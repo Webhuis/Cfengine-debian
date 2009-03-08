@@ -1,24 +1,21 @@
-This package was debianized by Antonio Radici <antonio@dyne.org> on
-Sun, 08 Mar 2009 20:18:57 +0000.
+Format-Specification:
+    http://wiki.debian.org/Proposals/CopyrightFormat?action=recall&rev=196
+Upstream-Maintainer: Mark Burgess <Mark.Burgess@iu.hio.no>
+Upstream-Source: http://www.cfengine.org/download.php
+Upstream-Name: cfengine
 
-It was downloaded from <url://example.com>
+Files: *
+Copyright: 2008, Cfengine AS
+License: GPL-2+
 
-Upstream Author(s):
+Files: debian/*
+Copyright: 2009, Antonio Radici <antonio@dyne.org>
+License: GPL-2+
 
-    <put author's name and email here>
-    <likewise for another author>
-
-Copyright:
-
-    <Copyright (C) YYYY Name OfAuthor>
-    <likewise for another author>
-
-License:
-
-    <Put the license of the package here indented by 4 spaces>
-
-The Debian packaging is copyright 2009, Antonio Radici <antonio@dyne.org> and
-is licensed under the GPL, see `/usr/share/common-licenses/GPL'.
-
-# Please also look if there are files or directories which have a
-# different copyright/license attached and list them here.
+License: GPL-2+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; version 2 dated June, 1991, or (at your
+    option) any later version.
+    On Debian GNU/Linux systems, the complete text of version 2 of the GNU
+    General Public License can be found in `/usr/share/common-licenses/GPL-2'
