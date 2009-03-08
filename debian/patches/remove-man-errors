@@ -1,3 +1,4 @@
+remove some manpage errors
 --- a/docs/cf-agent.8
 +++ b/docs/cf-agent.8
 @@ -19,7 +19,7 @@
