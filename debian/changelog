@@ -1,0 +1,5 @@
+cfengine (3.0.1b4-1) unstable; urgency=low
+
+  * Initial release (Closes: #518059)
+
+ -- Antonio Radici <antonio@dyne.org>  Sun, 08 Mar 2009 20:18:57 +0000

@@ -1,0 +1,24 @@
+This package was debianized by Antonio Radici <antonio@dyne.org> on
+Sun, 08 Mar 2009 20:18:57 +0000.
+
+It was downloaded from <url://example.com>
+
+Upstream Author(s):
+
+    <put author's name and email here>
+    <likewise for another author>
+
+Copyright:
+
+    <Copyright (C) YYYY Name OfAuthor>
+    <likewise for another author>
+
+License:
+
+    <Put the license of the package here indented by 4 spaces>
+
+The Debian packaging is copyright 2009, Antonio Radici <antonio@dyne.org> and
+is licensed under the GPL, see `/usr/share/common-licenses/GPL'.
+
+# Please also look if there are files or directories which have a
+# different copyright/license attached and list them here.

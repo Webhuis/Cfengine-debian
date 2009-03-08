@@ -1,0 +1,16 @@
+# Compulsory line, this is a version 3 file
+version=3
+
+http://www.cfengine.org/downloads/ cfengine-(3.*)\.tar\.gz
+
+# Uncomment to examine a Webserver directory
+#http://www.example.com/pub/cfengine-(.*)\.tar\.gz
+
+# Uncommment to examine a FTP server
+#ftp://ftp.example.com/pub/cfengine-(.*)\.tar\.gz debian uupdate
+
+# Uncomment to find new files on sourceforge, for devscripts >= 2.9
+# http://sf.net/cfengine/cfengine-(.*)\.tar\.gz
+
+# Uncomment to find new files on GooglePages
+# http://example.googlepages.com/foo.html cfengine-(.*)\.tar\.gz

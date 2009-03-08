@@ -1,0 +1,10 @@
+# Defaults for cfengine initscript
+# sourced by /etc/init.d/cfengine
+# installed at /etc/default/cfengine by the maintainer scripts
+
+#
+# This is a POSIX shell fragment
+#
+
+# Additional options that are passed to the Daemon.
+DAEMON_OPTS=""
