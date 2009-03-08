@@ -1,0 +1,33 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle testbundle in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: classes
+
+      promise by 'ok' (implicit) if context is any
+
+         expression => regline(.*mark.*,/tmp/testfile,)Promise belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_regline.cf' near line 20
+
+   TYPE: reports
+
+      promise by 'File matched' (implicit) if context is ok
+
+Promise belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_regline.cf' near line 26
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   version => 1.2.3 if subbody context any
+   bundlesequence =>  {'testbundle'} if subbody context any
+   }
+

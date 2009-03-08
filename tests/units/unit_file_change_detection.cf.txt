@@ -1,0 +1,85 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle testbundle in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: files
+
+      files promise by '/home/mark/tmp' -> me if context is any
+
+            changes => tripwire body for type changes(no parameters)
+               {
+               hash => md5 if subbody context any
+               report_changes => content if subbody context any
+               update_hashes => yes if subbody context any
+               }
+ if body context any
+         depth_search => recurse body for type depth_search
+               arg d
+
+               {
+               depth => $(d) if subbody context any
+               }
+             action => background body for type action(no parameters)
+               {
+               background => true if subbody context any
+               }
+ if body context any
+Promise belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_file_change_detection.cf' near line 28
+
+      files promise by '/home/mark/LapTop/words' -> you if context is any
+
+            changes => tripwire body for type changes(no parameters)
+               {
+               hash => md5 if subbody context any
+               report_changes => content if subbody context any
+               update_hashes => yes if subbody context any
+               }
+ if body context any
+         depth_search => recurse body for type depth_search
+               arg d
+
+               {
+               depth => $(d) if subbody context any
+               }
+Promise belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_file_change_detection.cf' near line 34
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'testbundle'} if subbody context any
+   }
+
+control body for type agent(no parameters)
+   {
+   agentaccess =>  {'mark','root'} if subbody context any
+   }
+
+tripwire body for type changes(no parameters)
+   {
+   hash => md5 if subbody context any
+   report_changes => content if subbody context any
+   update_hashes => yes if subbody context any
+   }
+
+background body for type action(no parameters)
+   {
+   background => true if subbody context any
+   }
+
+recurse body for type depth_search
+   arg d
+
+   {
+   depth => $(d) if subbody context any
+   }
+

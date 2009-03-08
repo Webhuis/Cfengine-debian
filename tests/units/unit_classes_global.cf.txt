@@ -1,0 +1,68 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle g in the context of common
+
+   ARGS:
+
+   {
+   TYPE: classes
+
+      classes promise by 'one' (implicit) if context is any
+
+         expression => any       if body context any
+            Promise (version not specified) belongs to bundle 'g' (type common) in file '../tests/units/unit_classes_global.cf' near line 14
+
+      classes promise by 'client_network' (implicit) if context is any
+
+         expression => any       if body context any
+            Promise (version not specified) belongs to bundle 'g' (type common) in file '../tests/units/unit_classes_global.cf' near line 16
+
+   }
+
+
+Bundle tryclasses_1 in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: classes
+
+      classes promise by 'two' (implicit) if context is any
+
+         expression => any       if body context any
+            Promise (version not specified) belongs to bundle 'tryclasses_1' (type agent) in file '../tests/units/unit_classes_global.cf' near line 25
+
+   }
+
+
+Bundle tryclasses_2 in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: classes
+
+      classes promise by 'three' (implicit) if context is any
+
+         expression => any       if body context any
+            Promise (version not specified) belongs to bundle 'tryclasses_2' (type agent) in file '../tests/units/unit_classes_global.cf' near line 34
+
+   TYPE: reports
+
+      reports promise by 'Success' (implicit) if context is one.three.!two
+
+            Promise (version not specified) belongs to bundle 'tryclasses_2' (type agent) in file '../tests/units/unit_classes_global.cf' near line 40
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'g','tryclasses_1','tryclasses_2'} if sub-body context any
+   }
+

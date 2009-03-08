@@ -1,0 +1,357 @@
+This is cf3-reference.info, produced by makeinfo version 4.12 from
+cf3-Reference.texinfo.
+
+INFO-DIR-SECTION Cfengine Training
+START-INFO-DIR-ENTRY
+* cfengine Reference:
+                        Cfengine is a language based framework
+                        designed for configuring and maintaining
+                        Unix-like operating systems attached
+                        to a TCP/IP network.
+END-INFO-DIR-ENTRY
+
+
+Indirect:
+cf3-reference.info-1: 423
+cf3-reference.info-2: 299340
+
+Tag Table:
+(Indirect)
+Node: Top423
+Node: Getting started860
+Node: A renewed cfengine4279
+Node: Installation7630
+Node: Work directory9119
+Node: Hard classes10784
+Ref: Hard classes-Footnote-112712
+Node: Global and local classes12807
+Node: Filenames and paths13850
+Node: Upgrading from cfengine 215543
+Node: Testing as a non-privilieged user18953
+Node: The bare necessities of a cfengine 320929
+Node: Familiiarizing yourself22044
+Node: Remote access troubleshooting27423
+Node: Server connection27721
+Node: Key exchange29556
+Node: Time windows32336
+Node: Other users than root35244
+Node: Encryption35760
+Node: A simple crash course36449
+Node: Rules are promises36842
+Node: Containers39252
+Node: When and where are promises made?41532
+Node: Types in cfengine 344824
+Node: Normal ordering45880
+Node: Loops and lists in cfengine 347411
+Node: Developer structures49697
+Node: How to run cfengine 3 examples50074
+Node: A complete configuration51469
+Node: promises.cf52081
+Node: site.cf54815
+Node: update.cf62734
+Node: failsafe.cf64203
+Node: What should a failsafe or update file contain64917
+Node: Recovery from errors in the configuration66012
+Node: Recovery from errors in the software67964
+Node: Control Promises69276
+Ref: Control Promises-Footnote-170447
+Node: control common70493
+Node: bundlesequence in common71385
+Node: inputs in common72704
+Node: version in common73076
+Node: lastseenexpireafter in common73479
+Node: output_prefix in common73871
+Node: domain in common74233
+Node: control agent74689
+Node: maxconnections in agent76198
+Node: abortclasses in agent76739
+Node: abortbundleclasses in agent77355
+Node: addclasses in agent78590
+Node: agentaccess in agent79359
+Node: agentfacility in agent79854
+Node: auditing in agent80519
+Node: binarypaddingchar in agent81273
+Node: bindtointerface in agent81976
+Node: hashupdates in agent82500
+Node: childlibpath in agent83175
+Node: defaultcopytype in agent83631
+Node: dryrun in agent84177
+Node: editbinaryfilesize in agent84722
+Node: editfilesize in agent85236
+Node: environment in agent85697
+Node: exclamation in agent86457
+Node: expireafter in agent86991
+Node: files_single_copy in agent87495
+Node: files_auto_define in agent88291
+Node: fullencryption in agent89171
+Node: hostnamekeys in agent89913
+Node: ifelapsed in agent90526
+Node: inform in agent91424
+Node: lastseen in agent91996
+Node: lastseenexpireafter in agent92601
+Node: mountfilesystems in agent93003
+Node: nonalphanumfiles in agent93585
+Node: repchar in agent94149
+Node: default_repository in agent94499
+Node: secureinput in agent95169
+Node: sensiblecount in agent95770
+Node: sensiblesize in agent96144
+Node: skipidentify in agent96517
+Node: suspiciousnames in agent97236
+Node: syslog in agent97721
+Node: timezone in agent98185
+Node: default_timeout in agent98554
+Node: verbose in agent99119
+Node: control server99548
+Node: cfruncommand in server100692
+Node: maxconnections in server101244
+Node: denybadclocks in server101811
+Node: allowconnects in server102683
+Node: denyconnects in server103467
+Node: allowallconnects in server104284
+Node: trustkeysfrom in server105288
+Node: allowusers in server105895
+Node: dynamicaddresses in server106453
+Node: skipverify in server107127
+Node: logallconnections in server107626
+Node: logencryptedtransfers in server108216
+Node: hostnamekeys in server108956
+Node: auditing in server109596
+Node: bindtointerface in server110353
+Node: serverfacility in server110920
+Node: control monitor111546
+Node: forgetrate in monitor112315
+Node: monitorfacility in monitor112976
+Node: histograms in monitor113631
+Node: tcpdump in monitor114257
+Node: tcpdumpcommand in monitor114746
+Node: control runagent115229
+Node: hosts in runagent116177
+Node: port in runagent116851
+Node: force_ipv4 in runagent117336
+Node: trustkey in runagent117893
+Node: encrypt in runagent119163
+Node: background_children in runagent119863
+Node: max_children in runagent120447
+Node: output_to_file in runagent120931
+Node: control executor121498
+Node: splaytime in executor122419
+Node: mailfrom in executor122892
+Node: mailto in executor123249
+Node: smtpserver in executor123661
+Node: mailmaxlines in executor124215
+Node: schedule in executor124868
+Node: executorfacility in executor125456
+Node: exec_command in executor126133
+Node: control knowledge126817
+Node: id_prefix in knowledge128125
+Node: build_directory in knowledge128694
+Node: sql_type in knowledge129289
+Node: sql_database in knowledge129687
+Node: sql_owner in knowledge130121
+Node: sql_passwd in knowledge130561
+Node: sql_server in knowledge131078
+Node: query_output in knowledge131535
+Node: query_engine in knowledge131937
+Node: style_sheet in knowledge132717
+Node: html_banner in knowledge133293
+Node: html_footer in knowledge133914
+Node: graph_output in knowledge134625
+Node: graph_directory in knowledge135236
+Node: generate_manual in knowledge135852
+Node: manual_source_directory in knowledge136608
+Node: control reporter137214
+Node: reports in reporter138052
+Node: report_output in reporter138701
+Node: build_directory in reporter139177
+Node: auto_scaling in reporter139776
+Node: error_bars in reporter140325
+Node: time_stamps in reporter141031
+Node: query_engine in reporter141821
+Node: style_sheet in reporter142596
+Node: html_banner in reporter143166
+Node: html_footer in reporter143781
+Node: Bundles for common144455
+Node: vars in common promises145220
+Node: string in vars145804
+Node: int in vars146517
+Node: real in vars147427
+Node: slist in vars147847
+Node: ilist in vars148611
+Node: rlist in vars149094
+Node: policy in vars149413
+Node: classes in common promises150056
+Node: or in classes150650
+Node: and in classes151116
+Node: xor in classes151631
+Node: dist in classes151969
+Node: expression in classes152708
+Node: not in classes153134
+Node: reports in common promises153550
+Node: lastseen in reports154152
+Node: intermittency in reports154661
+Node: showstate in reports155242
+Node: printfile in reports157751
+Node: friend_pattern in reports158592
+Node: * in agent promises159178
+Node: action in *160049
+Node: classes in *167578
+Node: ifvarclass in *170537
+Node: comment in *172014
+Node: * in edit_line promises172466
+Node: select_region in *173263
+Node: Bundles for agent174600
+Node: commands in agent promises176007
+Node: args in commands177869
+Node: contain in commands178489
+Node: module in commands183159
+Node: files in agent promises186153
+Node: file_select in files195080
+Node: copy_from in files202391
+Node: link_from in files213714
+Node: perms in files217539
+Node: changes in files220423
+Node: delete in files222111
+Node: rename in files223418
+Node: repository in files225474
+Node: edit_line in files225919
+Node: edit_xml in files226133
+Node: edit_defaults in files226350
+Node: depth_search in files227949
+Node: touch in files231526
+Node: create in files231982
+Node: move_obstructions in files232755
+Node: transformer in files233731
+Node: pathtype in files234252
+Node: acl in files235068
+Node: insert_lines in edit_line promises236739
+Node: location in insert_lines238114
+Node: insert_type in insert_lines239809
+Node: insert_select in insert_lines240473
+Node: expand_scalars in insert_lines243604
+Node: field_edits in edit_line promises244352
+Node: edit_field in field_edits246840
+Node: replace_patterns in edit_line promises250226
+Node: replace_with in replace_patterns251346
+Node: delete_lines in edit_line promises252189
+Node: not_matching in delete_lines252787
+Node: delete_select in delete_lines253378
+Node: interfaces in agent promises256723
+Node: tcp_ip in interfaces257704
+Node: methods in agent promises259801
+Node: usebundle in methods261281
+Node: packages in agent promises262340
+Node: package_policy in packages267448
+Node: package_method in packages268091
+Node: package_version in packages278271
+Node: package_architectures in packages278898
+Node: package_select in packages279647
+Node: processes in agent promises281342
+Node: signals in processes288180
+Node: process_stop in processes289129
+Node: process_count in processes289661
+Node: process_select in processes291292
+Node: restart_class in processes296541
+Node: storage in agent promises298168
+Node: mount in storage299340
+Node: volume in storage301832
+Node: Bundles for server304658
+Node: access in server promises305294
+Node: Access Example306789
+Node: admit in access307553
+Node: deny in access308365
+Node: maproot in access308990
+Node: ifencrypted in access309990
+Node: roles in server promises310651
+Node: authorize in roles311970
+Node: Bundles for knowledge312622
+Node: topics in knowledge promises313387
+Node: association in topics315133
+Node: comment in topics316488
+Node: occurrences in knowledge promises316960
+Node: represents in occurrences318295
+Node: representation in occurrences318926
+Node: Special functions319630
+Node: Function accessedbefore320883
+Node: Function accumulated321793
+Node: Function ago322948
+Node: Function canonify324011
+Node: Function changedbefore324467
+Node: Function classify325217
+Node: Function classmatch325824
+Node: Function execresult326493
+Node: Function fileexists327785
+Node: Function getindices328411
+Node: Function getgid329171
+Node: Function getuid329773
+Node: Function groupexists330374
+Node: Function hash331056
+Node: Function hostrange331836
+Node: Function hostinnetgroup332523
+Node: Function iprange333108
+Node: Function irange333839
+Node: Function isdir334164
+Node: Function isgreaterthan334776
+Node: Function islessthan335533
+Node: Function islink336316
+Node: Function isnewerthan337003
+Node: Function isplain337702
+Node: Function isvariable338250
+Node: Function now338937
+Node: Function on339307
+Node: Function randomint340056
+Node: Function readfile340497
+Node: Function readintarray340947
+Node: Function readintlist342218
+Node: Function readrealarray343209
+Node: Function readreallist343693
+Node: Function readstringarray344701
+Node: Function readstringlist346861
+Node: Function readtcp348119
+Node: Function regarray349375
+Node: Function regcmp350385
+Node: Function regline351059
+Node: Function reglist352365
+Node: Function returnszero353088
+Node: Function rrange353787
+Node: Function selectservers354127
+Node: Function splitstring355864
+Node: Function strcmp356788
+Node: Function usemodule357356
+Node: Function userexists358344
+Node: Special Variables359020
+Node: Variable context const359240
+Node: Variable const.dollar359658
+Node: Variable const.endl360002
+Node: Variable const.n360275
+Node: Variable const.r360537
+Node: Variable context sys360752
+Node: Variable sys.arch361930
+Node: Variable sys.cdate362201
+Node: Variable sys.class362499
+Node: Variable sys.date362837
+Node: Variable sys.domain363102
+Node: Variable sys.fqhost363600
+Node: Variable sys.fstab363936
+Node: Variable sys.host364202
+Node: Variable sys.interface364543
+Node: Variable sys.ipv4364834
+Node: Variable sys.ipv4[wlan0]365385
+Node: Variable sys.ipv4_1[wlan0]365724
+Node: Variable sys.ipv4_2[wlan0]366078
+Node: Variable sys.ipv4_3[wlan0]366434
+Node: Variable sys.long_arch366786
+Node: Variable sys.maildir367213
+Node: Variable sys.os367488
+Node: Variable sys.ostype367747
+Node: Variable sys.release368006
+Node: Variable sys.resolv368286
+Node: Variable sys.uqhost368556
+Node: Variable sys.workdir368839
+Node: Logs and records369242
+Node: Embedded Databases370074
+Node: Text logs371827
+Node: Reports in outputs372653
+Node: State information373182
+
+End Tag Table

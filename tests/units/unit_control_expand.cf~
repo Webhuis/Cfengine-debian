@@ -1,0 +1,33 @@
+bundle common g
+{
+vars:
+
+   "bundle" slist => { "bundle1", "bundle2" };
+
+}
+
+body common control
+{
+inputs => { @(g.bundle) };
+bundlesequence  => { @(g.bundle) };
+}
+
+bundle agent bundle1
+{
+vars:
+
+  "var1" string => "anything";
+}
+
+bundle agent bundle2
+{
+classes:
+
+  "ok" expression => isvariable("bundle1.var1");
+
+reports:
+
+  ok::
+
+    "Success";
+}

@@ -1,0 +1,32 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle test in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: files
+
+      promise by '/etc/passwd' (implicit) if context is any
+
+             create => true if body context any
+Promise belongs to bundle 'test' (type agent) in file '../tests/units/unit_filenames.cf' near line 12
+
+      promise by 'C:\etc\passwd' (implicit) if context is any
+
+             create => true if body context any
+Promise belongs to bundle 'test' (type agent) in file '../tests/units/unit_filenames.cf' near line 15
+
+      promise by 'etc/passwd' (implicit) if context is any
+
+             create => true if body context any
+Promise belongs to bundle 'test' (type agent) in file '../tests/units/unit_filenames.cf' near line 18
+
+   }
+
+
+
+
+All Bodies
+

@@ -1,0 +1,95 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle g in the context of common
+
+   ARGS:
+
+   {
+   TYPE: classes
+
+      classes promise by 'softclass' (implicit) if context is any
+
+         expression => any       if body context any
+            Promise (version not specified) belongs to bundle 'g' (type common) in file '../tests/units/unit_control_expand.cf' near line 5
+
+   TYPE: vars
+
+      vars promise by 'bundle' (implicit) if context is any
+
+              slist =>  {'bundle1','bundle2','@(extra)'}       if body context any
+            Promise (version not specified) belongs to bundle 'g' (type common) in file '../tests/units/unit_control_expand.cf' near line 9
+
+      vars promise by 'extra' (implicit) if context is any
+
+              slist =>  {'bundle3'}       if body context any
+             policy => overridable       if body context any
+            Promise (version not specified) belongs to bundle 'g' (type common) in file '../tests/units/unit_control_expand.cf' near line 11
+
+      vars promise by 'extra' (implicit) if context is softclass
+
+              slist =>  {'bundle3','bundle4'}       if body context any
+             policy => overridable       if body context any
+            Promise (version not specified) belongs to bundle 'g' (type common) in file '../tests/units/unit_control_expand.cf' near line 16
+
+   }
+
+
+Bundle bundle1 in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'var1' (implicit) if context is any
+
+             string => anything       if body context any
+            Promise (version not specified) belongs to bundle 'bundle1' (type agent) in file '../tests/units/unit_control_expand.cf' near line 31
+
+   }
+
+
+Bundle bundle2 in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: classes
+
+      classes promise by 'ok' (implicit) if context is any
+
+         expression => isvariable(bundle1.var1,)            Promise (version not specified) belongs to bundle 'bundle2' (type agent) in file '../tests/units/unit_control_expand.cf' near line 38
+
+   TYPE: reports
+
+      reports promise by 'Success' (implicit) if context is ok
+
+            Promise (version not specified) belongs to bundle 'bundle2' (type agent) in file '../tests/units/unit_control_expand.cf' near line 44
+
+   }
+
+
+Bundle bundle3 in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: reports
+
+      reports promise by 'Success extra...' (implicit) if context is linux
+
+            Promise (version not specified) belongs to bundle 'bundle3' (type agent) in file '../tests/units/unit_control_expand.cf' near line 53
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'@(g.bundle)'} if sub-body context any
+   }
+
