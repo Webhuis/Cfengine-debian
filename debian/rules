@@ -20,9 +20,12 @@ else
 CROSS= --build $(DEB_BUILD_GNU_TYPE)
 endif
 
-
+include /usr/share/quilt/quilt.make
 
 config.status: configure
+configure: config-stamp
+
+config-stamp: $(QUILT_STAMPFN)
 	dh_testdir
 	# Add here commands to configure the package.
 ifneq "$(wildcard /usr/share/misc/config.sub)" ""
@@ -45,7 +48,7 @@ build-stamp:  config.status
 
 	touch $@
 
-clean: 
+clean: unpatch
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp 
