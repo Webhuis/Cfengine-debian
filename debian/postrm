@@ -18,9 +18,22 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
+VDIR=/var/lib/cfengine3
+
+remove_inputs () {
+    if [ -d "$VDIR" ]; then
+        cd "$VDIR"
+        find . -mindepth 1 -maxdepth 1 \
+            -name inputs -prune -o -print0 | xargs -0r rm -rf
+        cd /; rmdir "$VDIR"
+    fi
+}
 
 case "$1" in
-    purge|remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    purge)
+        remove_inputs
+    ;; 
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
     ;;
 
     *)

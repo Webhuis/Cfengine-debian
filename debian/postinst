@@ -17,9 +17,17 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
+INPUTS=/var/lib/cfengine3/inputs
+
+make_key () {
+    if [ ! -f /var/lib/cfengine3/ppkeys/localhost.priv ]; then
+        cf-key
+    fi
+}
 
 case "$1" in
     configure)
+        make_key
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
