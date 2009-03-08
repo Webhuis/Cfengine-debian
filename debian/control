@@ -2,7 +2,7 @@ Source: cfengine3
 Section: admin
 Priority: optional
 Maintainer: Antonio Radici <antonio@dyne.org>
-Build-Depends: debhelper (>= 7), autotools-dev
+Build-Depends: debhelper (>= 7), autotools-dev, quilt
 Standards-Version: 3.8.0
 Homepage: http://www.cfengine.org/
 Vcs-Browser: http://git.debian.org/?p=collab-maint/cfengine3.git
@@ -13,12 +13,12 @@ Architecture: any
 Conflicts: cfengine2
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: tool for configuring and maintaining network machines
- Cfengine is a suite of programs for integrated autonomic management of either
- individual or networked computers
+ Cfengine is a suite of programs for integrated autonomic management 
+ of either individual or networked computers
  .
  Cfengine 3 is both a more powerful and much simplified version of cfengine, 
- which has been designed to interoperate with cfengine 2 rather than be backwards 
- compatible with it
+ which has been designed to interoperate with cfengine 2 rather than be 
+ backwards compatible with it
  .
- With cfengine 3 you can install, configure and maintain computers using powerful
- hands-free tools.
+ With cfengine 3 you can install, configure and maintain computers using 
+ powerful hands-free tools.
