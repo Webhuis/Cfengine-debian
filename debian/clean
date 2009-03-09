@@ -4,4 +4,3 @@ src/cf3parse.c
 src/cf3parse.h
 tests/units/*~
 config.log
-doc/cf-promise.8
