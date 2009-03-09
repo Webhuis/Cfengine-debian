@@ -34,6 +34,7 @@ endif
 ifneq "$(wildcard /usr/share/misc/config.guess)" ""
 	cp -f /usr/share/misc/config.guess config.guess
 endif
+	autoreconf -vfi
 	./configure $(CROSS) --prefix=/usr --with-workdir=/var/lib/cfengine3 --mandir=\$${prefix}/share/man --infodir=\$${prefix}/share/info CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs"
 
 
@@ -67,9 +68,6 @@ install: build
 
 	# Add here commands to install the package into debian/cfengine3.
 	$(MAKE) DESTDIR=$(CURDIR)/debian/cfengine3 install
-	# remove an empty manpage
-	rm $(CURDIR)/debian/cfengine3/usr/share/man/man8/cf-promise.8.gz
-
 
 # Build architecture-independent files here.
 binary-indep: install
