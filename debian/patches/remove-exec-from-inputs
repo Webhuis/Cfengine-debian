@@ -1,0 +1,9 @@
+--- a/inputs/Makefile.am
++++ b/inputs/Makefile.am
+@@ -1,5 +1,5 @@
+ 
+-pkgdata_SCRIPTS = failsafe.cf  library.cf  promises.cf  site.cf  update.cf
++pkgdata_DATA = failsafe.cf  library.cf  promises.cf  site.cf  update.cf
+ 
+ EXTRA_DIST = *.cf
+ 
