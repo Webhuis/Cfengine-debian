@@ -1,3 +1,4 @@
+inputs file should not be set with the executable bit
 --- a/inputs/Makefile.am
 +++ b/inputs/Makefile.am
 @@ -1,5 +1,5 @@

@@ -29,3 +29,5 @@ src/cf3lex.c
 src/cf3lex.l
 src/cf3parse.c
 src/cf3parse.h
+# removing empty files
+README

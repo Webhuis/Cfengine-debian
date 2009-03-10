@@ -1,3 +1,5 @@
+some docs don't need to be distributed so we will remove them, we will also remove
+cf-promise.8 because it's an empty manpage
 --- a/Makefile.am
 +++ b/Makefile.am
 @@ -1,10 +1,10 @@
