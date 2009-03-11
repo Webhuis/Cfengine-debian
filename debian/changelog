@@ -1,5 +1,9 @@
 cfengine3 (3.0.1b4-1) unstable; urgency=low
 
+  TODO: adding license exception
+        init script
+        analyse compatibility with cfengine2
+
   * Initial release (Closes: #518059)
 
  -- Antonio Radici <antonio@dyne.org>  Sun, 08 Mar 2009 20:18:57 +0000
