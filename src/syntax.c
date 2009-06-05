@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -583,6 +587,20 @@ if (IsNakedVar(s,'@')||IsNakedVar(s,'$'))
    return false;
    }
 
+/* Deal with complex strings as special cases */
+
+if (strcmp(lval,"mode") == 0 || strcmp(lval,"search_mode") == 0)
+   {
+   mode_t plus,minus;
+   
+   if (!ParseModeString(s,&plus,&minus))
+      {
+      snprintf(output,CF_BUFSIZE,"Error parsing Unix permission string %s)",s);
+      ReportError(output);
+      return false;
+      }
+   }
+
 if (FullTextMatch(range,s))
    {
    return true;
@@ -599,7 +617,6 @@ else
    return false;
    }
 
-/*regfree(&rx); */
 return true;
 }
 

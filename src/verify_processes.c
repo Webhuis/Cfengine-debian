@@ -1,22 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
-
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -135,7 +138,7 @@ if ((prp = cf_popen(pscomm,"r")) == NULL)
 while (!feof(prp))
    {
    memset(vbuff,0,CF_BUFSIZE);
-   ReadLine(vbuff,CF_BUFSIZE,prp);
+   CfReadLine(vbuff,CF_BUFSIZE,prp);
    AppendItem(procdata,vbuff,"");
    }
 
@@ -190,14 +193,14 @@ if (a.process_count.min_range != CF_NOINT) /* if a range is specified */
    {
    if (matches < a.process_count.min_range || matches > a.process_count.max_range)
       {
-      cfPS(cf_error,CF_CHG,"",pp,a,"Process count for \'%s\' was out of promised range\n",pp->promiser);
+      cfPS(cf_error,CF_CHG,"",pp,a," !! Process count for \'%s\' was out of promised range (%d found)\n",pp->promiser,matches);
       AddEphemeralClasses(a.process_count.out_of_range_define);
       out_of_range = true;
       }
    else
       {
       AddEphemeralClasses(a.process_count.in_range_define);
-      cfPS(cf_verbose,CF_NOP,"",pp,a," - Process promise for %s is kept",pp->promiser);
+      cfPS(cf_verbose,CF_NOP,"",pp,a," -> Process promise for %s is kept",pp->promiser);
       out_of_range = false;
       }
 
@@ -245,17 +248,16 @@ if (!need_to_restart)
    cfPS(cf_verbose,CF_NOP,"",pp,a," -- Matches in range for %s - process count promise kept\n",pp->promiser);
    return;
    }
- 
-if (a.restart_class)
+else
    {
-   if (a.transaction.action == cfa_fix)
+   if (a.transaction.action == cfa_warn)
+      {
+      cfPS(cf_error,CF_WARN,"",pp,a," -- Need to keep restart promise for %s, but only a warning is promised",pp->promiser);
+      }
+   else 
       {
       cfPS(cf_inform,CF_CHG,"",pp,a," -> Making a one-time restart promise for %s",pp->promiser);
-      NewClass(a.restart_class);
-      }
-   else if (a.transaction.action == cfa_warn)
-      {
-      cfPS(cf_error,CF_NOP,"",pp,a," -- Need to keep restart promise for %s, but only a warning is promised",pp->promiser);
+      NewBundleClass(a.restart_class,pp->bundle);
       }
    }
 }
@@ -273,18 +275,11 @@ int FindPidMatches(struct Item *procdata,struct Item **killlist,struct Attribute
   int end[CF_PROCCOLS];
   struct CfRegEx rex;
   
-rex = CompileRegExp(pp->promiser);
-
-if (rex.failed)
-   {
-   return 0;
-   }
-
 GetProcessColumnNames(procdata->name,(char **)names,start,end); 
 
 for (ip = procdata->next; ip != NULL; ip=ip->next)
    {
-   if (RegExMatchSubString(rex,ip->name,&s,&e))
+   if (BlockTextMatch(pp->promiser,ip->name,&s,&e))
       {
       if (!SelectProcess(ip->name,names,start,end,a,pp))
          {
@@ -336,7 +331,7 @@ for (ip = procdata->next; ip != NULL; ip=ip->next)
          continue;
          }
       
-      sprintf(saveuid,"%d",pid);
+      snprintf(saveuid,15,"%d",(int)pid);
       PrependItem(killlist,saveuid,"");
       SetItemListCounter(*killlist,saveuid,pid);
       }

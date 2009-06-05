@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -43,7 +48,7 @@ if (!SelectLeaf(path,sb,attr,pp))
    return false;
    }
 
-Debug(" -> Handling file existence constraints on %s\n",path);
+CfOut(cf_verbose,""," -> Handling file existence constraints on %s\n",path);
 
 /* We still need to augment the scope of context "this" for commands */
 
@@ -93,8 +98,10 @@ int CreateFile(char *file,struct Promise *pp,struct Attributes attr)
 
 // attr.move_obstructions for MakeParentDirectory
  
-if (strcmp("/.",file+strlen(file)-2) == 0)
+if (strcmp(".",ReadLastNode(file)) == 0)
    {
+   Debug("File object \"%s \"seems to be a directory\n",file);
+   
    if (!DONTDO)
       {
       if (!MakeParentDirectory(file,attr.move_obstructions))
@@ -285,7 +292,7 @@ lastnode = ReadLastNode(destination);
 
 if (MatchRlistItem(attr.link.copy_patterns,lastnode))
    {
-   CfOut(cf_verbose,"","Link %s matches copy_patterns\n",destination);
+   CfOut(cf_verbose,""," -> Link %s matches copy_patterns\n",destination);
    VerifyCopy(attr.link.source,destination,attr,pp);
    return true;
    }
@@ -372,7 +379,9 @@ if (a.haveeditline)
       BannerSubBundle(bp,params);
       NewScope(bp->name);
       AugmentScope(bp->name,bp->args,params);
+      PushPrivateClassContext();
       retval = ScheduleEditLineOperations(filename,bp,a,pp);
+      PopPrivateClassContext();
       DeleteFromScope(bp->name,bp->args);
       }
    }
@@ -480,7 +489,7 @@ else
       {
       case cfa_warn:
           
-          cfPS(cf_error,CF_WARN,"",pp,attr,"%s has permission %o - [should be %o]\n",file,dstat->st_mode & 07777,newperm & 07777);
+          cfPS(cf_error,CF_WARN,"",pp,attr," !! %s has permission %o - [should be %o]\n",file,dstat->st_mode & 07777,newperm & 07777);
           break;
           
       case cfa_fix:
@@ -494,7 +503,7 @@ else
                 }
              }
           
-          cfPS(cf_inform,CF_CHG,"",pp,attr,"Object %s had permission %o, changed it to %o\n",file,dstat->st_mode & 07777,newperm & 07777);
+          cfPS(cf_inform,CF_CHG,"",pp,attr," -> Object %s had permission %o, changed it to %o\n",file,dstat->st_mode & 07777,newperm & 07777);
           break;
           
       default:
@@ -519,7 +528,7 @@ else
       {
       case cfa_warn:
 
-          cfPS(cf_error,CF_WARN,"",pp,attr,"%s has flags %o - [should be %o]\n",file,dstat->st_mode & CHFLAGS_MASK,newflags & CHFLAGS_MASK);
+          cfPS(cf_error,CF_WARN,"",pp,attr," !! %s has flags %o - [should be %o]\n",file,dstat->st_mode & CHFLAGS_MASK,newflags & CHFLAGS_MASK);
           break;
           
       case cfa_fix:
@@ -533,7 +542,7 @@ else
                 }
              else
                 {
-                cfPS(cf_inform,CF_CHG,"",pp,attr,"%s had flags %o, changed it to %o\n",file,dstat->st_flags & CHFLAGS_MASK,newflags & CHFLAGS_MASK);
+                cfPS(cf_inform,CF_CHG,"",pp,attr," -> %s had flags %o, changed it to %o\n",file,dstat->st_flags & CHFLAGS_MASK,newflags & CHFLAGS_MASK);
                 }
              }
           
@@ -549,11 +558,11 @@ if (attr.touch)
    {
    if (utime(file,NULL) == -1)
       {
-      cfPS(cf_inform,CF_DENIED,"utime",pp,attr,"Touching file %s failed",file);
+      cfPS(cf_inform,CF_DENIED,"utime",pp,attr," !! Touching file %s failed",file);
       }
    else
       {
-      cfPS(cf_inform,CF_CHG,"",pp,attr,"Touching file %s",file);
+      cfPS(cf_inform,CF_CHG,"",pp,attr," -> Touching file %s",file);
       }
    }
 
@@ -633,14 +642,14 @@ if (dstat->st_uid == 0 && (dstat->st_mode & S_ISUID))
          {
          case cfa_fix:
 
-             cfPS(cf_inform,CF_CHG,"",pp,attr,"Removing setuid (root) flag from %s...\n\n",file);
+             cfPS(cf_inform,CF_CHG,"",pp,attr," -> Removing setuid (root) flag from %s...\n\n",file);
              break;
 
          case cfa_warn:
 
              if (amroot)
                 {
-                cfPS(cf_error,CF_WARN,"",pp,attr,"WARNING setuid (root) flag on %s...\n\n",file);
+                cfPS(cf_error,CF_WARN,"",pp,attr," !! WARNING setuid (root) flag on %s...\n\n",file);
                 }
              break;             
          }
@@ -661,7 +670,7 @@ if (dstat->st_uid == 0 && (dstat->st_mode & S_ISGID))
             {
             if (amroot)
                {
-               cfPS(cf_error,CF_WARN,"",pp,attr,"NEW SETGID root PROGRAM %s\n",file);
+               cfPS(cf_error,CF_WARN,"",pp,attr," !! NEW SETGID root PROGRAM %s\n",file);
                }
 
             PrependItem(&VSETUIDLIST,file,NULL);
@@ -674,12 +683,12 @@ if (dstat->st_uid == 0 && (dstat->st_mode & S_ISGID))
          {
          case cfa_fix:
 
-             cfPS(cf_inform,CF_CHG,"",pp,attr,"Removing setgid (root) flag from %s...\n\n",file);
+             cfPS(cf_inform,CF_CHG,"",pp,attr," -> Removing setgid (root) flag from %s...\n\n",file);
              break;
 
          case cfa_warn:
 
-             cfPS(cf_inform,CF_WARN,"",pp,attr,"WARNING setgid (root) flag on %s...\n\n",file);
+             cfPS(cf_inform,CF_WARN,"",pp,attr," !! WARNING setgid (root) flag on %s...\n\n",file);
              break;
              
          default:
@@ -701,7 +710,7 @@ if (lstat(from,&sb) == 0)
    {
    if (!attr.move_obstructions)
       {
-      cfPS(cf_verbose,CF_FAIL,"",pp,attr,"Object %s exists and is obstructing our promise\n",from);
+      cfPS(cf_verbose,CF_FAIL,"",pp,attr," !! Object %s exists and is obstructing our promise\n",from);
       return false;
       }
    
@@ -723,11 +732,11 @@ if (lstat(from,&sb) == 0)
       
       strcat(saved,CF_SAVED);
 
-      cfPS(cf_verbose,CF_CHG,"",pp,attr,"Moving file object %s to %s\n",from,saved);
+      cfPS(cf_verbose,CF_CHG,"",pp,attr," -> Moving file object %s to %s\n",from,saved);
 
       if (rename(from,saved) == -1)
          {
-         cfPS(cf_error,CF_FAIL,"rename",pp,attr,"Can't rename %s to %s\n",from,saved);
+         cfPS(cf_error,CF_FAIL,"rename",pp,attr," !! Can't rename %s to %s\n",from,saved);
          return false;
          }
 
@@ -741,7 +750,7 @@ if (lstat(from,&sb) == 0)
    
    if (S_ISDIR(sb.st_mode) && attr.link.when_no_file == cfa_force)
       {
-      cfPS(cf_verbose,CF_CHG,"",pp,attr,"Moving directory %s to %s%s\n",from,from,CF_SAVED);
+      cfPS(cf_verbose,CF_CHG,"",pp,attr," -> Moving directory %s to %s%s\n",from,from,CF_SAVED);
       
       if (DONTDO)
          {
@@ -758,7 +767,7 @@ if (lstat(from,&sb) == 0)
       
       if (stat(saved,&sb) != -1)
          {
-         cfPS(cf_error,CF_FAIL,"",pp,attr,"Couldn't save directory %s, since %s exists already\n",from,saved);
+         cfPS(cf_error,CF_FAIL,"",pp,attr," !! Couldn't save directory %s, since %s exists already\n",from,saved);
          CfOut(cf_error,"","Unable to force link to existing directory %s\n",from);
          return false;
          }
@@ -894,6 +903,34 @@ if (lstat(path,&dsb) == -1)
 else
    {
    CfOut(cf_inform,""," !! Warning - file object %s exists, contrary to promise\n",path);
+   }
+
+if (attr.rename.newname)
+   {
+   if (DONTDO)
+      {
+      CfOut(cf_inform,""," -> File %s should be renamed to %s to keep promise\n",path,attr.rename.newname);
+      return;
+      }
+   else
+      {
+      cfPS(cf_inform,CF_CHG,"",pp,attr," -> Renaming file %s to %s\n",path,attr.rename.newname);
+
+      if (!IsItemIn(VREPOSLIST,attr.rename.newname))
+         {
+         if (rename(path,attr.rename.newname) == -1)
+            {
+            cfPS(cf_error,CF_FAIL,"rename",pp,attr,"Error occurred while renaming %s\n",path);
+            return;
+            }
+         }
+      else
+         {
+         cfPS(cf_error,CF_WARN,"",pp,attr," !! Rename to same destination twice? Would overwrite saved copy - aborting",path);
+         }        
+      }
+   
+   return;
    }
 
 if (S_ISLNK(dsb.st_mode))
@@ -1397,7 +1434,7 @@ else
              Debug("Using LCHOWN function\n");
              if (lchown(file,uid,gid) == -1)
                 {
-                CfOut(cf_inform,"lchown","Cannot set ownership on link %s!\n",file);
+                CfOut(cf_inform,"lchown"," !! Cannot set ownership on link %s!\n",file);
                 }
              else
                 {
@@ -1409,19 +1446,19 @@ else
              {
              if (!uidmatch)
                 {
-                cfPS(cf_inform,CF_CHG,"",pp,attr,"Owner of %s was %d, setting to %d",file,sb->st_uid,uid);
+                cfPS(cf_inform,CF_CHG,"",pp,attr," -> Owner of %s was %d, setting to %d",file,sb->st_uid,uid);
                 }
              
              if (!gidmatch)
                 {
-                cfPS(cf_inform,CF_CHG,"",pp,attr,"Group of %s was %d, setting to %d",file,sb->st_gid,gid);
+                cfPS(cf_inform,CF_CHG,"",pp,attr," -> Group of %s was %d, setting to %d",file,sb->st_gid,gid);
                 }
              
              if (!S_ISLNK(sb->st_mode))
                 {
                 if (chown(file,uid,gid) == -1)
                    {
-                   cfPS(cf_inform,CF_DENIED,"chown",pp,attr,"Cannot set ownership on file %s!\n",file);
+                   cfPS(cf_inform,CF_DENIED,"chown",pp,attr," !! Cannot set ownership on file %s!\n",file);
                    }
                 else
                    {
@@ -1442,11 +1479,11 @@ else
           
           if ((gp = getgrgid(sb->st_gid)) == NULL)
              {
-             cfPS(cf_error,CF_WARN,"",pp,attr,"File %s is not owned by any group in group database\n",file);
+             cfPS(cf_error,CF_WARN,"",pp,attr," !! File %s is not owned by any group in group database\n",file);
              break;
              }
           
-          cfPS(cf_error,CF_WARN,"",pp,attr,"File %s is owned by [%s], group [%s]\n",file,pw->pw_name,gp->gr_name);
+          cfPS(cf_error,CF_WARN,"",pp,attr," !! File %s is owned by [%s], group [%s]\n",file,pw->pw_name,gp->gr_name);
           break;
       }
    }
@@ -1480,7 +1517,7 @@ if ((pop = cf_popen(comm,"r")) == NULL)
 
 while (!feof(pop))
    {
-   ReadLine(line,CF_BUFSIZE,pop);
+   CfReadLine(line,CF_BUFSIZE,pop);
    CfOut(cf_inform,"",line);
    }
 
@@ -1589,7 +1626,7 @@ if (lstat(pathbuf,&statbuf) != -1)
       {
       if (! S_ISLNK(statbuf.st_mode) && ! S_ISDIR(statbuf.st_mode))
          {
-         CfOut(cf_inform,"""The object %s is not a directory. Cannot make a new directory without deleting it.",pathbuf);
+         CfOut(cf_inform,"","The object %s is not a directory. Cannot make a new directory without deleting it.",pathbuf);
          return(false);
          }
       }

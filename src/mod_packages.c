@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -37,6 +41,7 @@ struct BodySyntax CF_PKGMETHOD_BODY[] =
    {"package_changes",cf_opts,"individual,bulk","Menu option - whether to group packages into a single aggregate command"},
    {"package_file_repositories",cf_slist,"","A list of machine-local directories to search for packages"},
    {"package_list_command",cf_str,CF_PATHRANGE,"Command to obtain a list of installed packages"},
+   {"package_update_list_command",cf_str,CF_PATHRANGE,"Command to obtain a list of available patches or updates"},
    {"package_list_version_regex",cf_str,"","Regular expression with one backreference to extract package version string" },
    {"package_list_name_regex",cf_str,"","Regular expression with one backreference to extract package name string" },
    {"package_list_arch_regex",cf_str,"","Regular expression with one backreference to extract package architecture string" },

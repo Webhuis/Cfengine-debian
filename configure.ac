@@ -1,4 +1,4 @@
-dnl ##########################################################################
+        dnl ##########################################################################
 dnl #
 dnl # Process this file with autoconf then autoheader to build a configure
 dnl # script => aclocal; automake -a -c; autoconf
@@ -14,7 +14,7 @@ dnl
 dnl The version in the next line is the only one to set
 dnl
 
-AM_INIT_AUTOMAKE(cfengine, 3.0.1b4)   dnl remember to set version
+AM_INIT_AUTOMAKE(cfengine, 3.0.2b1)   dnl remember to set version
 
 AM_CONFIG_HEADER(src/conf.h)
 
@@ -78,6 +78,8 @@ dnl Look for cf enterprise versions
 AC_CHECK_LIB(cfnova,main)
 AC_CHECK_LIB(cfcontellation,main)
 AC_CHECK_LIB(cfgalaxy,main)
+
+AC_CHECK_LIB(ldap,ldap_get_values_len)
 
 AC_CHECK_FUNC(door_create,door)
 AC_CHECK_FUNC(setsockopt, , AC_CHECK_LIB(socket, setsockopt))
@@ -276,7 +278,7 @@ else
     if test x"$OPENSSL_LIB_DIR" = xdefault ; then
         for d in $prefix /opt/ssl /usr/local/ssl /usr/local /usr; do
             if test -f "$d/include/openssl/opensslv.h"; then
-                OPENSSL_LIB_LDFLAGS="-L$d/lib"
+                OPENSSL_LIB_LDFLAGS="-L$d/lib${libsuff}"
                 OPENSSL_LIB_CPPFLAGS="-I$d/include"
                 OPENSSL_LIB_LIB="-lcrypto"
                 AC_MSG_RESULT($d)
@@ -356,9 +358,12 @@ dnl  Look for SQL connectors.
 dnl ######################################################################
 
 AC_ARG_WITH(sql,
-    [  --with-sql[=PATH] directory where MySQL/Postgress exists],
-    WITH_SQL=1,
-    WITH_SQL=0)
+	AS_HELP_STRING(--with-sql, [support database functions]), ,
+	with_sql=check)
+
+if test "x$with_sql" != xno; then
+   WITH_SQL=1
+fi
 
 dnl ######################################################################
 dnl Checks for perl compatible regular expressions
@@ -420,9 +425,10 @@ if test $WITH_SQL; then
   AC_CHECK_HEADERS(mysql/mysql.h)
   AC_CHECK_HEADERS(pgsql/libpq-fe.h)
   AC_CHECK_HEADERS(libpq-fe.h)
-  AC_CHECK_HEADERS(pcre.h)
-  AC_CHECK_HEADERS(pcre/pcre.h)
 fi
+
+AC_CHECK_HEADERS(pcre.h)
+AC_CHECK_HEADERS(pcre/pcre.h)
 
 dnl ######################################################################
 dnl Checks for header files.
@@ -657,6 +663,8 @@ case "$target_os" in
    linux*)
 	AC_DEFINE(LINUX)
 	AC_CHECK_LIB(nss_nis, yp_get_default_domain)
+        AC_CHECK_LIB(acl,main)
+        AC_CHECK_HEADERS(acl.h sys/acl.h acl/libacl.h)
         ;;
    freebsd*|dragonfly*)
 	AC_DEFINE(FREEBSD)
@@ -740,12 +748,13 @@ AC_ARG_WITH(workdir,
 		if test x$withval != x ; then
 			WORKDIR=$withval
 		else
-			WORKDIR=/var/cfengine
+  		        WORKDIR=/var/cfengine
 		fi
-		AC_DEFINE_UNQUOTED(WORKDIR, "${WORKDIR}")
+
+     	AC_DEFINE_UNQUOTED(WORKDIR, "${WORKDIR}")
 	],
 	[
-		WORKDIR=/var/cfengine
+           WORKDIR=/var/cfengine
 
 		AC_DEFINE_UNQUOTED(WORKDIR, "${WORKDIR}")
 	]

@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -59,7 +64,7 @@ char *CLASSTEXT[] =   /* If you change here change enum classes too! */
    "nextstep",
    "cray",
    "gnu",
-   "nt",
+   "windows",
    "unix_sv",
    "openbsd",
    "sco",
@@ -101,9 +106,9 @@ char *CLASSATTRIBUTES[CF_CLASSATTR][CF_ATTRDIM] =
    {"aos",".*",".*"},              /* AOS */
    {"bsd/os",".*",".*"},           /* BSDI */
    {"nextstep",".*",".*"},         /* nextstep */
-   {"sn*","cray*",".*"},           /* cray */
-   {"gnu*",".*",".*"},             /* gnu */
-   {"cygwin_nt*",".*",".*"},       /* NT */
+   {"sn.*","cray*",".*"},           /* cray */
+   {"gnu.*",".*",".*"},             /* gnu */
+   {"cygwin_nt.*",".*",".*"},       /* NT */
    {"unix_sv",".*",".*"},          /* Unixware */
    {"openbsd",".*",".*"},          /* OpenBSD */
    {"sco_sv",".*",".*"},           /* SCO */

@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -27,6 +31,24 @@
 
 #include "cf3.defs.h"
 #include "cf3.extern.h"
+
+/***************************************************************************/
+
+enum cfdbtype Str2dbType(char *s)
+
+{ int i;
+  static char *types[] = { "mysql","postgres", NULL };
+    
+for (i = 0; types[i] != NULL; i++)
+   {
+   if (s && strcmp(s,types[i]) == 0)
+      {
+      return (enum cfdbtype) i;
+      }
+   }
+
+return cfd_notype;
+}
 
 /***************************************************************************/
 
@@ -236,7 +258,7 @@ return cfa_nocomparison;
 enum representations String2Representation(char *s)
 
 { int i;
- static char *types[] = {"url","web","file","db","literal","image",NULL};
+ static char *types[] = {"url","web","file","db","literal","image","portal",NULL};
 
 for (i = 0; types[i] != NULL; i++)
    {
@@ -522,6 +544,24 @@ return (long) cftime;
 
 /*********************************************************************/
 
+enum cfinterval Str2Interval(char *string)
+
+{ static char *text[3] = { "hourly", "daily", NULL };
+  int i;
+ 
+for (i = 0; text[i] != NULL; i++)
+   {
+   if (string && (strcmp(text[i],string) == 0))
+      {
+      return i;
+      }
+   }
+
+return cfa_nointerval;
+}
+
+/*********************************************************************/
+
 int Day2Number(char *datestring)
 
 { int i = 0;
@@ -701,7 +741,7 @@ return cfacl_nomethod;
 
 enum cf_acl_type Str2AclType(char *string)
 
-{ static char *text[3] = { "posix", "ntfs", NULL };
+{ static char *text[4] = { "generic","posix", "ntfs", NULL };
   int i;
  
 for (i = 0; i < 3; i++)
@@ -719,10 +759,10 @@ return cfacl_notype;
 
 enum cf_acl_inherit Str2AclInherit(char *string)
 
-{ static char *text[3] = { "default", "parent", NULL };
+{ static char *text[4] = { "specify", "parent", "none", NULL };
   int i;
  
-for (i = 0; i < 3; i++)
+for (i = 0; i < 4; i++)
    {
    if (string && (strcmp(text[i],string) == 0))
       {

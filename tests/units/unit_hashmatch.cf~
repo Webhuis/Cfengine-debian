@@ -1,0 +1,24 @@
+
+body common control
+
+{
+bundlesequence  => { "example" };
+}
+
+###########################################################
+
+bundle agent example
+
+{     
+classes:
+
+  "matches" expression => hashmatch("/etc/passwd",md5,);
+
+reports:
+
+  matches::
+
+    "File has correct version";
+
+}
+

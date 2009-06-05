@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -64,7 +69,7 @@ do
       break;
       }
    
-   ReadLine(vbuff,CF_BUFSIZE,pp);
+   CfReadLine(vbuff,CF_BUFSIZE,pp);
 
    if (ferror(pp))  /* abortable */
       {
@@ -133,57 +138,58 @@ do
       case qnx:
       case crayos:
       case dragonfly:
-                    if (buf1[0] == '/')
-                       {
-                       strcpy(host,"localhost");
-                       strcpy(mounton,buf3);
-                       }
-                    else
-                       {
-                       sscanf(buf1,"%[^:]:%s",host,source);
-                       strcpy(mounton,buf3);
-                       }
-
-                    break;
+          if (IsAbsoluteFileName(buf1))
+             {
+             strcpy(host,"localhost");
+             strcpy(mounton,buf3);
+             }
+          else
+             {
+             sscanf(buf1,"%[^:]:%s",host,source);
+             strcpy(mounton,buf3);
+             }
+          
+          break;
       case solaris:
       case solarisx86:
 
       case hp:      
-                    if (buf3[0] == '/')
-                       {
-                       strcpy(host,"localhost");
-                       strcpy(mounton,buf1);
-                       }
-                    else
-                       {
-                       sscanf(buf1,"%[^:]:%s",host,source);
-                       strcpy(mounton,buf1);
-                       }
-
-                    break;
+          if (IsAbsoluteFileName(buf3))
+             {
+             strcpy(host,"localhost");
+             strcpy(mounton,buf1);
+             }
+          else
+             {
+             sscanf(buf1,"%[^:]:%s",host,source);
+             strcpy(mounton,buf1);
+             }
+          
+          break;
       case aix:
-                   /* skip header */
-
-                    if (buf1[0] == '/')
-                       {
-                       strcpy(host,"localhost");
-                       strcpy(mounton,buf2);
-                       }
-                    else
-                       {
-                       strcpy(host,buf1);
-                       strcpy(source,buf1);
-                       strcpy(mounton,buf3);
-                       }
-                    break;
-
-      case cfnt:    strcpy(mounton,buf2);
-                    strcpy(host,buf1);
-                    break;
+          /* skip header */
+          
+          if (IsAbsoluteFileName(buf1))
+             {
+             strcpy(host,"localhost");
+             strcpy(mounton,buf2);
+             }
+          else
+             {
+             strcpy(host,buf1);
+             strcpy(source,buf1);
+             strcpy(mounton,buf3);
+             }
+          break;
+          
+      case cfnt:
+          strcpy(mounton,buf2);
+          strcpy(host,buf1);
+          break;
       case unused2:
       case unused3:
-                    break;
-
+          break;
+          
       case cfsco: CfOut(cf_error,"","Don't understand SCO mount format, no data");
 
       default:
@@ -435,7 +441,7 @@ if (MatchFSInFstab(mountpt))
              
              while(!feof(pfp))
                 {
-                ReadLine(line,CF_BUFSIZE,pfp);
+                CfReadLine(line,CF_BUFSIZE,pfp);
                 
                 if (line[0] == '#')
                    {
@@ -504,7 +510,7 @@ if (! DONTDO)
       return 0;
       }
    
-   ReadLine(line,CF_BUFSIZE,pfp);
+   CfReadLine(line,CF_BUFSIZE,pfp);
    
    if (strstr(line,"busy") || strstr(line,"Busy"))
       {
@@ -595,7 +601,7 @@ while (!feof(pp))
       break;
       }
    
-   ReadLine(line,CF_BUFSIZE,pp);
+   CfReadLine(line,CF_BUFSIZE,pp);
 
    if (ferror(pp))  /* abortable */
       {

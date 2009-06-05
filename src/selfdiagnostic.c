@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -94,7 +98,7 @@ for (i = 0; varstrings[i] != NULL; i++)
       {
       printf("-----------------------------------------------------------\n");
       printf("Scanning: [%s]\n",varstrings[i]);
-      ScanRval("diagnostic",&scalars,&listoflists,varstrings[i],CF_SCALAR);
+      ScanRval("diagnostic",&scalars,&listoflists,varstrings[i],CF_SCALAR,NULL);
       printf("Cumulative scan produced:\n");
       printf("   Scalar variables: ");
       ShowRlist(stdout,scalars);
@@ -167,6 +171,25 @@ void TestExpandVariables()
   struct Constraint *cp;
   struct FnCall *fp;
 
+#ifndef NT
+if (getuid() > 0)
+   {
+   strncpy(CFWORKDIR,GetHome(getuid()),CF_BUFSIZE-10);
+   strcat(CFWORKDIR,"/.cfagent");
+   
+   if (strlen(CFWORKDIR) > CF_BUFSIZE/2)
+      {
+      FatalError("Suspicious looking home directory. The path is too long and will lead to problems.");
+      }
+   }
+else
+   {
+   strcpy(CFWORKDIR,WORKDIR);
+   }
+#else
+strcpy(CFWORKDIR,WORKDIR);
+#endif
+  
 /* Still have diagnostic scope */
 NewScope("control_common");
   
@@ -191,16 +214,16 @@ AppendConstraint(&(pp.conlist),"lval3",fp,CF_FNCALL,"upper classes2");
 
 pcopy = DeRefCopyPromise("diagnostic",&pp);
 
-ScanRval("diagnostic",&scalarvars,&listvars,pcopy->promiser,CF_SCALAR);
+ScanRval("diagnostic",&scalarvars,&listvars,pcopy->promiser,CF_SCALAR,NULL);
 
 if (pcopy->promisee != NULL)
    {
-   ScanRval("diagnostic",&scalarvars,&listvars,pp.promisee,pp.petype);
+   ScanRval("diagnostic",&scalarvars,&listvars,pp.promisee,pp.petype,NULL);
    }
 
 for (cp = pcopy->conlist; cp != NULL; cp=cp->next)
    {
-   ScanRval("diagnostic",&scalarvars,&listvars,cp->rval,cp->type);
+   ScanRval("diagnostic",&scalarvars,&listvars,cp->rval,cp->type,NULL);
    }
 
 ExpandPromiseAndDo(cf_common,"diagnostic",pcopy,scalarvars,listvars,NULL);
@@ -220,6 +243,8 @@ printf("%d. Testing regular expression engine\n",++NR);
 printf(" -> Regex engine is the Perl Compatible Regular Expression library\n");
 #else
 printf(" -> Regex engine is the POSIX Regular Expression library\n");
+printf(" !! Note if any of these tests hang, we recommend using the PCRE library\n");
+printf(" !! as the POSIX implementation suffers from memory corruption\n");
 #endif
 
 rex = CompileRegExp("#.*");

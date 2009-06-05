@@ -1,22 +1,26 @@
 
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -311,15 +315,25 @@ void HashString(char *buffer,int len,unsigned char digest[EVP_MAX_MD_SIZE+1],enu
 
 { EVP_MD_CTX context;
   const EVP_MD *md = NULL;
+  char *file_buffer;
   int md_len;
 
 Debug2("HashString(%c)\n",type);
 
-md = EVP_get_digestbyname(FileHashName(type));
-
-EVP_DigestInit(&context,md); 
-EVP_DigestUpdate(&context,(unsigned char*)buffer,len);
-EVP_DigestFinal(&context,digest,&md_len);
+switch (type)
+   {
+   case cf_crypt:
+       CfOut(cf_error,"","The crypt support is not presently implemented, please use md5 instead");
+       break;
+       
+   default:
+       md = EVP_get_digestbyname(FileHashName(type));
+       
+       EVP_DigestInit(&context,md); 
+       EVP_DigestUpdate(&context,(unsigned char*)buffer,len);
+       EVP_DigestFinal(&context,digest,&md_len);
+       break;
+   }
 }
 
 /*******************************************************************/

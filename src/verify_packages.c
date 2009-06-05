@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -90,7 +94,7 @@ if (a.packages.package_list_command == NULL && a.packages.package_file_repositor
 
 if (a.packages.package_name_regex||a.packages.package_version_regex||a.packages.package_arch_regex)
    {
-   if (a.packages.package_name_regex&&a.packages.package_version_regex&&a.packages.package_arch_regex)
+   if (a.packages.package_name_regex && a.packages.package_version_regex && a.packages.package_arch_regex)
       {
       if (!(a.packages.package_version && a.packages.package_architectures))
          {
@@ -211,7 +215,12 @@ if (a.packages.package_list_command != NULL)
    while (!feof(prp))
       {
       memset(vbuff,0,CF_BUFSIZE);
-      ReadLine(vbuff,CF_BUFSIZE,prp);   
+      CfReadLine(vbuff,CF_BUFSIZE,prp);   
+
+      if (!FullTextMatch(a.packages.package_installed_regex,vbuff))
+         {
+         continue;
+         }
       
       if (!PrependListPackageItem(&(manager->pack_list),vbuff,a,pp))
          {
@@ -221,6 +230,46 @@ if (a.packages.package_list_command != NULL)
    
    cf_pclose(prp);
    }
+
+/* Now get available updates */
+
+if (a.packages.package_update_list_command != NULL)
+   {
+   CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
+   CfOut(cf_verbose,"","   Reading package updates from %s\n",GetArg0(a.packages.package_update_list_command));
+   CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
+
+   if (!IsExecutable(GetArg0(a.packages.package_update_list_command)))
+      {
+      CfOut(cf_error,"","The proposed package update list command \"%s\" was not executable",a.packages.package_update_list_command);
+      return false;
+      }
+   
+   if ((prp = cf_popen(a.packages.package_update_list_command,"r")) == NULL)
+      {
+      CfOut(cf_error,"cf_popen","Couldn't open the package update list with command %s\n",a.packages.package_update_list_command);
+      return false;
+      }
+   
+   while (!feof(prp))
+      {
+      memset(vbuff,0,CF_BUFSIZE);
+      CfReadLine(vbuff,CF_BUFSIZE,prp);   
+
+      if (!PrependUpdateItem(&(manager->update_list),vbuff,manager->pack_list,a,pp))
+         {
+         continue;
+         }
+      }
+   
+   cf_pclose(prp);
+   }
+
+ReportSoftware(INSTALLED_PACKAGE_LISTS);
+
+CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
+CfOut(cf_verbose,"","  Done checking packages \n");
+CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
 
 return true;
 }
@@ -520,6 +569,7 @@ np->manager = strdup(mgr);
 np->action = pa;
 np->policy = policy;
 np->pack_list = NULL;
+np->update_list = NULL;
 np->next = *lists;
 *lists = np;
 return np;
@@ -548,10 +598,42 @@ int PrependListPackageItem(struct CfPackageItem **list,char *item,struct Attribu
   char version[CF_MAXVARSIZE];
   char vbuff[CF_MAXVARSIZE];
 
-if (!FullTextMatch(a.packages.package_installed_regex,item))
+strncpy(vbuff,ExtractFirstReference(a.packages.package_list_name_regex,item),CF_MAXVARSIZE-1);
+sscanf(vbuff,"%s",name); /* trim */
+
+strncpy(vbuff,ExtractFirstReference(a.packages.package_list_version_regex,item),CF_MAXVARSIZE-1);
+sscanf(vbuff,"%s",version); /* trim */
+
+if (a.packages.package_list_arch_regex)
+   {
+   strncpy(vbuff,ExtractFirstReference(a.packages.package_list_arch_regex,item),CF_MAXVARSIZE-1);
+   sscanf(vbuff,"%s",arch); /* trim */
+   }
+else
+   {
+   strncpy(arch,"default",CF_MAXVARSIZE-1);
+   }
+
+if (strcmp(name,"CF_NOMATCH") == 0 || strcmp(version,"CF_NOMATCH") == 0 || strcmp(arch,"CF_NOMATCH") == 0)
    {
    return false;
    }
+
+Debug(" -? Extracted package name \"%s\"\n",name);
+Debug(" -?      with version \"%s\"\n",version);
+Debug(" -?      with architecture \"%s\"\n",arch);
+
+return PrependPackageItem(list,name,version,arch,a,pp);
+}
+
+/*****************************************************************************/
+
+int PrependUpdateItem(struct CfPackageItem **list,char *item,struct CfPackageItem *chklist,struct Attributes a,struct Promise *pp)
+
+{ char name[CF_MAXVARSIZE];
+  char arch[CF_MAXVARSIZE];
+  char version[CF_MAXVARSIZE];
+  char vbuff[CF_MAXVARSIZE];
 
 strncpy(vbuff,ExtractFirstReference(a.packages.package_list_name_regex,item),CF_MAXVARSIZE-1);
 sscanf(vbuff,"%s",name); /* trim */
@@ -568,10 +650,22 @@ else
    strncpy(arch,"default",CF_MAXVARSIZE-1);
    }
 
+if (strcmp(name,"CF_NOMATCH") == 0 || strcmp(version,"CF_NOMATCH") == 0 || strcmp(arch,"CF_NOMATCH") == 0)
+   {
+   return false;
+   }
+
 Debug(" -? Extracted package name \"%s\"\n",name);
 Debug(" -?      with version \"%s\"\n",version);
 Debug(" -?      with architecture \"%s\"\n",arch);
 
+if (!PackageInItemList(chklist,name,version,arch))
+   {
+   CfOut(cf_verbose,""," -> Update for (%s,%s,%s) found, but it appears to be installed already",name,version,arch);
+   return false;
+   }
+
+CfOut(cf_verbose,""," -> Update for (%s,%s,%s) found, and it is not installed",name,version,arch);
 return PrependPackageItem(list,name,version,arch,a,pp);
 }
 
@@ -781,7 +875,7 @@ for (cmd = command; *cmd != '\0' && *cmd != ' '; cmd++)
    {
    }
 
-while (*(cmd-1) != '/' && cmd >= command)
+while (*(cmd-1) != FILE_SEPARATOR && cmd >= command)
    {
    cmd--;
    }
@@ -796,7 +890,7 @@ while (!feof(pfp))
       }
 
    line[0] = '\0';
-   ReadLine(line,CF_BUFSIZE-1,pfp);
+   CfReadLine(line,CF_BUFSIZE-1,pfp);
    CfOut(cf_inform,"","Q:%20.20s ...:%s",cmd,line);
 
    if (strlen(line) > 0 && verify)
@@ -936,6 +1030,28 @@ DeleteRlist(numbers_2);
 DeleteRlist(separators_1);
 DeleteRlist(separators_2);
 return result;
+}
+
+/*****************************************************************************/
+
+int PackageInItemList(struct CfPackageItem *list,char *name,char *version,char *arch)
+
+{ struct CfPackageItem *pi;
+ 
+if (strlen(name) == 0 || strlen(version) == 0 || strlen(arch) == 0)
+   {
+   return false;
+   }
+
+for (pi = list; pi != NULL; pi = pi->next)
+   {
+   if (strcmp(pi->name,name) == 0 && strcmp(pi->version,version) == 0 && strcmp(pi->arch,arch) == 0)
+      {
+      return true;
+      }
+   }
+
+return false;
 }
 
 /*****************************************************************************/

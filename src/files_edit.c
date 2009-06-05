@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -68,19 +72,19 @@ void FinishEditContext(struct edit_context *ec,struct Attributes a,struct Promis
 
 if (DONTDO || a.transaction.action == cfa_warn)
    {
-   if (ec && ec->num_edits > 0)
+   if (ec && !CompareToFile(ec->file_start,ec->filename,a,pp) && ec->num_edits > 0)
       {
-      cfPS(cf_error,CF_NOP,"",pp,a,"Need to edit file %s but only a warning promised",ec->filename);
+      cfPS(cf_error,CF_WARN,"",pp,a," -> Need to edit file %s but only a warning promised",ec->filename);
       }
    return;
    }
 else if (ec && ec->num_edits > 0)
    {
-   if (CompareToFile(ec->file_start,ec->filename))
+   if (CompareToFile(ec->file_start,ec->filename,a,pp))
       {
       if (ec)
          {
-         cfPS(cf_inform,CF_NOP,"",pp,a," -> No edit changes to file %s need saving",ec->filename);
+         cfPS(cf_verbose,CF_NOP,"",pp,a," -> No edit changes to file %s need saving",ec->filename);
          }      
       }
    else
@@ -93,7 +97,7 @@ else
    {
    if (ec)
       {
-      cfPS(cf_inform,CF_NOP,"",pp,a," -> No edit changes to file %s need saving",ec->filename);
+      cfPS(cf_verbose,CF_NOP,"",pp,a," -> No edit changes to file %s need saving",ec->filename);
       }
    }
 
@@ -127,7 +131,7 @@ if (stat(file,&statbuf) == -1)
 
 if (a.edits.maxfilesize != 0 && statbuf.st_size > a.edits.maxfilesize)
    {
-   CfOut(cf_inform,"","File %s is bigger than the limit edit.max_file_size = %d bytes\n",file,a.edits.maxfilesize);
+   CfOut(cf_inform,""," !! File %s is bigger than the limit edit.max_file_size = %d bytes\n",file,a.edits.maxfilesize);
    return(false);
    }
 
@@ -147,7 +151,7 @@ memset(line,0,CF_BUFSIZE);
 
 while(!feof(fp))
    {
-   ReadLine(line,CF_BUFSIZE-1,fp);
+   CfReadLine(line,CF_BUFSIZE-1,fp);
 
    if (!feof(fp) || (strlen(line) != 0))
       {
@@ -189,7 +193,7 @@ stamp_now = time((time_t *)NULL);
   
 if (stat(file,&statbuf) == -1)
    {
-   cfPS(cf_error,CF_FAIL,"stat",pp,a,"Can no longer access file %s, which needed editing!\n",file);
+   cfPS(cf_error,CF_FAIL,"stat",pp,a," !! Can no longer access file %s, which needed editing!\n",file);
    return false;
    }
 
@@ -228,7 +232,7 @@ cfPS(cf_inform,CF_CHG,"",pp,a,"Edited file %s \n",file);
 
 if (rename(file,backup) == -1)
    {
-   cfPS(cf_error,CF_FAIL,"rename",pp,a,"Can't rename %s to %s - so promised edits could not be moved into place\n",file,backup);
+   cfPS(cf_error,CF_FAIL,"rename",pp,a," !! Can't rename %s to %s - so promised edits could not be moved into place\n",file,backup);
    return false;
    }
 
@@ -239,10 +243,14 @@ if (a.edits.backup != cfa_nobackup)
       unlink(backup);
       }
    }
+else
+   {
+   unlink(backup);
+   }
 
 if (rename(new,file) == -1)
    {
-   cfPS(cf_error,CF_FAIL,"rename",pp,a,"Can't rename %s to %s - so promised edits could not be moved into place\n",new,file);
+   cfPS(cf_error,CF_FAIL,"rename",pp,a," !! Can't rename %s to %s - so promised edits could not be moved into place\n",new,file);
    return false;
    }       
 

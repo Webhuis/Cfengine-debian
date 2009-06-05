@@ -137,6 +137,8 @@ extern int errno;
 #ifndef ps2
 #include <sys/statfs.h>
 #endif
+
+#include <sys/systemcfg.h>
 #endif
 
 #ifdef SOLARIS
@@ -329,7 +331,7 @@ typedef int clockid_t;
 #define CF_METHODEXEC 0
 #define CF_METHODREPLY  1
 #define CF_EXEC_IFELAPSED 5
-#define CF_EXEC_EXPIREAFTER 10
+#define CF_EXEC_EXPIREAFTER 30
 
 /* Need this to to avoid conflict with solaris 2.6 and db.h */
 
@@ -363,7 +365,6 @@ typedef int clockid_t;
 #define CF_AVDB_FILE      "cf_observations.db"
 #define CF_OLDAVDB_FILE   "cf_learning.db"
 #define CF_STATEDB_FILE   "cf_state.db"
-#define CF_OLDLASTDB_FILE "cf_lastseen.db"
 #define CF_LASTDB_FILE    "cf_LastSeen.db"
 #define CF_AUDITDB_FILE   "cf_Audit.db"
 
@@ -401,6 +402,7 @@ typedef int clockid_t;
 #define CF_SHA_LEN 20
 #define CF_SHA1_LEN 20
 #define CF_BEST_LEN 0
+#define CF_CRYPT_LEN 64
 #define CF_SHA224_LEN 28
 #define CF_SHA256_LEN 32
 #define CF_SHA384_LEN 48
@@ -613,6 +615,8 @@ enum PROTOS
    cfd_sget,
    cfd_version,
    cfd_sopendir,
+   cfd_var,
+   cfd_svar,
    cfd_bad
    };
 
@@ -1059,34 +1063,6 @@ enum matchtypes
     NOTregexComplete
     };
 
-
-/*******************************************************************/
-
-struct CFACL
-   {
-   char * acl_alias;
-   enum   cffstype type;
-   char   method;            /* a = append, o = overwrite */
-   char   nt_acltype;
-   struct CFACE *aces;
-   struct CFACL *next;
-   };
-
-/*******************************************************************/
-
-struct CFACE
-   {
-#ifdef NT
-   char *access;     /* allowed / denied */
-   long int NTMode;  /* NT's access mask */
-#endif
-   char *mode;        /* permission flags*/
-   char *name;        /* id name */
-   char *acltype;     /* user / group / other */
-   char *classes;
-   struct CFACE *next;
-   };
-
 /*******************************************************************/
 
 struct Auth
@@ -1245,12 +1221,8 @@ struct Checksum_Value
 
 #ifdef NT
 #  define IsFileSep(c) ((c) == '\\' || (c) == '/')
-#  define FILE_SEPARATOR '\\'
-#  define FILE_SEPARATOR_STR "\\"
 #else
 #  define IsFileSep(c) ((c) == '/')
-#  define FILE_SEPARATOR '/'
-#  define FILE_SEPARATOR_STR "/"
 #endif
 
 

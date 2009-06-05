@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -27,6 +31,16 @@
 
 #include "cf3.defs.h"
 #include "cf3.extern.h"
+
+/*****************************************************************************/
+
+FILE *cf_fopen(char *file,char *type)
+
+{
+/* Windows native eventually? */
+
+return fopen(file,type);
+}
 
 /*****************************************************************************/
 
@@ -373,6 +387,7 @@ FILE *cf_popen_sh(char *command,char *type)
  { int i,pd[2];
    pid_t pid;
    FILE *pp = NULL;
+   char esc_command[CF_BUFSIZE];
 
 Debug("cf_popen_sh(%s)\n",command);
 
@@ -438,8 +453,9 @@ if (pid == 0)
          close(i);
          }
       }
-   
-   execl("/bin/sh","sh","-c",command,NULL);
+
+   strncpy(esc_command,WinEscapeCommand(command),CF_BUFSIZE-1);
+   execl("/bin/sh","sh","-c",esc_command,NULL);
    _exit(1);
    }
 else
@@ -490,6 +506,7 @@ FILE *cf_popen_shsetuid(char *command,char *type,uid_t uid,gid_t gid,char *chdir
  { int i,pd[2];
    pid_t pid;
    FILE *pp = NULL;
+   char esc_command[CF_BUFSIZE];
 
 Debug("cf_popen_shsetuid(%s,%s,%d,%d)\n",command,type,uid,gid);
 
@@ -578,8 +595,9 @@ if (pid == 0)
       {
       _exit(1);
       }
-   
-   execl("/bin/sh","sh","-c",command,NULL);
+
+   strncpy(esc_command,WinEscapeCommand(command),CF_BUFSIZE-1);
+   execl("/bin/sh","sh","-c",esc_command,NULL);
    _exit(1);
    }
 else
@@ -814,6 +832,16 @@ else
 
 return (WEXITSTATUS(status));
 #endif
+}
+
+/*****************************************************************************/
+
+int cf_fclose(FILE *fp)
+
+{
+/* Windows native eventually? */
+
+return fclose(fp);
 }
 
 /*******************************************************************/

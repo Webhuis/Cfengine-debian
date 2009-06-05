@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
+  
 */
 
 /*****************************************************************************/
@@ -43,6 +47,7 @@ enum typesequence
    kp_commands,
    kp_methods,
    kp_files,
+   kp_databases,
    kp_reports,
    kp_none
    };
@@ -58,6 +63,7 @@ char *TYPESEQUENCE[] =
    "commands",
    "methods",
    "files",
+   "databases",
    "reports",
    NULL
    };
@@ -173,7 +179,6 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:VSxMB",OPTIONS,&optindex)) != EOF)
           break;
 
       case 'B':
-          strncpy(VINPUTFILE,"./failsafe.cf",CF_BUFSIZE-1);
           BOOTSTRAP = true;
           MINUSF = true;
           break;
@@ -219,8 +224,7 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:VSxMB",OPTIONS,&optindex)) != EOF)
           break;
 
       default:  Syntax("cf-agent - cfengine's change agent",OPTIONS,HINTS,ID);
-          exit(1);
-          
+          exit(1);          
       }
   }
 
@@ -466,7 +470,7 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_repository].lval) == 0)
       {
       VREPOSITORY = strdup(retval);
-      CfOut(cf_verbose,"","SET compresscommand = %s\n",VREPOSITORY);
+      CfOut(cf_verbose,"","SET repository = %s\n",VREPOSITORY);
       continue;
       }
 
@@ -541,6 +545,13 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
          SetEnvironment(rp->item);
          }
       
+      continue;
+      }
+
+   if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_lastseen].lval) == 0)
+      {
+      LASTSEEN = GetBoolean(retval);
+      CfOut(cf_verbose,"","SET lastseen to %d",LASTSEEN);
       continue;
       }
    }
@@ -630,6 +641,8 @@ for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
       {
       AugmentScope(bp->name,bp->args,params);
       BannerBundle(bp,params);
+      THIS_BUNDLE = bp->name;
+      DeletePrivateClassContext(); // Each time we change bundle
       ScheduleAgentOperations(bp);
       }
    }
@@ -646,8 +659,6 @@ int ScheduleAgentOperations(struct Bundle *bp)
   enum typesequence type;
   int pass;
 
-DeletePrivateClassContext(); // Each time we change bundle
-  
 for (pass = 1; pass < CF_DONEPASSES; pass++)
    {
    for (type = 0; TYPESEQUENCE[type] != NULL; type++)
@@ -657,6 +668,11 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
       if ((sp = GetSubTypeForBundle(TYPESEQUENCE[type],bp)) == NULL)
          {
          continue;      
+         }
+
+      if (pass > 1 && (type == kp_vars || type == kp_classes))
+         {
+         continue;
          }
 
       BannerSubType(bp->name,sp->name,pass);
@@ -755,7 +771,7 @@ if (!IsDefinedClass(pp->classes))
    CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
    return;
    }
- 
+
 if (pp->done)
    {
    return;
@@ -820,6 +836,13 @@ if (strcmp("files",pp->agentsubtype) == 0)
 if (strcmp("commands",pp->agentsubtype) == 0)
    {
    VerifyExecPromise(pp);
+   EndMeasurePromise(start,pp);
+   return;
+   }
+
+if (strcmp("databases",pp->agentsubtype) == 0)
+   {
+   VerifyDatabasePromises(pp);
    EndMeasurePromise(start,pp);
    return;
    }
@@ -918,7 +941,12 @@ switch(type)
           {
           svp = (struct ServerItem *)rp->item;
           ServerDisconnection(svp->conn);
-          free(svp->server);
+          
+          if (svp->server)
+             {
+             free(svp->server);
+             }
+
           rp->item = NULL;
           }
 

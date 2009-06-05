@@ -1,13 +1,13 @@
 
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -16,6 +16,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -750,6 +755,35 @@ return liststart;
 }
 
 /*********************************************************************/
+
+char *ItemList2CSV(struct Item *list)
+
+{ struct Item *ip;
+  int len = 0;
+  char *s;
+  
+for (ip = list; ip !=  NULL; ip=ip->next)
+   {
+   len += strlen(ip->name) + 1;
+   }
+
+s = malloc(len+1);
+*s = '\0';
+
+for (ip = list; ip !=  NULL; ip=ip->next)
+   {
+   strcat(s,ip->name);
+
+   if (ip->next)
+      {
+      strcat(s,",");
+      }
+   }
+
+return s;
+}
+
+/*********************************************************************/
 /* Basic operations                                                  */
 /*********************************************************************/
 
@@ -846,6 +880,38 @@ for (ptr = list; ptr != NULL; ptr=ptr->next)
 
 /*********************************************************************/
 
+int IsMatchItemIn(struct Item *list,char *item)
+
+/* Solve for possible regex/fuzzy models unified */
+    
+{ struct Item *ptr; 
+ 
+if ((item == NULL) || (strlen(item) == 0))
+   {
+   return true;
+   }
+ 
+for (ptr = list; ptr != NULL; ptr=ptr->next)
+   {
+   if (FuzzySetMatch(ptr->name,item) == 0)
+      {
+      return(true);
+      }
+   
+   if (IsRegex(ptr->name))
+      {
+      if (FullTextMatch(ptr->name,item))
+         {
+         return(true);
+         }      
+      }   
+   }
+ 
+return(false);
+}
+
+/*********************************************************************/
+
 int IsFuzzyItemIn(struct Item *list,char *item)
 
  /* This is for matching ranges of IP addresses, like CIDR e.g.
@@ -879,7 +945,7 @@ return(false);
 
 /*********************************************************************/
 
-void DeleteItemList(struct Item *item)                /* delete starting from item */
+void DeleteItemList(struct Item *item)  /* delete starting from item */
  
 {
 if (item != NULL)
@@ -983,9 +1049,9 @@ while (true)
    ip1 = ip1->next;
    ip2 = ip2->next;
    }
+
+return true;
 }
-
-
 
 /*********************************************************************/
 
@@ -1216,13 +1282,13 @@ return DeleteItemGeneral(list,string,NOTliteralSomewhere);
 
 /*********************************************************************/
 
-int CompareToFile(struct Item *liststart,char *file)
+int CompareToFile(struct Item *liststart,char *file,struct Attributes a,struct Promise *pp)
 
 /* returns true if file on disk is identical to file in memory */
 
 { FILE *fp;
   struct stat statbuf;
-  struct Item *ip = liststart;
+  struct Item *ip = liststart,*cmplist = NULL;
   unsigned char *finmem = NULL, fdata;
   unsigned long fip = 0, tmplen, idx;
 
@@ -1235,59 +1301,20 @@ if (stat(file,&statbuf) == -1)
 
 if (liststart == NULL)
    {
-   return true;
-   }
-
-for (ip = liststart; ip != NULL; ip=ip->next)
-   {
-   tmplen = strlen(ip->name);
-
-   if ((finmem = realloc(finmem, fip+tmplen+1)) == NULL)
-      {
-      Debug("CompareToFile(%s): can't realloc() memory\n",file);
-      free(finmem);
-      return false;
-      }
-   
-   memcpy(finmem+fip, ip->name, tmplen);
-   fip += tmplen;
-   *(finmem+fip++) = '\n';
-   }
-
-if (statbuf.st_size != fip)
-   {
-   Debug("CompareToFile(%s): sizes are different: MEM:(%u) FILE:(%u)\n",file, fip, statbuf.st_size);
-   free(finmem);
    return false;
    }
 
-if ((fp = fopen(file,"r")) == NULL)
+if (!LoadFileAsItemList(&cmplist,file,a,pp))
    {
-   CfOut(cf_error,"fopen","Couldn't read file %s for editing\n",file);
-   free(finmem);
    return false;
    }
 
-for (idx = 0; idx < fip; idx++)
+if (!ItemListsEqual(cmplist,liststart))
    {
-   if (fread(&fdata, 1, 1, fp) != 1)
-      {
-      Debug("CompareToFile(%s): non-zero fread() before file-in-mem finished at %u-th byte MEM:(0x%x/%c)\n",file, idx, *(finmem+idx), *(finmem+idx));
-      free(finmem);
-      fclose(fp);
-      return false;
-      }
-   
-   if (fdata != *(finmem+idx))
-      {
-      printf("CompareToFile(%s): difference found at %u-th byte MEM:(0x%x/%c) != FILE:(0x%x/%c)\n",file, idx, *(finmem+idx), *(finmem+idx), fdata, fdata);
-      free(finmem);
-      fclose(fp);
-      return false;
-      }
+   DeleteItemList(cmplist);
+   return false;
    }
 
-free(finmem);
-fclose(fp);
+DeleteItemList(cmplist);
 return (true);
 }

@@ -1,12 +1,13 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -16,6 +17,10 @@
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 
@@ -96,8 +101,6 @@ struct Item *PREVIOUS_STATE = NULL;
 struct Item *ENTROPIES = NULL;
 
 int NO_FORK = false;
-double FORGETRATE = 0.7;
-
 int LASTQ[CF_OBSERVABLES];
 
 /*******************************************************************/
@@ -488,8 +491,11 @@ return ConvTimeKey(str);
 struct Averages EvalAvQ(char *t)
 
 { struct Averages *currentvals,newvals;
-  int i; 
   double This[CF_OBSERVABLES],delta2;
+  char name[CF_MAXVARSIZE];
+  int i; 
+
+Banner("Evaluating and storing new weekly averages");
   
 if ((currentvals = GetCurrentAverages(t)) == NULL)
    {
@@ -502,6 +508,9 @@ if ((currentvals = GetCurrentAverages(t)) == NULL)
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
    double delta2;
+   
+   name[0] = '\0';
+   GetClassName(i,name);
 
    newvals.Q[i].q = THIS[i];
    LOCALAV.Q[i].q = THIS[i];
@@ -510,11 +519,11 @@ for (i = 0; i < CF_OBSERVABLES; i++)
        
    This[i] = RejectAnomaly(THIS[i],currentvals->Q[i].expect,currentvals->Q[i].var,LOCALAV.Q[i].expect,LOCALAV.Q[i].var);
 
-   Debug("Current %s.q %lf\n",OBS[i][0],currentvals->Q[i].q);
-   Debug("Current %s.var %lf\n",OBS[i][0],currentvals->Q[i].var);
-   Debug("Current %s.ex %lf\n",OBS[i][0],currentvals->Q[i].expect);
-   Debug("THIS[%s] = %lf\n",OBS[i][0],THIS[i]);
-   Debug("This[%s] = %lf\n",OBS[i][0],This[i]);
+   Debug("Current %s.q %lf\n",name,currentvals->Q[i].q);
+   Debug("Current %s.var %lf\n",name,currentvals->Q[i].var);
+   Debug("Current %s.ex %lf\n",name,currentvals->Q[i].expect);
+   Debug("THIS[%s] = %lf\n",name,THIS[i]);
+   Debug("This[%s] = %lf\n",name,This[i]);
 
    newvals.Q[i].expect = WAverage(This[i],currentvals->Q[i].expect,WAGE);
    LOCALAV.Q[i].expect = WAverage(newvals.Q[i].expect,LOCALAV.Q[i].expect,ITER);
@@ -524,15 +533,15 @@ for (i = 0; i < CF_OBSERVABLES; i++)
    newvals.Q[i].var = WAverage(delta2,currentvals->Q[i].var,WAGE);
    LOCALAV.Q[i].var = WAverage(newvals.Q[i].var,LOCALAV.Q[i].var,ITER);
 
-   CfOut(cf_verbose,"","New %s.q %lf\n",OBS[i][0],newvals.Q[i].q);
-   CfOut(cf_verbose,"","New %s.var %lf\n",OBS[i][0],newvals.Q[i].var);
-   CfOut(cf_verbose,"","New %s.ex %lf\n",OBS[i][0],newvals.Q[i].expect);
+   CfOut(cf_verbose,"","New %s.q %lf\n",name,newvals.Q[i].q);
+   CfOut(cf_verbose,"","New %s.var %lf\n",name,newvals.Q[i].var);
+   CfOut(cf_verbose,"","New %s.ex %lf\n",name,newvals.Q[i].expect);
 
-   CfOut(cf_verbose,"","%s = %lf -> (%f#%f) local [%f#%f]\n",OBS[i][0],This[i],newvals.Q[i].expect,sqrt(newvals.Q[i].var),LOCALAV.Q[i].expect,sqrt(LOCALAV.Q[i].var));
+   CfOut(cf_verbose,"","%s = %lf -> (%lf#%lf) local [%lf#%lf]\n",name,This[i],newvals.Q[i].expect,sqrt(newvals.Q[i].var),LOCALAV.Q[i].expect,sqrt(LOCALAV.Q[i].var));
 
    if (This[i] > 0)
       {
-      CfOut(cf_verbose,"","Storing %.2f in %s\n",This[i],OBS[i][0]);
+      CfOut(cf_verbose,"","Storing %.2lf in %s\n",This[i],name);
       }
    }
    
@@ -620,7 +629,7 @@ void ArmClasses(struct Averages av,char *timekey)
   struct Item *classlist = NULL, *ip;
   int i,j,k,pos;
   FILE *fp;
-  char buff[CF_BUFSIZE],ldt_buff[CF_BUFSIZE];
+  char buff[CF_BUFSIZE],ldt_buff[CF_BUFSIZE],name[CF_MAXVARSIZE];
   static int anomaly[CF_OBSERVABLES][LDT_BUFSIZE];
   static double anomaly_chi[CF_OBSERVABLES];
   static double anomaly_chi_limit[CF_OBSERVABLES];
@@ -629,8 +638,9 @@ Debug("Arm classes for %s\n",timekey);
  
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
-   sigma = SetClasses(OBS[i][0],THIS[i],av.Q[i].expect,av.Q[i].var,LOCALAV.Q[i].expect,LOCALAV.Q[i].var,&classlist,timekey);
-   SetVariable(OBS[i][0],THIS[i],av.Q[i].expect,sigma,&classlist);
+   GetClassName(i,name);
+   sigma = SetClasses(name,THIS[i],av.Q[i].expect,av.Q[i].var,LOCALAV.Q[i].expect,LOCALAV.Q[i].var,&classlist,timekey);
+   SetVariable(name,THIS[i],av.Q[i].expect,sigma,&classlist);
 
    /* LDT */
 
@@ -651,7 +661,7 @@ for (i = 0; i < CF_OBSERVABLES; i++)
       anomaly_chi[i] = CHI[i];
       anomaly_chi_limit[i] = CHI_LIMIT[i];
       
-      CfOut(cf_verbose,"","LDT(%d) in %s chi = %.2f thresh %.2f \n",LDT_POS,OBS[i][0],CHI[i],CHI_LIMIT[i]);
+      CfOut(cf_verbose,"","LDT(%d) in %s chi = %.2f thresh %.2f \n",LDT_POS,name,CHI[i],CHI_LIMIT[i]);
 
       /* Last printed element is now */
       
@@ -676,11 +686,11 @@ for (i = 0; i < CF_OBSERVABLES; i++)
 
       if (THIS[i] > av.Q[i].expect)
          {
-         snprintf(buff,CF_BUFSIZE,"%s_high_ldt",OBS[i][0]);
+         snprintf(buff,CF_BUFSIZE,"%s_high_ldt",name);
          }
       else
          {
-         snprintf(buff,CF_BUFSIZE,"%s_high_ldt",OBS[i][0]);
+         snprintf(buff,CF_BUFSIZE,"%s_high_ldt",name);
          }
 
       AppendItem(&classlist,buff,"2");
@@ -707,15 +717,17 @@ for (i = 0; i < CF_OBSERVABLES; i++)
          }
       }
 
-   snprintf(buff,CF_MAXVARSIZE,"ldtbuf_%s=%s",OBS[i][0],ldt_buff);
+   snprintf(buff,CF_MAXVARSIZE,"ldtbuf_%s=%s",name,ldt_buff);
    AppendItem(&classlist,buff,"");
 
-   snprintf(buff,CF_MAXVARSIZE,"ldtchi_%s=%.2f",OBS[i][0],anomaly_chi[i]);
+   snprintf(buff,CF_MAXVARSIZE,"ldtchi_%s=%.2f",name,anomaly_chi[i]);
    AppendItem(&classlist,buff,"");
    
-   snprintf(buff,CF_MAXVARSIZE,"ldtlimit_%s=%.2f",OBS[i][0],anomaly_chi_limit[i]);
+   snprintf(buff,CF_MAXVARSIZE,"ldtlimit_%s=%.2f",name,anomaly_chi_limit[i]);
    AppendItem(&classlist,buff,"");
    }
+
+SetMeasurementPromises(&classlist);
 
 /* Publish class list */
 
@@ -960,11 +972,11 @@ if ((pp = cf_popen(pscomm,"r")) == NULL)
    return;
    }
 
-ReadLine(vbuff,CF_BUFSIZE,pp); 
+CfReadLine(vbuff,CF_BUFSIZE,pp); 
 
 while (!feof(pp))
    {
-   ReadLine(vbuff,CF_BUFSIZE,pp);
+   CfReadLine(vbuff,CF_BUFSIZE,pp);
    sscanf(vbuff,"%s",user);
    
    if (!IsItemIn(list,user))
@@ -1177,7 +1189,7 @@ while (!feof(pp))
    memset(local,0,CF_BUFSIZE);
    memset(remote,0,CF_BUFSIZE);
    
-   ReadLine(vbuff,CF_BUFSIZE,pp);
+   CfReadLine(vbuff,CF_BUFSIZE,pp);
 
    if (strstr(vbuff,"UNIX"))
       {
@@ -1259,7 +1271,7 @@ while (!feof(pp))
  
 cf_pclose(pp);
  
-/* Now save the state for ShowState() cf2 vesion alert function IFF
+/* Now save the state for ShowState() cf2 version alert function IFF
    the state is not smaller than the last or at least 40 minutes
    older. This mirrors the persistence of the maxima classes */
 
@@ -1377,6 +1389,8 @@ if (!OpenDB(AVDB,&dbp))
    {
    return NULL;
    }
+
+memset(&entry,0,sizeof(entry));
 
 AGE++;
 WAGE = AGE / CF_WEEK * CF_MEASURE_INTERVAL;
@@ -1507,7 +1521,18 @@ else
    wold = FORGETRATE;
    }
 
+if (aold == 0 && anew == 0)
+   {
+   return 0;
+   }
+
 av = (wnew*anew + wold*aold)/(wnew+wold); 
+
+if (av < 0)
+   {
+   // Accuracy lost - something wrong
+   return 0.0;
+   }
 
 return av;
 }
@@ -1519,7 +1544,7 @@ double SetClasses(char * name,double variable,double av_expect,double av_var,dou
 { char buffer[CF_BUFSIZE],buffer2[CF_BUFSIZE];
   double dev,delta,sigma,ldelta,lsigma,sig;
 
-Debug("\n SetClasses(%s,X=%f,avX=%f,varX=%f,lavX=%f,lvarX=%f,%s)\n",name,variable,av_expect,av_var,localav_expect,localav_var,timekey);
+Debug("\n SetClasses(%s,X=%lf,avX=%lf,varX=%lf,lavX=%lf,lvarX=%lf,%s)\n",name,variable,av_expect,av_var,localav_expect,localav_var,timekey);
 
 delta = variable - av_expect;
 sigma = sqrt(av_var);
@@ -1527,7 +1552,7 @@ ldelta = variable - localav_expect;
 lsigma = sqrt(localav_var);
 sig = sqrt(sigma*sigma+lsigma*lsigma); 
 
-Debug(" delta = %f,sigma = %f, lsigma = %f, sig = %f\n",delta,sigma,lsigma,sig);
+Debug(" delta = %lf,sigma = %lf, lsigma = %lf, sig = %lf\n",delta,sigma,lsigma,sig);
  
 if (sigma == 0.0 || lsigma == 0.0)
    {
@@ -1636,10 +1661,10 @@ void SetVariable(char *name,double value,double average,double stddev,struct Ite
 sprintf(var,"value_%s=%d",name,(int)value);
 AppendItem(classlist,var,"");
 
-sprintf(var,"average_%s=%1.1f",name,average);
+sprintf(var,"av_%s=%1.1f",name,average);
 AppendItem(classlist,var,"");
 
-sprintf(var,"stddev_%s=%1.1f",name,stddev);
+sprintf(var,"dev_%s=%1.1f",name,stddev);
 AppendItem(classlist,var,""); 
 }
 
@@ -2053,7 +2078,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
                 break;
             }
 
-         Debug("Set temp%d to %f\n",count,temp);
+         Debug("Set temp%d to %lf\n",count,temp);
          }
       }
    
@@ -2087,11 +2112,11 @@ if ((pp = cf_popen("/usr/bin/sensors","r")) == NULL)
    return false;
    }
 
-ReadLine(vbuff,CF_BUFSIZE,pp); 
+CfReadLine(vbuff,CF_BUFSIZE,pp); 
 
 while (!feof(pp))
    {
-   ReadLine(vbuff,CF_BUFSIZE,pp);
+   CfReadLine(vbuff,CF_BUFSIZE,pp);
 
    if (strstr(vbuff,"Temp")||strstr(vbuff,"temp"))
       {
@@ -2134,7 +2159,7 @@ for (ip = list; ip != NULL; ip=ip->next)
                 break;
             }
 
-         Debug("Set temp%d to %f from what looks like cpu temperature\n",count,temp);
+         Debug("Set temp%d to %lf from what looks like cpu temperature\n",count,temp);
          }
       }
    }
@@ -2169,7 +2194,7 @@ for (ip = list; ip != NULL; ip=ip->next)
                 break;
             }
 
-         Debug("Set temp%d to %f from what looks like core temperatures\n",count,temp);
+         Debug("Set temp%d to %lf from what looks like core temperatures\n",count,temp);
          }
       }
    }
@@ -2242,7 +2267,7 @@ for (ip = list; ip != NULL; ip=ip->next)
                 break;
             }
 
-         Debug("Set temp%d to %f\n",count,temp);
+         Debug("Set temp%d to %lf\n",count,temp);
          }
       }
    }

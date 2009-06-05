@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -106,6 +110,18 @@ struct Attributes GetPackageAttributes(struct Promise *pp)
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
 attr.packages = GetPackageConstraints(pp);
+return attr;
+}
+
+/*******************************************************************/
+
+struct Attributes GetDatabaseAttributes(struct Promise *pp)
+
+{ struct Attributes attr;
+
+attr.transaction = GetTransactionConstraints(pp);
+attr.classes = GetClassDefinitionConstraints(pp);
+attr.database = GetDatabaseConstraints(pp);
 return attr;
 }
 
@@ -256,6 +272,8 @@ struct Attributes GetOccurrenceAttributes(struct Promise *pp)
 
 attr.represents = GetListConstraint("represents",pp->conlist);
 attr.rep_type = GetConstraint("representation",pp->conlist,CF_SCALAR);
+attr.web_root = GetConstraint("web_root",pp->conlist,CF_SCALAR);
+attr.path_root = GetConstraint("path_root",pp->conlist,CF_SCALAR);
 
 return attr;
 }
@@ -330,7 +348,8 @@ struct CfACL GetAclConstraints(struct Promise *pp)
 ac.acl_method = Str2AclMethod(GetConstraint("acl_method",pp->conlist,CF_SCALAR));
 ac.acl_type = Str2AclType(GetConstraint("acl_type",pp->conlist,CF_SCALAR));
 ac.acl_directory_inherit = Str2AclInherit(GetConstraint("acl_directory_inherit",pp->conlist,CF_SCALAR));
-ac.acl_entries = GetListConstraint("acl_entries",pp->conlist);
+ac.acl_entries = GetListConstraint("aces",pp->conlist);
+ac.acl_inherit_entries = GetListConstraint("inherit_aces",pp->conlist);
 return ac;
 }
 
@@ -374,20 +393,27 @@ struct FileSelect GetSelectConstraints(struct Promise *pp)
 
 { struct FileSelect s;
   char *value;
+  struct Rlist *rp;
+  mode_t plus,minus;
   
 s.name = (struct Rlist *)GetConstraint("leaf_name",pp->conlist,CF_LIST);
 s.path = (struct Rlist *)GetConstraint("path_name",pp->conlist,CF_LIST);
 s.filetypes = (struct Rlist *)GetConstraint("file_types",pp->conlist,CF_LIST);
 s.issymlinkto = (struct Rlist *)GetConstraint("issymlinkto",pp->conlist,CF_LIST);
 
-s.plus = 0;
-s.minus = 0;
-value = (char *)GetConstraint("search_mode",pp->conlist,CF_SCALAR);
+s.perms = GetListConstraint("search_mode",pp->conlist);
 
-if (!ParseModeString(value,&s.plus,&s.minus))
+for  (rp = s.perms; rp != NULL; rp=rp->next)
    {
-   CfOut(cf_error,"","Problem validating a mode string");
-   PromiseRef(cf_error,pp);
+   plus = 0;
+   minus = 0;
+   value = (char *)rp->item;
+   
+   if (!ParseModeString(value,&plus,&minus))
+      {
+      CfOut(cf_error,"","Problem validating a mode string");
+      PromiseRef(cf_error,pp);
+      }
    }
 
 value = (char *)GetConstraint("search_bsdflags",pp->conlist,CF_SCALAR);
@@ -455,6 +481,10 @@ if (t.expireafter == CF_NOINT)
 
 t.audit = GetBooleanConstraint("audit",pp->conlist);
 t.log_string = GetConstraint("log_string",pp->conlist,CF_SCALAR);
+
+t.log_kept = GetConstraint("log_kept",pp->conlist,CF_SCALAR);
+t.log_repaired = GetConstraint("log_repaired",pp->conlist,CF_SCALAR);
+t.log_failed = GetConstraint("log_failed",pp->conlist,CF_SCALAR);
 
 value = GetConstraint("log_level",pp->conlist,CF_SCALAR);
 t.log_level = String2ReportLevel(value);
@@ -792,6 +822,8 @@ p.package_changes = change_policy;
 p.package_file_repositories = GetListConstraint("package_file_repositories",pp->conlist);
 
 p.package_list_command = (char *)GetConstraint("package_list_command",pp->conlist,CF_SCALAR);
+p.package_update_list_command = (char *)GetConstraint("package_update_list_command",pp->conlist,CF_SCALAR);
+
 p.package_list_version_regex = (char *)GetConstraint("package_list_version_regex",pp->conlist,CF_SCALAR);
 p.package_list_name_regex = (char *)GetConstraint("package_list_name_regex",pp->conlist,CF_SCALAR);
 p.package_list_arch_regex = (char *)GetConstraint("package_list_arch_regex",pp->conlist,CF_SCALAR);
@@ -1179,6 +1211,8 @@ r.showstate = GetListConstraint("showstate",pp->conlist);
 
 r.friend_pattern = GetConstraint("friend_pattern",pp->conlist,CF_SCALAR);
 
+r.to_file = GetConstraint("report_to_file",pp->conlist,CF_SCALAR);
+
 return r;
 }
 
@@ -1226,6 +1260,11 @@ m.stream_type = GetConstraint("stream_type",pp->conlist,CF_SCALAR);
 value = GetConstraint("data_type",pp->conlist,CF_SCALAR);
 m.data_type = Typename2Datatype(value);
 
+if (m.data_type == cf_notype)
+   {
+   m.data_type = cf_str;
+   }
+
 m.history_type = GetConstraint("history_type",pp->conlist,CF_SCALAR);
 m.select_line_matching = GetConstraint("select_line_matching",pp->conlist,CF_SCALAR);
 m.select_line_number = GetIntConstraint("select_line_number",pp->conlist);
@@ -1233,4 +1272,34 @@ m.select_line_number = GetIntConstraint("select_line_number",pp->conlist);
 m.extraction_regex = GetConstraint("extraction_regex",pp->conlist,CF_SCALAR);
 m.units = GetConstraint("units",pp->conlist,CF_SCALAR);
 return m;
+}
+
+/*******************************************************************/
+
+struct CfDatabase GetDatabaseConstraints(struct Promise *pp)
+
+{ struct CfDatabase d;
+  char *value;
+
+d.db_server_owner = GetConstraint("db_server_owner",pp->conlist,CF_SCALAR);
+d.db_server_password = GetConstraint("db_server_password",pp->conlist,CF_SCALAR);
+d.db_server_host = GetConstraint("db_server_host",pp->conlist,CF_SCALAR);
+d.db_connect_db = GetConstraint("db_server_connection_db",pp->conlist,CF_SCALAR);
+d.type = GetConstraint("database_type",pp->conlist,CF_SCALAR);
+d.server = GetConstraint("database_server",pp->conlist,CF_SCALAR);
+d.columns = GetListConstraint("database_columns",pp->conlist);
+d.rows = GetListConstraint("database_rows",pp->conlist);
+d.operation = GetConstraint("database_operation",pp->conlist,CF_SCALAR);
+d.exclude = GetListConstraint("registry_exclude",pp->conlist);
+
+value = GetConstraint("db_server_type",pp->conlist,CF_SCALAR);
+d.db_server_type = Str2dbType(value);
+
+if (value && d.db_server_type == cfd_notype)
+   {
+   CfOut(cf_error,"","Unsupported database type \"%s\" in databases promise",value);
+   PromiseRef(cf_error,pp);
+   }
+
+return d;
 }

@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -141,13 +145,15 @@ for (rpl = lvals, rpr=rvals; rpl != NULL; rpl = rpl->next,rpr = rpr->next)
    {
    lval = (char *)rpl->item;
 
+   CfOut(cf_verbose,"","    ? Augment scope %s with %s\n",scope,lval);
+
    // CheckBundleParameters() already checked that there is no namespace collision
    // By this stage all functions should have been expanded, so we only have scalars left
 
    if (IsNakedVar(rpr->item,'@'))
       {
       GetNaked(naked,rpr->item);
-
+      
       if (GetVariable(scope,naked,&(retval.item),&(retval.rtype)) != cf_notype)
          {
          NewList(scope,lval,retval.item,cf_slist);
@@ -308,11 +314,32 @@ void PushThisScope()
 
 op = GetScope("this");
 
+if (op == NULL)
+   {
+   return;
+   }
+
 CF_STCKFRAME++;
 PushStack(&CF_STCK,(void *)op);
 snprintf(name,CF_MAXVARSIZE,"this_%d",CF_STCKFRAME);
 free(op->scope);
 op->scope = strdup(name);
+
+/*
+op = GetScope("match");
+
+if (op == NULL)
+   {
+   return;
+   }
+
+CF_STCKFRAME++;
+PushStack(&CF_STCK,(void *)op);
+snprintf(name,CF_MAXVARSIZE,"match_%d",CF_STCKFRAME);
+free(op->scope);
+op->scope = strdup(name);
+NewScope("match");
+*/
 }
 
 /*******************************************************************/
@@ -320,10 +347,34 @@ op->scope = strdup(name);
 void PopThisScope()
 
 { struct Scope *op = NULL;
+
+ /*
+DeleteScope("match");
  
 if (CF_STCKFRAME > 0)
    {
    PopStack(&CF_STCK,(void *)&op,sizeof(op));
+
+   if (op == NULL)
+      {
+      return;
+      }
+   
+   CF_STCKFRAME--;
+   free(op->scope);
+   op->scope = strdup("match");
+   }    
+ */
+ 
+if (CF_STCKFRAME > 0)
+   {
+   PopStack(&CF_STCK,(void *)&op,sizeof(op));
+
+   if (op == NULL)
+      {
+      return;
+      }
+   
    CF_STCKFRAME--;
    free(op->scope);
    op->scope = strdup("this");

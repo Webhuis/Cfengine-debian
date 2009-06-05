@@ -1,0 +1,136 @@
+<p><h1>Cfengine Site Policy Summary (version 1.2.3)</h1> <html><head>
+<link rel="stylesheet" type="text/css" href="http://www.cfengine.org/css/promises.css" />
+</head>
+
+<a name="bundle_testbundle"></a><div id="bundle"><table class=border><tr><td><h2> Bundle <span class="bodytype">agent</span> <span class="bodyname">testbundle</span>
+ <tr><td> ARGS:</td></tr>
+
+<tr><td><table class="border"><tr><td><tr><td><a name="type_vars"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_copy_edit_cf_21"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_testbundle">[BUNDLE]</a>&nbsp;
+<a href="promises.cf.html#promise_unit_copy_edit_cf_21">[TEMPLATE]</a>
+<a href="promise_output_common.html#promise_unit_copy_edit_cf_21">[RESULT]</a>
+</div>
+Promise type is <span class="subtype">vars</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'source'</b> make the promise to default promisee 'cf-agent' (about vars)...
+
+<br><span class="lval">........................string</span> => /tmp , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_copy_edit.cf</i>' near line 21</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_copy_edit_cf_22"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_testbundle">[BUNDLE]</a>&nbsp;
+<a href="promises.cf.html#promise_unit_copy_edit_cf_22">[TEMPLATE]</a>
+<a href="promise_output_common.html#promise_unit_copy_edit_cf_22">[RESULT]</a>
+</div>
+Promise type is <span class="subtype">vars</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'dest'</b> make the promise to default promisee 'cf-agent' (about vars)...
+
+<br><span class="lval">........................string</span> => /tmp , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_copy_edit.cf</i>' near line 22</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td><a name="type_files"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_copy_edit_cf_28"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_testbundle">[BUNDLE]</a>&nbsp;
+<a href="promises.cf.html#promise_unit_copy_edit_cf_28">[TEMPLATE]</a>
+<a href="promise_output_common.html#promise_unit_copy_edit_cf_28">[RESULT]</a>
+</div>
+Promise type is <span class="subtype">files</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'/$(dest)/staging-file'</b> make the promise to default promisee 'cf-agent' (about files)...
+
+<br><span class="lval">........................comment</span> => Copy from source to buffer , if body <a href="#class_context">context</a> any
+<br><span class="lval">........................copy_from</span> =>  <span class="bodytype">copy_from</span> <a href="#body_cp"><span class="bodyname">cp</span>(<span class="args">from</span>,
+)</a><br><span class="lval">.............................source</span> => '<span class="rval">$(from)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................compare</span> => '<span class="rval">mtime'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................type_check</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">........................classes</span> =>  <span class="bodytype">classes</span> <a href="#body_satisfied"><span class="bodyname">satisfied</span>(<span class="args">x</span>,
+)</a><br><span class="lval">.............................promise_repaired</span> => '<span class="rval"> {'$(x)'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................persist_time</span> => '<span class="rval">0'</span> if sub-body context <span class="class">any</span>
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_copy_edit.cf</i>' near line 28</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_copy_edit_cf_35"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_testbundle">[BUNDLE]</a>&nbsp;
+<a href="promises.cf.html#promise_unit_copy_edit_cf_35">[TEMPLATE]</a>
+<a href="promise_output_common.html#promise_unit_copy_edit_cf_35">[RESULT]</a>
+</div>
+Promise type is <span class="subtype">files</span>, <a href="#class_context">context</a> is <span class="class">copy_ok</span> <br><hr>
+
+Resource object <b>'/$(dest)/staging-file'</b> make the promise to default promisee 'cf-agent' (about files)...
+
+<br><span class="lval">........................edit_line</span> => myedits , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_copy_edit.cf</i>' near line 35</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></h2></table></div>
+<a name="bundle_myedits"></a><div id="bundle"><table class=border><tr><td><h2> Bundle <span class="bodytype">edit_line</span> <span class="bodyname">myedits</span>
+ <tr><td> ARGS:</td></tr>
+
+<tr><td><table class="border"><tr><td><tr><td><a name="type_replace_patterns"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_copy_edit_cf_58"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_myedits">[BUNDLE]</a>&nbsp;
+<a href="promises.cf.html#promise_unit_copy_edit_cf_58">[TEMPLATE]</a>
+<a href="promise_output_common.html#promise_unit_copy_edit_cf_58">[RESULT]</a>
+</div>
+Promise type is <span class="subtype">replace_patterns</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'TEMPLATE_HOST_KEY'</b> make the promise to default promisee 'cf-edit_line' (about replace_patterns)...
+
+<br><span class="lval">........................replace_with</span> => $(sys.host) , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>myedits</b> (type edit_line) in '<i>../tests/units/unit_copy_edit.cf</i>' near line 58</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></h2></table></div>
+<h1>All Bodies</h1><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_control"></a> <span class="bodytype">common</span> <a href="#body_control"><span class="bodyname">control</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................bundlesequence</span> => '<span class="rval"> {'testbundle'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................version</span> => '<span class="rval">1.2.3'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_cp"></a> <span class="bodytype">copy_from</span> <a href="#body_cp"><span class="bodyname">cp</span>(<span class="args">from</span>,
+)</a><br><span class="lval">.............................source</span> => '<span class="rval">$(from)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................compare</span> => '<span class="rval">mtime'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................type_check</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_rp"></a> <span class="bodytype">replace_with</span> <a href="#body_rp"><span class="bodyname">rp</span>(<span class="args">x</span>,
+)</a><br><span class="lval">.............................replace_value</span> => '<span class="rval">$(x)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................occurrences</span> => '<span class="rval">all'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_satisfied"></a> <span class="bodytype">classes</span> <a href="#body_satisfied"><span class="bodyname">satisfied</span>(<span class="args">x</span>,
+)</a><br><span class="lval">.............................promise_repaired</span> => '<span class="rval"> {'$(x)'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................persist_time</span> => '<span class="rval">0'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p></html>

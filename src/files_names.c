@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -26,6 +31,197 @@
 
 #include "cf3.defs.h"
 #include "cf3.extern.h"
+
+/*****************************************************************************/
+
+void LocateFilePromiserGroup(char *wildpath,struct Promise *pp,void (*fnptr)(char *path, struct Promise *ptr))
+
+{ struct Item *path,*ip,*remainder = NULL;
+  char pbuffer[CF_BUFSIZE];
+  struct stat statbuf;
+  int count = 0,lastnode = false, expandregex = false;
+  uid_t agentuid = getuid();
+  int create = GetBooleanConstraint("create",pp->conlist);
+
+Debug("LocateFilePromiserGroup(%s)\n",wildpath);
+
+/* Do a search for promiser objects matching wildpath */
+
+if (!IsPathRegex(wildpath))
+   {
+   CfOut(cf_verbose,""," -> Using literal pathtype for %s\n",wildpath);
+   (*fnptr)(wildpath,pp);
+   return;
+   }
+else
+   {
+   CfOut(cf_verbose,""," -> Using regex pathtype for %s (see pathtype)\n",wildpath);
+   }
+
+pbuffer[0] = '\0';
+path = SplitString(wildpath,FILE_SEPARATOR);
+
+for (ip = path; ip != NULL; ip=ip->next)
+   {
+   if (ip->name == NULL || strlen(ip->name) == 0)
+      {
+      continue;
+      }
+
+   if (ip->next == NULL)
+      {
+      lastnode = true;
+      }
+
+   /* No need to chdir as in recursive descent, since we know about the path here */
+   
+   if (IsRegex(ip->name))
+      {
+      remainder = ip->next;
+      expandregex = true;
+      break;
+      }
+   else
+      {
+      expandregex = false;
+      }
+
+   if (!JoinPath(pbuffer,ip->name))
+      {
+      CfOut(cf_error,"","Buffer overflow in LocateFilePromiserGroup\n");
+      return;
+      }
+
+   if (stat(pbuffer,&statbuf) != -1)
+      {
+      if (S_ISDIR(statbuf.st_mode) && statbuf.st_uid != agentuid && statbuf.st_uid != 0)
+         {
+         CfOut(cf_inform,"","Directory %s in search path %s is controlled by another user - trusting its content is potentially risky (possible race)\n",pbuffer,wildpath);
+         PromiseRef(cf_inform,pp);
+         }
+      }
+   }
+
+if (expandregex) /* Expand one regex link and hand down */
+   {
+   char nextbuffer[CF_BUFSIZE],regex[CF_BUFSIZE];
+   struct dirent *dirp;
+   DIR *dirh;
+   struct Attributes dummyattr;
+
+   memset(&dummyattr,0,sizeof(dummyattr));
+ 
+   strncpy(regex,ip->name,CF_BUFSIZE-1);
+
+   if ((dirh=opendir(pbuffer)) == NULL)
+      {
+      // Could be a dummy directory to be created so this is not an error.
+      CfOut(cf_verbose,""," -> Using best-effort expanded (but non-existent) file base path %s\n",wildpath);
+      (*fnptr)(wildpath,pp);
+      DeleteItemList(path);
+      return;
+      }
+   else
+      {
+      count = 0;
+   
+      for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+         {
+         if (!ConsiderFile(dirp->d_name,pbuffer,dummyattr,pp))
+            {
+            continue;
+            }
+         
+         if (!lastnode && !S_ISDIR(statbuf.st_mode))
+            {
+            Debug("Skipping non-directory %s\n",dirp->d_name);
+            continue;
+            }
+         
+         if (FullTextMatch(regex,dirp->d_name))
+            {
+            Debug("Link %s matched regex %s\n",dirp->d_name,regex);
+            }
+         else
+            {
+            continue;
+            }
+         
+         count++;
+         
+         strncpy(nextbuffer,pbuffer,CF_BUFSIZE-1);
+         AddSlash(nextbuffer);
+         strcat(nextbuffer,dirp->d_name);
+         
+         for (ip = remainder; ip != NULL; ip=ip->next)
+            {
+            AddSlash(nextbuffer);
+            strcat(nextbuffer,ip->name);
+            }
+         
+         /* The next level might still contain regexs, so go again as long as expansion is not nullpotent */
+         
+         if (!lastnode && (strcmp(nextbuffer,wildpath) != 0))
+            {
+            LocateFilePromiserGroup(nextbuffer,pp,fnptr);
+            }
+         else
+            {
+            struct Promise *pcopy;
+            CfOut(cf_verbose,""," -> Using expanded file base path %s\n",nextbuffer);
+
+            /* Now need to recompute any back references to get the complete path */
+            
+            if (!FullTextMatch(pp->promiser,nextbuffer))
+               {
+               CfOut(cf_error,"","Error recomputing references");
+               }
+
+            /* If there were back references there could still be match.x vars to expand */
+            pcopy = DeRefCopyPromise(CONTEXTID,pp);
+            (*fnptr)(nextbuffer,pcopy);
+            DeletePromise(pcopy);
+            }
+         }
+      
+      closedir(dirh);
+      }
+   }
+else
+   {
+   CfOut(cf_verbose,""," -> Using file base path %s\n",pbuffer);
+   (*fnptr)(pbuffer,pp);
+   }
+
+if (count == 0)
+   {
+   CfOut(cf_verbose,"","No promiser file objects matched as regular expression %s\n",wildpath);
+
+   if (create)
+      {
+      VerifyFilePromise(pp->promiser,pp);
+      }
+   }
+
+DeleteItemList(path);
+}
+
+/*********************************************************************/
+
+int EmptyString(char *s)
+
+{ char *sp;
+
+for (sp = s; *sp != '\0'; sp++)
+   {
+   if (!isspace(*sp))
+      {
+      return false;
+      }
+   }
+
+return true;
+}
 
 /*********************************************************************/
 
@@ -263,7 +459,7 @@ if ((str == NULL) || (strlen(str) == 0))
    return;
    }
 
-if (strlen(str) > CF_BUFSIZE)
+if (strlen(str) > CF_EXPANDSIZE)
    {
    CfOut(cf_error,"","Chop was called on a string that seemed to have no terminator");
    return;
@@ -285,13 +481,13 @@ int CompressPath(char *dest,char *src)
   int nodelen;
   int rootlen;
 
-Debug2("CompressPath(%s,%s)\n",dest,src);
+Debug("CompressPath(%s,%s)\n",dest,src);
 
 memset(dest,0,CF_BUFSIZE);
 
 rootlen = RootDirLength(src);
 strncpy(dest,src,rootlen);
- 
+
 for (sp = src+rootlen; *sp != '\0'; sp++)
    {
    if (IsFileSep(*sp))
@@ -308,7 +504,7 @@ for (sp = src+rootlen; *sp != '\0'; sp++)
          }
       }
 
-   strncpy(node, sp, nodelen);
+   strncpy(node,sp,nodelen);
    node[nodelen] = '\0';
    
    sp += nodelen - 1;
@@ -338,7 +534,7 @@ for (sp = src+rootlen; *sp != '\0'; sp++)
       return false;
       }
    }
- 
+
 return true;
 }
 
@@ -368,7 +564,8 @@ if (IsFileSep(f[0]) && IsFileSep(f[1]))
    {
    return true;
    }
-if ( isalpha(f[0]) && f[1] == ':' && IsFileSep(f[2]) )
+
+if (isalpha(f[0]) && f[1] == ':' && IsFileSep(f[2]))
    {
    return true;
    }
@@ -388,9 +585,10 @@ int RootDirLength(char *f)
 
   /* Return length of Initial directory in path - */
 
-{
+{ int len;
+ char *sp;
+
 #ifdef NT
-  int len;
 
 if (IsFileSep(f[0]) && IsFileSep(f[1]))
    {
@@ -406,6 +604,7 @@ if (IsFileSep(f[0]) && IsFileSep(f[1]))
       }
    
    /* Skip over share name */
+
    for (len++; !IsFileSep(f[len]); len++)
       {
       if (f[len] == '\0')
@@ -419,17 +618,19 @@ if (IsFileSep(f[0]) && IsFileSep(f[1]))
    
    return len;
    }
- if ( isalpha(f[0]) && f[1] == ':' && IsFileSep(f[2]) )
-    {
-    return 3;
-    }
+
+if (isalpha(f[0]) && f[1] == ':' && IsFileSep(f[2]) )
+   {
+   return 3;
+   }
 #endif
- if (*f == '/')
-    {
-    return 1;
-    }
- 
- return 0;
+
+if (IsFileSep(*f))
+   {
+   return 1;
+   }
+
+return 0;
 }
 
 /*********************************************************************/

@@ -343,6 +343,8 @@ extern struct Item *VACTIONSEQ;
 extern struct Item *VACCESSLIST;
 extern struct Item *VADDCLASSES;
 extern struct Item *VALLADDCLASSES;
+extern struct Rlist *PRIVCLASSHEAP;
+
 extern struct Item *VJUSTACTIONS;
 extern struct Item *VAVOIDACTIONS;
 extern struct Edit *VEDITLIST;
@@ -373,6 +375,10 @@ extern struct Auth *VADMIT;
 extern struct Auth *VDENY;
 extern struct Auth *VADMITTOP;
 extern struct Auth *VDENYTOP;
+extern struct Auth *VARADMIT;
+extern struct Auth *VARADMITTOP;
+extern struct Auth *VARDENY;
+extern struct Auth *VARDENYTOP;
 
 /* Associated variables which simplify logic */
 
@@ -393,7 +399,6 @@ extern short PARSING;
 extern short SHOWDB;
 extern short ISCFENGINE;
 
-extern short LASTSEEN;
 extern short VERBOSE;
 extern short EXCLAIM;
 extern short INFORM;
@@ -543,5 +548,5 @@ extern char *CF_SCLICODES[CF_MAX_SCLICODES][2];
 extern struct re_pattern_buffer *SEARCHPATTBUFF;
 extern struct re_pattern_buffer *PATTBUFFER;
 
-extern char *CF_DIGEST_TYPES[9][2];
-extern int CF_DIGEST_SIZES[9];
+extern char *CF_DIGEST_TYPES[10][2];
+extern int CF_DIGEST_SIZES[10];

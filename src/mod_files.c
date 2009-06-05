@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -118,7 +123,7 @@ struct BodySyntax CF_INSERTSELECT_BODY[] =
    {"insert_if_startwith_from_list",cf_slist,CF_ANYSTRING,"Insert line if it starts with a string in the list"},
    {"insert_if_not_startwith_from_list",cf_slist,CF_ANYSTRING,"Insert line if it DOES NOT start with a string in the list"},
    {"insert_if_match_from_list",cf_slist,CF_ANYSTRING,"Insert line if it fully matches a regex in the list"},
-   {"insert_if_not_match_from_list",cf_slist,CF_ANYSTRING"Insert line if it DOES NOT fully match a regex in the list"},
+   {"insert_if_not_match_from_list",cf_slist,CF_ANYSTRING,"Insert line if it DOES NOT fully match a regex in the list"},
    {"insert_if_contains_from_list",cf_slist,CF_ANYSTRING,"Insert line if a regex in the list match a line fragment"},
    {"insert_if_not_contains_from_list",cf_slist,CF_ANYSTRING,"Insert line if a regex in the list DOES NOT match a line fragment"},
    {NULL,cf_notype,NULL,NULL}
@@ -177,9 +182,10 @@ struct BodySyntax CF_COMMON_EDITBODIES[] =
 struct BodySyntax CF_ACL_BODY[] =
    {
    {"acl_method",cf_opts,"append,overwrite","Editing method for access control list"},
-   {"acl_type",cf_opts,"posix,ntfs","Access control list type for the affected file system"},
-   {"acl_directory_inherit",cf_opts,"default,parent","Access control list type for the affected file system"},
-   {"acl_entries",cf_slist,CF_ANYSTRING,"Native settings for access control entry"},
+   {"acl_type",cf_opts,"generic,posix,ntfs","Access control list type for the affected file system"},
+   {"acl_directory_inherit",cf_opts,"parent,specify,none","Access control list type for the affected file system"},
+   {"aces",cf_slist,"(group|user|all|mask):([^:]:)*[-+,rwx()]*(:.+)*","Native settings for access control entry"},
+   {"inherit_aces",cf_slist,CF_ANYSTRING,"Native settings for access control entry"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -257,10 +263,10 @@ struct BodySyntax CF_FILEFILTER_BODY[] =
    {
    {"leaf_name",cf_slist,"","List of regexes that match an acceptable name"},
    {"path_name",cf_slist,CF_PATHRANGE,"List of pathnames to match acceptable target"},
-   {"search_mode",cf_str,CF_MODERANGE,"Mode mask for acceptable files"},
+   {"search_mode",cf_slist,CF_MODERANGE,"A list of mode masks for acceptable file permissions"},
    {"search_size",cf_irange,"0,inf","Integer range of file sizes"},
-   {"search_owners",cf_slist,CF_USERRANGE,"List of acceptable user names or ids for the file"},
-   {"search_groups",cf_slist,CF_USERRANGE,"List of acceptable group names or ids for the file"},
+   {"search_owners",cf_slist,"","List of acceptable user names or ids for the file, or regexes to match"},
+   {"search_groups",cf_slist,"","List of acceptable group names or ids for the file, or regexes to match"},
    {"search_bsdflags",cf_str,"[(arch|archived|dump|opaque|sappnd|sappend|schg|schange|simmutable|sunlnk|sunlink|uappnd|uappend|uchg|uchange|uimmutable|uunlnk|uunlink)[|*]]*","String of flags for bsd file system flags expected set"},
    {"ctime",cf_irange,CF_TIMERANGE,"Range of change times (ctime) for acceptable files"},
    {"mtime",cf_irange,CF_TIMERANGE,"Range of modification times (mtime) for acceptable files"},
@@ -296,7 +302,7 @@ struct BodySyntax CF_LINKTO_BODY[] =
 struct BodySyntax CF_COPYFROM_BODY[] =
    {
    {"source",cf_str,CF_PATHRANGE,"Reference source file from which to copy"},
-   {"servers",cf_slist,"","List of servers in order of preference from which to copy"},
+   {"servers",cf_slist,"[A-Za-z0-9_.:-]+","List of servers in order of preference from which to copy"},
    {"portnumber",cf_int,"1024,99999","Port number to connect to on server host"},
    {"copy_backup",cf_opts,"true,false,timestamp","Menu option policy for file backup/version control"},
    {"stealth",cf_opts,CF_BOOL,"true/false whether to preserve time stamps on copied file"},

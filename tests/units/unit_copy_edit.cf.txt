@@ -1,0 +1,100 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle testbundle in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'source' (implicit) if context is any
+
+             string => /tmp       if body context any
+            Promise (version 1.2.3) belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_copy_edit.cf' near line 21
+
+      vars promise by 'dest' (implicit) if context is any
+
+             string => /tmp       if body context any
+            Promise (version 1.2.3) belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_copy_edit.cf' near line 22
+
+   TYPE: files
+
+      files promise by '/$(dest)/staging-file' (implicit) if context is any
+
+            comment => Copy from source to buffer       if body context any
+          copy_from => cp body for type copy_from
+               arg from
+
+               {
+               source => $(from) if sub-body context any
+               compare => mtime if sub-body context any
+               type_check => true if sub-body context any
+               }
+            classes => satisfied body for type classes
+               arg x
+
+               {
+               promise_repaired =>  {'$(x)'} if sub-body context any
+               persist_time => 0 if sub-body context any
+               }
+            Promise (version 1.2.3) belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_copy_edit.cf' near line 28
+
+      files promise by '/$(dest)/staging-file' (implicit) if context is copy_ok
+
+          edit_line => myedits       if body context any
+            Promise (version 1.2.3) belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_copy_edit.cf' near line 35
+
+   }
+
+
+Bundle myedits in the context of edit_line
+
+   ARGS:
+
+   {
+   TYPE: replace_patterns
+
+      replace_patterns promise by 'TEMPLATE_HOST_KEY' (implicit) if context is any
+
+         replace_with => $(sys.host)       if body context any
+            Promise (version 1.2.3) belongs to bundle 'myedits' (type edit_line) in file '../tests/units/unit_copy_edit.cf' near line 58
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'testbundle'} if sub-body context any
+   version => 1.2.3 if sub-body context any
+   }
+
+cp body for type copy_from
+   arg from
+
+   {
+   source => $(from) if sub-body context any
+   compare => mtime if sub-body context any
+   type_check => true if sub-body context any
+   }
+
+rp body for type replace_with
+   arg x
+
+   {
+   replace_value => $(x) if sub-body context any
+   occurrences => all if sub-body context any
+   }
+
+satisfied body for type classes
+   arg x
+
+   {
+   promise_repaired =>  {'$(x)'} if sub-body context any
+   persist_time => 0 if sub-body context any
+   }
+

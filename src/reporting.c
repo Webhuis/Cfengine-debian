@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -231,7 +235,6 @@ for (bp = bundles; bp != NULL; bp=bp->next)
    fprintf(FREPORT_HTML,"%s\n",CFH[cfx_bundle][cfe]);
    }
 
-
 /* Now summarize the remaining bodies */
 
 fprintf(FREPORT_HTML,"<h1>All Bodies</h1>");
@@ -264,6 +267,8 @@ void ShowPromise(struct Promise *pp, int indent)
   struct Rlist *rp;
   char *v,rettype,vbuff[CF_BUFSIZE];
   void *retval;
+  time_t lastseen,last;
+  double val,av,var;
 
 if (GetVariable("control_common","version",&retval,&rettype) != cf_notype)
    {
@@ -357,6 +362,35 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
      
    }
 
+av = 0;
+var = 0;
+val = 0;
+last = 0;
+
+lastseen = GetPromiseCompliance(pp,&val,&av,&var,&last);
+
+if (lastseen) /* This only gives something in Nova or higher */
+   {
+   strncpy(vbuff,ctime(&lastseen),CF_MAXVARSIZE);
+   Chop(vbuff);
+   
+   fprintf(FREPORT_HTML,"<hr><p><div id=\"compliance\">Compliance last checked on %s. At that time the system was ",vbuff);
+   if (val = 1.0)
+      {
+      fprintf(FREPORT_HTML,"COMPLIANT.");
+      }
+   else if (val = 0.5)
+      {
+      fprintf(FREPORT_HTML,"REPAIRED.");
+      }
+   else if (val = 0.0)
+      {
+      fprintf(FREPORT_HTML,"NON-COMPLIANT.");
+      }
+
+   fprintf(FREPORT_HTML," Average compliance %.1lf pm %.1lf percent. </div>",av*100.0,sqrt(var)*100.0);
+   }
+
 if (pp->audit)
    {
    Indent(indent);
@@ -370,12 +404,12 @@ if (pp->audit)
    {
    Indent(indent);
    fprintf(FREPORT_TXT,"Promise (version %s) belongs to bundle \'%s\' (type %s) in file \'%s\' near line %d\n",v,pp->bundle,pp->bundletype,pp->audit->filename,pp->lineno);
-   fprintf(FREPORT_TXT,"\n");
+   fprintf(FREPORT_TXT,"\n\n");
    }
 else
    {
    Indent(indent);
-   fprintf(FREPORT_TXT,"Promise (version %s) belongs to bundle \'%s\' (type %s) near line %d\n",v,pp->bundle,pp->bundletype,pp->lineno);
+   fprintf(FREPORT_TXT,"Promise (version %s) belongs to bundle \'%s\' (type %s) near line %d\n\n",v,pp->bundle,pp->bundletype,pp->lineno);
    }
 }
 
@@ -563,7 +597,7 @@ fprintf(FREPORT_TXT,"}\n");
 
 /*******************************************************************/
 
-void SyntaxTree()
+void SyntaxTree(void)
 
 {
 printf("%s",CFH[0][0]);
@@ -678,7 +712,7 @@ for (i = 0; bs[i].lval != NULL; i++)
    else
       {
       printf("<tr><td>%s</td><td>%s</td><td>",bs[i].lval,CF_DATATYPES[bs[i].dtype]);
-      ShowRange((char *)bs[i].range);
+      ShowRange((char *)bs[i].range,bs[i].dtype);
       printf("</td><td>");
       printf("<div id=\"description\">%s</div>",bs[i].description);
       printf("</td></tr>\n");
@@ -690,7 +724,7 @@ printf("</table></div>\n");
 
 /*******************************************************************/
 
-void ShowRange(char *s)
+void ShowRange(char *s,enum cfdatatype type)
 
 { char *sp;
  
@@ -700,13 +734,31 @@ if (strlen(s) == 0)
    return;
    }
 
-for (sp = s; *sp != '\0'; sp++)
+switch (type)
    {
-   printf("%c",*sp);
-   if (*sp == '|')
-      {
-      printf("<br>");
-      }
+   case cf_opts:
+   case cf_olist:
+       
+       for (sp = s; *sp != '\0'; sp++)
+          {
+          printf("%c",*sp);
+          if (*sp == ',')
+             {
+             printf("<br>");
+             }
+          }
+
+       break;
+
+   default:
+       for (sp = s; *sp != '\0'; sp++)
+          {
+          printf("%c",*sp);
+          if (*sp == '|')
+             {
+             printf("<br>");
+             }
+          }
    }
 }
 

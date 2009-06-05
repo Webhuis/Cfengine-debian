@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -49,7 +53,7 @@ if (thislock.lock == NULL)
 
 PromiseBanner(pp);
 
-cfPS(cf_error,CF_CHG,"",pp,a,"R: %s",pp->promiser);
+CfOut(cf_error,"","R: %s",pp->promiser);
 
 if (a.report.haveprintfile)
    {
@@ -98,7 +102,7 @@ while (!feof(fp) && (lines < a.report.numlines))
    {
    buffer[0] = '\0';
    fgets(buffer,CF_BUFSIZE,fp);
-   cfPS(cf_error,CF_CHG,"",pp,a,"R: %s",buffer);
+   CfOut(cf_error,"","R: %s",buffer);
    lines++;
    }
 
@@ -209,7 +213,7 @@ if (stat(buffer,&statbuf) == 0)
    conns--;
 
    CfOut(cf_error,"","\n");
-   cfPS(cf_error,CF_CHG,"",pp,a,"R: The peak measured state was q = %d:\n",conns);
+   CfOut(cf_error,"","R: The peak measured state was q = %d:\n",conns);
 
    if (IsSocketType(type)||IsTCPType(type))
       {
@@ -231,7 +235,7 @@ if (stat(buffer,&statbuf) == 0)
             continue;
             }
 
-         cfPS(cf_error,CF_CHG,"",pp,a,"R: DNS key: %s = %s (%d/%d)\n",buffer,IPString2Hostname(buffer),ip->counter,conns);
+         CfOut(cf_error,"","R: DNS key: %s = %s (%d/%d)\n",buffer,IPString2Hostname(buffer),ip->counter,conns);
          
          if (strlen(ip->name) > maxlen)
             {
@@ -279,7 +283,7 @@ if (stat(buffer,&statbuf) == 0)
             }
          }
       
-      cfPS(cf_error,CF_CHG,"",pp,a,"R: %s \t(%d/%d)\n",assemble,ip->counter,conns);
+      CfOut(cf_error,"","R: %s \t(%d/%d)\n",assemble,ip->counter,conns);
       }
    
    dist = (double *) malloc((tot+1)*sizeof(double));
@@ -293,16 +297,16 @@ if (stat(buffer,&statbuf) == 0)
          S -= dist[i]*log(dist[i]);
          }
       
-      cfPS(cf_error,CF_CHG,"",pp,a,"R: Variability/entropy of addresses = %.1f %%\n",S/log((double)tot)*100.0);
+      CfOut(cf_error,"","R: Variability/entropy of addresses = %.1f %%\n",S/log((double)tot)*100.0);
       CfOut(cf_error,"","R: (Entropy = 0 for single source, 100 for flatly distributed source)\n -\n");
       }
    
    CfOut(cf_error,"","\n");
-   snprintf(buffer,CF_BUFSIZE,"R: State of %s peaked at %s\n",type,ctime(&statbuf.st_mtime));
+   CfOut(cf_error,"","R: State of %s peaked at %s\n",type,ctime(&statbuf.st_mtime));
    }
 else 
    {
-   snprintf(buffer,CF_BUFSIZE,"R: State parameter %s is not known or recorded\n",type);
+   CfOut(cf_inform,"","R: State parameter %s is not known or recorded\n",type);
    }
 
 DeleteItemList(addresses); 
@@ -342,7 +346,6 @@ void VerifyFriendConnections(int hours,struct Attributes a,struct Promise *pp)
   struct QPoint entry;
   double average = 0.0, var = 0.0, ticksperminute = 60.0;
   double ticksperhour = (double)CF_TICKS_PER_HOUR,ticksperday = (double)CF_TICKS_PER_DAY;
-
  
 CfOut(cf_verbose,"","CheckFriendConnections(%d)\n",hours);
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);

@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -66,7 +70,15 @@ int CfConnectDB(CfdbConn *cfdb,enum cfdbtype dbtype,char *remotehost,char *dbuse
 cfdb->connected = false;
 cfdb->type = dbtype;
 
-CfOut(cf_verbose,"","Connect to SQL database \"%s\" user=%s, host=%s\n",db,dbuser,remotehost);
+/* If db == NULL, no database was specified, so we assume it has not been created yet. Need to
+   open a generic database and create */
+
+if (db == NULL)
+   {
+   db = "no db specified";
+   }
+
+CfOut(cf_verbose,"","Connect to SQL database \"%s\" user=%s, host=%s (type=%d)\n",db,dbuser,remotehost,dbtype);
 
 switch (dbtype)
    {
@@ -74,46 +86,67 @@ switch (dbtype)
        
 #ifdef HAVE_LIBMYSQLCLIENT
 
+       CfOut(cf_verbose,""," -> This is a MySQL database\n");
        mysql_init(&(cfdb->my_conn));
        
        if (!mysql_real_connect(&(cfdb->my_conn),remotehost,dbuser,passwd,db,0,NULL,0))
           {
-          CfOut(cf_error,"","Failed to connect to MYSQL database: %s\n",mysql_error(&(cfdb->my_conn)));
+          CfOut(cf_error,"","Failed to connect to existing MYSQL database: %s\n",mysql_error(&(cfdb->my_conn)));
           return false;
           }
 
        cfdb->connected = true;
-
+#else
+       CfOut(cf_inform,"","There is no MySQL support compiled into this version");  
 #endif
        break;
        
-   case cfd_postgress:
+   case cfd_postgres:
 
 #ifdef HAVE_LIBPQ
 
+       CfOut(cf_verbose,""," -> This is a PotsgreSQL database\n");
+       
        if (strcmp(remotehost,"localhost") == 0)
           {
           /* Some authentication problem - ?? */
-          snprintf(format,CF_BUFSIZE-1,"dbname=%s user=%s password=%s",db,dbuser,passwd);
+          if (db)
+             {
+             snprintf(format,CF_BUFSIZE-1,"dbname=%s user=%s password=%s",db,dbuser,passwd);
+             }
+          else
+             {
+             snprintf(format,CF_BUFSIZE-1,"user=%s password=%s",dbuser,passwd);
+             }
           }
        else
           {
-          snprintf(format,CF_BUFSIZE-1,"dbname=%s host=%s user=%s password=%s",db,remotehost,dbuser,passwd);
+          if (db)
+             {
+             snprintf(format,CF_BUFSIZE-1,"dbname=%s host=%s user=%s password=%s",db,remotehost,dbuser,passwd);
+             }
+          else
+             {
+             snprintf(format,CF_BUFSIZE-1,"host=%s user=%s password=%s",remotehost,dbuser,passwd);
+             }
           }
 
        cfdb->pq_conn = PQconnectdb(format);
        
        if (PQstatus(cfdb->pq_conn) == CONNECTION_BAD)
           {
-          CfOut(cf_error,"","Failed to connect to POSTGRESS database: %s\n",PQerrorMessage(cfdb->pq_conn));
+          CfOut(cf_error,"","Failed to connect to existing POSTGRES database: %s\n",PQerrorMessage(cfdb->pq_conn));
           return false;
           }
 
        cfdb->connected = true;
+#else
+       CfOut(cf_inform,"","There is no PostgreSQL support compiled into this version");  
 #endif
        break;
 
    default:
+
        CfOut(cf_verbose,"","There is no SQL database selected");
        cfdb->connected = false;       
        break;
@@ -128,6 +161,11 @@ return true;
 void CfCloseDB(CfdbConn *cfdb)
 
 {
+if (!cfdb->connected)
+   {
+   return;
+   }
+ 
 switch (cfdb->type)
    {
    case cfd_mysql:
@@ -137,7 +175,7 @@ switch (cfdb->type)
 #endif
        break;
        
-   case cfd_postgress:
+   case cfd_postgres:
 
 #ifdef HAVE_LIBPQ
        PQfinish(cfdb->pq_conn); 
@@ -178,6 +216,8 @@ cfdb->result = false;
 cfdb->row = 0;
 cfdb->column = 0;
 cfdb->rowdata = NULL;
+cfdb->maxcolumns = 0;
+cfdb->maxrows = 0;
 
 switch (cfdb->type)
    {
@@ -204,7 +244,7 @@ switch (cfdb->type)
 #endif
        break;
        
-   case cfd_postgress:
+   case cfd_postgres:
 
 #ifdef HAVE_LIBPQ
        
@@ -212,7 +252,7 @@ switch (cfdb->type)
 
        if (PQresultStatus(cfdb->pq_res) != PGRES_COMMAND_OK && PQresultStatus(cfdb->pq_res) != PGRES_TUPLES_OK)
           {
-          CfOut(cf_inform,"","Postgress query failed: %s, %s\n",query,PQerrorMessage(cfdb->pq_conn));
+          CfOut(cf_inform,"","Postgres query failed: %s, %s\n",query,PQerrorMessage(cfdb->pq_conn));
           }
        else
           {
@@ -266,7 +306,7 @@ switch (cfdb->type)
 #endif
        break;
        
-   case cfd_postgress:
+   case cfd_postgres:
 
 #ifdef HAVE_LIBPQ
 
@@ -322,11 +362,14 @@ switch (cfdb->type)
    case cfd_mysql:
        
 #ifdef HAVE_LIBMYSQLCLIENT
-       mysql_free_result(cfdb->my_res); 
+       if (cfdb->result)
+          {
+          mysql_free_result(cfdb->my_res);
+          }
 #endif
        break;
        
-   case cfd_postgress:
+   case cfd_postgres:
 
 #ifdef HAVE_LIBPQ
        PQclear(cfdb->pq_res);  
@@ -368,7 +411,7 @@ switch (cfdb->type)
 #endif
        break;
        
-   case cfd_postgress:
+   case cfd_postgres:
 
 #ifdef HAVE_LIBPQ
        PQescapeString (result,query,strlen(query));

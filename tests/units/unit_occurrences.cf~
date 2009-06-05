@@ -1,0 +1,26 @@
+
+body common control
+{
+bundlesequence => { "test" };
+}
+
+
+bundle knowledge test
+
+{
+topics:
+
+  "test topic";
+
+occurrences:
+
+  test_topics::
+
+   ".*"
+            represents => { "definitions" },
+            representation => "file",
+            path_root => "/home/mark/tmp",
+            web_root => "http://www.cfengine.com";
+
+
+}

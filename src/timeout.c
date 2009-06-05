@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -68,7 +73,7 @@ void DeleteTimeOut()
 void SetReferenceTime(int setclasses)
 
 { time_t tloc;
- char vbuff[CF_BUFSIZE];
+  char vbuff[CF_BUFSIZE];
  
 if ((tloc = time((time_t *)NULL)) == -1)
    {
@@ -83,7 +88,12 @@ CfOut(cf_verbose,"","Reference time set to %s\n",ctime(&tloc));
 
 if (setclasses)
    {
+   time_t now = time(NULL);
+   struct tm *tmv = gmtime(&now);
+
    AddTimeClass(vbuff);
+   snprintf(vbuff,CF_MAXVARSIZE,"GMT_Hr%d\n",tmv->tm_hour);
+   NewClass(vbuff);
    }
 }
 
@@ -109,7 +119,7 @@ void AddTimeClass(char *str)
 
 { int i,value;
   char buf2[10], buf3[10], buf4[10], buf5[10], buf[10], out[10];
-  
+
 for (i = 0; i < 7; i++)
    {
    if (strncmp(DAY_TEXT[i],str,3)==0)
@@ -122,6 +132,8 @@ for (i = 0; i < 7; i++)
 sscanf(str,"%*s %s %s %s %s",buf2,buf3,buf4,buf5);
 
 /* Hours */
+
+buf[0] = '\0';
 
 sscanf(buf4,"%[^:]",buf);
 sprintf(out,"Hr%s",buf);

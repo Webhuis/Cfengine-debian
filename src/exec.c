@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -173,13 +177,16 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != 
       case 'D': NewClassesFromString(optarg);
           break;
           
-      case 'N': NegateClassesFromString(optarg,&VNEGHEAP);
+      case 'N':
+          NegateClassesFromString(optarg,&VNEGHEAP);
           break;
           
       case 'I': INFORM = true;
           break;
           
-      case 'v': VERBOSE = true;
+      case 'v':
+          VERBOSE = true;
+          NO_FORK = true;
           break;
           
       case 'n': DONTDO = true;
@@ -384,7 +391,7 @@ else
       nargv[i] = argv[i];
       }
    
-   nargv[i++] = strdup("--once");
+   nargv[i++] = strdup("-FK");
    nargv[i++] = NULL;
    
    while (true)
@@ -396,7 +403,7 @@ else
          CfOut(cf_verbose,"","Sleeping for splaytime %d seconds\n\n",SPLAYTIME);
          sleep(SPLAYTIME);
 
-#ifdef NT 
+#if defined NT && !(defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD) 
          /*
           * Spawn a separate process - spawn will work if the cfexecd binary
           * has changed (where cygwin's fork() would fail).
@@ -404,14 +411,14 @@ else
          
          Debug("Spawning %s\n", nargv[0]);
 
-         pid = spawnvp((int)_P_NOWAIT,(char *)(nargv[0]),(char **)nargv);
+         pid = _spawnvp((int)_P_NOWAIT,(char *)(nargv[0]),(char **)nargv);
 
          if (pid < 1)
             {
-            CfOut(cf_inform,"spawnvp","Can't spawn run");
+            CfOut(cf_error,"_spawnvp","Can't spawn run");
             }
 #endif
-#ifndef NT
+         
 #if (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
          
          pthread_attr_init(&PTHREADDEFAULTS);
@@ -430,7 +437,6 @@ else
          pthread_attr_destroy(&PTHREADDEFAULTS);
 #else
          LocalExec((void *)1);  
-#endif
 #endif
          }
       }
@@ -454,6 +460,12 @@ sleep(60);                /* 1 Minute resolution is enough */
 
 now = time(NULL);
 
+GetNameInfo3();
+GetInterfaceInfo3();
+FindV6InterfaceInfo();
+Get3Environment();
+OSClasses();
+SetReferenceTime(true);
 snprintf(timekey,63,"%s",ctime(&now)); 
 AddTimeClass(timekey); 
 
@@ -497,7 +509,7 @@ void *LocalExec(void *scheduled_run)
 
 { FILE *pp; 
   char line[CF_BUFSIZE],filename[CF_BUFSIZE],*sp;
-  char cmd[CF_BUFSIZE];
+  char cmd[CF_BUFSIZE],esc_command[CF_BUFSIZE];
   int print,tid,count = 0;
   time_t starttime = time(NULL);
   FILE *fp;
@@ -512,7 +524,6 @@ pthread_sigmask(SIG_BLOCK,&sigmask,NULL);
 tid = (int) pthread_self();
 #endif
 
-
  
 CfOut(cf_verbose,"","------------------------------------------------------------------\n\n");
 CfOut(cf_verbose,"","  LocalExec(%sscheduled) at %s\n", scheduled_run ? "" : "not ", ctime(&starttime));
@@ -526,12 +537,15 @@ if (strlen(EXECCOMMAND) > 0)
    }
 else
    {
-   snprintf(cmd,CF_BUFSIZE-1,"%s/bin/cf-agent%s -Dfrom_cfexecd%s",
+   snprintf(cmd,CF_BUFSIZE-1,"%s/bin/cf-agent -f failsafe.cf && %s/bin/cf-agent%s -Dfrom_cfexecd%s",
+            CFWORKDIR,
             CFWORKDIR,
             NOSPLAY ? " -q" : "",
             scheduled_run ? ":scheduled_run" : "");
    }
 
+strncpy(esc_command,MapName(cmd),CF_BUFSIZE-1);
+   
 snprintf(line,CF_BUFSIZE-1,"_%d_%s",starttime,CanonifyName(ctime(&starttime)));
 snprintf(filename,CF_BUFSIZE-1,"%s/outputs/cf_%s_%s_%x",CFWORKDIR,CanonifyName(VFQNAME),line,(unsigned short)tid);
 
@@ -543,16 +557,18 @@ if ((fp = fopen(filename,"w")) == NULL)
    return NULL;
    }
 
-CfOut(cf_verbose,"","Command => %s\n",cmd);
+CfOut(cf_verbose,""," -> Command => %s\n",cmd);
 
-if ((pp = cf_popen_sh(cmd,"r")) == NULL)
+if ((pp = cf_popen_sh(esc_command,"r")) == NULL)
    {
    CfOut(cf_inform,"cf_popen","Couldn't open pipe to command %s\n",cmd);
    fclose(fp);
    return NULL;
    }
- 
-while (!feof(pp) && ReadLine(line,CF_BUFSIZE,pp))
+
+CfOut(cf_verbose,""," -> Command is executing...%s\n",esc_command);
+
+while (!feof(pp) && CfReadLine(line,CF_BUFSIZE,pp))
    {
    if (ferror(pp))
       {
@@ -564,7 +580,7 @@ while (!feof(pp) && ReadLine(line,CF_BUFSIZE,pp))
       
    for (sp = line; *sp != '\0'; sp++)
       {
-      if (! isspace((int)*sp))
+      if (!isspace((int)*sp))
          {
          print = true;
          break;
@@ -596,14 +612,22 @@ while (!feof(pp) && ReadLine(line,CF_BUFSIZE,pp))
 cf_pclose(pp);
 Debug("Closing fp\n");
 fclose(fp);
-closelog();
+
+if (ONCE)
+   {
+   closelog();
+   }
+
+CfOut(cf_verbose,""," -> Command is complete\n",cmd);
 
 if (count)
    {
+   CfOut(cf_verbose,""," -> Mailing result\n",cmd);
    MailResult(filename,MAILTO);
    }
 else
    {
+   CfOut(cf_verbose,""," -> No output\n",cmd);
    unlink(filename);
    }
 
@@ -624,7 +648,7 @@ int FileChecksum(char *filename,unsigned char digest[EVP_MAX_MD_SIZE+1],char typ
 
 Debug2("FileChecksum(%c,%s)\n",type,filename);
 
-if ((file = fopen (filename, "rb")) == NULL)
+if ((file = fopen(filename,"rb")) == NULL)
    {
    printf ("%s can't be opened\n", filename);
    }
@@ -744,10 +768,12 @@ if ((strlen(VMAILSERVER) == 0) || (strlen(to) == 0))
    /* Syslog should have done this */
    return;
    }
-  
+
+CfOut(cf_verbose,"","Mail result...\n");
+
 if (stat(file,&statbuf) == -1)
    {
-   exit(0);
+   return;
    }
 
 snprintf(prev_file,CF_BUFSIZE-1,"%s/outputs/previous",CFWORKDIR);

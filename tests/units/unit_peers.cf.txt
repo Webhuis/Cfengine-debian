@@ -1,0 +1,33 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle peers in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'mygroup' (implicit) if context is any
+
+              slist =>  {'','etc','twelve','eleven','ten','nine','eight','seven','siz','five','four','three','two'}       if body context any
+            Promise (version not specified) belongs to bundle 'peers' (type agent) in file '../tests/units/unit_peers.cf' near line 13
+
+   TYPE: reports
+
+      reports promise by 'mypeer $(mygroup)' (implicit) if context is linux
+
+            Promise (version not specified) belongs to bundle 'peers' (type agent) in file '../tests/units/unit_peers.cf' near line 19
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'peers'} if sub-body context any
+   }
+
