@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -48,7 +52,7 @@ void ForceScalar(char *lval,char *rval)
 
 { char rtype,retval[CF_MAXVARSIZE];
 
-if (THIS_AGENT_TYPE != cf_agent)
+if (THIS_AGENT_TYPE != cf_agent && THIS_AGENT_TYPE != cf_know)
    {
    return;
    }
@@ -70,8 +74,11 @@ void NewScalar(char *scope,char *lval,char *rval,enum cfdatatype dt)
  
 Debug("NewScalar(%s,%s,%s)\n",scope,lval,rval);
 
-sp1 = strdup(lval);
-sp2 = strdup((char *)rval);
+//sp1 = strdup(lval);
+//sp2 = strdup((char *)rval);
+
+sp1 = lval;
+sp2 = rval;
 
 AddVariableHash(scope,sp1,sp2,CF_SCALAR,dt,NULL,0);
 }
@@ -110,7 +117,7 @@ slot = GetHash(lval);
 if (ptr == NULL)
    {
    struct Scope *sp;
-   CfOut(cf_verbose,"","No such scope id %s\n",scope);
+   CfOut(cf_verbose,"","No such scope id \"%s\"\n",scope);
    FatalError("No such scope");
    }
  
@@ -264,7 +271,12 @@ void DeleteVariable(char *scope,char *id)
   
 i = slot = GetHash(id);
 ptr = GetScope(scope);
- 
+
+if (ptr == NULL)
+   {
+   return;
+   }
+
 if (CompareVariable(id,ptr->hashtable[slot]) != 0)
    {
    while (true)
@@ -345,6 +357,58 @@ switch (rtype)
    }
     
 return strcmp(ap->rval,rval);
+}
+
+/*******************************************************************/
+
+int UnresolvedVariables(struct CfAssoc *ap,char rtype)
+
+{ char buffer[CF_BUFSIZE];
+  struct Rlist *list, *rp;
+
+if (ap == NULL)
+   {
+   return false;
+   }
+
+switch (rtype)
+   {
+   case CF_SCALAR:
+       return IsCf3VarString(ap->rval);
+       
+   case CF_LIST:
+       list = (struct Rlist *)ap->rval;
+       
+       for (rp = list; rp != NULL; rp=rp->next)
+          {
+          if (IsCf3VarString(rp->item))
+             {
+             return true;
+             }
+          }
+       
+       return false;
+
+   default:
+       return false;
+   }
+}
+
+/*******************************************************************/
+
+int UnresolvedArgs(struct Rlist *args)
+    
+{ struct Rlist *rp;
+
+for (rp = args; rp != NULL; rp = rp->next)
+   {
+   if (IsCf3VarString(rp->item))
+      {
+      return true;
+      }
+   }
+
+return false;
 }
 
 /*******************************************************************/
@@ -490,7 +554,7 @@ return true;
 int BooleanControl(char *scope,char *name)
 
 { char varbuf[CF_BUFSIZE], rtype;
- 
+
 if (GetVariable(scope,name,(void *)varbuf,&rtype) != cf_notype)
    {
    return GetBoolean(varbuf);
@@ -537,7 +601,7 @@ for (sp = str+2; *sp != '\0' ; sp++)       /* check for varitems */
           else
              {
              Debug("Illegal character found: '%c'\n", *sp);
-             yyerror("Illegal character somewhere in variable or nested expansion");
+             CfOut(cf_error,"","Illegal character somewhere in variable \"%s\" or nested expansion",str);
              }
       }
    

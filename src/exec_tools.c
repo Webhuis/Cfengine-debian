@@ -1,12 +1,13 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -16,6 +17,10 @@
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -23,7 +28,6 @@
 /* File: exec_tools.c                                                        */
 /*                                                                           */
 /*****************************************************************************/
-
 
 #include "cf3.defs.h"
 #include "cf3.extern.h"
@@ -89,6 +93,7 @@ int ShellCommandReturnsZero(char *comm,int useshell)
   pid_t pid;
   char arg[CF_MAXSHELLARGS][CF_BUFSIZE];
   char **argv;
+  char esc_command[CF_BUFSIZE];
 
 if (!useshell)
    {
@@ -107,7 +112,7 @@ if (!useshell)
       return false;
       }
    }
-    
+
 if ((pid = fork()) < 0)
    {
    FatalError("Failed to fork new process");
@@ -115,12 +120,14 @@ if ((pid = fork()) < 0)
 else if (pid == 0)                     /* child */
    {
    ALARM_PID = -1;
-   
+
    if (useshell)
       {
-      if (execl("/bin/sh","sh","-c",comm,NULL) == -1)
+      strncpy(esc_command,WinEscapeCommand(comm),CF_BUFSIZE-1);
+
+      if (execl("/bin/sh","sh","-c",esc_command,NULL) == -1)
          {
-         CfOut(cf_error,"execl","Command %s failed",comm);
+         CfOut(cf_error,"execl","Command %s failed",esc_command);
          exit(1);
          }
       }
@@ -152,7 +159,7 @@ else if (pid == 0)                     /* child */
 else                                    /* parent */
    {
    pid_t wait_result;
-   
+
    while ((wait_result = wait(&status)) != pid)
       {
       if (wait_result <= 0)
@@ -195,10 +202,10 @@ int GetExecOutput(char *command,char *buffer,int useshell)
 /* Buffer initially contains whole exec string */
 
 { int offset = 0;
-  char line[CF_BUFSIZE], *sp; 
+  char line[CF_EXPANDSIZE], *sp; 
   FILE *pp;
 
-Debug1("GetExecOutput(%s,%s)\n",command,buffer);
+Debug("GetExecOutput(%s,%s) - use shell = %d\n",command,buffer,useshell);
   
 if (useshell)
    {
@@ -215,7 +222,7 @@ if (pp == NULL)
    return false;
    }
 
-memset(buffer,0,CF_BUFSIZE);
+memset(buffer,0,CF_EXPANDSIZE);
   
 while (!feof(pp))
    {
@@ -225,7 +232,7 @@ while (!feof(pp))
       break;
       }
 
-   ReadLine(line,CF_BUFSIZE,pp);
+   CfReadLine(line,CF_EXPANDSIZE,pp);
 
    if (ferror(pp))  /* abortable */
       {
@@ -241,13 +248,13 @@ while (!feof(pp))
          }
       }
    
-   if (strlen(line)+offset > CF_BUFSIZE-10)
+   if (strlen(line)+offset > CF_EXPANDSIZE-10)
       {
-      CfOut(cf_error,"","Buffer exceeded %d bytes in exec %s\n",CF_BUFSIZE,command);
+      CfOut(cf_error,"","Buffer exceeded %d bytes in exec %s\n",CF_EXPANDSIZE,command);
       break;
       }
 
-   snprintf(buffer+offset,CF_BUFSIZE,"%s ",line);
+   snprintf(buffer+offset,CF_EXPANDSIZE,"%s ",line);
    offset += strlen(line)+1;
    }
 
@@ -310,3 +317,31 @@ for (fd = STDERR_FILENO + 1; fd < maxfd; ++fd)
    }
 }
 
+/**********************************************************************/
+
+char *WinEscapeCommand(char *s)
+
+{ static char buffer[CF_BUFSIZE];
+  char *spf,*spto;
+
+memset(buffer,0,CF_BUFSIZE);
+
+spto = buffer;
+
+for (spf = s; *spf != '\0'; spf++)
+   {
+   switch (*spf)
+      {
+      case '\\':
+          *spto++ = '\\';
+          *spto++ = '\\';
+          break;
+
+      default:
+          *spto++ = *spf;
+          break;          
+      }
+   }
+
+return buffer;
+}

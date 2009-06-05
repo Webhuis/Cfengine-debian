@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -31,9 +36,28 @@ void VerifyMeasurementPromise(double *this,struct Promise *pp)
 
 { struct Attributes a;
 
+if (pp->done)
+   {
+   if (pp->ref)
+      {
+      CfOut(cf_verbose,"","Skipping static observation %s (%s), already done",pp->promiser,pp->ref);
+      }
+   else
+      {
+      CfOut(cf_verbose,"","Skipping static observation %s, already done",pp->promiser);
+      }
+   
+   return;
+   }
+ 
 PromiseBanner(pp);
  
 a = GetMeasurementAttributes(pp);
+
+if (strcmp(a.measure.history_type,"weekly") == 0)
+   {
+   *(pp->donep) = true;
+   }
 
 if (!CheckMeasureSanity(a,pp))
    {
@@ -72,7 +96,6 @@ else
          case cf_str:
          case cf_int:
          case cf_real:
-
              break;
 
          default:
@@ -94,7 +117,9 @@ if (a.measure.select_line_matching && a.measure.select_line_number != CF_NOINT)
 if (!a.measure.extraction_regex)
    {
    CfOut(cf_verbose,"","No extraction regex, so assuming whole line is the value");
-
+   }
+else
+   {
    if (!strchr(a.measure.extraction_regex,'(') && !strchr(a.measure.extraction_regex,')'))
       {
       cfPS(cf_error,CF_INTERPT,"",pp,a,"The extraction_regex must contain a single backreference for the extraction\n");

@@ -17,23 +17,26 @@ bundlesequence  => { "testbundle"  };
 bundle agent testbundle
 
 {
-
 files:
 
   "/home/mark/tmp/comment_test"
 
        create    => "true",
-       edit_line => comment_lines_matching("myline.*","# ");
+       edit_line => comment_lines_matching;
 }
 
 ########################################################
 
-bundle edit_line comment_lines_matching(regex,comment)
+bundle edit_line comment_lines_matching
   {
+  vars:
+
+    "regexes" slist => { "one.*", "two.*", "four.*" };
+
   replace_patterns:
 
-   "^($(regex))$"
-      replace_with => comment("$(comment)");
+   "^($(regexes))$"
+      replace_with => comment("# ");
   }
 
 ########################################

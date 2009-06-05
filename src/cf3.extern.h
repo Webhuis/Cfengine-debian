@@ -29,6 +29,7 @@
 /* See variables in cf3globals.c and syntax.c */
 
 extern struct PromiseParser P;
+extern int REQUIRE_COMMENTS;
 
 extern struct Bundle *BUNDLES;
 extern struct Body *BODIES;
@@ -44,6 +45,8 @@ extern struct Rlist *SINGLE_COPY_CACHE;
 extern struct Rlist *ACCESSLIST;
 extern struct Topic *TOPIC_MAP;
 extern struct PromiseIdent *PROMISE_ID_LIST;
+
+extern double FORGETRATE;
 
 extern struct Rlist *CF_STCK;
 extern int CF_STCKFRAME;
@@ -65,6 +68,7 @@ extern char HASHDB[CF_BUFSIZE];
 extern int FSTAB_EDITS;
 
 extern int CFA_MAXTHREADS;
+extern char *THIS_BUNDLE;
 extern char THIS_AGENT[CF_MAXVARSIZE];
 extern enum cfagenttype THIS_AGENT_TYPE;
 extern short INSTALL_SKIP;
@@ -74,6 +78,7 @@ extern time_t PROMISETIME;
 extern int ABORTBUNDLE;
 extern struct Item *ABORTBUNDLEHEAP;
 extern int LASTSEENEXPIREAFTER;
+extern int LASTSEEN;
 extern char *DEFAULT_COPYTYPE;
 extern struct Rlist *SERVERLIST;
 extern struct Item *PROCESSTABLE;
@@ -88,6 +93,9 @@ extern int CF_SAVEFSTAB;
 extern char *DAY_TEXT[];
 extern char *MONTH_TEXT[];
 extern char *SHIFT_TEXT[];
+
+extern char FILE_SEPARATOR;
+extern char FILE_SEPARATOR_STR[2];
 
 /***********************************************************/
 /* SYNTAX MODULES                                          */
@@ -132,6 +140,12 @@ extern struct BodySyntax CF_STORAGE_BODIES[];
 extern struct SubTypeSyntax CF_STORAGE_SUBTYPES[];
 extern struct BodySyntax CF_MOUNT_BODY[];
 extern struct BodySyntax CF_CHECKVOL_BODY[];
+#endif
+
+#ifndef CF3_MOD_DATABASES
+extern struct BodySyntax CF_DATABASES_BODIES[];
+extern struct SubTypeSyntax CF_DATABASES_SUBTYPES[];
+extern struct BodySyntax CF_SQLSERVER_BODY[];
 #endif
 
 #ifndef CF3_MOD_KNOWLEGDE

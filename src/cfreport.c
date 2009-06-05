@@ -1,21 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -103,7 +108,7 @@ struct Rlist *REPORTS = NULL;
             "data stored in cfengine's embedded databases in human\n"
             "readable form.";
  
- struct option OPTIONS[19] =
+ struct option OPTIONS[20] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -120,13 +125,14 @@ struct Rlist *REPORTS = NULL;
       { "titles",no_argument,0,'t'},
       { "timestamps",no_argument,0,'T'},
       { "resolution",no_argument,0,'R'},
+      { "syntax",no_argument,0,'S'},
       { "no-error-bars",no_argument,0,'e'},
       { "no-scaling",no_argument,0,'n'},
       { "verbose",no_argument,0,'v'},
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[19] =
+ char *HINTS[20] =
       {
       "Print the help message",
       "Set debugging level 0,1,2,3",
@@ -143,6 +149,7 @@ struct Rlist *REPORTS = NULL;
       "Add title data to generated graph files",
       "Add a time stamp to directory name for graph file data",
       "Print graph data in high resolution",
+      "Print a syntax summary for this cfengine version",
       "Do not add error bars to the printed graphs",
       "Do not automatically scale the axes",
       "Generate verbose output",
@@ -251,7 +258,7 @@ void CheckOpts(int argc,char **argv)
   int c;
   char ld_library_path[CF_BUFSIZE];
 
-while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMI",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMIS",OPTIONS,&optindex)) != EOF)
    {
    switch ((char) c)
       {
@@ -275,6 +282,10 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMI",OPTIONS,&optindex)) != EO
                  DEBUG = true;
                  break;
              }
+          break;
+
+      case 'S':
+          SyntaxTree();
           break;
 
       case 'v':
@@ -306,7 +317,7 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMI",OPTIONS,&optindex)) != EO
           break;
 
       case 'o': strcpy(OUTPUTDIR,optarg);
-          CfOut(cf_verbose,"","Setting output directory to s\n",OUTPUTDIR);
+          CfOut(cf_inform,"","Setting output directory to s\n",OUTPUTDIR);
           break;
 
       case 'T': TIMESTAMPS = true;
@@ -477,6 +488,10 @@ for (cp = ControlBodyConstraints(cf_report); cp != NULL; cp=cp->next)
          {
          XML = true;
          }
+      else if (strcmp("csv",retval) == 0)
+         {
+         CSV = true;
+         }
       continue;
       }
 
@@ -598,6 +613,8 @@ for (rp  = REPORTS; rp != NULL; rp = rp->next)
       {
       CfOut(cf_verbose,"","Creating compliance summary (Cfengine Nova and above)...\n");
       SummarizeCompliance(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
+      CfOut(cf_verbose,"","Creating per-promise compliance summary (Cfengine Nova and above)...\n");
+      SummarizePerPromiseCompliance(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
       }
 
    if (strcmp("file_changes",rp->item) == 0)
@@ -606,6 +623,18 @@ for (rp  = REPORTS; rp != NULL; rp = rp->next)
       SummarizeFileChanges(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
       }
 
+   if (strcmp("installed_software",rp->item) == 0)
+      {
+      CfOut(cf_verbose,"","Creating software version summary (Cfengine Nova and above)...\n");
+      SummarizeSoftware(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
+      }
+
+   if (strcmp("software_updates",rp->item) == 0)
+      {
+      CfOut(cf_verbose,"","Creating software update version summary (Cfengine Nova and above)...\n");
+      SummarizeUpdates(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
+      }
+   
    if (strcmp("setuid",rp->item) == 0)
       {
       CfOut(cf_verbose,"","Creating setuid report (Cfengine Nova and above)...\n");
@@ -1793,7 +1822,7 @@ dbp->close(dbp,0);
 void EraseAverages()
 
 { int i,err;
-  char timekey[CF_MAXVARSIZE];
+ char timekey[CF_MAXVARSIZE],name[CF_MAXVARSIZE];
   struct Item *list = NULL;
   struct Averages entry;
   time_t now;
@@ -1833,7 +1862,9 @@ for (now = CF_MONDAY_MORNING; now < CF_MONDAY_MORNING+CF_WEEK; now += CF_MEASURE
       {
       for (i = 0; i < CF_OBSERVABLES; i++)
          {
-         if (IsItemIn(list,OBS[i][0]))
+         LookUpClassName(i,name);
+   
+         if (IsItemIn(list,name))
             {
             /* Set history but not most recent to zero */
             entry.Q[i].expect = 0;
@@ -1887,10 +1918,12 @@ CfOut(cf_inform,"","Writing report to %s\n",name);
 
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
+   LookUpClassName(i,name);
+   
    if (XML)
       {
       fprintf(fout,"%s",CFRX[cfx_entry][cfb]);
-      fprintf(fout,"%s %s %s",CFRX[cfx_event][cfb],OBS[i][0],CFRX[cfx_event][cfe]);
+      fprintf(fout,"%s %s %s",CFRX[cfx_event][cfb],name,CFRX[cfx_event][cfe]);
       fprintf(fout,"%s %s %s",CFRX[cfx_min][cfb],MIN.Q[i].expect,CFRX[cfx_min][cfe]);
       fprintf(fout,"%s %s %s",CFRX[cfx_max][cfb],MAX.Q[i].expect,CFRX[cfx_max][cfe]);
       fprintf(fout,"%s %s %s",CFRX[cfx_dev][cfb],sqrt(MAX.Q[i].var),CFRX[cfx_dev][cfe]);
@@ -1899,7 +1932,7 @@ for (i = 0; i < CF_OBSERVABLES; i++)
    else if (HTML)
       {
       fprintf(fout,"%s",CFRH[cfx_entry][cfb]);
-      fprintf(fout,"%s %s %s",CFRH[cfx_event][cfb],OBS[i][0],CFRH[cfx_event][cfe]);
+      fprintf(fout,"%s %s %s",CFRH[cfx_event][cfb],name,CFRH[cfx_event][cfe]);
       fprintf(fout,"%s Min %s %s",CFRH[cfx_min][cfb],MIN.Q[i].expect,CFRH[cfx_min][cfe]);
       fprintf(fout,"%s Max %s %s",CFRH[cfx_max][cfb],MAX.Q[i].expect,CFRH[cfx_max][cfe]);
       fprintf(fout,"%s %s %s",CFRH[cfx_dev][cfb],sqrt(MAX.Q[i].var),CFRH[cfx_dev][cfe]);
@@ -1907,11 +1940,11 @@ for (i = 0; i < CF_OBSERVABLES; i++)
       }
    else if (CSV)
       {
-      fprintf(fout,"%2d,%-10s,%10f,%10f,%10f\n",i,OBS[i][0],MIN.Q[i].expect,MAX.Q[i].expect,sqrt(MAX.Q[i].var));
+      fprintf(fout,"%2d,%-10s,%10f,%10f,%10f\n",i,name,MIN.Q[i].expect,MAX.Q[i].expect,sqrt(MAX.Q[i].var));
       }
    else
       {
-      CfOut(cf_verbose,"","%2d. MAX <%-10s-in>   = %10f - %10f u %10f\n",i,OBS[i][0],MIN.Q[i].expect,MAX.Q[i].expect,sqrt(MAX.Q[i].var));
+      CfOut(cf_verbose,"","%2d. MAX <%-10s-in>   = %10f - %10f u %10f\n",i,name,MIN.Q[i].expect,MAX.Q[i].expect,sqrt(MAX.Q[i].var));
       }
    }
 
@@ -1948,7 +1981,7 @@ void WriteGraphFiles()
   DBT key,value;
   struct stat statbuf;
   struct Averages entry,det;
-  char timekey[CF_MAXVARSIZE];
+  char timekey[CF_MAXVARSIZE],name[CF_MAXVARSIZE];
   time_t now;
   DB *dbp;
   
@@ -1973,11 +2006,15 @@ OpenFiles();
 
 if (TITLES)
    {
+   char name[CF_MAXVARSIZE];
+   
    for (i = 0; i < CF_OBSERVABLES; i+=2)
       {
-      fprintf(FPAV,"# Column %d: %s\n",i,OBS[i][0]);
-      fprintf(FPVAR,"# Column %d: %s\n",i,OBS[i][0]);
-      fprintf(FPNOW,"# Column %d: %s\n",i,OBS[i][0]);
+      LookUpClassName(i,name);
+
+      fprintf(FPAV,"# Column %d: %s\n",i,name);
+      fprintf(FPVAR,"# Column %d: %s\n",i,name);
+      fprintf(FPNOW,"# Column %d: %s\n",i,name);
       }
 
    fprintf(FPAV,"##############################################\n");
@@ -2035,9 +2072,9 @@ while (now < CF_MONDAY_MORNING + CF_WEEK)
 
    for (i = 0; i < CF_OBSERVABLES; i++)
       {
-      fprintf(FPAV,"%f ",entry.Q[i].expect/MAX.Q[i].expect);
-      fprintf(FPVAR,"%f ",entry.Q[i].var/MAX.Q[i].var);
-      fprintf(FPNOW,"%f ",entry.Q[i].q/MAX.Q[i].q);
+      fprintf(FPAV,"%lf ",entry.Q[i].expect/MAX.Q[i].expect);
+      fprintf(FPVAR,"%lf ",entry.Q[i].var/MAX.Q[i].var);
+      fprintf(FPNOW,"%lf ",entry.Q[i].q/MAX.Q[i].q);
       }                        
    
    fprintf(FPAV,"\n");
@@ -2046,9 +2083,9 @@ while (now < CF_MONDAY_MORNING + CF_WEEK)
    
    for (i = 0; i < CF_OBSERVABLES; i++)
       {
-      fprintf(FPE[i],"%d %f %f\n",count, entry.Q[i].expect, sqrt(entry.Q[i].var));
+      fprintf(FPE[i],"%d %lf %lf\n",count, entry.Q[i].expect, sqrt(entry.Q[i].var));
       /* Use same scaling for Q so graphs can be merged */
-      fprintf(FPQ[i],"%d %f 0.0\n",count, entry.Q[i].q);
+      fprintf(FPQ[i],"%d %lf 0.0\n",count, entry.Q[i].q);
       }               
 
    memset(&entry,0,sizeof(entry));
@@ -2128,7 +2165,7 @@ while (here_and_now < now)
 
    for (i = 0; i < CF_OBSERVABLES; i++)
       {
-      fprintf(FPM[i],"%d %f %f %f\n",count, entry.Q[i].expect, sqrt(entry.Q[i].var),entry.Q[i].q);
+      fprintf(FPM[i],"%d %lf %lf %lf\n",count, entry.Q[i].expect, sqrt(entry.Q[i].var),entry.Q[i].q);
       }               
    }
 
@@ -2143,8 +2180,8 @@ void WriteHistograms()
 { int i,j,k;
   int position,day;
   int weekly[CF_OBSERVABLES][CF_GRAINS];
+  char filename[CF_BUFSIZE],name[CF_MAXVARSIZE];
   FILE *fp;
-  char filename[CF_BUFSIZE];
  
 for (i = 0; i < 7; i++)
    {
@@ -2213,7 +2250,9 @@ else
 
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
-   sprintf(filename,"%s.distr",OBS[i][0]); 
+   LookUpClassName(i,name);
+   sprintf(filename,"%s.distr",name);
+   
    if ((FPQ[i] = fopen(filename,"w")) == NULL)
       {
       perror("fopen");
@@ -2384,7 +2423,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
             val = array[i];
             }
 
-         fprintf(fp,"%d %f\n",i,val/maxval*50.0);
+         fprintf(fp,"%d %lf\n",i,val/maxval*50.0);
          }
       
       fclose(fp);      
@@ -2559,7 +2598,7 @@ DeleteItemList(hostlist);
 void OpenFiles()
 
 { int i;
-  char filename[CF_BUFSIZE];
+ char filename[CF_BUFSIZE],name[CF_MAXVARSIZE];
  
 sprintf(filename,"cfenv-average");
 
@@ -2587,7 +2626,11 @@ if ((FPNOW = fopen(filename,"w")) == NULL)
 
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
-   sprintf(filename,"%s.E-sigma",OBS[i][0]);
+   LookUpClassName(i,name);
+
+   CfOut(cf_inform,"","Reporting on \"%s\"\n",name);
+   
+   sprintf(filename,"%s.E-sigma",name);
    
    if ((FPE[i] = fopen(filename,"w")) == NULL)
       {
@@ -2595,14 +2638,13 @@ for (i = 0; i < CF_OBSERVABLES; i++)
       exit(1);
       }
    
-   sprintf(filename,"%s.q",OBS[i][0]);
+   sprintf(filename,"%s.q",name);
    
    if ((FPQ[i] = fopen(filename,"w")) == NULL)
       {
       CfOut(cf_error,"fopen","File %s could not be opened for writing\n",filename);
       exit(1);
       }
-   
    }
 }
 
@@ -2628,11 +2670,12 @@ for (i = 0; i < CF_OBSERVABLES; i++)
 void OpenMagnifyFiles()
 
 { int i;
-  char filename[CF_BUFSIZE];
+ char filename[CF_BUFSIZE],name[CF_MAXVARSIZE];
       
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
-   sprintf(filename,"%s.mag",OBS[i][0]);
+   LookUpClassName(i,name);
+   sprintf(filename,"%s.mag",name);
    
    if ((FPM[i] = fopen(filename,"w")) == NULL)
       {

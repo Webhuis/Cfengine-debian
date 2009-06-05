@@ -1,12 +1,13 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -16,6 +17,10 @@
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -66,7 +71,6 @@ int ScheduleEditLineOperations(char *filename,struct Bundle *bp,struct Attribute
   struct Promise *pp;
   int pass;
 
-DeletePrivateClassContext();
 NewScope("edit");
 NewScalar("edit","filename",filename,cf_str);
          
@@ -275,7 +279,7 @@ if (!a.haveregion)
    }
 else if (!SelectRegion(*start,&begin_ptr,&end_ptr,a,pp))
    {
-   cfPS(cf_error,CF_INTERPT,"",pp,a," !! The promised line deletion (%s) could not select an edit region in %s",pp->promiser,pp->this_server);
+   cfPS(cf_error,CF_INTERPT,"",pp,a," !! The promised column edit (%s) could not select an edit region in %s",pp->promiser,pp->this_server);
    return;
    }
 
@@ -315,7 +319,7 @@ if (!a.haveregion)
    }
 else if (!SelectRegion(*start,&begin_ptr,&end_ptr,a,pp))
    {
-   cfPS(cf_error,CF_INTERPT,"",pp,a," !! The promised line deletion (%s) could not select an edit region in %s",pp->promiser,pp->this_server);
+   cfPS(cf_error,CF_INTERPT,"",pp,a," !! The promised pattern replace (%s) could not select an edit region in %s",pp->promiser,pp->this_server);
    return;
    }
 
@@ -401,11 +405,12 @@ for (ip = start; ip != NULL; ip = ip->next)
          }
       }
 
-   if (a.region.select_end)
+   if (a.region.select_end && beg != CF_UNDEFINED_ITEM)
       {
       if (end == CF_UNDEFINED_ITEM && FullTextMatch(a.region.select_end,ip->name))
          {
          end = ip;
+         break;
          }
       }
 
@@ -423,16 +428,19 @@ if (beg == CF_UNDEFINED_ITEM && a.region.select_start)
 
 if (end == CF_UNDEFINED_ITEM && a.region.select_end)
    {
-   cfPS(cf_verbose,CF_INTERPT,"",pp,a," !! The promised end pattern (%s) was not found when selecting edit region in %s",a.region.select_end,pp->this_server);
+   cfPS(cf_verbose,CF_INTERPT,"",pp,a," !! The promised end pattern (%s) was not found when selecting edit region in %s, abort edit",a.region.select_end,pp->this_server);
+   end = NULL; /* End of file is null ptr if nothing else specified */
    return false;
    }
-else
+
+if (end == CF_UNDEFINED_ITEM)
    {
    end = NULL; /* End of file is null ptr if nothing else specified */
    }
 
 *begin_ptr = beg;
 *end_ptr = end;
+
 return true;
 }
 
@@ -627,7 +635,7 @@ for (ip = *start; ip != NULL; ip = np)
 
    if (in_region && match)
       {
-      if (DONTDO || a.transaction.action == cfa_warn)
+      if (a.transaction.action == cfa_warn)
          {
          cfPS(cf_error,CF_WARN,"",pp,a," -> Need to delete line \"%s\" from %s - but only a warning was promised",ip->name,pp->this_server);
          np = ip->next;
@@ -693,13 +701,6 @@ int ReplacePatterns(struct Item *file_start,struct Item *file_end,struct Attribu
   struct CfRegEx rex;
   struct Item *ip;
  
-rex = CompileRegExp(pp->promiser);
-
-if (rex.failed)
-   {
-   return false;
-   }
-
 if (a.replace.occurrences && strcmp(a.replace.occurrences,"first") == 0)
    {
    once_only = true;
@@ -712,7 +713,7 @@ for (ip = file_start; ip != file_end; ip=ip->next)
       continue;
       }
 
-   if (!RegExMatchSubString(rex,ip->name,&start_off,&end_off))
+   if (!BlockTextMatch(pp->promiser,ip->name,&start_off,&end_off))
       {
       continue;
       }
@@ -739,7 +740,7 @@ for (ip = file_start; ip != file_end; ip=ip->next)
          }
       else
          {
-         if (!RegExMatchSubString(rex,sp,&start_off,&end_off))
+         if (!BlockTextMatch(pp->promiser,sp,&start_off,&end_off))
             {
             strncat(line_buff,sp,CF_BUFSIZE);
             break;
@@ -752,16 +753,19 @@ for (ip = file_start; ip != file_end; ip=ip->next)
          }
       }
 
-   if (RegExMatchSubString(rex,line_buff,&start_off,&end_off))
+   if (BlockTextMatch(pp->promiser,line_buff,&start_off,&end_off))
       {
-      ExpandScalar(a.replace.replace_value,replace);
-
-      if (strcmp(replace,line_buff) != 0)
-         {      
-         cfPS(cf_error,CF_INTERPT,"",pp,a," -> Promised replacement \"%s\" on line \"%s\" for pattern \"%s\" is not convergent while editing %s",line_buff,ip->name,pp->promiser,pp->this_server);
-         CfOut(cf_error,"","Because the regular expression \"%s\" still matches the replacement string \"%s\"",pp->promiser,line_buff);
-         PromiseRef(cf_error,pp);
-         continue;
+      if (start_off == 0 && end_off == strlen(line_buff))
+         {
+         ExpandScalar(a.replace.replace_value,replace);
+         
+         if (strcmp(replace,line_buff) != 0)
+            {      
+            cfPS(cf_error,CF_INTERPT,"",pp,a," -> Promised replacement \"%s\" on line \"%s\" for pattern \"%s\" is not convergent while editing %s",line_buff,ip->name,pp->promiser,pp->this_server);
+            CfOut(cf_error,"","Because the regular expression \"%s\" still matches the replacement string \"%s\"",pp->promiser,line_buff);
+            PromiseRef(cf_error,pp);
+            continue;
+            }
          }
       }
 
@@ -770,7 +774,7 @@ for (ip = file_start; ip != file_end; ip=ip->next)
       break;
       }
    
-   if (DONTDO || a.transaction.action == cfa_warn)
+   if (a.transaction.action == cfa_warn)
       {
       cfPS(cf_verbose,CF_WARN,"",pp,a," -> Need to replace line \"%s\" in %s - but only a warning was promised",pp->promiser,pp->this_server);
       continue;
@@ -815,7 +819,7 @@ for (ip = file_start; ip != file_end; ip=ip->next)
       continue;
       }
 
-   if (!RegExMatchFullString(rex,ip->name))
+   if (!FullTextMatch(pp->promiser,ip->name))
       {
       continue;
       }
@@ -855,12 +859,35 @@ int SanityCheckInsertions(struct Attributes a)
   long with = 0;
   long ok = true;
   
-with += (long)a.line_select.startwith_from_list;
-not += (long)a.line_select.not_startwith_from_list;
-with += (long)a.line_select.match_from_list;
-not += (long)a.line_select.not_match_from_list;
-with += (long)a.line_select.contains_from_list;
-not += (long)a.line_select.not_contains_from_list;
+if (a.line_select.startwith_from_list)
+   {
+   with++;
+   }
+
+if (a.line_select.not_startwith_from_list)
+   {
+   not++;
+   }
+
+if (a.line_select.match_from_list)
+   {
+   with++;
+   }
+
+if (a.line_select.not_match_from_list)
+   {
+   not++;
+   }
+
+if (a.line_select.contains_from_list)
+   {
+   with++;
+   }
+
+if (a.line_select.not_contains_from_list)
+   {
+   not++;
+   }
 
 if (not > 1)
    {
@@ -892,7 +919,7 @@ if (prev == CF_UNDEFINED_ITEM) /* Insert at first line */
       {
       if (*start == NULL)
          {
-         if (DONTDO || a.transaction.action == cfa_warn)
+         if (a.transaction.action == cfa_warn)
             {
             cfPS(cf_error,CF_WARN,"",pp,a," -> Need to insert the promised line \"%s\" in %s - but only a warning was promised",newline,pp->this_server);
             return true;
@@ -908,7 +935,7 @@ if (prev == CF_UNDEFINED_ITEM) /* Insert at first line */
       
       if (strcmp((*start)->name,newline) != 0)
          {
-         if (DONTDO || a.transaction.action == cfa_warn)
+         if (a.transaction.action == cfa_warn)
             {
             cfPS(cf_error,CF_WARN,"",pp,a," -> Need to prepend the promised line \"%s\" to %s - but only a warning was promised",newline,pp->this_server);
             return true;
@@ -938,7 +965,7 @@ if (a.location.before_after == cfe_before)
       }
    else
       {
-      if (DONTDO || a.transaction.action == cfa_warn)
+      if (a.transaction.action == cfa_warn)
          {
          cfPS(cf_error,CF_WARN,"",pp,a," -> Need to insert line \"%s\" into %s but only a warning was promised",newline,pp->this_server);
          return true;
@@ -961,7 +988,7 @@ else
       }
    else
       {
-      if (DONTDO || a.transaction.action == cfa_warn)
+      if (a.transaction.action == cfa_warn)
          {
          cfPS(cf_error,CF_WARN,"",pp,a," -> Need to insert line \"%s\" in %s but only a warning was promised",newline,pp->this_server);
          return true;
@@ -1035,7 +1062,7 @@ if (a.column.value_separator != '\0')
 
    if (retval)
       {
-      if (DONTDO || a.transaction.action == cfa_warn)
+      if (a.transaction.action == cfa_warn)
          {
          cfPS(cf_error,CF_NOP,"",pp,a," -> Need to edit field in %s but only warning promised",pp->this_server);
          retval = false;
@@ -1060,9 +1087,9 @@ else
 
    if (a.column.column_operation && strcmp(a.column.column_operation,"delete") == 0)
       {
-      if (DONTDO)
+      if (a.transaction.action == cfa_warn)
          {
-         cfPS(cf_error,CF_NOP,"",pp,a," -> Need to delete field field value %s in %s",rp->item,pp->this_server);
+         cfPS(cf_error,CF_NOP,"",pp,a," -> Need to delete field field value %s in %s but only a warning was promised",rp->item,pp->this_server);
          return false;
          }
       else
@@ -1076,9 +1103,9 @@ else
       }
    else
       {
-      if (DONTDO)
+      if (a.transaction.action == cfa_warn)
          {
-         cfPS(cf_error,CF_NOP,"",pp,a," -> Need to set column field value %s to %s in %s",rp->item,a.column.column_value,pp->this_server);
+         cfPS(cf_error,CF_NOP,"",pp,a," -> Need to set column field value %s to %s in %s but only a warning was promised",rp->item,a.column.column_value,pp->this_server);
          return false;
          }
       else

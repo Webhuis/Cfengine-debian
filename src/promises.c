@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -490,7 +494,12 @@ return NULL;
 void DeletePromises(struct Promise *pp)
 
 {
-if (pp->this_server != NULL)
+if (pp == NULL)
+   {
+   return;
+   }
+
+ if (pp->this_server != NULL)
    {
    free(pp->this_server);
    }
@@ -500,7 +509,6 @@ if (pp->next != NULL)
    DeletePromises(pp->next);
    }
 
-free(pp->bundle);
 DeletePromise(pp);
 }
 
@@ -531,9 +539,10 @@ pp->this_server = NULL;
 pp->cache = NULL;
 pp->conn = NULL;
 pp->inode_cache = NULL;
+pp->cache = NULL;
 
 pp->bundletype = NULL;
-pp->agentsubtype = strdup(typename);
+pp->agentsubtype = typename;   /* cache this, not copy strdup(typename);*/
 pp->ref = NULL;                /* cache a reference if given*/
 pp->next = NULL;
 return pp;
@@ -556,9 +565,14 @@ if (pp->promisee != NULL)
    DeleteRvalItem(pp->promisee,pp->petype);
    }
 
+free(pp->bundle);
+free(pp->classes);
+
 // ref/agentsubtype are only references
 
 DeleteConstraintList(pp->conlist);
+
+free((char *)pp);
 }
 
 /*****************************************************************************/
@@ -580,6 +594,8 @@ if (pp->classes)
    {
    free(pp->classes);
    }
+
+free(pp->bundle);
 
 for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
@@ -619,4 +635,53 @@ if (pp->ref)
    {
    CfOut(level,"","Comment: %s\n",pp->ref);
    }
+}
+
+/*******************************************************************/
+
+void HashPromise(struct Promise *pp,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhashes type)
+
+{ EVP_MD_CTX context;
+  int len, md_len;
+  const EVP_MD *md = NULL;
+  struct Constraint *cp;
+  struct Rlist *rp;
+
+md = EVP_get_digestbyname(FileHashName(type));
+   
+EVP_DigestInit(&context,md);
+
+EVP_DigestUpdate(&context,pp->promiser,strlen(pp->promiser));
+
+if (pp->ref)
+   {
+   EVP_DigestUpdate(&context,pp->ref,strlen(pp->ref));
+   }
+
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
+   {
+   EVP_DigestUpdate(&context,cp->lval,strlen(cp->lval));
+
+   switch(cp->type)
+      {
+      case CF_SCALAR:
+          EVP_DigestUpdate(&context,cp->rval,strlen(cp->rval));
+          break;
+
+      case CF_LIST:
+          for (rp = cp->rval; rp != NULL; rp=rp->next)
+             {
+             EVP_DigestUpdate(&context,rp->item,strlen(rp->item));
+             }
+          break;
+
+      case CF_FNCALL:
+          // Shouldn't happen -right?
+          break;
+      }
+   }
+
+EVP_DigestFinal(&context,digest,&md_len);
+   
+/* Digest length stored in md_len */
 }

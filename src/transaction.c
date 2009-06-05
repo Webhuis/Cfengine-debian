@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -30,25 +34,37 @@
 
 /*****************************************************************************/
 
-void SummarizeTransaction(struct Attributes attr,struct Promise *pp)
+void SummarizeTransaction(struct Attributes attr,struct Promise *pp,char *logname)
 
-{
-if (attr.transaction.log_string)
-   {
-   cfPS(cf_log,CF_NOP,"",pp,attr,attr.transaction.log_string);
-   }
+{ FILE *fout;
  
-/*
-   char *log_string;
-   char *log_level;
-
-   enum cfoutputlevel report_level;
-   cf_inform,
-   cf_verbose,
-   cf_error,
-   cflogonly,
-   {"log_level",cf_str,"inform,verbose,debug"},
-*/
+if (logname && attr.transaction.log_string)
+   {
+   if (strcmp(logname,"stdout") == 0)
+      {
+      printf("L: %s\n",attr.transaction.log_string);
+      }
+   else
+      {
+      if ((fout = fopen(logname,"a")) == NULL)
+         {
+         CfOut(cf_error,"","Unable to open private log %s",logname);
+         return;
+         }
+      
+      CfOut(cf_verbose,""," -> Logging string \"%s\" to %s\n",attr.transaction.log_string,logname);
+      fprintf(fout,"%s\n",attr.transaction.log_string);
+      
+      fclose(fout);
+      }
+   }
+else if (attr.transaction.log_failed)
+   {
+   if (strcmp(logname,attr.transaction.log_failed) == 0)
+      {
+      cfPS(cf_log,CF_NOP,"",pp,attr,"%s",attr.transaction.log_string);
+      }
+   }
 }
 
 /*****************************************************************************/
@@ -61,7 +77,8 @@ struct CfLock AcquireLock(char *operand,char *host,time_t now,struct Attributes 
   char *promise,cc_operator[CF_BUFSIZE],cc_operand[CF_BUFSIZE];
   char cflock[CF_BUFSIZE],cflast[CF_BUFSIZE],cflog[CF_BUFSIZE];
   struct CfLock this;
-
+  unsigned char digest[EVP_MAX_MD_SIZE+1];
+    
 this.last = (char *) CF_UNDEFINED;
 this.lock = (char *) CF_UNDEFINED;
 this.log  = (char *) CF_UNDEFINED;
@@ -114,9 +131,11 @@ for (i = 0; cc_operand[i] != '\0'; i++)
    sum = (CF_MACROALPHABET * sum + cc_operand[i]) % CF_HASHTABLESIZE;
    }
 
+HashPromise(pp,digest,cf_md5);
+
 snprintf(cflog,CF_BUFSIZE,"%s/cf3.%.40s.runlog",CFWORKDIR,host);
-snprintf(cflock,CF_BUFSIZE,"lock.%.100s.%s.%.100s_%d",pp->bundle,cc_operator,cc_operand,sum);
-snprintf(cflast,CF_BUFSIZE,"last.%.100s.%s.%.100s_%d",pp->bundle,cc_operator,cc_operand,sum);
+snprintf(cflock,CF_BUFSIZE,"lock.%.100s.%s.%.100s_%d_%s",pp->bundle,cc_operator,cc_operand,sum,HashPrint(cf_md5,digest));
+snprintf(cflast,CF_BUFSIZE,"last.%.100s.%s.%.100s_%d_%s",pp->bundle,cc_operator,cc_operand,sum,HashPrint(cf_md5,digest));
 
 Debug("LOCK(%s)[%s]\n",pp->bundle,cflock);
 
@@ -234,7 +253,7 @@ Debug("Yielding lock %s\n",this.lock);
 
 if (RemoveLock(this.lock) == -1)
    {
-   Debug("Unable to remove lock %s\n",this.lock);
+   CfOut(cf_verbose,"","Unable to remove lock %s\n",this.lock);
    free(this.last);
    free(this.lock);
    free(this.log);
@@ -401,7 +420,7 @@ int RemoveLock(char *name)
 
 if ((dbp = OpenLock()) == NULL)
    {
-   return 0;
+   return -1;
    }
 
 #if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
@@ -498,5 +517,8 @@ return dbp;
 void CloseLock(DB *dbp)
 
 {
-dbp->close(dbp,0);
+if (dbp)
+   { 
+   dbp->close(dbp,0);
+   }
 }

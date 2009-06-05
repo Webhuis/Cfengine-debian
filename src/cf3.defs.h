@@ -91,7 +91,7 @@
 #define CF_DEFINECLASSES "classes"
 #define CF_TRANSACTION   "action"
 
-#define CF3_MODULES 11 /* This value needs to be incremented when adding modules */
+#define CF3_MODULES 12 /* This value needs to be incremented when adding modules */
 
 /*************************************************************************/
 
@@ -220,6 +220,7 @@ enum cfgcontrol
    cfg_lastseenexpireafter,
    cfg_output_prefix,
    cfg_domain,
+   cfg_require_comments,
    cfg_noagent
    };
     
@@ -252,6 +253,7 @@ enum cfacontrol
    cfa_ifelapsed,
    cfa_inform,
    cfa_lastseen,
+   cfa_intermittency,
    cfa_max_children,
    cfa_mountfilesystems,
    cfa_nonalphanumfiles,
@@ -330,6 +332,7 @@ enum cfscontrol
    cfs_auditing,
    cfs_bindtointerface,
    cfs_serverfacility,
+   cfs_portnumber,
    cfs_notype,
    };
 
@@ -344,6 +347,7 @@ enum cfkcontrol
    cfk_sql_owner,
    cfk_sql_passwd,
    cfk_sql_server,
+   cfk_sql_connect_db,
    cfk_query_output,
    cfk_query_engine,
    cfk_stylesheet,
@@ -424,7 +428,7 @@ enum cfeditorder
 #define CF_SIGNALRANGE "hup,int,trap,kill,pipe,cont,abrt,stop,quit,term,child,usr1,usr2,bus,segv"
 #define CF_BOOL      "true,false,yes,no,on,off"
 #define CF_LINKRANGE "symlink,hardlink,relative,absolute,none"
-#define CF_TIMERANGE "0,4026531839"
+#define CF_TIMERANGE "0,2147483647"
 #define CF_VALRANGE  "0,99999999999"
 #define CF_INTRANGE  "-99999999999,9999999999"
 #define CF_REALRANGE "-9.99999E100,9.99999E100"
@@ -488,6 +492,7 @@ enum fncalltype
    cfn_getuid,
    cfn_groupexists,
    cfn_hash,
+   cfn_hashmatch,
    cfn_hostrange,
    cfn_hostinnetgroup,
    cfn_iprange,
@@ -499,8 +504,15 @@ enum fncalltype
    cfn_isnewerthan,
    cfn_isplain,
    cfn_isvariable,
+   cfn_lastnode,
+   cfn_ldaparray,
+   cfn_ldaplist,
+   cfn_ldapvalue,
    cfn_now,
    cfn_date,
+   cfn_peers,
+   cfn_peerleader,
+   cfn_peerleaders,
    cfn_randomint,
    cfn_readfile,
    cfn_readintarray,
@@ -512,11 +524,15 @@ enum fncalltype
    cfn_readtcp,
    cfn_regarray,
    cfn_regcmp,
+   cfn_registryvalue,
    cfn_regline,
-   cfn_reglist,   
+   cfn_reglist,
+   cfn_regldap,
+   cfn_remotescalar,
    cfn_returnszero,
    cfn_rrange,
    cfn_selectservers,
+   cfn_splayclass,
    cfn_splitstring,
    cfn_strcmp,
    cfn_usemodule,
@@ -665,7 +681,6 @@ struct FnCall
 struct Scope                         /* $(bundlevar) $(scope.name) */
    {
    char *scope;                                 /* Name of scope */
-   char *classes;                               /* Private context classes */
    struct CfAssoc *hashtable[CF_HASHTABLESIZE]; /* Variable heap  */
    struct Scope *next;
    };
@@ -699,6 +714,13 @@ struct FnCallStatus  /* from builtin functions */
 /*******************************************************************/
 /* Return value signalling                                         */
 /*******************************************************************/
+
+enum cfinterval
+   {
+   cfa_hourly,
+   cfa_daily,
+   cfa_nointerval
+   };
 
 enum cfdatetemplate
    {
@@ -760,6 +782,7 @@ enum cfhashes
    cf_sha1,
    cf_sha,
    cf_besthash,
+   cf_crypt,
    cf_nohash
    };
 
@@ -812,6 +835,7 @@ enum representations
    cfk_db,
    cfk_literal,
    cfk_image,
+   cfk_portal,
    cfk_none
    };
 
@@ -844,6 +868,7 @@ enum action_policy
   cfa_no_ppolicy
   };
 
+/************************************************************************************/
 
 enum cf_acl_method
    {
@@ -854,6 +879,7 @@ enum cf_acl_method
 
 enum cf_acl_type
    {
+   cfacl_generic,
    cfacl_posix,
    cfacl_ntfs,
    cfacl_notype
@@ -861,9 +887,19 @@ enum cf_acl_type
        
 enum cf_acl_inherit
    {
-   cfacl_default,
+   cfacl_specify,
    cfacl_parent,
-   cfacl_noinherit
+   cfacl_none,
+   cfacl_noinherit,
+   };
+
+struct CfACL
+   {
+   enum cf_acl_method acl_method;
+   enum cf_acl_type acl_type;
+   enum cf_acl_inherit acl_directory_inherit;
+   struct Rlist *acl_entries;
+   struct Rlist *acl_inherit_entries;
    };
 
 /*************************************************************************/
@@ -927,6 +963,9 @@ struct TransactionContext
    int expireafter;
    int background;
    char *log_string;
+   char *log_kept;
+   char *log_repaired;
+   char *log_failed;
    char *measure_id;
    int  audit;
    enum cfreport report_level;
@@ -956,7 +995,7 @@ struct Topic
    {
    char *topic_type;
    char *topic_name;
-   char *comment;
+   char *topic_comment;
    struct Occurrence *occurrences;
    struct TopicAssociation *associations;
    struct Topic *next;
@@ -978,6 +1017,89 @@ struct Occurrence
    enum representations rep_type;
    struct Rlist *represents; /* subtype represented by promiser */
    struct Occurrence *next;
+   };
+
+
+/*************************************************************************/
+/* SQL Database connectors                                               */
+/*************************************************************************/
+
+#ifdef HAVE_MYSQL_MYSQL_H
+#include <mysql/mysql.h>
+#endif
+
+#ifdef HAVE_PGSQL_LIBPQ_FE_H
+#include <pgsql/libpq-fe.h>
+#endif
+
+#ifdef HAVE_LIBPQ_FE_H
+#include <libpq-fe.h>
+#endif
+
+enum cfdbtype
+   {
+   cfd_mysql,
+   cfd_postgres,
+   cfd_notype
+   };
+
+typedef struct 
+   {
+#ifdef HAVE_MYSQL_MYSQL_H
+   MYSQL my_conn;
+   MYSQL_RES *my_res;
+#endif
+#if defined HAVE_PGSQL_LIBPQ_FE_H || defined HAVE_LIBPQ_FE_H
+   PGconn *pq_conn;
+   PGresult   *pq_res;
+#endif
+   int connected;
+   int result;
+   int row;
+   int maxcolumns;
+   int maxrows;
+   int column;
+   char **rowdata;
+   char *blank;
+   enum cfdbtype type;
+   }
+CfdbConn;
+
+/*************************************************************************/
+/* Threading container                                                   */
+/*************************************************************************/
+
+struct PromiseThread
+   {
+   enum cfagenttype agent;
+   char *scopeid;
+   struct Promise *pp;
+   void *fnptr;
+   };
+
+/*************************************************************************/
+/* Package promises                                                      */
+/*************************************************************************/
+
+struct CfPackageManager
+   {
+   char *manager;
+   enum package_actions action;
+   enum action_policy policy;
+   struct CfPackageItem *pack_list;
+   struct CfPackageItem *update_list;
+   struct CfPackageManager *next;
+   };
+
+/*************************************************************************/
+
+struct CfPackageItem 
+   {
+   char *name;
+   char *version;
+   char *arch;
+   struct Promise *pp;
+   struct CfPackageItem *next;
    };
 
 /*************************************************************************/
@@ -1036,8 +1158,7 @@ struct FileSelect
    {
    struct Rlist *name;
    struct Rlist *path;
-   mode_t plus;
-   mode_t minus;
+   struct Rlist *perms;      
    struct Rlist *owners;
    struct Rlist *groups;
    u_long plus_flags;     /* for *BSD chflags */
@@ -1243,6 +1364,7 @@ struct Report
    double intermittency;
    char *friend_pattern;
    char *filename;
+   char *to_file;
    int numlines;
    struct Rlist *showstate;
    };
@@ -1259,6 +1381,7 @@ struct Packages
    enum action_policy package_changes;
    struct Rlist *package_file_repositories;
    char *package_list_command;
+   char *package_update_list_command;
    char *package_list_version_regex;
    char *package_list_name_regex;
    char *package_list_arch_regex;
@@ -1299,14 +1422,21 @@ struct CfTcpIp
 
 /*************************************************************************/
 
-struct CfACL
+struct CfDatabase
    {
-   enum cf_acl_method acl_method;
-   enum cf_acl_type acl_type;
-   enum cf_acl_inherit acl_directory_inherit;
-   struct Rlist *acl_entries;
+   char *db_server_owner;
+   char *db_server_password;
+   char *db_server_host;
+   char *db_connect_db;
+   enum cfdbtype  db_server_type;
+   char *server;
+   char *type;
+   char *operation;
+   struct Rlist *columns;
+   struct Rlist *rows;
+   struct Rlist *exclude;
    };
-
+    
 /*************************************************************************/
 
  /* This is huge, but the simplification of logic is huge too
@@ -1326,6 +1456,7 @@ struct Attributes
    struct Context context;
    struct Measurement measure;
    struct CfACL acl;
+   struct CfDatabase database;
    char *transformer;
    char *pathtype;
    char *repository;
@@ -1398,89 +1529,9 @@ struct Attributes
    struct Rlist *associates;
    struct Rlist *represents;
    char *rep_type;
+   char *path_root;
+   char *web_root;
    };
-
-/*************************************************************************/
-/* SQL Database connectors                                               */
-/*************************************************************************/
-
-#ifdef HAVE_MYSQL_MYSQL_H
-#include <mysql/mysql.h>
-#endif
-
-#ifdef HAVE_PGSQL_LIBPQ_FE_H
-#include <pgsql/libpq-fe.h>
-#endif
-
-#ifdef HAVE_LIBPQ_FE_H
-#include <libpq-fe.h>
-#endif
-
-enum cfdbtype
-   {
-   cfd_mysql,
-   cfd_postgress,
-   cfd_notype
-   };
-
-typedef struct 
-   {
-#ifdef HAVE_MYSQL_MYSQL_H
-   MYSQL my_conn;
-   MYSQL_RES *my_res;
-#endif
-#if defined HAVE_PGSQL_LIBPQ_FE_H || defined HAVE_LIBPQ_FE_H
-   PGconn *pq_conn;
-   PGresult   *pq_res;
-#endif
-   int connected;
-   int result;
-   int row;
-   int maxcolumns;
-   int maxrows;
-   int column;
-   char **rowdata;
-   char *blank;
-   enum cfdbtype type;
-   }
-CfdbConn;
-
-/*************************************************************************/
-/* Threading container                                                   */
-/*************************************************************************/
-
-struct PromiseThread
-   {
-   enum cfagenttype agent;
-   char *scopeid;
-   struct Promise *pp;
-   void *fnptr;
-   };
-
-/*************************************************************************/
-/* Package promises                                                      */
-/*************************************************************************/
-
-struct CfPackageManager
-   {
-   char *manager;
-   enum package_actions action;
-   enum action_policy policy;
-   struct CfPackageItem *pack_list;
-   struct CfPackageManager *next;
-   };
-
-/*************************************************************************/
-
-struct CfPackageItem 
-   {
-   char *name;
-   char *version;
-   char *arch;
-   struct Promise *pp;
-   struct CfPackageItem *next;
-   };
-
 
 #include "prototypes3.h"
 

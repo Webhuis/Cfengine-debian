@@ -1,0 +1,31 @@
+
+#
+
+body common control
+{
+bundlesequence => { "ldap" };
+}
+
+#
+
+bundle agent ldap
+{
+vars:
+
+   # Get the first matching value for "uid"
+
+  "value" string => ldapvalue("ldap://eternity.iu.hio.no","dc=cfengine,dc=com","(sn=User)","uid","subtree","none");
+
+   # Geta all matching values for "uid" 
+
+  "list" slist =>  ldaplist("ldap://eternity.iu.hio.no","dc=cfengine,dc=com","(sn=User)","uid","subtree","none");
+
+
+reports:
+
+ linux::
+
+   "LDAP VALUE $(value) found";
+   "LDAP LIST VALUE $(list)";
+
+}

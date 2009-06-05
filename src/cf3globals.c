@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 
@@ -44,6 +48,7 @@ short VERBOSE = false;
 short INFORM = false;
 short PARSING = false;
 short CFPARANOID = false;
+int REQUIRE_COMMENTS = CF_UNDEFINED;
 
 struct utsname VSYSNAME;
 
@@ -58,6 +63,7 @@ int CFA_BACKGROUND = 0;
 int CFA_BACKGROUND_LIMIT = 1;
 int AM_BACKGROUND_PROCESS = false;
 
+char *THIS_BUNDLE = NULL;
 char THIS_AGENT[CF_MAXVARSIZE];
 enum cfagenttype THIS_AGENT_TYPE;
 short INSTALL_SKIP = false;
@@ -102,6 +108,7 @@ struct Rlist *CF_STCK = NULL;
 
 int CF_STCKFRAME = 0;
 int LASTSEENEXPIREAFTER = CF_WEEK;
+int LASTSEEN = true;
 
 struct Topic *TOPIC_MAP = NULL;
 
@@ -192,6 +199,8 @@ char *CF_AGENTTYPES[] = /* see enum cfagenttype */
 /* Compatability infrastructure                                              */
 /*****************************************************************************/
 
+double FORGETRATE = 0.7;
+
 short IGNORELOCK = false;
 short DONTDO = false;
 short DEBUG = false;
@@ -237,11 +246,13 @@ pthread_attr_t PTHREADDEFAULTS;
 pthread_mutex_t MUTEX_SYSCALL = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 pthread_mutex_t MUTEX_LOCK = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 pthread_mutex_t MUTEX_COUNT = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+pthread_mutex_t MUTEX_HOSTNAME = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 #else
 # if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
 pthread_mutex_t MUTEX_SYSCALL = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_LOCK = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_COUNT = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_HOSTNAME = PTHREAD_MUTEX_INITIALIZER;
 # endif
 #endif
 
@@ -266,6 +277,8 @@ char *PROTOCOL[] =
    "SGET",
    "VERSION",
    "SOPENDIR",
+   "VAR",
+   "SVAR",
    NULL
    };
 
@@ -273,10 +286,14 @@ struct Item *IPADDRESSES = NULL;
 struct Item *VHEAP = NULL;
 struct Item *VNEGHEAP = NULL;
 struct Item *VADDCLASSES=NULL;           /* Action sequence defs  */
+struct Rlist *PRIVCLASSHEAP = NULL;
 
 int PR_KEPT = 0;
 int PR_REPAIRED = 0;
 int PR_NOTKEPT = 0;
+
+char FILE_SEPARATOR;
+char FILE_SEPARATOR_STR[2];
 
 /*******************************************************************/
 /*                                                                 */
@@ -287,7 +304,7 @@ int PR_NOTKEPT = 0;
 /* These string lengths should not exceed CF_MAXDIGESTNAMELEN
    characters for packing */
 
-char *CF_DIGEST_TYPES[9][2] =
+char *CF_DIGEST_TYPES[10][2] =
      {
      "md5","m",
      "sha224","c",
@@ -297,10 +314,11 @@ char *CF_DIGEST_TYPES[9][2] =
      "sha1","S",
      "sha","s",   /* Should come last, since substring */
      "best","b",
+     "crypt","o",
      NULL,NULL
      };
 
-int CF_DIGEST_SIZES[9] =
+int CF_DIGEST_SIZES[10] =
      {
      CF_MD5_LEN,
      CF_SHA224_LEN,
@@ -310,6 +328,7 @@ int CF_DIGEST_SIZES[9] =
      CF_SHA1_LEN,
      CF_SHA_LEN,
      CF_BEST_LEN,
+     CF_CRYPT_LEN,
      0
      };
 

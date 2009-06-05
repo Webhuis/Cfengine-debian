@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -35,12 +39,17 @@
 int FullTextMatch(char *regexp,char *teststring)
 
 { struct CfRegEx rex;
+
+if (strcmp(regexp,teststring) == 0)
+   {
+   return true;
+   }
  
 rex = CompileRegExp(regexp);
 
 if (rex.failed)
    {
-   return 0;
+   return false;
    }
 
 if (RegExMatchFullString(rex,teststring))
@@ -152,7 +161,7 @@ int IsRegex(char *str)
 
 for (sp = str; *sp != '\0'; sp++)
    {
-   if (strchr("^.*+\[]()$",*sp))
+   if (strchr("^*+\[]()$",*sp))
       {
       return true;  /* Maybe */
       }
@@ -194,9 +203,9 @@ if (result = IsRegex(str))
                 result++;
                 }
              break;
-         case FILE_SEPARATOR:
-             
-             if (r || s)
+         default:
+
+             if (*sp == FILE_SEPARATOR && (r || s))
                 {
                 CfOut(cf_error,"","Path regular expression %s seems to use expressions containing the directory symbol %c",str,FILE_SEPARATOR);
                 CfOut(cf_error,"","Use a work-around to avoid pathological behaviour\n");
@@ -225,6 +234,13 @@ for (ptr = list; ptr != NULL; ptr=ptr->next)
       continue;
       }
 
+   /* Avoid using regex if possible, due to memory leak */
+   
+   if (strcmp(regex,ptr->name) == 0)
+      {
+      return(true);
+      }
+
    /* Make it commutative */
 
    if (FullTextMatch(regex,ptr->name) || FullTextMatch(ptr->name,regex))
@@ -247,6 +263,13 @@ int MatchRlistItem(struct Rlist *listofregex,char *teststring)
  
 for (rp = listofregex; rp != NULL; rp=rp->next)
    {
+   /* Avoid using regex if possible, due to memory leak */
+   
+   if (strcmp(teststring,rp->item) == 0)
+      {
+      return(true);
+      }
+
    /* Make it commutative */
    
    if (FullTextMatch(rp->item,teststring))
@@ -274,6 +297,7 @@ struct CfRegEx CompileRegExp(char *regexp)
  int erroffset;
 
 memset(&this,0,sizeof(struct CfRegEx)); 
+
 rx = pcre_compile(regexp,0,&errorstr,&erroffset,NULL);
 
 if (rx == NULL)
@@ -292,7 +316,7 @@ else
  regex_t rx;
  int code;
 
-memset(&this,0,sizeof(struct CfRegEx)); 
+memset(&this,0,sizeof(struct CfRegEx));
 
 code = regcomp(&rx,regexp,REG_EXTENDED);
 
@@ -301,7 +325,7 @@ if (code != 0)
    char buf[CF_BUFSIZE];
    regerror(code,&rx,buf,CF_BUFSIZE-1);
    Chop(buf);
-   CfOut(cf_error,"regerror","Regular expression error %d for %s: %s\n", code, regexp,buf);
+   CfOut(cf_error,"regerror","Regular expression error %d for %s: %s\n", code,regexp,buf);
    this.failed = true;
    }
 else
@@ -385,6 +409,12 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
    *start = ovector[0];
    *end = ovector[1];
 
+   if (rc > 1)
+      {
+      DeleteScope("match");
+      NewScope("match");
+      }
+   
    for (i = 0; i < rc; i++) /* make backref vars $(1),$(2) etc */
       {
       char substring[1024];
@@ -397,13 +427,15 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
       snprintf(lval,3,"%d",i);
       ForceScalar(lval,substring);
       }
-   
+
+   pcre_free(rx);
    return true;
    }
 else
    {
    *start = 0;
    *end = 0;
+   //pcre_free(rx);
    return false;
    }
 
@@ -412,15 +444,18 @@ else
  regex_t rx = rex.rx;
  regmatch_t pmatch[2];
  int code,i;
- 
+
 if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
    {
+   DeleteScope("match");
+   NewScope("match");
+
    for (i = 0; i < 2; i++) /* make backref vars $(1),$(2) etc */
       {
       int backref_len;
       char substring[1024];
       char lval[4];
-      int s,e;
+      regoff_t s,e;
       s = (int)pmatch[i].rm_so;
       e = (int)pmatch[i].rm_eo;
       backref_len = e - s;
@@ -436,15 +471,23 @@ if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
 
    *start = (int)pmatch[0].rm_so;
    *end = (int)pmatch[0].rm_eo;
+   regfree(&rx);
    return true;
    }
 else
    {
    char buf[CF_BUFSIZE];
-   regerror(code,&rx,buf,CF_BUFSIZE-1);
-   Debug("Regular expression error %d for %s: %s\n", code,rex.regexp,buf);
+   
+   if (DEBUG)
+      {
+      buf[0] = '\0';
+      regerror(code,&rx,buf,CF_BUFSIZE-1);
+      Debug("Regular expression error %d for %s: %s\n", code,rex.regexp,buf);
+      }
+   
    *start = 0;
    *end = 0;
+   regfree(&rx);
    return false;
    }
 
@@ -468,6 +511,12 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
    match_start = teststring + ovector[0];
    match_len = ovector[1] - ovector[0];
 
+   if (rc > 1)
+      {
+      DeleteScope("match");
+      NewScope("match");
+      }
+   
    for (i = 0; i < rc; i++) /* make backref vars $(1),$(2) etc */
       {
       char substring[1024];
@@ -480,7 +529,9 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
       snprintf(lval,3,"%d",i);
       ForceScalar(lval,substring);
       }
-   
+
+   pcre_free(rx);
+      
    if ((match_start == teststring) && (match_len == strlen(teststring)))
       {
       return true;
@@ -492,6 +543,7 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
    }
 else
    {
+   //pcre_free(rx);
    return false;
    }
 
@@ -504,6 +556,9 @@ else
 
 if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
    {
+   DeleteScope("match");
+   NewScope("match");
+
    for (i = 1; i < 2; i++) /* make backref vars $(1),$(2) etc */
       {
       int backref_len;
@@ -524,6 +579,8 @@ if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
       break;
       }
 
+   regfree(&rx);
+      
    if ((pmatch[0].rm_so == 0) && (pmatch[0].rm_eo == strlen(teststring)))
       {
       Debug("Regex %s matches (%s) exactly.\n",rex.regexp,teststring);
@@ -538,8 +595,14 @@ if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
 else
    {
    char buf[CF_BUFSIZE];
-   regerror(code,&rx,buf,CF_BUFSIZE-1);
-   Debug("Regular expression error %d for %s: %s\n", code,rex.regexp,buf);
+
+   if (DEBUG)
+      {
+      regerror(code,&rx,buf,CF_BUFSIZE-1);
+      Debug("Regular expression error %d for %s: %s\n", code,rex.regexp,buf);
+      }
+   
+   regfree(&rx);
    return false;
    }
 
@@ -557,7 +620,7 @@ char *FirstBackReference(struct CfRegEx rex,char *regex,char *teststring)
  pcre *rx;
  int ovector[OVECCOUNT],i,rc,match_len;
  char *match_start;
- 
+
 rx = rex.rx;
 memset(backreference,0,CF_BUFSIZE);
 
@@ -580,6 +643,8 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
       }
    }
 
+pcre_free(rx);
+   
 #else
 
  regex_t rx = rex.rx;
@@ -609,15 +674,19 @@ if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
       }
    }
 
+regfree(&rx);
+
 #endif
 
 if (strlen(backreference) == 0)
    {
-   CfOut(cf_verbose,"","The regular expression \"%s\" contained no parenthetic back-reference",regex);
+   Debug("The regular expression \"%s\" yielded no matching back-reference",regex);
+   strncpy(backreference,"CF_NOMATCH",CF_MAXVARSIZE);
    }
 
 return backreference;
 }
+
 
 /*********************************************************************/
 /* Enumerated languages - fuzzy match model                          */
@@ -808,6 +877,11 @@ int FuzzySetMatch(char *s1,char *s2)
   int mask;
   unsigned long a1,a2;
 
+if (strcmp(s1,s2) == 0)
+   {
+   return 0;
+   }
+  
 if (strstr(s1,"/") != 0)
    {
    isCIDR = true;
@@ -898,16 +972,20 @@ if (isv4)
       {
       long i, from = -1, to = -1, cmp = -1;
       char *sp1,*sp2,buffer1[CF_MAX_IP_LEN],buffer2[CF_MAX_IP_LEN];
-      
+
       sp1 = s1;
       sp2 = s2;
       
       for (i = 0; i < 4; i++)
          {
-         if (sscanf(sp1,"%[^.]",buffer1) <= 0)
+         buffer1[0] = '\0';
+         sscanf(sp1,"%[^.]",buffer1);
+         
+         if (strlen(buffer1) == 0)
             {
             break;
             }
+
          sp1 += strlen(buffer1)+1;
          sscanf(sp2,"%[^.]",buffer2);
          sp2 += strlen(buffer2)+1;
@@ -916,7 +994,7 @@ if (isv4)
             {
             sscanf(buffer1,"%ld-%ld",&from,&to);
             sscanf(buffer2,"%ld",&cmp);
-            
+
             if (from < 0 || to < 0)
                {
                Debug("Couldn't read range\n");
@@ -1044,7 +1122,7 @@ int FuzzyHostParse(char *arg1,char *arg2)
 
 n = sscanf(arg2,"%ld-%ld%n",&start,&end,&where);
 
-if ( n != 2 )
+if (n != 2)
    {
    CfOut(cf_error,"","HostRange syntax error: second arg should have X-Y format where X and Y are decimal numbers");
    return false;

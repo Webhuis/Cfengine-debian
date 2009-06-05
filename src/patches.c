@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -47,6 +52,93 @@ else
 
 /*********************************************************/
 
+char *MapName(char *s)
+
+{ static char buffer[CF_BUFSIZE];
+  char *spf,*spto;
+  int rootlen;
+  struct stat sb;
+
+#ifdef NT
+memset(buffer,0,CF_BUFSIZE);
+
+if (UseUnixStandard(s))
+   {
+   spto = buffer;
+
+   for (spf = s; *spf != '\0'; spf++)
+      {
+      if (IsFileSep(*spf) && IsFileSep(*(spf+1))) /* compress // or \\ */
+         {
+         continue;
+         }
+
+      if (IsFileSep(*spf) && *(spf+1) != '\0' && *(spf+2) == ':') /* compress \c:\abc */
+         {
+         continue;
+         }
+
+      if (*(spf+1) != '\0' && (strncmp(spf+1,":\\",2) == 0 || strncmp(spf+1,":/",2) == 0 ))
+         {
+         /* For cygwin translation */
+         strcat(spto,"/cygdrive/");
+         /* Drive letter */
+         strncat(spto,spf,1); 
+         strcat(spto,"/");
+         spto += strlen("/cygdrive/c/");
+         spf += strlen("c:/") - 1;
+         continue;
+         }
+
+      switch (*spf)
+         {
+         case '\\':
+             *spto = '/';
+             break;
+
+         default:
+             *spto = *spf;
+             break;          
+         }
+      
+      spto++;
+      }
+   }
+else
+   {
+   spto = buffer;
+
+   for (spf = s; *spf != '\0'; spf++)
+      {
+      switch (*spf)
+         {
+         case '/':
+             *spto++ = '\\';
+             break;
+
+         default:
+             *spto++ = *spf;
+             break;          
+         }
+      }
+   }
+#else
+strncpy(buffer,s,CF_BUFSIZE-1);
+#endif
+
+return buffer;
+}
+
+/*********************************************************/
+
+int UseUnixStandard(char *s)
+
+{
+return true;
+}
+
+/*********************************************************/
+
 char *StrStr(char *a,char *b) /* Case insensitive match */
 
 { char buf1[CF_BUFSIZE],buf2[CF_BUFSIZE];
@@ -65,6 +157,66 @@ int StrnCmp(char *a,char *b,size_t n) /* Case insensitive match */
 strncpy(buf1,ToLowerStr(a),CF_BUFSIZE-1);
 strncpy(buf2,ToLowerStr(b),CF_BUFSIZE-1);
 return strncmp(buf1,buf2,n); 
+}
+
+/*********************************************************************/
+
+int cf_strcmp(char *s1,char *s2)
+
+{
+/* Windows native eventually? */
+return strcmp(s1,s2);
+}
+
+/*********************************************************************/
+
+int cf_strncmp(char *s1,char *s2,size_t n)
+
+{
+/* Windows native eventually? */
+return strncmp(s1,s2,n);
+}
+
+/*********************************************************************/
+
+char *cf_strcpy(char *s1,char *s2)
+
+{
+/* Windows native eventually? */
+return strcpy(s1,s2);
+}
+
+/*********************************************************************/
+
+char *cf_strncpy(char *s1,char *s2,size_t n)
+
+{
+/* Windows native eventually? */
+return strncpy(s1,s2,n);
+}
+
+/*********************************************************************/
+
+char *cf_strdup(char *s)
+
+{
+return strdup(s);
+}
+
+/*********************************************************************/
+
+int cf_strlen(char *s)
+    
+{
+return strlen(s);
+}
+
+/*********************************************************************/
+
+char *cf_strchr(char *s, int c)
+    
+{
+return strchr(s,c);
 }
 
 /*********************************************************/

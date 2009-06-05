@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -29,6 +33,8 @@
 
 #include "cf3.defs.h"
 #include "cf3.extern.h"
+
+struct Item *EDIT_ANCHORS = NULL;
 
 /*******************************************************************/
 
@@ -480,7 +486,7 @@ return retval;
 void ReCheckAllConstraints(struct Promise *pp)
 
 { struct Constraint *cp;
-  char *handle = GetConstraint("handle",pp->conlist,CF_SCALAR);
+  char *sp,*handle = GetConstraint("handle",pp->conlist,CF_SCALAR);
   struct PromiseIdent *prid;
 
 if (handle)
@@ -498,11 +504,50 @@ if (handle)
       prid = NewPromiseId(handle,pp);
       }
    }
-  
+
+if (REQUIRE_COMMENTS)
+   {
+   if (pp->ref == NULL)
+      {
+      CfOut(cf_error,"","Un-commented promise found, but comments have been required by policy\n");
+      PromiseRef(cf_error,pp);
+      }
+   }
+
 for (cp = pp->conlist; cp != NULL; cp = cp->next)
    {
    PostCheckConstraint(pp->agentsubtype,pp->bundle,cp->lval,cp->rval,cp->type);
    }     
+
+/* Special promise type checks */
+
+if (!IsDefinedClass(pp->classes))
+   {
+   return;
+   }
+
+if (VarClassExcluded(pp,&sp))
+   {
+   return;
+   }
+
+if (strcmp(pp->agentsubtype,"insert_lines") == 0)
+   {
+   /* Multiple additions with same criterion will not be convergent */
+   
+   if (sp = GetConstraint("select_line_matching",pp->conlist,CF_SCALAR))
+      {
+      if (IsItemIn(EDIT_ANCHORS,sp))
+         {
+         CfOut(cf_error,""," !! insert_lines promise uses the same select_line_matching anchor as another promise. This will lead to non-convergent behaviour.");
+         PromiseRef(cf_error,pp);
+         }
+      else
+         {
+         PrependItem(&EDIT_ANCHORS,sp,"");
+         }
+      }
+   }
 }
 
 /*****************************************************************************/

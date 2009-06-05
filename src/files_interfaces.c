@@ -1,20 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -187,9 +192,9 @@ cf_closedir(dirh);
 void VerifyFilePromise(char *path,struct Promise *pp)
 
 { struct stat osb,oslb,dsb,dslb;
- struct Attributes a,b;
+  struct Attributes a,b;
   struct CfLock thislock;
-  int success,rlevel = 0,isthere,save = true;
+  int exists,success,rlevel = 0,isthere,save = true;
   char filename[CF_BUFSIZE];
 
 a = GetFilesAttributes(pp);
@@ -211,10 +216,20 @@ if (lstat(path,&oslb) == -1)  /* Careful if the object is a link */
          {
          return;
          }
+      else
+         {
+         exists = (lstat(path,&oslb) != -1);
+         }
       }
+   
+   exists = false;
+   }
+else
+   {
+   exists = true;
    }
 
-if (!VerifyFileLeaf(path,&oslb,a,pp))
+if (exists && !VerifyFileLeaf(path,&oslb,a,pp))
    {
    if (!S_ISDIR(oslb.st_mode))
       {
@@ -230,6 +245,14 @@ if (stat(path,&osb) == -1)
          {
          return;
          }
+      else
+         {
+         exists = true;
+         }
+      }
+   else
+      {
+      exists = false;
       }
    }
 else
@@ -242,6 +265,8 @@ else
          return;
          }
       }
+
+   exists = true;
    }
 
 if (a.link.link_children)
@@ -273,17 +298,17 @@ if (!LoadFileAsItemList(&VSETUIDLIST,filename,a,pp))
 
 /* Phase 1 - */
 
-if (a.havedelete||a.haverename||a.haveperms||a.havechange||a.transformer)
+if (exists && (a.havedelete||a.haverename||a.haveperms||a.havechange||a.transformer))
    {
    lstat(path,&oslb); /* if doesn't exist have to stat again anyway */
    
-   if (a.havedepthsearch)
+   if (a.havedepthsearch)       
       {
       SetSearchDevice(&oslb,pp);
       }
    
    success = DepthSearch(path,&oslb,rlevel,a,pp);
-
+   
    /* normally searches do not include the base directory */
    
    if (a.recursion.include_basedir)
@@ -328,7 +353,7 @@ if (a.haveedit)
    ScheduleEditOperation(path,a,pp);
    }
 
-if (save && VSETUIDLIST && !CompareToFile(VSETUIDLIST,filename))
+if (save && VSETUIDLIST && !CompareToFile(VSETUIDLIST,filename,a,pp))
    {
    SaveItemListAsFile(VSETUIDLIST,filename,b,pp);
    }
@@ -366,7 +391,7 @@ else
 
 if (found == -1)
    {
-   cfPS(cf_error,CF_FAIL,"",pp,attr,"Can't stat %s\n",source);
+   cfPS(cf_error,CF_FAIL,"",pp,attr,"Can't stat %s in verify copy\n",source);
    DeleteClientCache(attr,pp);
    return;
    }
@@ -426,7 +451,7 @@ if (S_ISDIR(ssb.st_mode))
          {
          if (cf_stat(sourcefile,&ssb,attr,pp) == -1)
             {
-            CfOut(cf_inform,"stat","Can't stat %s\n",sourcefile);
+            CfOut(cf_inform,"stat","Can't stat source file (notlinked) %s\n",sourcefile);
             DeleteClientCache(attr,pp);       
             return;
             }
@@ -435,7 +460,7 @@ if (S_ISDIR(ssb.st_mode))
          {
          if (cf_lstat(sourcefile,&ssb,attr,pp) == -1)
             {
-            CfOut(cf_inform,"lstat","Can't stat %s\n",sourcefile);
+            CfOut(cf_inform,"lstat","Can't stat source file %s\n",sourcefile);
             DeleteClientCache(attr,pp);       
             return;
             }
@@ -702,7 +727,7 @@ if (found == -1)
          {
          if (stat(destfile,&dsb) == -1)
             {
-            CfOut(cf_error,"stat","Can't stat %s\n",destfile);
+            CfOut(cf_error,"stat","Can't stat destination file %s\n",destfile);
             }
          else
             {
@@ -730,7 +755,14 @@ if (found == -1)
          }
       else
          {
-         cfPS(cf_inform,CF_FAIL,"",pp,attr," !! Copy from %s:%s failed\n",server,sourcefile);
+         if (server)
+            {
+            cfPS(cf_inform,CF_FAIL,"",pp,attr," !! Copy from %s:%s failed\n",server,sourcefile);
+            }
+         else
+            {
+            cfPS(cf_inform,CF_FAIL,"",pp,attr," !! Copy from localhost:%s failed\n",sourcefile);
+            }
          }
 
       return;
@@ -745,7 +777,7 @@ if (found == -1)
          }
       else if (mkfifo(destfile,srcmode))
          {
-         cfPS(cf_error,CF_FAIL,"mkfifo",pp,attr,"Cannot create fifo `%s'", destfile);
+         cfPS(cf_error,CF_FAIL,"mkfifo",pp,attr," !! Cannot create fifo `%s'", destfile);
          return;
          }
 
@@ -762,11 +794,11 @@ if (found == -1)
             }
          else if (mknod (destfile, srcmode, ssb.st_rdev))
             {
-            cfPS(cf_error,CF_FAIL,"mknod",pp,attr,"Cannot create special file `%s'",destfile);
+            cfPS(cf_error,CF_FAIL,"mknod",pp,attr," !! Cannot create special file `%s'",destfile);
             return;
             }
 
-         cfPS(cf_error,CF_CHG,"mknod",pp,attr,"Created special file/device `%s'",destfile);
+         cfPS(cf_error,CF_CHG,"mknod",pp,attr," -> Created special file/device `%s'",destfile);
          }
       }
    
@@ -813,7 +845,14 @@ else
             }
          else
             {
-            cfPS(cf_inform,CF_CHG,"",pp,attr," -> Updated %s from source %s on %s",destfile,sourcefile,server);
+            if (server)
+               {
+               cfPS(cf_inform,CF_CHG,"",pp,attr," -> Updated %s from source %s on %s",destfile,sourcefile,server);
+               }
+            else
+               {
+               cfPS(cf_inform,CF_CHG,"",pp,attr," -> Updated %s from source %s on localhost",destfile,sourcefile);
+               }
             }
          
          if (MatchRlistItem(AUTO_DEFINE_LIST,destfile))
@@ -825,7 +864,7 @@ else
             {
             if (stat(destfile,&dsb) == -1)
                {
-               cfPS(cf_error,CF_INTERPT,"stat",pp,attr,"Can't stat %s\n",destfile);
+               cfPS(cf_error,CF_INTERPT,"stat",pp,attr,"Can't stat destination %s\n",destfile);
                }
             else
                {
@@ -839,7 +878,7 @@ else
             } 
          else
             {
-            cfPS(cf_error,CF_FAIL,"stat",pp,attr,"Can't stat %s\n",destfile);
+            cfPS(cf_error,CF_FAIL,"",pp,attr,"Was not able to copy %s to %s\n",sourcefile,destfile);
             }
          
          return;
@@ -1033,7 +1072,7 @@ free((char *)dirh);
 
 /*********************************************************************/
 
-int ReadLine(char *buff,int size,FILE *fp)
+int CfReadLine(char *buff,int size,FILE *fp)
 
 { char ch;
  
@@ -1262,7 +1301,7 @@ if (cf_readlink(sourcefile,linkbuf,CF_BUFSIZE,attr,pp) == -1)
 
 CfOut(cf_verbose,"","Checking link from %s to %s\n",destfile,linkbuf);
 
-if (attr.copy.link_type == cfa_absolute && linkbuf[0] != '/')      /* Not absolute path - must fix */
+if (attr.copy.link_type == cfa_absolute && !IsAbsoluteFileName(linkbuf))      /* Not absolute path - must fix */
    {
    char vbuff[CF_BUFSIZE];
    strcpy(vbuff,sourcefile);
@@ -1435,9 +1474,10 @@ else
    
    if (!JoinSuffix(new,CF_NEW))
       {
+      CfOut(cf_error,"","Unable to construct filename for copy");
       return false;
       }
-   
+
 #ifdef DARWIN
    }
 #endif
@@ -1471,7 +1511,7 @@ else
       }
    }
 
-Debug("CopyRegular succeeded in copying to %s to %s\n",source,new);
+CfOut(cf_verbose,""," -> Copy of regular file succeeded %s to %s\n",source,new);
 
 backup[0] = '\0';
 
@@ -1537,7 +1577,7 @@ else
       }
    }
 
-if (stat(new,&dstat) == -1)
+if (lstat(new,&dstat) == -1)
    {
    CfOut(cf_error,"stat","Can't stat new file %s\n",new);
    return false;
@@ -1545,7 +1585,7 @@ if (stat(new,&dstat) == -1)
 
 if (dstat.st_size != sstat.st_size)
    {
-   CfOut(cf_verbose,""," !! New file %s seems to have been corrupted in transit (sizes %d and %d), aborting!\n",new, (int) dstat.st_size, (int) sstat.st_size);
+   CfOut(cf_error,""," !! New file %s seems to have been corrupted in transit (sizes %d and %d), aborting!\n",new, (int) dstat.st_size, (int) sstat.st_size);
    if (backupok)
       {
       rename(backup,dest); /* ignore failure */
@@ -1555,7 +1595,7 @@ if (dstat.st_size != sstat.st_size)
 
 if (attr.copy.verify)
    {
-   CfOut(cf_verbose,"","Final verification of transmission: %s -> %s\n",source,new);
+   CfOut(cf_verbose,""," ?? Final verification of transmission ...\n");
 
    if (CompareFileHashes(source,new,&sstat,&dstat,attr,pp))
       {
@@ -1565,6 +1605,10 @@ if (attr.copy.verify)
          rename(backup,dest); /* ignore failure */
          }
       return false;
+      }
+   else
+      {
+      CfOut(cf_verbose,""," -> New file %s transmitted correctly - verified\n",new);
       }
    }
  
@@ -1709,7 +1753,7 @@ void FileAutoDefine(char *destfile)
 
 snprintf(class,CF_MAXVARSIZE,"auto_%s",CanonifyName(destfile)); 
 NewClass(class);
-CfOut(cf_inform,"Auto defining class %s\n",class); 
+CfOut(cf_inform,"","Auto defining class %s\n",class); 
 }           
 
 /*********************************************************************/

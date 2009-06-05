@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -57,7 +61,7 @@ ClassAuditLog(&dummyp,dummyattr,"Cfagent starting",CF_NOP);
 void EndAudit()
 
 { double total;
- char *sp,rettype,string[CF_BUFSIZE];
+  char *sp,rettype,string[CF_BUFSIZE];
   void *retval;
   struct Promise dummyp;
   struct Attributes dummyattr;
@@ -85,8 +89,10 @@ if (total == 0)
    }
 else
    {   
-   snprintf(string,CF_BUFSIZE,"Outcome of version %s: Promises observed to be kept %.0f%%, Promises repaired %.0f%%, Promises not repaired %.0f\%\n",
+   snprintf(string,CF_BUFSIZE,"Outcome of version %s (%s-%d): Promises observed to be kept %.0f%%, Promises repaired %.0f%%, Promises not repaired %.0f\%\n",
             sp,
+            THIS_AGENT,
+            CFA_BACKGROUND,
             (double)PR_KEPT/total,
             (double)PR_REPAIRED/total,
             (double)PR_NOTKEPT/total);
@@ -113,7 +119,7 @@ if (AUDITDBP)
 void ClassAuditLog(struct Promise *pp,struct Attributes attr,char *str,char status)
 
 { time_t now = time(NULL);
-  char date[CF_BUFSIZE],lock[CF_BUFSIZE],key[CF_BUFSIZE],operator[CF_BUFSIZE];
+ char date[CF_BUFSIZE],lock[CF_BUFSIZE],key[CF_BUFSIZE],operator[CF_BUFSIZE],id[CF_MAXVARSIZE];
   struct AuditLog newaudit;
   struct Audit *ap = pp->audit;
   struct timespec t;
@@ -127,40 +133,54 @@ switch(status)
    case CF_CHG:
        PR_REPAIRED++;
        AddAllClasses(attr.classes.change,attr.classes.persist,attr.classes.timer);
+       NotePromiseCompliance(pp,0.5);
+       SummarizeTransaction(attr,pp,attr.transaction.log_repaired);
        break;
        
    case CF_WARN:
        PR_NOTKEPT++;
+       NotePromiseCompliance(pp,1.0);
        break;
        
    case CF_TIMEX:
        PR_NOTKEPT++;
        AddAllClasses(attr.classes.timeout,attr.classes.persist,attr.classes.timer);
+       NotePromiseCompliance(pp,0.0);
+       SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
 
    case CF_FAIL:
        PR_NOTKEPT++;
        AddAllClasses(attr.classes.failure,attr.classes.persist,attr.classes.timer);
+       NotePromiseCompliance(pp,0.0);
+       SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
        
    case CF_DENIED:
        PR_NOTKEPT++;
        AddAllClasses(attr.classes.denied,attr.classes.persist,attr.classes.timer);
+       NotePromiseCompliance(pp,0.0);
+       SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
        
    case CF_INTERPT:
        PR_NOTKEPT++;
        AddAllClasses(attr.classes.interrupt,attr.classes.persist,attr.classes.timer);
+       NotePromiseCompliance(pp,0.0);
+       SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
 
    case CF_REGULAR:
        AddAllClasses(attr.classes.change,attr.classes.persist,attr.classes.timer);
+       NotePromiseCompliance(pp,0.5);
        PR_REPAIRED++;
        break;
        
    case CF_UNKNOWN:
    case CF_NOP:
        AddAllClasses(attr.classes.kept,attr.classes.persist,attr.classes.timer);
+       NotePromiseCompliance(pp,1.0);
+       SummarizeTransaction(attr,pp,attr.transaction.log_kept);              
        PR_KEPT++;
        break;
    }
@@ -253,13 +273,13 @@ for (rp = list; rp != NULL; rp=rp->next)
 
    if (persist > 0)
       {
-      CfOut(cf_verbose,""," ?> defining persistent class %s\n",(char *)rp->item);
+      CfOut(cf_verbose,""," ?> defining persistent promise result class %s\n",(char *)rp->item);
       NewPersistentContext(rp->item,persist,policy);
       PrependItem(&VHEAP,CanonifyName((char *)rp->item),NULL);
       }
    else
       {
-      CfOut(cf_verbose,""," ?> defining class %s\n",(char *)rp->item);
+      CfOut(cf_verbose,""," ?> defining promise result class %s\n",(char *)rp->item);
       PrependItem(&VHEAP,CanonifyName((char *)rp->item),NULL);
       }
    }

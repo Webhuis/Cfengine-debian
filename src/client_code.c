@@ -1,22 +1,26 @@
 
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -186,9 +190,12 @@ void ServerDisconnection(struct cfagent_connection *conn)
 {
 Debug("Closing current server connection\n");
 
-close(conn->sd);
-conn->sd = CF_NOT_CONNECTED;
-DeleteAgentConn(conn);
+if (conn)
+   {
+   close(conn->sd);
+   conn->sd = CF_NOT_CONNECTED;
+   DeleteAgentConn(conn);
+   }
 }
 
 /*********************************************************************/
@@ -1113,6 +1120,7 @@ for (rp = SERVERLIST; rp != NULL; rp=rp->next)
    if ((strcmp(ipname,svp->server) == 0) && svp->conn && svp->conn->sd > 0)
       {
       CfOut(cf_verbose,"","Connection to %s is already open and ready...\n",ipname);
+      svp->busy = true;
       return svp->conn;
       }
    }
@@ -1146,8 +1154,11 @@ CfOut(cf_verbose,"","Existing connection just became free...\n");
 
 void MarkServerOffline(char *server)
 
+/* Unable to contact the server so don't waste time trying for
+   other connections, mark it offline */
+    
 { struct Rlist *rp;
-  struct cfagent_connection *conn;
+  struct cfagent_connection *conn = NULL;
   struct ServerItem *svp;
   char ipname[CF_MAXVARSIZE];
 
@@ -1171,7 +1182,8 @@ if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)
   
 for (rp = SERVERLIST; rp != NULL; rp=rp->next)
    {
-   conn = (struct cfagent_connection *)rp->item;
+   svp = (struct ServerItem *)rp->item;
+   conn = svp->conn;
 
    if (strcmp(ipname,conn->localip) == 0)
       {
@@ -1188,13 +1200,31 @@ if (pthread_mutex_lock(&MUTEX_GETADDR) != 0)
    }
 #endif
 
+/* If no existing connection, get one .. */
+
 rp = PrependRlist(&SERVERLIST,"nothing",CF_SCALAR);
-free(rp->item);
+
 svp = (struct ServerItem *)malloc((sizeof(struct ServerItem)));
+
+if (svp == NULL)
+   {
+   return;
+   }
+
+if ((svp->server = strdup(ipname)) == NULL)
+   {
+   return;
+   }
+
+free(rp->item);
 rp->item = svp;
-svp->server = strdup(ipname);
-svp->conn = NewAgentConn();
-svp->conn->sd = CF_COULD_NOT_CONNECT;
+
+
+if (svp->conn = NewAgentConn())
+   {
+   /* If we couldn't connect, mark this server unavailable for everyone */
+   svp->conn->sd = CF_COULD_NOT_CONNECT;
+   }
 
 #ifdef HAVE_PTHREAD_H  
 if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)
@@ -1209,6 +1239,8 @@ if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)
 
 void CacheServerConnection(struct cfagent_connection *conn,char *server)
 
+/* First time we open a connection, so store it */
+    
 { struct Rlist *rp;
   struct ServerItem *svp;
   char ipname[CF_MAXVARSIZE];
@@ -1223,39 +1255,13 @@ if (pthread_mutex_lock(&MUTEX_GETADDR) != 0)
 
 strncpy(ipname,Hostname2IPString(server),CF_MAXVARSIZE-1);
 
-#ifdef HAVE_PTHREAD_H  
-if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   exit(1);
-   }
-#endif
-  
-for (rp = SERVERLIST; rp != NULL; rp=rp->next)
-   {
-   conn = (struct cfagent_connection *)rp->item;
-
-   if (strcmp(ipname,conn->localip) == 0)
-      {
-      conn->sd = CF_COULD_NOT_CONNECT;
-      return;
-      }
-   }
-
-#ifdef HAVE_PTHREAD_H  
-if (pthread_mutex_lock(&MUTEX_GETADDR) != 0)
-   {
-   CfOut(cf_error,"lock","pthread_mutex_lock failed");
-   exit(1);
-   }
-#endif
-
 rp = PrependRlist(&SERVERLIST,"nothing",CF_SCALAR);
 free(rp->item);
 svp = (struct ServerItem *)malloc((sizeof(struct ServerItem)));
 rp->item = svp;
 svp->server = strdup(ipname);
 svp->conn = conn;
+svp->busy = true;
 
 #ifdef HAVE_PTHREAD_H  
 if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)

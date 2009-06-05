@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -56,8 +60,8 @@ extern struct Auth *ROLESTOP;
 
 /*******************************************************************/
 
-void KeepServerAccessPromise(struct Promise *pp);
-
+void KeepFileAccessPromise(struct Promise *pp);
+void KeepLiteralAccessPromise(struct Promise *pp);
 
 /*******************************************************************/
 /* Level                                                           */
@@ -187,7 +191,7 @@ for (cp = ControlBodyConstraints(cf_server); cp != NULL; cp=cp->next)
       {
       continue;
       }
-   
+
    if (GetVariable("control_server",cp->lval,&retval,&rettype) == cf_notype)
       {
       CfOut(cf_error,"","Unknown lval %s in server control body",cp->lval);
@@ -348,7 +352,14 @@ for (cp = ControlBodyConstraints(cf_server); cp != NULL; cp=cp->next)
       
       continue;
       }
-   
+
+   if (strcmp(cp->lval,CFR_CONTROLBODY[cfs_portnumber].lval) == 0)
+      {
+      SHORT_CFENGINEPORT = (short)Str2Int(retval);
+      strncmp(STR_CFENGINEPORT,retval,15);
+      CfOut(cf_verbose,"","SET default portnumber = %u = %s\n",(int)SHORT_CFENGINEPORT,STR_CFENGINEPORT);
+      continue;
+      }   
    }
 }
 
@@ -411,9 +422,19 @@ if (strcmp(pp->agentsubtype,"classes") == 0)
    return;
    }
 
+sp = (char *)GetConstraint("resource_type",pp->conlist,CF_SCALAR);
+
+if (strcmp(pp->agentsubtype,"access") == 0 && sp && strcmp(sp,"literal") == 0)
+   {
+   KeepLiteralAccessPromise(pp);
+   return;
+   }
+
+/* Default behaviour is file access */
+
 if (strcmp(pp->agentsubtype,"access") == 0)
    {
-   KeepServerAccessPromise(pp);
+   KeepFileAccessPromise(pp);
    return;
    }
 
@@ -426,7 +447,7 @@ if (strcmp(pp->agentsubtype,"roles") == 0)
 
 /*********************************************************************/
 
-void KeepServerAccessPromise(struct Promise *pp)
+void KeepFileAccessPromise(struct Promise *pp)
 
 { struct Constraint *cp;
   struct Body *bp;
@@ -463,6 +484,91 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
    switch (cp->type)
       {
       case CF_SCALAR:
+
+          val = (char *)cp->rval;
+
+          if (strcmp(cp->lval,CF_REMACCESS_BODIES[cfs_encrypted].lval) == 0)
+             {
+             ap->encrypt = true;
+             }
+             
+          break;
+
+      case CF_LIST:
+          
+          for (rp = (struct Rlist *)cp->rval; rp != NULL; rp=rp->next)
+             {
+             if (strcmp(cp->lval,CF_REMACCESS_BODIES[cfs_admit].lval) == 0)
+                {
+                PrependItem(&(ap->accesslist),rp->item,NULL);
+                continue;
+                }
+             
+             if (strcmp(cp->lval,CF_REMACCESS_BODIES[cfs_deny].lval) == 0)
+                {
+                PrependItem(&(dp->accesslist),rp->item,NULL);
+                continue;
+                }
+
+             if (strcmp(cp->lval,CF_REMACCESS_BODIES[cfs_maproot].lval) == 0)
+                {
+                PrependItem(&(ap->maproot),rp->item,NULL);
+                continue;
+                }
+             }
+          break;
+
+      case CF_FNCALL:
+          /* Shouldn't happen */
+          break;
+      }
+   }
+}
+
+/*********************************************************************/
+
+void KeepLiteralAccessPromise(struct Promise *pp)
+
+{ struct Constraint *cp;
+  struct Body *bp;
+  struct FnCall *fp;
+  struct Rlist *rp;
+  struct Auth *ap,*dp;
+  char *handle = GetConstraint("handle",pp->conlist,CF_SCALAR);
+  char *val;
+
+if (handle == NULL)
+   {
+   CfOut(cf_error,"","Access to literal server data requires you to define a promise handle for reference");
+   return;
+   }
+  
+if (!GetAuthPath(handle,VARADMIT))
+   {
+   InstallServerAuthPath(handle,&VARADMIT,&VARADMITTOP);
+   }
+
+RegisterLiteralServerData(handle,pp);
+
+if (!GetAuthPath(handle,VARDENY))
+   {
+   InstallServerAuthPath(handle,&VARDENY,&VARDENYTOP);
+   }
+
+ap = GetAuthPath(handle,VARADMIT);
+dp = GetAuthPath(handle,VARDENY);
+
+for (cp = pp->conlist; cp != NULL; cp = cp->next)
+   {
+   if (!IsDefinedClass(cp->classes))
+      {
+      continue;
+      }
+
+   switch (cp->type)
+      {
+      case CF_SCALAR:
+
           val = (char *)cp->rval;
 
           if (strcmp(cp->lval,CF_REMACCESS_BODIES[cfs_encrypted].lval) == 0)

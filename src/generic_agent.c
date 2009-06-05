@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -37,35 +41,48 @@ extern void CheckOpts(int argc,char **argv);
 void GenericInitialize(int argc,char **argv,char *agents)
 
 { enum cfagenttype ag = Agent2Type(agents);
- char vbuff[CF_BUFSIZE];
+  char vbuff[CF_BUFSIZE];
   int ok;
-
+  
 InitializeGA(argc,argv);
 SetReferenceTime(true);
 SetStartTime(false);
 SetSignals();
 
+if (EnterpriseExpiry("33","May","2109"))
+   {
+   CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise trial has expired.\n");
+   exit(1);
+   }
+
 if (!NOHARDCLASSES)
    {
+   NewScope("const");
+   NewScope("match");
+   NewScope("mon");
    SetNewScope("sys");
-   SetNewScope("const");
-   SetNewScope("match");
    GetNameInfo3();
-   GetInterfaceInfo3();
-   FindV6InterfaceInfo();
-   Get3Environment();
-   OSClasses();
+   if (ag != cf_know)
+      {
+      GetInterfaceInfo3();
+      FindV6InterfaceInfo();
+      Get3Environment();
+      OSClasses();
+      }
    }
 
 LoadPersistentContext();
 LoadSystemConstants();
-
+   
 strcpy(THIS_AGENT,CF_AGENTTYPES[ag]); 
+NewClass(CanonifyName(THIS_AGENT));
 THIS_AGENT_TYPE = ag;
-snprintf(vbuff,CF_BUFSIZE,"control_%s",THIS_AGENT);
-SetNewScope(vbuff);
 
+snprintf(vbuff,CF_BUFSIZE,"control_%s",THIS_AGENT);
+
+SetNewScope(vbuff);
 NewScope("this");
+NewScope("match");
 
 ok = BOOTSTRAP || CheckPromises(ag);
 
@@ -97,12 +114,12 @@ int CheckPromises(enum cfagenttype ag)
 { char cmd[CF_BUFSIZE],path[CF_BUFSIZE];
   struct stat sb;
  
-if (ag != cf_agent)
+if ((ag != cf_agent) && (ag != cf_executor))
    {
    return true;
    }
 
-snprintf(cmd,CF_BUFSIZE-1,"%s/bin/cf-promises",CFWORKDIR);
+snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
 
 if (stat(cmd,&sb) == -1)
    {
@@ -112,15 +129,15 @@ if (stat(cmd,&sb) == -1)
 
 /* If we are cf-agent, check syntax before attempting to run */
 
-if ((*VINPUTFILE == '.') || IsFileSep(*VINPUTFILE))
+if ((*VINPUTFILE == '.') || IsAbsoluteFileName(VINPUTFILE))
    {
-   snprintf(cmd,CF_BUFSIZE-1,"%s/bin/cf-promises -f %s",CFWORKDIR,VINPUTFILE);
+   snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises -f %s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,VINPUTFILE);
    }
 else
    {
-   snprintf(cmd,CF_BUFSIZE-1,"%s/bin/cf-promises -f %s/inputs/%s",CFWORKDIR,CFWORKDIR,VINPUTFILE);
+   snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises -f %s%cinputs%c%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,VINPUTFILE);
    }
- 
+
 /* Check if reloading policy will succeed */
  
 if (ShellCommandReturnsZero(cmd,true))
@@ -210,10 +227,7 @@ switch (ag)
 
    case cf_monitor:
        break;
-
-
    }
-
 }
 
 /*******************************************************************/
@@ -227,6 +241,23 @@ void InitializeGA(int argc,char *argv[])
   struct stat statbuf;
   unsigned char s[16],vbuff[CF_BUFSIZE];
   char ebuff[CF_EXPANDSIZE];
+
+#ifdef NT
+if (stat("/cygdrive",&statbuf) == 0)
+   {
+   FILE_SEPARATOR = '/';
+   strcpy(FILE_SEPARATOR_STR,"/");
+   }
+else
+   {
+   FILE_SEPARATOR = '\\';
+   strcpy(FILE_SEPARATOR_STR,"\\");
+   }
+#else
+FILE_SEPARATOR = '/';
+strcpy(FILE_SEPARATOR_STR,"/");
+#endif
+
 
 NewClass("any");
 strcpy(VPREFIX,"cf3");
@@ -245,7 +276,6 @@ if (DEBUG)
    {
    NewClass("debug_mode");
    }
-
 
 CfOut(cf_verbose,"","Cfengine - autonomous configuration engine - commence self-diagnostic prelude\n");  
 CfOut(cf_verbose,"","------------------------------------------------------------------------\n");
@@ -267,8 +297,9 @@ else
    {
    strcpy(CFWORKDIR,WORKDIR);
    }
+
 #else
-strcpy(CFWORKDIR,WORKDIR);
+strcpy(CFWORKDIR,MapName(WORKDIR));
 #endif
 
 CfOut(cf_verbose,"","Work directory is %s\n",CFWORKDIR);
@@ -277,7 +308,7 @@ snprintf(HASHDB,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_CHKDB);
 
 snprintf(vbuff,CF_BUFSIZE,"%s/inputs/update.conf",CFWORKDIR);
 MakeParentDirectory(vbuff,true);
-snprintf(vbuff,CF_BUFSIZE,"%s/bin/cfagent -D from_cfexecd",CFWORKDIR);
+snprintf(vbuff,CF_BUFSIZE,"%s/bin/cf-agent -D from_cfexecd",CFWORKDIR);
 MakeParentDirectory(vbuff,true);
 snprintf(vbuff,CF_BUFSIZE,"%s/outputs/spooled_reports",CFWORKDIR);
 MakeParentDirectory(vbuff,true);
@@ -342,6 +373,23 @@ VIFELAPSED = 1;
 VEXPIREAFTER = 1;
 
 setlinebuf(stdout);
+
+if (BOOTSTRAP)
+   {
+   snprintf(vbuff,CF_BUFSIZE,"%s/inputs/failsafe.cf",CFWORKDIR);
+   
+   if (stat(vbuff,&statbuf) == -1)
+      {
+      CfOut(cf_inform,"","Didn't find established file %s, so looking for one in current directory\n",vbuff);
+      strncpy(VINPUTFILE,"./failsafe.cf",CF_BUFSIZE-1);
+      }
+   else
+      {
+      CfOut(cf_inform,"","Found an established failsafe file %s, so using it.\n",vbuff);
+      strncpy(VINPUTFILE,vbuff,CF_BUFSIZE-1);
+      }   
+   }
+
 }
 
 /*******************************************************************/
@@ -392,8 +440,6 @@ if (VINPUTLIST != NULL)
       }
    }
 
-//UnHashVariables(); - why did I do this?
-
 HashVariables();
 PARSING = false;
 }
@@ -404,10 +450,11 @@ int NewPromiseProposals()
 
 { struct Rlist *rp,*sl;
   struct stat sb;
+  int result = false;
 
-if (stat(VINPUTFILE,&sb) == -1)
+if (stat(InputLocation(VINPUTFILE),&sb) == -1)
    {
-   CfOut(cf_error,"stat","There are no readable promise proposals at %s",VINPUTFILE);
+   CfOut(cf_error,"stat","There is no readable input file at %s",VINPUTFILE);
    return false;
    }
 
@@ -435,37 +482,47 @@ if (VINPUTLIST != NULL)
                 if (stat(InputLocation((char *)returnval.item),&sb) == -1)
                    {
                    CfOut(cf_error,"stat","There are no readable promise proposals at %s",(char *)returnval.item);
-                   return false;
+                   break;
                    }
 
                 if (sb.st_mtime > PROMISETIME)
                    {
-                   return true;
+                   result = true;                   
                    }
                 
                 break;
                 
             case CF_LIST:
+
                 for (sl = (struct Rlist *)returnval.item; sl != NULL; sl=sl->next)
                    {
-                   if (stat(InputLocation((char *)returnval.item),&sb) == -1)
+                   if (stat(InputLocation((char *)sl->item),&sb) == -1)
                       {
-                      CfOut(cf_error,"stat","There are no readable promise proposals at %s",(char *)returnval.item);
-                      return false;
+                      CfOut(cf_error,"stat","There are no readable promise proposals at %s",(char *)sl->item);
+                      break;
                       }
 
                    if (sb.st_mtime > PROMISETIME)
                       {
-                      return true;
+                      result = true;
+                      break;
                       }
                    }
+                
                 break;
+            }
+         
+         DeleteRvalItem(returnval.item,returnval.rtype);
+
+         if (result)
+            {
+            break;
             }
          }
       }
    }
 
-return false;
+return result;
 }
 
 /*******************************************************************/
@@ -565,11 +622,12 @@ void Cf3ParseFile(char *filename)
   int access = false;
   char wfilename[CF_BUFSIZE];
 
+
 strncpy(wfilename,InputLocation(filename),CF_BUFSIZE);
 
 if (stat(wfilename,&statbuf) == -1)
    {
-   CfOut(cf_error,"stat","Can't stat file %s for parsing\n",wfilename);
+   CfOut(cf_error,"stat","Can't stat file \"%s\" for parsing\n",wfilename);
    exit(1);
    }
 
@@ -796,13 +854,24 @@ CfOut(cf_verbose,"","\n");
 
 void PromiseBanner(struct Promise *pp)
 
-{
+{ char *sp,handle[CF_MAXVARSIZE];
+
+if ((sp = GetConstraint("handle",pp->conlist,CF_SCALAR)) || (sp = PromiseID(pp)))
+   {
+   strncpy(handle,sp,CF_MAXVARSIZE-1);
+   }
+else
+   {
+   strcpy(handle,"(enterprise only)");
+   }
+ 
 CfOut(cf_verbose,"","\n");
 CfOut(cf_verbose,"","    .........................................................\n");
 
 if (VERBOSE||DEBUG)
    {
-   printf ("%s     Promise by: %s",VPREFIX,pp->promiser);
+   printf ("%s     Promise handle: %s\n",VPREFIX,handle);
+   printf ("%s     Promise made by: %s",VPREFIX,pp->promiser);
    }
 
 if (pp->promisee)
@@ -939,7 +1008,7 @@ else
    {
    if (statbuf.st_mode & 077)
       {
-      snprintf(output,CF_BUFSIZE*2,"UNTRUSTED: RPC input directory %s was not private! (%o)\n",vbuff,statbuf.st_mode & 0777);
+      snprintf(output,CF_BUFSIZE-1,"UNTRUSTED: RPC input directory %s was not private! (%o)\n",vbuff,statbuf.st_mode & 0777);
       FatalError(output);
       }
    }
@@ -965,7 +1034,7 @@ else
    if (statbuf.st_mode & 077)
       {
       
-      snprintf(output,CF_BUFSIZE*2,"UNTRUSTED: RPC output directory %s was not private! (%o)\n",vbuff,statbuf.st_mode & 0777);
+      snprintf(output,CF_BUFSIZE-1,"UNTRUSTED: RPC output directory %s was not private! (%o)\n",vbuff,statbuf.st_mode & 0777);
       FatalError(output);
       }
    }
@@ -985,7 +1054,7 @@ else
    {
    if (statbuf.st_mode & 077)
       {
-      snprintf(output,CF_BUFSIZE*2,"UNTRUSTED: Private key directory %s/ppkeys (mode %o) was not private!\n",CFWORKDIR,statbuf.st_mode & 0777);
+      snprintf(output,CF_BUFSIZE-1,"UNTRUSTED: Private key directory %s/ppkeys (mode %o) was not private!\n",CFWORKDIR,statbuf.st_mode & 0777);
       FatalError(output);
       }
    }
@@ -999,14 +1068,14 @@ char *InputLocation(char *filename)
 
 { static char wfilename[CF_BUFSIZE], path[CF_BUFSIZE];
 
-if (MINUSF && (filename != VINPUTFILE) && (*VINPUTFILE == '.' || IsFileSep(*VINPUTFILE)) && !IsFileSep(*filename))
+if (MINUSF && (filename != VINPUTFILE) && (*VINPUTFILE == '.' || IsAbsoluteFileName(VINPUTFILE)) && !IsAbsoluteFileName(filename))
    {
    /* If -f assume included relative files are in same directory */
    strncpy(path,VINPUTFILE,CF_BUFSIZE-1);
    ChopLastNode(path);
    snprintf(wfilename,CF_BUFSIZE-1,"%s/%s",path,filename);
    }
-else if ((*filename == '.') || IsFileSep(*filename))
+else if ((*filename == '.') || IsAbsoluteFileName(filename))
    {
    strncpy(wfilename,filename,CF_BUFSIZE-1);
    }
@@ -1015,7 +1084,7 @@ else
    snprintf(wfilename,CF_BUFSIZE-1,"%s/inputs/%s",CFWORKDIR,filename);
    }
 
-return wfilename;
+return MapName(wfilename);
 }
 
 /*******************************************************************/
@@ -1071,6 +1140,18 @@ void VerifyPromises(enum cfagenttype agent)
   int ok = true;
 
 Debug("\n\nVerifyPromises()\n");
+
+if (REQUIRE_COMMENTS == CF_UNDEFINED)
+   {
+   for (bdp = BODIES; bdp != NULL; bdp = bdp->next) /* get schedule */
+      {
+      if ((strcmp(bdp->name,"control") == 0) && (strcmp(bdp->type,"common") == 0))
+         {
+         REQUIRE_COMMENTS = GetBooleanConstraint("require_comments",bdp->conlist);
+         break;
+         }
+      }
+   }
 
 for (rp = BODYPARTS; rp != NULL; rp=rp->next)
    {
@@ -1253,8 +1334,8 @@ void CheckCommonClassPromises(struct Promise *classlist)
 
 { struct Promise *pp;
 
-Debug("CheckCommonClassPromises()\n");
-  
+CfOut(cf_verbose,""," -> Checking common class promises...\n");
+
 for (pp = classlist; pp != NULL; pp=pp->next)
    {
    KeepClassContextPromise(pp);
@@ -1332,7 +1413,7 @@ for (cp = controllist; cp != NULL; cp=cp->next)
       {
       CfOut(cf_error,"","Rule from %s at/before line %d\n",cp->audit->filename,cp->lineno);
       }
-   
+
    if (strcmp(cp->lval,CFG_CONTROLBODY[cfg_output_prefix].lval) == 0)
       {
       strncpy(VPREFIX,returnval.item,CF_MAXVARSIZE);
@@ -1351,6 +1432,8 @@ for (cp = controllist; cp != NULL; cp=cp->next)
       NewClass(CanonifyName(VDOMAIN));
       continue;
       }
+
+   DeleteRvalItem(returnval.item,returnval.rtype);
    }
 }
 
@@ -1463,6 +1546,7 @@ void Version(char *component)
 
 {
 printf("This is %s version %s - Free software %s\n",component,VERSION,CF3COPYRIGHT);
+EnterpriseVersion();
 }
 
 /********************************************************************/

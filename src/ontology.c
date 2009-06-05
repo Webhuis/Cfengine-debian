@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -58,7 +62,7 @@ if ((tp->topic_type = strdup(type)) == NULL)
    FatalError("");
    }
 
-tp->comment = NULL;
+tp->topic_comment = NULL;
 tp->associations = NULL;
 tp->occurrences = NULL;
 tp->next = *list;
@@ -90,10 +94,17 @@ if ((tp->topic_name = strdup(name)) == NULL)
    FatalError("");
    }
 
-if ((tp->comment = strdup(comment)) == NULL)
+if (comment)
    {
-   CfOut(cf_error,"malloc","Memory failure in AddTopic");
-   FatalError("");
+   if ((tp->topic_comment = strdup(comment)) == NULL)
+      {
+      CfOut(cf_error,"malloc","Memory failure in AddTopic");
+      FatalError("");
+      }
+   }
+else
+   {
+   tp->topic_comment = NULL;
    }
 
 if ((tp->topic_type = strdup(type)) == NULL)
@@ -173,7 +184,7 @@ for (rp = associates; rp != NULL; rp=rp->next)
 
 /*****************************************************************************/
 
-void AddOccurrence(struct Occurrence **list,char *topic_name,char *reference,struct Rlist *represents,enum representations rtype)
+void AddOccurrence(struct Occurrence **list,char *reference,struct Rlist *represents,enum representations rtype)
 
 { struct Occurrence *op = NULL;
   struct TopRepresentation *tr;
@@ -198,7 +209,7 @@ if (!(op = OccurrenceExists(*list,reference,rtype)))
 
 if (represents == NULL)
    {
-   CfOut(cf_error,"","Class occurrence \"%s\" claims to represent no topics, in which case it is dud",topic_name);
+   CfOut(cf_error,"","Topic occurrence \"%s\" claims to represent no aspect of its topic, discarding...",reference);
    return;
    }
 
@@ -319,14 +330,8 @@ for (tp = list; tp != NULL; tp=tp->next)
 
 if (match)
    {
-   if (tp->comment)
-      {
-      snprintf(longname,CF_BUFSIZE,"%s (%s)",tp->comment,topic);
-      }
-   else
-      {
-      snprintf(longname,CF_BUFSIZE,"%s",topic);
-      }
+   /* deprecate this form snprintf(longname,CF_BUFSIZE,"%s (%s)",tp->comment,topic); */
+   snprintf(longname,CF_BUFSIZE,"%s",topic);
    }
 
 if (match && cfdb)
@@ -456,13 +461,13 @@ for (ta = list; ta != NULL; ta=ta->next)
    
    if (ta->bwd_name && strcmp(fwd,ta->bwd_name) == 0)
       {
-      CfOut(level,"","Association \"%s\" exists already but in opposite orientation\n",fwd);
+      CfOut(cf_inform,"","Association \"%s\" exists already but in opposite orientation\n",fwd);
       return ta;
       }
 
    if (bwd && strcmp(bwd,ta->fwd_name) == 0)
       {
-      CfOut(level,"","Association \"%s\" exists already but in opposite orientation\n",bwd);
+      CfOut(cf_inform,"","Association \"%s\" exists already but in opposite orientation\n",bwd);
       return ta;
       }
 

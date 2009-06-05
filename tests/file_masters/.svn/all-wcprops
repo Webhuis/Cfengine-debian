@@ -1,0 +1,53 @@
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters
+END
+failsafe.cf
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/failsafe.cf
+END
+Makefile.in
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/Makefile.in
+END
+promises.cf
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/promises.cf
+END
+Makefile.am
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/Makefile.am
+END
+update.cf
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/update.cf
+END
+library.cf
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/library.cf
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/projects/cfengine-3/!svn/ver/358/trunk/tests/file_masters/Makefile
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/README
+END

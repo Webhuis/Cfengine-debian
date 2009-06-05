@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -55,6 +59,7 @@ struct FnCallType CF_FNCALL_TYPES[] =
    {"getuid",cf_int,1,"Return the integer user id of the named user on this host"},
    {"groupexists",cf_class,1,"True if group or numerical id exists on this host"},
    {"hash",cf_str,2,"Return the hash of arg1, type arg2 and assign to a variable"},
+   {"hashmatch",cf_class,3,"Compute the hash of arg1, of type arg2 and test if it matches the value in arg 3"},
    {"hostrange",cf_class,2,"True if the current host lies in the range of enumerated hostnames specified"},
    {"hostinnetgroup",cf_class,1,"True if the current host is in the named netgroup"},
    {"iprange",cf_class,1,"True if the current host lies in the range of IP addresses specified"},
@@ -66,8 +71,15 @@ struct FnCallType CF_FNCALL_TYPES[] =
    {"isnewerthan",cf_class,2,"True if arg1 is newer (modified later) than arg2 (mtime)"},
    {"isplain",cf_class,1,"True if the named object is a plain/regular file"},
    {"isvariable",cf_class,1,"True if the named variable is defined"},
+   {"lastnode",cf_str,2,"Extract the last of a separated string, e.g. filename from a path"},
+   {"ldaparray",cf_class,6,"Extract all values from an ldap record"},
+   {"ldaplist",cf_slist,6,"Extract all named values from multiple ldap records"},
+   {"ldapvalue",cf_str,6,"Extract the first matching named value from ldap"},
    {"now",cf_int,0,"Convert the current time into system representation"},
    {"on",cf_int,6,"Convert an exact date/time to an integer system representation"},
+   {"peers",cf_slist,3,"Get a list of peers (not including ourself) from the partition to which we belong"},
+   {"peerleader",cf_str,3,"Get the assigned peer-leader of the partition to which we belong"},
+   {"peerleaders",cf_slist,3,"Get a list of peer leaders from the named partitioning"},
    {"randomint",cf_int,2,"Generate a random integer between the given limits"},
    {"readfile",cf_str,2,"Read max number of bytes from named file and assign to variable"},
    {"readintarray",cf_int,6,"Read an array of integers from a file and assign the dimension to a variable"},
@@ -78,12 +90,16 @@ struct FnCallType CF_FNCALL_TYPES[] =
    {"readstringlist",cf_slist,5,"Read and assign a list variable from a file of separated strings"},
    {"readtcp",cf_str,4,"Connect to tcp port, send string and assign result to variable"},
    {"regarray",cf_class,2,"True if arg1 matches any item in the associative array with id=arg2"},
-   {"regcmp",cf_class,2,"True if arg1 is a regular expression matching arg2"},
-   {"regline",cf_class,2,"True if arg1 is a regular expression matching a line in file arg2"},
-   {"reglist",cf_class,2,"True if arg1 matches any item in the list with id=arg2"},
+   {"regcmp",cf_class,2,"True if arg2 is a regular expression matching arg1"},
+   {"registryvalue",cf_str,2,"Returns a value for an MS-Win registry key,value pair"},
+   {"regline",cf_class,2,"True if arg2 is a regular expression matching a line in file arg1"},
+   {"reglist",cf_class,2,"True if arg2 matches any item in the list with id=arg1"},
+   {"regldap",cf_class,7,"True if arg6 is a regular expression matching a value item in an ldap search"},
+   {"remotescalar",cf_str,3,"Read a scalar value from a remote cfengine server"},
    {"returnszero",cf_class,2,"True if named shell command has exit status zero"},
    {"rrange",cf_rrange,2,"Define a range of real numbers for cfengine internal use"},
    {"selectservers",cf_int,6,"Select tcp servers which respond correctly to a query and return their number, set array of names"},
+   {"splayclass",cf_class,2,"True if the first argument's time-slot has arrived, according to a policy in arg2"},
    {"splitstring",cf_slist,3,"Convert a string in arg1 into a list of max arg3 strings by splitting on a regular expression in arg2"},
    {"strcmp",cf_class,2,"True if the two strings match exactly"},
    {"usemodule",cf_class,2,"Execute cfengine module script and set class if successful"},
@@ -98,8 +114,11 @@ struct BodySyntax CF_TRANSACTION_BODY[] =
    {"action_policy",cf_opts,"fix,warn,nop","Whether to repair or report about non-kept promises"},
    {"ifelapsed",cf_int,CF_VALRANGE,"Number of minutes before next allowed assessment of promise"},
    {"expireafter",cf_int,CF_VALRANGE,"Number of minutes before a repair action is interrupted and retried"},
-   {"log_string",cf_str,"","A message to be written to the log when the promise is verified"},
+   {"log_string",cf_str,"","A message to be written to the log when a promise verification leads to a repair"},
    {"log_level",cf_opts,"inform,verbose,error,log","The reporting level sent to syslog"},
+   {"log_kept",cf_str,"","This should be filename of a file to which log_string will be saved, if undefined it goes to syslog"},
+   {"log_repaired",cf_str,"","This should be filename of a file to which log_string will be saved, if undefined it goes to syslog"},
+   {"log_failed",cf_str,"","This should be filename of a file to which log_string will be saved, if undefined it goes to syslog"},
    {"audit",cf_opts,CF_BOOL,"true/false switch for detailed audit records of this promise"},
    {"background",cf_opts,CF_BOOL,"true/false switch for parallelizing the promise repair"},
    {"report_level",cf_opts,"inform,verbose,error,log","The reporting level for standard output"},
@@ -160,6 +179,7 @@ struct BodySyntax CFG_CONTROLBODY[] =
    {"lastseenexpireafter",cf_int,CF_VALRANGE,"Number of minutes after which last-seen entries are purged"},
    {"output_prefix",cf_str,"","The string prefix for standard output"},
    {"domain",cf_str,".*","Specify the domain name for this host"},
+   {"require_comments",cf_opts,CF_BOOL,"Warn about promises that do not have comment documentation"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -190,6 +210,7 @@ struct BodySyntax CFA_CONTROLBODY[] =
    {"ifelapsed",cf_int,CF_VALRANGE,"Global default for time that must elapse before promise will be rechecked"},
    {"inform",cf_opts,CF_BOOL,"true/false set inform level default"},
    {"lastseen",cf_opts,CF_BOOL,"true/false record last observed time for all client-server connections (true)"},
+   {"intermittency",cf_opts,CF_BOOL,"true/false store detailed recordings of last observed time for all client-server connections for reliability assessment (false)"},
    {"max_children",cf_int,CF_VALRANGE,"Maximum number of background tasks that should be allowed concurrently"},
    {"mountfilesystems",cf_opts,CF_BOOL,"true/false mount any filesystems promised"},
    {"nonalphanumfiles",cf_opts,CF_BOOL,"true/false warn about filenames with no alphanumeric content"},
@@ -225,6 +246,7 @@ struct BodySyntax CFS_CONTROLBODY[] =
    {"auditing",cf_opts,CF_BOOL,"true/false activate auditing of server connections"},
    {"bindtointerface",cf_str,"","IP of the interface to which the server should bind on multi-homed hosts"},
    {"serverfacility",cf_opts,CF_FACILITY,"Menu option for syslog facility level"},
+   {"port",cf_int,"1024,99999","Default port for cfengine server"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -269,11 +291,12 @@ struct BodySyntax CFK_CONTROLBODY[] =
    {
    {"id_prefix",cf_str,".*","The LTM identifier prefix used to label topic maps (used for disambiguation in merging)"},
    {"build_directory",cf_str,".*","The directory in which to generate output files"},
-   {"sql_type",cf_opts,"mysql,postgress","Menu option for supported database type"},
+   {"sql_type",cf_opts,"mysql,postgres","Menu option for supported database type"},
    {"sql_database",cf_str,"","Name of database used for the topic map"},
    {"sql_owner",cf_str,"","User id of sql database user"},
    {"sql_passwd",cf_str,"","Embedded password for accessing sql database"},
    {"sql_server",cf_str,"","Name or IP of database server (or localhost)"},
+   {"sql_connection_db",cf_str,"","The name of an existing database to connect to in order to create/manage other databases"},
    {"query_output",cf_opts,"html,text","Menu option for generated output format"},
    {"query_engine",cf_str,"","Name of a dynamic web-page used to accept and drive queries in a browser"},
    {"style_sheet",cf_str,"","Name of a style-sheet to be used in rendering html output (added to headers)"},
@@ -288,7 +311,7 @@ struct BodySyntax CFK_CONTROLBODY[] =
 
 struct BodySyntax CFRE_CONTROLBODY[] = /* enum cfrecontrol */
    {
-   {"reports",cf_olist,"audit,performance,all_locks,active_locks,hashes,classes,last_seen,monitor_now,monitor_history,monitor_summary,compliance,setuid,file_changes","A list of reports to generate"},
+   {"reports",cf_olist,"audit,performance,all_locks,active_locks,hashes,classes,last_seen,monitor_now,monitor_history,monitor_summary,compliance,setuid,file_changes,installed_software,software_updates","A list of reports to generate"},
    {"report_output",cf_opts,"csv,html,text,xml","Menu option for generated output format. Applies only to text reports, graph data remain in xydy format."},
    {"build_directory",cf_str,".*","The directory in which to generate output files"},
    {"auto_scaling",cf_opts,CF_BOOL,"true/false whether to auto-scale graph output to optimize use of space"},
@@ -298,7 +321,7 @@ struct BodySyntax CFRE_CONTROLBODY[] = /* enum cfrecontrol */
    {"style_sheet",cf_str,"","Name of a style-sheet to be used in rendering html output (added to headers)"},
    {"html_banner",cf_str,"","HTML code for a banner to be added to rendered in html after the header"},
    {"html_footer",cf_str,"","HTML code for a page footer to be added to rendered in html before the end body tag"},
-   {"html_embed",cf_opts,CF_BOOL,"If false, no header and footer tags will be added to html output"},
+   {"html_embed",cf_opts,CF_BOOL,"If true, no header and footer tags will be added to html output"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -341,7 +364,7 @@ struct BodySyntax CF_COMMON_BODIES[] =
    {CF_DEFINECLASSES,cf_body,CF_DEFINECLASS_BODY,"Signalling behaviour"},
    {"ifvarclass",cf_str,"","Extended classes ANDed with context"},
    {"handle",cf_str,CF_IDRANGE,"A unique id-tag string for referring to this as a promisee elsewhere"},
-   {"builds_on",cf_slist,"","A list of promise handles that this promise builds on or depends on somehow (for knowledge management)"},
+   {"depends_on",cf_slist,"","A list of promise handles that this promise builds on or depends on somehow (for knowledge management)"},
    {"comment",cf_str,"","A comment about this promise's real intention that follows through the program"},
    {NULL,cf_notype,NULL,NULL}
    };
@@ -372,6 +395,7 @@ struct SubTypeSyntax *CF_ALL_SUBTYPES[CF3_MODULES] =
    {
    CF_COMMON_SUBTYPES,     /* Add modules after this, mod_report.c is here */
    CF_EXEC_SUBTYPES,       /* mod_exec.c */
+   CF_DATABASES_SUBTYPES,  /* mod_databases.c */
    CF_FILES_SUBTYPES,      /* mod_files.c */
    CF_INTERFACES_SUBTYPES, /* mod_interfaces.c */
    CF_METHOD_SUBTYPES,     /* mod_methods.c */

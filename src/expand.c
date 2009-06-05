@@ -1,22 +1,26 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*********************************************************************/
@@ -98,16 +102,16 @@ Debug("****************************************************\n\n");
   
 pcopy = DeRefCopyPromise(scopeid,pp);
 
-ScanRval(scopeid,&scalarvars,&listvars,pcopy->promiser,CF_SCALAR);
+ScanRval(scopeid,&scalarvars,&listvars,pcopy->promiser,CF_SCALAR,pp);
 
 if (pcopy->promisee != NULL)
    {
-   ScanRval(scopeid,&scalarvars,&listvars,pp->promisee,pp->petype);
+   ScanRval(scopeid,&scalarvars,&listvars,pp->promisee,pp->petype,pp);
    }
 
 for (cp = pcopy->conlist; cp != NULL; cp=cp->next)
    {
-   ScanRval(scopeid,&scalarvars,&listvars,cp->rval,cp->type);
+   ScanRval(scopeid,&scalarvars,&listvars,cp->rval,cp->type,pp);
    }
 
 PushThisScope();
@@ -154,7 +158,7 @@ return final;
 
 /*********************************************************************/
 
-void ScanRval(char *scopeid,struct Rlist **scalarvars,struct Rlist **listvars,void *rval,char type)
+void ScanRval(char *scopeid,struct Rlist **scalarvars,struct Rlist **listvars,void *rval,char type,struct Promise *pp)
 
 { struct Rlist *rp;
   struct FnCall *fp;
@@ -168,13 +172,13 @@ switch(type)
    {
    case CF_SCALAR:
 
-       ScanScalar(scopeid,scalarvars,listvars,(char *)rval,0);
+       ScanScalar(scopeid,scalarvars,listvars,(char *)rval,0,pp);
        break;
        
    case CF_LIST:
        for (rp = (struct Rlist *)rval; rp != NULL; rp=rp->next)
           {
-          ScanRval(scopeid,scalarvars,listvars,rp->item,rp->type);
+          ScanRval(scopeid,scalarvars,listvars,rp->item,rp->type,pp);
           }
        break;
        
@@ -184,7 +188,7 @@ switch(type)
        for (rp = (struct Rlist *)fp->args; rp != NULL; rp=rp->next)
           {
           Debug("Looking at arg for function-like object %s()\n",fp->name);
-          ScanRval(scopeid,scalarvars,listvars,(char *)rp->item,rp->type);
+          ScanRval(scopeid,scalarvars,listvars,(char *)rp->item,rp->type,pp);
           }
        break;
 
@@ -196,7 +200,7 @@ switch(type)
 
 /*********************************************************************/
 
-void ScanScalar(char *scopeid,struct Rlist **scal,struct Rlist **its,char *string,int level)
+void ScanScalar(char *scopeid,struct Rlist **scal,struct Rlist **its,char *string,int level,struct Promise *pp)
 
 { struct Rlist *rp;
   char *sp,rtype;
@@ -231,6 +235,8 @@ for (sp = string; (*sp != '\0') ; sp++)
             {
             strncpy(absscope,scopeid,CF_MAXVARSIZE-1);  
             }
+
+         RegisterBundleDependence(absscope,pp);
          
          if (GetVariable(absscope,var,&rval,&rtype) != cf_notype)
             {
@@ -264,7 +270,7 @@ for (sp = string; (*sp != '\0') ; sp++)
             if (IsExpandable(var))
                {
                Debug("Found embedded variables\n");
-               ScanScalar(scopeid,scal,its,var,level+1);
+               ScanScalar(scopeid,scal,its,var,level+1,pp);
                }
             }
          sp += strlen(var)-1;
@@ -777,7 +783,7 @@ int IsNakedVar(char *str, char vtype)
 { char *sp,last;
   int count=0;
 
-if (str == NULL)
+if (str == NULL || strlen(str) == 0)
    {
    return false;
    }
@@ -881,6 +887,11 @@ if (IsExcluded(pp->classes))
 
 for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
+   if (strcmp(cp->lval,"comment") == 0)
+      {
+      continue;
+      }
+   
    if (strcmp(cp->lval,"policy") == 0)
       {
       if (strcmp(cp->rval,"constant") == 0)
@@ -973,6 +984,82 @@ else
    CfOut(cf_error,"","Rule from %s at/before line %d\n",cp->audit->filename,cp->lineno);
    }
 
+}
+
+/*********************************************************************/
+
+void ConvergePromiseValues(struct Promise *pp)
+
+{ struct Constraint *cp;
+  struct Rlist *rp;
+  char expandbuf[CF_EXPANDSIZE];
+
+switch (pp->petype)
+   {
+   case CF_SCALAR:
+       
+       if (IsCf3VarString((char *)pp->promisee))
+          {             
+          ExpandScalar(pp->promisee,expandbuf);
+          if (strcmp(pp->promisee,expandbuf) != 0)
+             {
+             free(pp->promisee);
+             pp->promisee = strdup(expandbuf);
+             }
+          }
+       break;
+       
+   case CF_LIST:
+       
+       for (rp = (struct Rlist *)pp->promisee; rp != NULL; rp=rp->next)
+          {
+          if (IsCf3VarString((char *)rp->item))
+             {             
+             ExpandScalar(rp->item,expandbuf);
+             if (strcmp(rp->item,expandbuf) != 0)
+                {
+                free(rp->item);
+                rp->item = strdup(expandbuf);
+                }
+             }          
+          }
+       break;   
+   }
+ 
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
+   {
+   switch (cp->type)
+      {
+      case CF_SCALAR:
+
+          if (IsCf3VarString((char *)cp->rval))
+             {             
+             ExpandScalar(cp->rval,expandbuf);
+             if (strcmp(cp->rval,expandbuf) != 0)
+                {
+                free(cp->rval);
+                cp->rval = strdup(expandbuf);
+                }
+             }
+          break;
+
+      case CF_LIST:
+
+          for (rp = (struct Rlist *)cp->rval; rp != NULL; rp=rp->next)
+             {
+             if (IsCf3VarString((char *)rp->item))
+                {             
+                ExpandScalar(rp->item,expandbuf);
+                if (strcmp(rp->item,expandbuf) != 0)
+                   {
+                   free(rp->item);
+                   rp->item = strdup(expandbuf);
+                   }
+                }          
+             }
+          break;
+      }
+   }
 }
       
 /*********************************************************************/

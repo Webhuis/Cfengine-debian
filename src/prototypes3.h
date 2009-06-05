@@ -79,6 +79,7 @@ struct Attributes GetTopicsAttributes(struct Promise *pp);
 struct Attributes GetOccurrenceAttributes(struct Promise *pp);
 struct Attributes GetPackageAttributes(struct Promise *pp);
 struct Attributes GetMeasurementAttributes(struct Promise *pp);
+struct Attributes GetDatabaseAttributes(struct Promise *pp);
     
 struct Packages GetPackageConstraints(struct Promise *pp);
 struct ExecContain GetExecContainConstraints(struct Promise *pp);
@@ -115,6 +116,7 @@ struct LineSelect GetInsertSelectConstraints(struct Promise *pp);
 struct LineSelect GetDeleteSelectConstraints(struct Promise *pp);
 struct Measurement GetMeasurementConstraint(struct Promise *pp);
 struct CfACL GetAclConstraints(struct Promise *pp);
+struct CfDatabase GetDatabaseConstraints(struct Promise *pp);
 
 void ShowAttributes(struct Attributes a);
 
@@ -126,11 +128,13 @@ void CompilePromises(void);
 
 /* cfstreams.c */
 
+void CfFOut(FILE *fp,char *fmt, ...);
 void CfOut(enum cfreport level,char *errstr,char *fmt, ...);
 void cfPS(enum cfreport level,char status,char *errstr,struct Promise *pp,struct Attributes attr,char *fmt, ...);
 void CfFile(FILE *fp,char *fmt, ...);
 void MakeLog(struct Item *mess,enum cfreport level);
 void MakeReport(struct Item *mess,int prefix);
+void FileReport(struct Item *mess,int prefix,char *filename);
 void SanitizeBuffer(char *buffer);
 
 /* cf_sql.c */
@@ -219,6 +223,8 @@ struct PromiseIdent *PromiseIdExists(char *handle);
 
 /* conversion.c */
 
+enum cfinterval Str2Interval(char *s);
+enum cfdbtype Str2dbType(char *s);
 char *Rlist2String(struct Rlist *list,char *sep);
 int Signal2Int(char *s);
 enum cfreport String2ReportLevel(char *typestr);
@@ -275,11 +281,14 @@ int IsProcessType(char *s);
 
 /* enterprise_stubs.c */
 
-void InitMeasurements();
+void EnterpriseVersion(void);
+int EnterpriseExpiry(char *day,char *month,char *year);
+void InitMeasurements(void);
 void BundleNode(FILE *fp,char *bundle);
 void BodyNode(FILE *fp,char *bundle,int call);
 void TypeNode(FILE *fp,char *type);
 void PromiseNode(FILE *fp,struct Promise *pp,int type);
+void RegisterBundleDependence(char *absscope,struct Promise *pp);
 void MapPromiseToTopic(FILE *fp,struct Promise *pp,char *version);
 void Nova_MapPromiseToTopic(FILE *fp,struct Promise *pp,char *version);
 void ShowTopicRepresentation(FILE *fp);
@@ -287,18 +296,47 @@ void Nova_ShowTopicRepresentation(FILE *fp);
 void NotePromiseConditionals(struct Promise *pp);
 void DependencyGraph(struct Topic *map);
 void HistoryUpdate(struct Averages newvals);
+void GetClassName(int i,char *name);
+void LookUpClassName(int i,char *name);
 void SummarizeCompliance(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
+void SummarizePerPromiseCompliance(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
 void SummarizeSetuid(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
 void SummarizeFileChanges(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
 void VerifyMeasurement(double *this,struct Attributes a,struct Promise *pp);
+void SetMeasurementPromises(struct Item **classlist);
 void LongHaul(void);
 void VerifyACL(char *file,struct Attributes a, struct Promise *pp);
+int CheckACLSyntax(struct CfACL acl,struct Promise *pp);
+int CfVerifyTablePromise(CfdbConn *cfdb,char *name,struct Rlist *columns,struct Attributes a,struct Promise *pp);
+int VerifyDatabasePromise(CfdbConn *cfdb,char *database,struct Attributes a,struct Promise *pp);
+int VerifyTablePromise(CfdbConn *cfdb,char *table,struct Rlist *columns,struct Attributes a,struct Promise *pp);
+void ReportSoftware(struct CfPackageManager *list);
+void SummarizeSoftware(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
+void SummarizeUpdates(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
+void LoadSlowlyVaryingObservations(void);
+void RegisterLiteralServerData(char *handle,struct Promise *pp);
+char *ReturnLiteralData(char *handle);
+char *GetRemoteScalar(char *handle,char *server,int encrypted);
+char *PromiseID(struct Promise *pp);
+void NotePromiseCompliance(struct Promise *pp,double val);
+time_t GetPromiseCompliance(struct Promise *pp,double *value,double *average,double *var,time_t *lastseen);
+void SyntaxCompletion(char *s);
+int GetRegistryValue(char *key,char *value,char *buffer);
+
+void *CfLDAPValue(char *uri,char *dn,char *filter,char *name,char *scope,char *sec);
+void *CfLDAPList(char *uri,char *dn,char *filter,char *name,char *scope,char *sec);
+void *CfLDAPArray(char *array,char *uri,char *dn,char *filter,char *scope,char *sec);
+void *CfRegLDAP(char *uri,char *dn,char *filter,char *name,char *scope,char *regex,char *sec);
+void CacheUnreliableValue(char *caller,char *handle,char *buffer);
+int RetrieveUnreliableValue(char *caller,char *handle,char *buffer);
 
 /* env_context.c */
 
 int Abort(void);
 void KeepClassContextPromise(struct Promise *pp);
 int ContextSanityCheck(struct Attributes a);
+void PushPrivateClassContext(void);
+void PopPrivateClassContext(void);
 void DeletePrivateClassContext(void);
 void DeleteEntireHeap(void);
 void NewPersistentContext(char *name,unsigned int ttl_minutes,enum statepolicy policy);
@@ -327,6 +365,7 @@ int IsBracketed (char *s);
 
 /* evalfunction.c */
 
+struct Rval FnCallSplayClass(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallRandomInt(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallGetUid(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallGetGid(struct FnCall *fp,struct Rlist *finalargs);
@@ -361,13 +400,24 @@ struct Rval FnCallReadStringArray(struct FnCall *fp,struct Rlist *finalargs,enum
 struct Rval FnCallClassMatch(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallUseModule(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallHash(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallHashMatch(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallCanonify(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallRegLine(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallSplitString(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallHostInNetgroup(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallClassify(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallRemoteScalar(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallRegLDAP(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallLDAPValue(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallLDAPList(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallLDAPArray(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallPeers(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallPeerLeader(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallPeerLeaders(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallRegistryValue(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallLastNode(struct FnCall *fp,struct Rlist *finalargs);
 
-void *ReadFile(char *filename,int maxsize);
+void *CfReadFile(char *filename,int maxsize);
 char *StripPatterns(char *file_buffer,char *pattern);
 void CloseStringHole(char *s,int start,int end);
 int BuildLineArray(char *array_lval,char *file_buffer,char *split,int maxent,enum cfdatatype type);
@@ -380,8 +430,8 @@ int CheckID(char *id);
 void ExpandPromise(enum cfagenttype ag,char *scopeid,struct Promise *pp,void *fnptr);
 void ExpandPromiseAndDo(enum cfagenttype ag,char *scope,struct Promise *p,struct Rlist *scalarvars,struct Rlist *listvars,void (*fnptr)());
 struct Rval ExpandDanglers(char *scope,struct Rval rval,struct Promise *pp);
-void ScanRval(char *scope,struct Rlist **los,struct Rlist **lol,void *string,char type);
-void ScanScalar(char *scope,struct Rlist **los,struct Rlist **lol,char *string,int level);
+void ScanRval(char *scope,struct Rlist **los,struct Rlist **lol,void *string,char type,struct Promise *pp);
+void ScanScalar(char *scope,struct Rlist **los,struct Rlist **lol,char *string,int level,struct Promise *pp);
 
 int IsExpandable(char *str);
 int ExpandScalar(char *string,char buffer[CF_EXPANDSIZE]);
@@ -394,6 +444,7 @@ struct Rval EvaluateFinalRval(char *scopeid,void *rval,char rtype,int forcelist,
 int IsNakedVar(char *str,char vtype);
 void GetNaked(char *s1, char *s2);
 void ConvergeVarHashPromise(char *scope,struct Promise *pp,int checkdup);
+void ConvergePromiseValues(struct Promise *pp);
 int Epimenides(char *var,char *rval,char rtype,int level);
 
 /* exec_tool.c */
@@ -402,6 +453,7 @@ int IsExecutable(char *file);
 int ShellCommandReturnsZero(char *comm,int useshell);
 int GetExecOutput(char *command,char *buffer,int useshell);
 void ActAsDaemon(int preserve);
+char *WinEscapeCommand(char *s);
 
 /* files_copy.c */
 
@@ -490,10 +542,11 @@ void cf_closedir(CFDIR *dirh);
 int CopyRegularFile(char *source,char *dest,struct stat sstat,struct stat dstat,struct Attributes attr, struct Promise *pp);
 void RegisterAHardLink(int i,char *value,struct Attributes attr, struct Promise *pp);
 void FileAutoDefine(char *destfile);
-int ReadLine(char *buff,int size,FILE *fp);
+int CfReadLine(char *buff,int size,FILE *fp);
 
 /* files_names.c */
 
+int EmptyString(char *s);
 int ExpandOverflow(char *str1,char *str2);
 char *JoinPath(char *path,char *leaf);
 char *JoinSuffix(char *path,char *leaf);
@@ -513,7 +566,6 @@ char ToLower (char ch);
 char ToUpper (char ch);
 char *ToUpperStr (char *str);
 char *ToLowerStr (char *str);
-
 
 /* files_operators.c */
 
@@ -565,7 +617,7 @@ int SelectLeaf(char *path,struct stat *sb,struct Attributes attr,struct Promise 
 int SelectTypeMatch(struct stat *lstatptr,struct Rlist *crit);
 int SelectOwnerMatch(struct stat *lstatptr,struct Rlist *crit);
 int SelectGroupMatch(struct stat *lstatptr,struct Rlist *crit);
-int SelectModeMatch(struct stat *lstatptr,mode_t plus,mode_t minus);
+int SelectModeMatch(struct stat *lstatptr,struct Rlist *ls);
 int SelectTimeMatch(time_t stattime,time_t fromtime,time_t totime);
 int SelectNameRegexMatch(char *filename,char *crit);
 int SelectPathRegexMatch(char *filename,char *crit);
@@ -687,12 +739,13 @@ int DeleteItemContaining (struct Item **list,char *string);
 int DeleteItemNotContaining (struct Item **list,char *string);
 int OrderedListsMatch(struct Item *list1,struct Item *list2);
 int IsClassedItemIn(struct Item *list,char *item);
-int CompareToFile(struct Item *liststart,char *file);
+int CompareToFile(struct Item *liststart,char *file,struct Attributes a,struct Promise *pp);
 struct Item *String2List(char *string);
 int ListLen (struct Item *list);
 int ByteSizeList (struct Item *list);
 int IsItemIn (struct Item *list, char *item);
 int IsFuzzyItemIn (struct Item *list, char *item);
+int IsMatchItemIn(struct Item *list,char *item);
 int GetItemListCounter (struct Item *list, char *item);
 struct Item *ConcatLists (struct Item *list1, struct Item *list2);
 void CopyList (struct Item **dest,struct Item *source);
@@ -711,7 +764,7 @@ void IncrementItemListCounter (struct Item *ptr, char *string);
 void SetItemListCounter (struct Item *ptr, char *string,int value);
 struct Item *SortItemListNames(struct Item *list);
 struct Item *SortItemListCounters(struct Item *list);
-
+char *ItemList2CSV(struct Item *list);
 
 /* iteration.c */
 
@@ -780,7 +833,7 @@ void TexinfoManual(char *mandir);
 int FullTextMatch (char *regptr,char *cmpptr);
 int FullTextCaseMatch (char *regexp,char *teststring);
 char *ExtractFirstReference(char *regexp,char *teststring);
-
+void CfRegFree(struct CfRegEx rex);
 int BlockTextMatch (char *regexp,char *teststring,int *s,int *e);
 int BlockTextCaseMatch(char *regexp,char *teststring,int *start,int *end);
 int IsRegexItemIn(struct Item *list,char *regex);
@@ -823,7 +876,7 @@ void MountAll(void);
 void AddTopic(struct Topic **list,char *name,char *type);
 void AddCommentedTopic(struct Topic **list,char *name,char *comment,char *type);
 void AddTopicAssociation(struct TopicAssociation **list,char *fwd_name,char *bwd_name,struct Rlist *li,int verify);
-void AddOccurrence(struct Occurrence **list,char *topic_name,char *reference,struct Rlist *represents,enum representations rtype);
+void AddOccurrence(struct Occurrence **list,char *reference,struct Rlist *represents,enum representations rtype);
 int TopicExists(struct Topic *list,char *topic_name,char *topic_type);
 char *GetTopicType(struct Topic *list,char *topic_name);
 struct Topic *GetCanonizedTopic(struct Topic *list,char *topic_name);
@@ -842,6 +895,16 @@ int IsPrivileged (void);
 int IntMin (int a,int b);
 char *StrStr (char *s1,char *s2);
 int StrnCmp (char *s1,char *s2,size_t n);
+int cf_strcmp(char *s1,char *s2);
+int cf_strncmp(char *s1,char *s2,size_t n);
+char *cf_strdup(char *s);
+int cf_strlen(char *s);
+char *cf_strncpy(char *s1,char *s2,size_t n);
+char *cf_strchr(char *s, int c);
+char *cf_strcpy(char *s1,char *s2);
+char *MapName(char *s);
+int UseUnixStandard(char *s);
+
 #ifndef HAVE_GETNETGRENT
 int setnetgrent (const char *netgroup);
 int getnetgrent (char **host, char **user, char **domain);
@@ -877,6 +940,8 @@ int setegid (gid_t egid);
 
 /* pipes.c */
 
+FILE *cf_fopen(char *file,char *type);
+int cf_fclose(FILE *fp);
 FILE *cf_popen(char *command,char *type);
 FILE *cf_popensetuid(char *command,char *type,uid_t uid,gid_t gid,char *chdirv,char *chrootv);
 FILE *cf_popen_sh(char *command,char *type);
@@ -909,6 +974,7 @@ void DeletePromises(struct Promise *pp);
 void DeleteDeRefPromise(char *scopeid,struct Promise *pp);
 void PromiseRef(enum cfreport level,struct Promise *pp);
 struct Promise *NewPromise(char *typename,char *promiser);
+void HashPromise(struct Promise *pp,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhashes type);
 
 /* recursion.c */
 
@@ -933,7 +999,7 @@ void ShowControlBodies(void);
 void ShowBundleTypes(void);
 void ShowPromiseTypesFor(char *s);
 void ShowBodyParts(struct BodySyntax *bs);
-void ShowRange(char *);
+void ShowRange(char *s,enum cfdatatype type);
 void ShowBuiltinFunctions(void);
 void ShowBody(struct Body *body,int ident);
 void DebugBanner(char *s);
@@ -950,6 +1016,7 @@ struct Rlist *KeyInRlist(struct Rlist *list,char *key);
 int RlistLen(struct Rlist *start);
 void PopStack(struct Rlist **liststart, void **item,size_t size);
 void PushStack(struct Rlist **liststart,void *item);
+int IsInListOfRegex(struct Rlist *list,char *str);
 
 void *CopyRvalItem(void *item, char type);
 void DeleteRvalItem(void *rval, char type);
@@ -1071,7 +1138,7 @@ char *GetHome(uid_t uid);
 
 /* transaction.c */
 
-void SummarizeTransaction(struct Attributes attr,struct Promise *pp);
+void SummarizeTransaction(struct Attributes attr,struct Promise *pp,char *logname);
 struct CfLock AcquireLock(char *operand,char *host,time_t now,struct Attributes attr,struct Promise *pp);
 void YieldCurrentLock(struct CfLock this);
 void GetLockName(char *lockname,char *locktype,char *base,struct Rlist *params);
@@ -1113,6 +1180,15 @@ int IsCf3VarString(char *str);
 int BooleanControl(char *scope,char *name);
 char *ExtractInnerCf3VarString(char *str,char *substr);
 char *ExtractOuterCf3VarString(char *str,char *substr);
+int UnresolvedVariables(struct CfAssoc *ap,char rtype);
+int UnresolvedArgs(struct Rlist *args);
+
+/* verify_databases.c */
+
+void VerifyDatabasePromises(struct Promise *pp);
+int CheckDatabaseSanity(struct Attributes a, struct Promise *pp);
+void VerifySQLPromise(struct Attributes a,struct Promise *pp);
+void VerifyRegistryPromise(struct Attributes a,struct Promise *pp);
 
 /* verify_exec.c */
 
@@ -1162,6 +1238,8 @@ int ComparePackages(char *n,char *v,char *a,struct CfPackageItem *pi,enum versio
 void ParsePackageVersion(char *version,struct Rlist *num,struct Rlist *sep);
 void SchedulePackageOp(char *name,char *version,char *arch,int installed,int matched,int novers,struct Attributes a,struct Promise *pp);
 int ExecPackageCommand(char *command,int verify,struct Attributes a,struct Promise *pp);
+int PackageInItemList(struct CfPackageItem *list,char *name,char *version,char *arch);
+int PrependUpdateItem(struct CfPackageItem **list,char *item,struct CfPackageItem *chklist,struct Attributes a,struct Promise *pp);
 
 /* verify_processes.c */
 

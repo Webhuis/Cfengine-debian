@@ -2,6 +2,8 @@
 	First standalone release, independent of cfengine 2 
 	Purge old definitions and check consistency.
 
+	NB: changed search_mode to be a list of matching values
+	
 	Reporting rationalized in cf-promises with -r only to avoid
 	leaving output files everywhere.
 
@@ -18,6 +20,15 @@
 	New classes for quartly shifts: Morning,Afternoon,Evening,Night
 
 	Bug fixes in editfiles - line insertion for multiple line objects
+
+	Change the name of the variables and context from the monitord for
+	better separation of data, and shorter names. sys -> mon
+	average -> av, stddev -> dev
+
+	canonical name for windows changed from "nt" to "windows", also version names
+	added "vista","xp" etc..
+
+	License notices updated for dual license editions.
 	
 3.0.0
 	First release of cfengine 3. Known omissions:

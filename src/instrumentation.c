@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -152,7 +156,6 @@ dbp->close(dbp,0);
 void NoteClassUsage()
 
 { DB *dbp;
-  DB_ENV *dbenv = NULL;
   DBC *dbcp;
   DBT key,stored;
   char name[CF_BUFSIZE];
@@ -282,7 +285,7 @@ void LastSaw(char *hostname,enum roles role)
   time_t now = time(NULL);
   struct QPoint q,newq;
   double lastseen,delta2;
-  int lsea = LASTSEENEXPIREAFTER;
+  int lsea = LASTSEENEXPIREAFTER, intermittency = false;
 
 if (strlen(hostname) == 0)
    {
@@ -290,28 +293,31 @@ if (strlen(hostname) == 0)
    return;
    }
 
-if (!BooleanControl("control_agent",CFA_CONTROLBODY[cfa_lastseen].lval))
+if (BooleanControl("control_agent",CFA_CONTROLBODY[cfa_intermittency].lval))
    {
-   return;
+   CfOut(cf_inform,""," -> Recording intermittency");
+   intermittency = true;
    }
 
-Debug("LastSeen(%s) reg\n",hostname);
+CfOut(cf_verbose,"","LastSaw host %s now\n",hostname);
 
 /* Tidy old versions - temporary */
-snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_OLDLASTDB_FILE);
-unlink(name);
+snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
 
 if (!OpenDB(name,&dbp))
    {
    return;
    }
 
-/* Now open special file for peer entropy record - INRIA intermittency */
-snprintf(name,CF_BUFSIZE-1,"%s/lastseen/%s.%s",CFWORKDIR,CF_LASTDB_FILE,hostname);
-
-if (!OpenDB(name,&dbpent))
+if (intermittency)
    {
-   return;
+   /* Open special file for peer entropy record - INRIA intermittency */
+   snprintf(name,CF_BUFSIZE-1,"%s/lastseen/%s.%s",CFWORKDIR,CF_LASTDB_FILE,hostname);
+   
+   if (!OpenDB(name,&dbpent))
+      {
+      return;
+      }
    }
 
 #ifdef HAVE_PTHREAD_H  
@@ -372,7 +378,11 @@ if (lastseen > (double)lsea)
 else
    {
    WriteDB(dbp,databuf,&newq,sizeof(newq));
-   WriteDB(dbpent,GenTimeKey(now),&newq,sizeof(newq));
+
+   if (intermittency)
+      {
+      WriteDB(dbpent,GenTimeKey(now),&newq,sizeof(newq));
+      }
    }
 
 #ifdef HAVE_PTHREAD_H  
@@ -383,8 +393,12 @@ if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)
    }
 #endif
 
+if (intermittency)
+   {
+   dbpent->close(dbpent,0);
+   }
+
 dbp->close(dbp,0);
-dbpent->close(dbpent,0);
 }
 
 /*****************************************************************************/
@@ -419,7 +433,12 @@ return true;
 int ReadDB(DB *dbp,char *name,void *ptr,int size)
 
 { DBT *key,value;
-  
+
+if (dbp == NULL)
+   {
+   return false;
+   }
+ 
 key = NewDBKey(name);
 memset(&value,0,sizeof(DBT));
 
@@ -433,6 +452,7 @@ if ((errno = dbp->get(dbp,NULL,key,&value,0)) == 0)
       }
    else
       {
+      DeleteDBKey(key);
       return false;
       }
    
@@ -443,6 +463,7 @@ if ((errno = dbp->get(dbp,NULL,key,&value,0)) == 0)
 else
    {
    Debug("Database read failed: %s",db_strerror(errno));
+   DeleteDBKey(key);
    return false;
    }
 }
@@ -452,6 +473,11 @@ else
 int WriteDB(DB *dbp,char *name,void *ptr,int size)
 
 { DBT *key,*value;
+
+if (dbp == NULL)
+   {
+   return false;
+   }
  
 key = NewDBKey(name); 
 value = NewDBValue(ptr,size);
@@ -479,6 +505,11 @@ void DeleteDB(DB *dbp,char *name)
 
 { DBT *key;
 
+if (dbp == NULL)
+   {
+   return;
+   }
+ 
 key = NewDBKey(name);
 
 if ((errno = dbp->del(dbp,NULL,key,0)) != 0)
@@ -489,7 +520,6 @@ if ((errno = dbp->del(dbp,NULL,key,0)) != 0)
 DeleteDBKey(key);
 Debug("DELETED DB %s\n",name);
 }
-
 
 /*****************************************************************************/
 /* Level 2                                                                   */

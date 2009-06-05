@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -93,7 +97,7 @@ if (attr.select.groups == NULL)
    PrependItem(&leaf_attr,"group","");
    }
 
-if (SelectModeMatch(sb,attr.select.plus,attr.select.minus))
+if (SelectModeMatch(sb,attr.select.perms))
    {
    PrependItem(&leaf_attr,"mode","");
    }
@@ -234,6 +238,20 @@ for (rp = crit; rp != NULL; rp = rp->next)
       DeleteItemList(leafattrib);
       return true;
       }
+
+   if (FullTextMatch((char *)rp->item,pw->pw_name))
+      {
+      Debug(" - ? Select owner match\n");
+      DeleteItemList(leafattrib);
+      return true;
+      }
+
+   if (FullTextMatch((char *)rp->item,buffer))
+      {
+      Debug(" - ? Select owner match\n");
+      DeleteItemList(leafattrib);
+      return true;
+      }
    }
 
 DeleteItemList(leafattrib);
@@ -269,6 +287,20 @@ for (rp = crit; rp != NULL; rp = rp->next)
       DeleteItemList(leafattrib);
       return true;
       }
+
+   if (FullTextMatch((char *)rp->item,gr->gr_name))
+      {
+      Debug(" - ? Select owner match\n");
+      DeleteItemList(leafattrib);
+      return true;
+      }
+
+   if (FullTextMatch((char *)rp->item,buffer))
+      {
+      Debug(" - ? Select owner match\n");
+      DeleteItemList(leafattrib);
+      return true;
+      }
    }
 
 DeleteItemList(leafattrib);
@@ -277,16 +309,33 @@ return false;
 
 /*******************************************************************/
 
-int SelectModeMatch(struct stat *lstatptr,mode_t plus,mode_t minus)
+int SelectModeMatch(struct stat *lstatptr,struct Rlist *list)
 
-{ mode_t newperm;
+{ mode_t newperm,plus,minus;
+  struct Rlist *rp;
 
-newperm = (lstatptr->st_mode & 07777);
-newperm |= plus;
-newperm &= ~minus;
+for  (rp = list; rp != NULL; rp=rp->next)
+   {
+   plus = 0;
+   minus = 0;
 
-Debug(" - ? Select mode match?\n");
-return ((newperm & 07777) == (lstatptr->st_mode & 07777));
+   if (!ParseModeString(rp->item,&plus,&minus))
+      {
+      CfOut(cf_error,"","Problem validating a mode string \"%s\" in search filter",rp->item);
+      continue;
+      }
+
+   newperm = (lstatptr->st_mode & 07777);
+   newperm |= plus;
+   newperm &= ~minus;
+   
+   if ((newperm & 07777) == (lstatptr->st_mode & 07777))
+      {
+      return true;
+      }   
+   }
+
+return false;
 } 
 
 /*******************************************************************/
@@ -340,7 +389,7 @@ if ((pp = cf_popen(prog,"r")) == NULL)
 while (!feof(pp))
    {
    line[0] = '\0';
-   ReadLine(line,CF_BUFSIZE,pp);  /* One buffer only */
+   CfReadLine(line,CF_BUFSIZE,pp);  /* One buffer only */
 
    if (FullTextMatch(crit,line))
       {

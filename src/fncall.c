@@ -1,21 +1,25 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License
-  
+  You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -248,8 +252,35 @@ ClearFnCallStatus();
 
 expargs = NewExpArgs(fp,pp);
 
+if (UnresolvedArgs(expargs))
+   {
+   FNCALL_STATUS.status = FNCALL_FAILURE;
+   rval.item = CopyFnCall(fp);
+   rval.rtype = CF_FNCALL;
+   DeleteExpArgs(expargs);
+   return rval;
+   }
+
 switch (this)
    {
+   case cfn_registryvalue:
+       rval = FnCallRegistryValue(fp,expargs);
+       break;
+   case cfn_splayclass:
+       rval = FnCallSplayClass(fp,expargs);
+       break;
+   case cfn_lastnode:
+       rval = FnCallLastNode(fp,expargs);
+       break;
+   case cfn_peers:
+       rval = FnCallPeers(fp,expargs);
+       break;
+   case cfn_peerleader:
+       rval = FnCallPeerLeader(fp,expargs);
+       break;
+   case cfn_peerleaders:
+       rval = FnCallPeerLeaders(fp,expargs);
+       break;
    case cfn_canonify:
        rval = FnCallCanonify(fp,expargs);
        break;
@@ -322,6 +353,18 @@ switch (this)
    case cfn_regarray:
        rval = FnCallRegArray(fp,expargs);
        break;
+   case cfn_regldap:
+       rval = FnCallRegLDAP(fp,expargs);
+       break;
+   case cfn_ldaparray:
+       rval = FnCallLDAPArray(fp,expargs);
+       break;
+   case cfn_ldaplist:
+       rval = FnCallLDAPList(fp,expargs);
+       break;
+   case cfn_ldapvalue:
+       rval = FnCallLDAPValue(fp,expargs);
+       break;
    case cfn_getindices:
        rval = FnCallGetIndices(fp,expargs);
        break;
@@ -364,6 +407,9 @@ switch (this)
    case cfn_rrange:
        rval = FnCallRRange(fp,expargs);
        break;
+   case cfn_remotescalar:
+       rval = FnCallRemoteScalar(fp,expargs);
+       break;
    case cfn_date:
        rval = FnCallOnDate(fp,expargs);
        break;
@@ -379,13 +425,18 @@ switch (this)
    case cfn_classmatch:
        rval = FnCallClassMatch(fp,expargs);
        break;
+   case cfn_classify:
+       rval = FnCallClassify(fp,expargs);
+       break;
    case cfn_hash:
        rval = FnCallHash(fp,expargs);
+       break;
+   case cfn_hashmatch:
+       rval = FnCallHashMatch(fp,expargs);
        break;
    case cfn_usemodule:
        rval = FnCallUseModule(fp,expargs);
        break;
-
    case cfn_selectservers:
        rval = FnCallSelectServers(fp,expargs);
        break;
@@ -396,12 +447,14 @@ switch (this)
        break;
    }
 
-
 if (FNCALL_STATUS.status == FNCALL_FAILURE)
    {
    /* We do not assign variables to failed function calls */
    rval.item = CopyFnCall(fp);
    rval.rtype = CF_FNCALL;
+   }
+else
+   {
    }
 
 DeleteExpArgs(expargs);

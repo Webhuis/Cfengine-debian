@@ -1,0 +1,77 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle test in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'ps[relayhost]' (implicit) if context is any
+
+             string => [$(mailrelay)]:587       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 24
+
+      vars promise by 'ps[mydomain]' (implicit) if context is any
+
+             string => iu.hio.no       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 25
+
+      vars promise by 'ps[smtp_sasl_auth_enable]' (implicit) if context is any
+
+             string => yes       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 26
+
+      vars promise by 'ps[smtp_sasl_password_maps]' (implicit) if context is any
+
+             string => hash:/etc/postfix/sasl-passwd       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 27
+
+      vars promise by 'ps[smtp_sasl_security_options]' (implicit) if context is any
+
+             string =>        if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 28
+
+      vars promise by 'ps[smtp_use_tls]' (implicit) if context is any
+
+             string => yes       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 29
+
+      vars promise by 'ps[default_privs]' (implicit) if context is any
+
+             string => mailman       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 30
+
+      vars promise by 'ps[inet_protocols]' (implicit) if context is any
+
+             string => all       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 31
+
+      vars promise by 'ps[inet_interfaces]' (implicit) if context is any
+
+             string => 127.0.0.1       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 32
+
+      vars promise by 'parameter_name' (implicit) if context is any
+
+              slist => getindices(ps,)            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 34
+
+   TYPE: reports
+
+      reports promise by 'Found key $(parameter_name)' (implicit) if context is linux
+
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_getindices.cf' near line 40
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'test'} if sub-body context any
+   }
+

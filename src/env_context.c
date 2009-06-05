@@ -1,12 +1,13 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -16,6 +17,11 @@
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
+  
 */
 /*****************************************************************************/
 /*                                                                           */
@@ -66,7 +72,7 @@ if (strcmp(pp->bundletype,THIS_AGENT) == 0 || FullTextMatch("edit_.*",pp->bundle
    {
    if (EvalClassExpression(a.context.expression,pp))
       {
-      Debug(" ?> defining class %s\n",pp->promiser);
+      Debug(" ?> defining explicit class %s\n",pp->promiser);
       NewBundleClass(pp->promiser,pp->bundle);
       }
 
@@ -94,7 +100,25 @@ void DeletePrivateClassContext()
 DeleteItemList(VADDCLASSES);
 VADDCLASSES = NULL;
 }
-   
+
+/*****************************************************************************/
+
+void PushPrivateClassContext()
+
+{
+PushStack(&PRIVCLASSHEAP,VADDCLASSES);
+VADDCLASSES = NULL;
+}
+
+/*****************************************************************************/
+
+void PopPrivateClassContext()
+
+{ struct Item *list;
+
+DeleteItemList(VADDCLASSES);
+PopStack(&PRIVCLASSHEAP,(void *)&VADDCLASSES,sizeof(VADDCLASSES));
+}
 
 /*****************************************************************************/
 
@@ -145,10 +169,10 @@ if (value.data != NULL)
          }
       }
    }
- else
-    {
-    CfOut(cf_verbose,"","New persistent state %s but empty\n",key.data);
-    }
+else
+   {
+   CfOut(cf_verbose,"","New persistent state %s\n",key.data);
+   }
  
  
 memset(&key,0,sizeof(key));       
@@ -169,7 +193,7 @@ if ((errno = dbp->put(dbp,NULL,&key,&value,0)) != 0)
    }
 else
    {
-   CfOut(cf_verbose,"","(Re)Set persistent state %s for %d minutes\n",name,ttl_minutes);
+   CfOut(cf_verbose,"","Re-set persistent state %s for %d minutes\n",name,ttl_minutes);
    }
 
 dbp->close(dbp,0);
@@ -665,6 +689,11 @@ if (IsRegexItemIn(ABORTHEAP,copy))
    exit(1);
    }
 
+if (IsItemIn(VHEAP,copy))
+   {
+   CfOut(cf_error,"","WARNING - private class \"%s\" in bundle \"%s\" shadows a global class - you should choose a different name to avoid conflicts",copy,bundle);
+   }
+
 if (IsItemIn(VADDCLASSES,copy))
    {
    return;
@@ -740,7 +769,6 @@ for (sp = class; *sp != '\0'; sp++)
       {
       break;
       }
-
 
    if (IsBracketed(cbuff)) /* Strip brackets */
       {

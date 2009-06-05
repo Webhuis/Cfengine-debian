@@ -1,12 +1,12 @@
 /* 
-   Copyright (C) 2008 - Cfengine AS
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,6 +15,11 @@
   You should have received a copy of the GNU General Public License  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 
 */
 
@@ -68,8 +73,8 @@ struct BodySyntax CF_MATCHVALUE_BODY[] =
 struct BodySyntax CF_MEASURE_BODIES[] =
    {
    {"stream_type",cf_opts,"pipe,file","The datatype being collected."},
-   {"data_type",cf_opts,"counter,integer,real,string","The datatype being collected."},
-   {"history_type",cf_opts,"weekly,none","Whether the data can be seen as a time-series or just an isolated value"},
+   {"data_type",cf_opts,"counter,int,real,string,slist","The datatype being collected."},
+   {"history_type",cf_opts,"weekly,scalar,static,log","Whether the data can be seen as a time-series or just an isolated value"},
    {"units",cf_str,"","The engineering dimensions of this value or a note about its intent used in plots"},
    {"match_value",cf_body,CF_MATCHVALUE_BODY,"Criteria for extracting the measurement from a datastream"},
    {NULL,cf_notype,NULL,NULL}

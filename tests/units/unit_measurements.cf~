@@ -1,7 +1,19 @@
 #
 # Enterprise level promises to watch data
 #
+#######################################################
+#
+# Test file:
+#
+# First line
+# Blonk blonk bnklkygsuilnm
+#
+#######################################################
 
+body common control
+{
+bundlesequence => { "watch" };
+}
 
 #######################################################
 
@@ -16,16 +28,46 @@ bundle monitor watch
 {
 measurements:
 
+ atlas::
+
   "/home/mark/tmp/testmeasure"
 
-   handle => "blonk_watch",
-   stream_type => "file",
-   data_type => "string",
-   history_type => "weekly",
-   units => "blonks",
-   match_value => find_blonks,
-   action => sample_min("10");
+      handle => "blonk_watch",
+      stream_type => "file",
+      data_type => "string",
+      history_type => "weekly",
+      units => "blonks",
+      match_value => find_blonks,
+      action => sample_min("10");
+
+
+   # Now follow a special process on this machine
+   # using cfengine's process cache to avoid resampling
+
+   "/var/cfengine/state/cf_rootprocs"
+
+      handle => "monitor_self_watch",
+      stream_type => "file",
+      data_type => "int",
+      history_type => "none",
+      units => "kB",
+      match_value => proc_value(".*cf-monitord.*","root\s+[0-9.]+\s+[0-9.]+\s+[0-9.]+\s+[0-9.]+\s+([0-9]+).*");
+
+ linux::
+
+  "/bin/df"
+
+      handle => "free_memory_watch",
+      stream_type => "pipe",
+      data_type => "slist",
+      history_type => "static",
+      units => "device",
+      match_value => file_systems;
+      # Update this as often as possible
+
 }
+
+##########################################################
 
 body action sample_min(x)
 {
@@ -33,21 +75,35 @@ ifelapsed => "$(x)";
 expireafter => "$(x)";
 }
 
+##########################################################
+
 body match_value find_blonks
 {
 select_line_number => "2";
 extraction_regex => "Blonk blonk ([blonk]+).*";
-
 }
 
-#
-# Test file:
-#
-# First line
-# Blonk blonk bnklkygsuilnm
-#
+##########################################################
 
-body common control
+body match_value free_memory # not willy!
 {
-bundlesequence => { "watch" };
+select_line_matching => "MemFree:.*";
+extraction_regex => "MemFree:\s+([0-9]+).*";
 }
+
+##########################################################
+
+body match_value proc_value(x,y)
+{
+select_line_matching => "$(x)";
+extraction_regex => "$(y)";
+}
+
+##########################################################
+
+body match_value file_system
+{
+select_line_matching => "/.*";
+extraction_regex => "(.*)";
+}
+
