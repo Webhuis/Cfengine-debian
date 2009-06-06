@@ -3,7 +3,7 @@ Section: admin
 Priority: optional
 Maintainer: Antonio Radici <antonio@dyne.org>
 Build-Depends: debhelper (>= 7), autotools-dev, quilt
-Standards-Version: 3.8.0
+Standards-Version: 3.8.1
 Homepage: http://www.cfengine.org/
 Vcs-Browser: http://git.debian.org/?p=collab-maint/cfengine3.git
 Vcs-Git: git://git.debian.org/git/collab-maint/cfengine3.git
@@ -22,3 +22,15 @@ Description: tool for configuring and maintaining network machines
  .
  With cfengine 3 you can install, configure and maintain computers using 
  powerful hands-free tools.
+
+Package: cfengine3-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends: cfengine3 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: debugging symbols for cfengine3
+ The main purpose of cfengine is to allow the system administrator
+ to create a single central file which will define how every host
+ on a network should be configured.
+ .
+ This package contains the debugging symbols for cfengine3.

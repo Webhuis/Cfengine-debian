@@ -93,7 +93,7 @@ binary-arch: install
 #	dh_installinfo
 	dh_installman
 	dh_link
-	dh_strip
+	dh_strip --dbg-package=cfengine3-dbg
 	dh_compress
 	dh_fixperms
 #	dh_perl

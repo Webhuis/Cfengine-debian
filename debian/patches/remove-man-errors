@@ -3,7 +3,7 @@ file; I'm removing all the man errors from here
 remove some manpage errors
 --- a/src/generic_agent.c
 +++ b/src/generic_agent.c
-@@ -1394,7 +1394,7 @@
+@@ -1477,7 +1477,7 @@
     {
     if (options[i].has_arg)
        {
@@ -12,7 +12,7 @@ remove some manpage errors
        }
     else
        {
-@@ -1438,7 +1438,7 @@
+@@ -1521,7 +1521,7 @@
     {
     if (options[i].has_arg)
        {
@@ -21,7 +21,7 @@ remove some manpage errors
        }
     else
        {
-@@ -1451,10 +1451,10 @@
+@@ -1534,10 +1534,10 @@
         ".SH INFORMATION\n");
  
  printf("\nBug reports: bug-cfengine@cfengine.org\n");
