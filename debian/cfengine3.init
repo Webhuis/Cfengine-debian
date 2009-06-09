@@ -44,15 +44,15 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 CFEXECD_DAEMON=/usr/sbin/cf-execd
 CFEXECD_NAME=cf-execd
-CFEXECD_PIDFILE=/var/run/$CFEXECD_NAME.pid
+CFEXECD_PIDFILE=/var/lib/cfengine3/$CFEXECD_NAME.pid
 
-CFSERVD_DAEMON=/usr/sbin/cf-servd
-CFSERVD_NAME=cf-servd
-CFSERVD_PIDFILE=/var/run/$CFSERVD_NAME.pid
+CFSERVD_DAEMON=/usr/sbin/cf-serverd
+CFSERVD_NAME=cf-serverd
+CFSERVD_PIDFILE=/var/lib/cfengine3/$CFSERVD_NAME.pid
 
-CFENVD_DAEMON=/usr/sbin/cf-envd
-CFENVD_NAME=cf-envd
-CFENVD_PIDFILE=/var/run/$CFENVD_NAME.pid
+#CFENVD_DAEMON=/usr/sbin/cf-envd
+#CFENVD_NAME=cf-envd
+#CFENVD_PIDFILE=/var/lib/cfengine3/$CFENVD_NAME.pid
 
 LOGDIR=/var/log/cfengine3  # Log directory to use
 
@@ -89,7 +89,7 @@ if [ -f /etc/default/$NAME ] ; then
 else 
     RUN_CFSERVD=1
     RUN_CFEXECD=1
-    RUN_CFENVD=1
+#    RUN_CFENVD=1
 fi
 
 # Use this if you want the user to explicitly set 'RUN' in
@@ -131,15 +131,19 @@ running_pid() {
 running() {
     RUN_ALL=0 # by default everything is running
 
-    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON $CFENVD_DAEMON; do
-        DAEMONNAME=$(basename DAEMON)
-        PIDFILE=/var/run/$DAEMONNAME.pid
+    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON; do
+        DAEMONNAME=$(basename $DAEMON)
+        PIDFILE=/var/lib/cfengine3/$DAEMONNAME.pid
 
         # Check if the process is running looking at /proc
         # (works for all users)
 
         # No pidfile, probably no daemon present
-        [ ! -f "$PIDFILE" ] && RUN_ALL=1
+        if [ ! -f "$PIDFILE" ]; then
+	    RUN_ALL=1
+		continue
+	fi
+
         pid=`cat $PIDFILE`
         running_pid $pid $DAEMON || RUN_ALL=1
     done
@@ -149,9 +153,9 @@ running() {
 
 start_servers() {
 
-    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON $CFENVD_DAEMON; do
-        DAEMONNAME=$(basename DAEMON)
-        PIDFILE=/var/run/$DAEMONNAME.pid
+    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON; do
+        DAEMONNAME=$(basename $DAEMON)
+        PIDFILE=/var/lib/cfengine3/$DAEMONNAME.pid
 
         # Start the process using the wrapper
         if [ -z "$DAEMONUSER" ] ; then
@@ -166,7 +170,7 @@ start_servers() {
         fi
 
         # if it fails we need to stop all the daemons started before
-        if [ $errcode ne 0 ]; then
+        if [ $errcode -ne 0 ]; then
             stop_servers;
             return $errcode
         fi
@@ -178,9 +182,9 @@ start_servers() {
 stop_servers() {
     STOP_ALL=0 # by default we stopped everything
 
-    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON $CFENVD_DAEMON; do
-        DAEMONNAME=$(basename DAEMON)
-        PIDFILE=/var/run/$DAEMONNAME.pid
+    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON; do
+        DAEMONNAME=$(basename $DAEMON)
+        PIDFILE=/var/lib/cfengine3/$DAEMONNAME.pid
 
 # Stop the process using the wrapper
         if [ -z "$DAEMONUSER" ] ; then
@@ -195,7 +199,7 @@ stop_servers() {
         fi
 
         # if it fails we still need to stop the other daemons
-        if [ $errcode ne 0 ]; then
+        if [ $errcode ]; then
             STOP_ALL=$errcode
         fi
     done
@@ -215,9 +219,9 @@ reload_servers() {
 force_stop() {
     STOP_ALL=0 # by default we stopped everything
 
-    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON $CFENVD_DAEMON; do
-        DAEMONNAME=$(basename DAEMON)
-        PIDFILE=/var/run/$DAEMONNAME.pid
+    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON; do
+        DAEMONNAME=$(basename $DAEMON)
+        PIDFILE=/var/lib/cfengine3/$DAEMONNAME.pid
 
         # Force the process to die killing it manually
         [ ! -e "$PIDFILE" ] && return
@@ -229,7 +233,7 @@ force_stop() {
                 kill -9 $pid
                 sleep "$DIETIME"s
                 pid=`cat $PIDFILE`
-                if running_pid $pid $DAEMON; then
+                if -f $PIDFILE && running_pid $pid $DAEMON; then
                     echo "Cannot kill $NAME (pid=$pid)!"
                     STOP_ALL=1
                 fi
