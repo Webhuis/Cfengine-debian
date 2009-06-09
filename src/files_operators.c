@@ -79,7 +79,7 @@ else
       }
    }
 
-if (attr.haveperms || attr.havechange)
+if (attr.haveperms || attr.havechange || attr.acl.acl_entries)
    {
    VerifyFileAttributes(path,sb,attr,pp);
    }
@@ -329,16 +329,6 @@ int ScheduleEditOperation(char *filename,struct Attributes a,struct Promise *pp)
   char *edit_bundle_name = NULL;
   struct Rlist *params;
   int retval = false;
-  struct CfLock thislock;
-  char lockname[CF_BUFSIZE],context_save[CF_MAXVARSIZE];
-
-snprintf(lockname,CF_BUFSIZE-1,"edit-%s",filename);
-thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
-
-if (thislock.lock == NULL)
-   {
-   return false;
-   }
  
 pp->edcontext = NewEditContext(filename,a,pp);
 
@@ -346,7 +336,6 @@ if (pp->edcontext == NULL)
    {
    CfOut(cf_error,"","File %s was marked for editing but could not be opened\n",filename);
    FinishEditContext(pp->edcontext,a,pp);
-   YieldCurrentLock(thislock);
    return false;
    }
 
@@ -366,7 +355,6 @@ if (a.haveeditline)
    else
       {
       FinishEditContext(pp->edcontext,a,pp);
-      YieldCurrentLock(thislock);
       return false;
       }
    
@@ -387,7 +375,6 @@ if (a.haveeditline)
    }
 
 FinishEditContext(pp->edcontext,a,pp);
-YieldCurrentLock(thislock);
 return retval;
 }
 
@@ -1109,7 +1096,7 @@ else
       
       if (rmdir(lastnode) == -1)
          {
-         cfPS(cf_inform,CF_FAIL,"rmdir",pp,attr,"Delete directory %s failed\n",path);
+         cfPS(cf_verbose,CF_FAIL,"rmdir",pp,attr,"Delete directory %s failed\n",path);
          }            
       else
          {

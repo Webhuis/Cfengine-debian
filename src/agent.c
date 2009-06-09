@@ -55,7 +55,7 @@ enum typesequence
 char *TYPESEQUENCE[] =
    {
    "vars",
-   "classes",
+   "classes",    /* Maelstrom order 2 */
    "interfaces",
    "processes",
    "storage",
@@ -133,6 +133,8 @@ GenericInitialize(argc,argv,"agent");
 PromiseManagement("agent");
 ThisAgentInit();
 KeepPromises();
+NoteClassUsage(VHEAP);
+NoteVarUsage();
 return 0;
 }
 
@@ -620,6 +622,12 @@ if (!ok)
    FatalError("Errors in agent bundles");
    }
 
+if (VERBOSE || DEBUG)
+   {
+   CfOut(cf_verbose,"","Bundlesequence => ");
+   ShowRval(stdout,retval,rettype);
+   }
+
 /* If all is okay, go ahead and evaluate */
 
 for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
@@ -670,7 +678,7 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
          continue;      
          }
 
-      if (pass > 1 && (type == kp_vars || type == kp_classes))
+      if (pass > 1 && type == kp_vars)
          {
          continue;
          }
@@ -1017,6 +1025,8 @@ for (ip = VADDCLASSES; ip != NULL; ip=ip->next)
    {
    CfOut(cf_verbose,"","     +       %s\n",ip->name);
    }
+
+NoteClassUsage(VADDCLASSES);
 
 CfOut(cf_verbose,"","\n");
 

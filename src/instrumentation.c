@@ -153,7 +153,7 @@ dbp->close(dbp,0);
 
 /***************************************************************/
 
-void NoteClassUsage()
+void NoteClassUsage(struct Item *baselist)
 
 { DB *dbp;
   DBC *dbcp;
@@ -168,8 +168,13 @@ void NoteClassUsage()
 
 Debug("RecordClassUsage\n");
 
-for (ip = VHEAP; ip != NULL; ip=ip->next)
+for (ip = baselist; ip != NULL; ip=ip->next)
    {
+   if (IsHardClass(ip->name))
+      {
+      continue;
+      }
+   
    if (!IsItemIn(list,ip->name))
       {
       PrependItem(&list,ip->name,NULL);
@@ -192,9 +197,9 @@ for (ip = list; ip != NULL; ip=ip->next)
       lastseen = now - e.t;
       newe.t = now;
       newe.Q.q = vtrue;
-      newe.Q.expect = GAverage(vtrue,e.Q.expect,0.5);
+      newe.Q.expect = GAverage(vtrue,e.Q.expect,0.3);
       delta2 = (vtrue - e.Q.expect)*(vtrue - e.Q.expect);
-      newe.Q.var = GAverage(delta2,e.Q.var,0.5);
+      newe.Q.var = GAverage(delta2,e.Q.var,0.3);
       }
    else
       {
@@ -224,6 +229,7 @@ for (ip = list; ip != NULL; ip=ip->next)
 if ((errno = dbp->cursor(dbp, NULL, &dbcp, 0)) != 0)
    {
    dbp->err(dbp, errno, "DB->cursor");
+   dbp->close(dbp,0);
    return;
    }
 
@@ -273,6 +279,7 @@ while (dbcp->c_get(dbcp, &key, &stored, DB_NEXT) == 0)
    }
 
 dbp->close(dbp,0);
+DeleteItemList(list);
 }
 
 /***************************************************************/

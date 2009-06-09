@@ -1,8 +1,8 @@
-\input texinfo-altfont
-\input texinfo-logo
+@c \input texinfo-altfont
+@c \input texinfo-logo
 \input texinfo
-@selectaltfont{cmbright}
-@setlogo{CfengineLogo}
+@c @selectaltfont{cmbright}
+@c @setlogo{CfengineLogo}
 @c *********************************************************************
 @c
 @c  This is an AUTO_GENERATED TEXINFO file. Do not submit patches against it.
@@ -11,19 +11,21 @@
 @c ***********************************************************************
 @c %** start of header
 @setfilename cf3-reference.info
-@settitle Cfengine reference manual (version 3.0.1a7)
+@settitle Cfengine reference manual
 @setchapternewpage odd
 @c %** end of header
 @titlepage
 @title Cfengine Reference Manual
 @subtitle Auto generated, self-healing knowledge
-@subtitle for version 3.0.1a7
+@subtitle for core version 3.0.2b1
+@subtitle Contains Nova extensions at version 1.0.0
+
 @author cfengine.com
 @c @smallbook
 @fonttextsize 10
 @page
 @vskip 0pt plus 1filll
-Copyright @copyright{} 2008 Cfengine AS
+Copyright @copyright{} in the year of issue Cfengine AS
 @end titlepage
 @c *************************** File begins here ************************
 @ifinfo
@@ -59,27 +61,31 @@ Copyright @copyright{} 2008 Cfengine AS
 * Bundles for agent::           
 * Bundles for server::          
 * Bundles for knowledge::       
+* Bundles for monitor::         
 * Special functions::           
 * Special Variables::           
 * Logs and records::            
 @end menu
 
 @node Getting started, A simple crash course, Top, Top
-@chapter Cfengine 3.0.1a7 -- Getting started
+@chapter Cfengine 3.0.2b1 -- Getting started
 
 @*
 
 Cfengine is a suite of programs for integrated autonomic management of
 either individual or networked computers. It has existed as as
-software suite since 1993 and is published under the GNU Public
-License.  This document represents cfengine version 3.0.0 of cfengine,
-which is a radical departure from earlier versions.
+software suite since 1993 and this version published under the GNU
+Public License (GPL v3) and a Commercial Open Source License (COSL).
+
+This document represents cfengine version 3 of cfengine, which is a
+radical departure from earlier versions.
 
 Cfengine 3 has been changed to be both a more powerful tool and a much
-simpler tool. Cfengine 3 is not backwards compatible with the cfengine
-2 configuration language, but it interoperates with cfengine 2 so that
-it is "run-time compatible".  This means that you can change over to
-version 3 slowly, with low risk and at your own speed.
+simpler tool. Cfengine 3's language interface is not backwards
+compatible with the cfengine 2 configuration language, but it
+interoperates with cfengine 2 so that it is "run-time compatible".
+This means that you can change over to version 3 slowly, with low risk
+and at your own speed.
 
 With cfengine 3 you can install, configure and maintain computers
 using powerful hands-free tools. You can also integrate knowledge
@@ -88,7 +94,7 @@ management and diagnosis into the processes.
 Cfengine differs from most management systems in being
 
 @itemize
-@item Open software (GPL).
+@item Open software (GPL or COSL).
 @item Lightweight and generic.
 @item Non-reliant on a working network to function correctly.
 @item Capable of making each and every host autonomous
@@ -257,15 +263,19 @@ Open source Secure Sockets Layer for encryption.@*URL: @url{http://www.openssl.o
 Light-weight flat-file database system.@*URL: @url{http://www.oracle.com/technology/products/berkeley-db/index.html}
 
 @item @b{In addition...} 
-It is strongly recommended to make the Perl Compatible
-Regular Expression (PCRE) library available as this is a significant
-improvement over the buggy POSIX libraries. This documentation assumes
-the use of PCRE
+It is recommended to make the Perl Compatible Regular Expression
+(PCRE) library available as this is a significant improvement over the
+more standard POSIX libraries. This documentation assumes the use of
+PCRE
 
 @item
 On Windows machines, you need to install the basic Cygwin DLL from @url{http://www.cygwin.com}
 in order to run cfengine. 
 @end table
+
+Additional functionality becomes available if other libraries are present, e.g.
+OpenLDAP, client libraries for MySQL and PostgreSQL, etc. It is possible to run
+cfengine without these, but related functionality will be missing.
 
 Unless you have purchased ready-to-run binaries, or are using a
 package distribution, you will need to compile cfengine. For this you
@@ -361,7 +371,11 @@ qualified domain name for your host, cfengine truncates it at the first dot.
 
 @item A day of the week (in the form @code{Monday, Tuesday, Wednesday, ..}).
 
-@item An hour of the day (in the form @code{Hr00, Hr01 ... Hr23}).
+@item An hour of the day, current time zone (in the form @code{Hr00, Hr01 ... Hr23}).
+
+@item An hour of the day GMT (in the form @code{GMT_Hr00, GMT_Hr01 ... GMT_Hr23}).
+This is consistent the world over, in case you need virtual simulteneity of change
+coordination.
 
 @item Minutes in the hour (in the form @code{Min00, Min17 ... Min45}).
 
@@ -372,6 +386,11 @@ qualified domain name for your host, cfengine truncates it at the first dot.
 @item A month (in the form @code{January, February, ... December}).
 
 @item A year (in the form @code{Yr1997, Yr2004}).
+
+@item A shift in @code{Night,Morning,Afternoon,Evening}, which fall into six hour blocks
+starting at 00:00 hours.
+
+@item A `lifecycle index', which is the year number modulo 3 (used in long term resource memory).
 
 @item An arbitrary user-defined string.
 
@@ -448,7 +467,7 @@ reports:
 
 @end verbatim
 
-Here we see that class @samp{one} is local while classes @samp{two} and @samp{three} are local.
+Here we see that class @samp{one} is global while classes @samp{two} and @samp{three} are local.
 The report `Success' result is therefore true because only @samp{one} and @samp{three} are in scope.
 
 @c -------------------------------------------------------------------------------
@@ -1108,15 +1127,19 @@ none of the encryption settings affect the security of authentication.
 
 @menu
 * Rules are promises::          
+* Best practice for writing promises::  
 * Containers::                  
 * When and where are promises made?::  
 * Types in cfengine 3::         
+* Variable expansion in cfengine 3::  
 * Normal ordering::             
 * Loops and lists in cfengine 3::  
+* Pattern matching and referencing::  
+* Distributed discovery::       
 * Developer structures::        
 @end menu
 
-@node Rules are promises, Containers, A simple crash course, A simple crash course
+@node Rules are promises, Best practice for writing promises, A simple crash course, A simple crash course
 @section Rules are promises
 
 Everything in cfengine 3 can be interpreted as a promise. Promises can
@@ -1188,8 +1211,74 @@ powerful. All function-like objects (e.g. @code{users("..")}) are either builtin
 special functions or parameterized templates which contain the `meat' of the right hand
 side.
 
+
+
 @c -----------------------------------------------------------------------
-@node Containers, When and where are promises made?, Rules are promises, A simple crash course
+@node Best practice for writing promises, Containers, Rules are promises, A simple crash course
+@section Best practice for writing promises
+
+When writing promises, get into the habit of giving every promise a comment
+that explains its intention.
+
+Also, give related promises @i{handles}, or labels that can be used to
+refer to them by.
+
+@verbatim
+
+files:
+
+  "/var/cfengine/inputs" 
+
+    handle => "update_policy",
+
+    perms => system("600"),
+    copy_from => mycopy("$(master_location)","$(policy_server)"),
+    depth_search => recurse("inf"),
+    file_select => input_files,
+    action => immediate;
+   
+@end verbatim
+If a promise affects another promise is some way, you can make the affected
+promise one of the promisees, like this:
+
+@verbatim
+
+access:
+
+  "/master/cfengine/inputs" -> { "update_policy", "other_promisee" },
+
+    handle  => "serve_updates",
+
+    admit   => { "217.77.34.*" };
+
+@end verbatim
+
+Conversely, if a promise might depend on another in some (even indirect) way, document this too.
+
+@verbatim
+
+files:
+
+  "/var/cfengine/inputs" 
+
+    handle     => "update_policy",
+    depends_on => "serve_updates",
+
+    perms => system("600"),
+    copy_from => mycopy("$(master_location)","$(policy_server)"),
+    depth_search => recurse("inf"),
+    file_select => input_files,
+    action => immediate;
+
+
+@end verbatim
+
+Get into the habit of adding the cause-effect lines of influence.
+Enterprise editions of cfengine will track the dependencies between these
+promises and map out impact analyses.
+
+@c -----------------------------------------------------------------------
+@node Containers, When and where are promises made?, Best practice for writing promises, A simple crash course
 @section Containers
 
 Cfengine allows you to group multiple promise statements
@@ -1388,7 +1477,7 @@ verification, causing contention and wasting CPU cycles.
 
 
 @c -----------------------------------------------------------------------
-@node Types in cfengine 3, Normal ordering, When and where are promises made?, A simple crash course
+@node Types in cfengine 3, Variable expansion in cfengine 3, When and where are promises made?, A simple crash course
 @section Types in cfengine 3
 
 A key difference in cfengine 3 compared to earlier versions is the
@@ -1425,7 +1514,225 @@ Check these by identifying the words @samp{agent} and @samp{copy_from}
 in the examples above. Types are there to make configuration more robust.
 
 @c -----------------------------------------------------------------------
-@node Normal ordering, Loops and lists in cfengine 3, Types in cfengine 3, A simple crash course
+@node Variable expansion in cfengine 3, Normal ordering, Types in cfengine 3, A simple crash course
+@section Variable expansion in cfengine 3
+
+Cfengine 3 has some simple rules for variable expansion. These make
+a couple of restrictions that enforce discipline of clarity and
+allow automatic dependency tracking in enterprise versions of cfengine.
+
+@menu
+* Scalar variable expansion::   
+* List variable substitution and expansion::  
+* Arrays in cfengine 3::        
+@end menu
+
+@node Scalar variable expansion, List variable substitution and expansion, Variable expansion in cfengine 3, Variable expansion in cfengine 3
+@subsection Scalar variable expansion
+
+Scalar variables are written @samp{$(name)} and they represent
+a single value at a time.
+
+@itemize
+@item Scalars that are written without a context, e.g. @samp{$(myvar)}
+are local to the current bundle.
+
+@item Scalars are globally available everywhere provided one
+uses the context to verify them e.g. @samp{$(context.myvar)}
+may be written to access the variable `myvar' in bundle `context'.
+
+@end itemize
+
+@c -----------------------------------------------------------------------
+@node List variable substitution and expansion, Arrays in cfengine 3, Scalar variable expansion, Variable expansion in cfengine 3
+@subsection List variable substitution and expansion
+
+@itemize
+
+@item Scalar references to @i{local} list variables imply iteration, e.g.
+suppose we have local list variable @samp{@@(list)}, then the
+scalar @samp{$(list)} implies an iteration over every value of the
+list.
+
+
+@item Lists can be passed around in their entirety in any context
+where a list is expected as @samp{@@(list)}., e.g.
+
+@verbatim
+
+ vars:
+
+   "longlist" slist => { @(shortlist), "plus", "plus" };
+  
+   "shortlist" slist => { "you", "me" }; 
+
+@end verbatim
+
+@item Only local lists can be expanded directly. Thus @samp{$(list)}
+can be expanded but not @samp{$(context.list)}. See below for the
+explanation.
+
+@end itemize
+
+During list expansion, only local lists can be expanded, thus global
+list references have to be mapped into a local context if you want to
+use them for iteration. Instead of doing this in some
+arbitrary way, with possibility of name collisions, cfengine
+asks you to make this explicit. There are two possible approaches.
+
+The first uses parameterization to map a global list into a local
+context.
+@verbatim
+
+#
+# Show access of external lists.
+#
+# - to pass lists globally, use a parameter to dereference them
+#
+
+body common control
+{
+bundlesequence => { hardening(@(va.tmpdirs)) };
+}
+
+#########################################################
+
+bundle common va 
+{
+vars:
+ 
+ "tmpdirs"  slist => { "/tmp", "/var/tmp", "/usr/tmp"  };
+
+} 
+
+##########################################################
+
+bundle agent hardening(x)
+{
+classes:
+
+  "ok" expression => "any";
+
+vars:
+
+ "other"    slist => { "/tmp", "/var/tmp" };
+
+reports:
+
+  ok::
+
+    "Do $(x)";
+    "Other: $(other)";
+} 
+
+@end verbatim
+
+This alternative uses a direct `short-circuit' approach to map the global
+list into the local context.
+
+@verbatim
+#
+# Show access of external lists.
+#
+
+body common control
+{
+bundlesequence => { hardening };
+}
+
+#########################################################
+
+bundle common va 
+{
+vars:
+ 
+ "tmpdirs"  slist => { "/tmp", "/var/tmp", "/usr/tmp"  };
+
+} 
+
+##########################################################
+
+bundle agent hardening
+{
+classes:
+
+  "ok" expression => "any";
+
+vars:
+
+ "other"    slist => { "/tmp", "/var/tmp" };
+ "x"        slist => { @(va.tmpdirs) };
+
+reports:
+
+  ok::
+
+    "Do $(x)";
+    "Other: $(other)";
+} 
+@end verbatim
+
+@c ----------------------------------------------------------------------- 
+@node Arrays in cfengine 3,  , List variable substitution and expansion, Variable expansion in cfengine 3
+@subsection Arrays in cfengine 3
+
+Arrays variables are written with @samp{[} and @samp{]} brackets, e.g.
+
+@verbatim
+
+bundle agent example
+
+{
+vars:
+
+  "component" slist => { "cf-monitord", "cf-serverd", "cf-execd" };
+
+  "array[cf-monitord]" string => "The monitor";
+  "array[cf-serverd]" string => "The server";
+  "array[cf-execd]" string => "The executor, not executionist";
+
+commands:
+
+   "/bin/echo $(component) is"
+
+            args => "$(array[$(component)])";
+
+}
+
+@end verbatim
+
+Arrays are associative and may be of type scalar or list. Enumerated
+arrays are simply treated as a special case of associative arrays, since
+there are no numerical loops in cfengine. Special functions exist to
+extract lists of keys from array variables for iteration purposes.
+
+Thus one could have written the example above in the form of the
+following example:
+
+@verbatim
+
+bundle agent array
+
+{
+vars:
+
+  "v[index_1]" string => "value_1";
+  "v[index_2]" string => "value_2";
+
+  "parameter_name" slist => getindices("v");
+
+reports:
+
+  Yr2008::
+
+   "Found index: $(parameter_name)";
+
+}
+
+@end verbatim
+
+@c -----------------------------------------------------------------------
+@node Normal ordering, Loops and lists in cfengine 3, Variable expansion in cfengine 3, A simple crash course
 @section Normal ordering
 
 Ordering of promise verification within cfengine takes a pragmatic approach.
@@ -1481,7 +1788,7 @@ that is set by another promise.
 @end enumerate
 
 @c -----------------------------------------------------------------------
-@node Loops and lists in cfengine 3, Developer structures, Normal ordering, A simple crash course
+@node Loops and lists in cfengine 3, Pattern matching and referencing, Normal ordering, A simple crash course
 @section Loops and lists in cfengine 3
 
 There are no explicit loops in cfengine, instead there are lists.
@@ -1574,7 +1881,327 @@ Q ".../bin/echo cf-ex": cf-execd is The executor, not executionist
 
 @end verbatim
 
-@node Developer structures,  , Loops and lists in cfengine 3, A simple crash course
+
+@c -----------------------------------------------------------------------
+@node Pattern matching and referencing, Distributed discovery, Loops and lists in cfengine 3, A simple crash course
+@section Pattern matching and referencing
+
+One of the strengths of cfengine 3 is the ability to recognize and
+exploit patterns.  All string patterns in cfengine 3 are matched using
+regular expressions. The preferred regular expression library is the
+Perl Compatible Regular Expression library. This is more powerful and
+more reliable than the default POSIX regular expression code and all
+users should make the PCRE library available during compilation if
+possible.
+
+Cfengine has the ability to extract back-references from pattern matches.
+This makes sense in two cases. Back references are fragments of a string
+that match parenethetic expressions. For instance, suppose we have the string:
+
+@smallexample
+
+ Mary had a little lamb ...
+
+@end smallexample
+
+@noindent and apply the regular expression
+
+@smallexample
+
+ "Mary ([^l])little (.*)"
+
+@end smallexample
+The pattern matches the entire string, and it
+contains two parentheses, which respectively match
+the fragments `has a ' and `lamb ...'. The regular
+expression libraries assign three matches to this
+result, labelled 0, 1 and 2. 
+
+The zeroth value is the entire string matched by the
+total expression. The first value is the fragment matched
+by the first parenthesis, and so on.
+
+Each time cfengine matches a string, these values are
+assigned to a special variable context @code{$(match.@var{n})}.
+The fragments can be referred to in the remainder of the promise.
+There are two places where this makes sense. One is in pattern replacement
+during file editing, and the other is in searching for files.
+
+Consider the examples below:
+@verbatim
+
+bundle agent testbundle
+
+{
+files:
+
+  # The back reference in a path only applies to the last link
+  # of the pathname, so the (tmp) gets ignored
+
+  "/home/mark/(tmp)/(cf3)_(.*)"
+       create    => "true",
+       edit_line => myedit("second $(match.2)");
+
+
+  # but ...
+
+  "/home/mark/(tmp)/cf3_test"
+       create    => "true",
+       edit_line => myedit("second $(match.1)");
+
+
+}
+
+@end verbatim
+If there were to exist a file @file{/home/mark/tmp/cf3_test},
+then we would have:
+
+@table @samp
+@item $(match.0)
+equal to `/home/mark/tmp/cf3_test'
+@item $(match.1)
+equal to `tmp'
+@item $(match.2)
+equal to `cf3'
+@item $(match.3)
+equal to `test'
+@end table
+
+Now look at the edit bundle. This uses back references to
+replace shell comment lines with C comment lines. (The same
+approach is used to hash-comment lines in files).
+
+@verbatim
+
+bundle edit_line myedit(parameter)
+  {
+  vars:
+
+   "edit_variable" string => "private edit variable is $(parameter)"; 
+
+  insert_lines:
+
+     "$(edit_variable)";
+  
+  replace_patterns:
+
+  # replace shell comments with C comments
+
+   "#(.*)"
+
+      replace_with => C_comment,
+     select_region => MySection("New section");
+
+  }
+
+########################################
+# Bodies
+########################################
+
+body replace_with C_comment
+
+{
+replace_value => "/* $(match.1) */"; # backreference 0
+occurrences => "all";  # first, last all
+}
+
+########################################################
+
+body select_region MySection(x)
+
+{
+select_start => "\[$(x)\]";
+select_end => "\[.*\]";
+}
+
+@end verbatim
+
+Try this example on the file
+@verbatim
+[First section]
+
+one
+two 
+three
+
+[New section]
+
+four
+#five
+six
+
+[final]
+
+seven
+eleven
+@end verbatim
+
+@noindent The resulting file is edited like this:
+@verbatim
+[First section]
+
+one
+two
+three
+
+[New section]
+
+four
+/* cf3 */
+six
+
+[final]
+
+seven
+eleven
+
+private edit variable is second test
+@end verbatim
+
+
+@menu
+* Runaway change warning::      
+* Commenting lines::            
+@end menu
+
+@node Runaway change warning, Commenting lines, Pattern matching and referencing, Pattern matching and referencing
+@subsection Runaway change warning
+
+Be careful when using patterns to search for files that are altered by cfengine
+is you are not using a file repository. Each time cfengine makes a change it
+saves an old file into a copy like @file{cf3_test.cf-before-edit}. These
+new files then get matched by the same expression above -- because it ends
+in the generic@code{.*}), or does not
+specify a tail for the expression. Thus cfengine will happily edit backups
+of the edit file too, and generate a recursive process, resulting in something
+like the following:
+
+@smallexample
+cf3_test                  cf3_test.cf-before-edit
+cf3_test~                 cf3_test~.cf-before-edit.cf-before-edit
+cf3_test~.cf-before-edit  cf3_test~.cf-before-edit.cf-before-edit.cf-before-edit
+@end smallexample
+
+Always try to be as specific as possible when specifying patterns. A lazy approach
+will often come back to haunt you.
+
+
+@node Commenting lines,  , Runaway change warning, Pattern matching and referencing
+@subsection Commenting lines
+
+The following example shows how you would hash-comment lines in a file
+using cfengine 3.
+
+@verbatim
+######################################################################
+#
+# HashCommentLines implemented in cfengine 3
+#
+######################################################################
+
+body common control
+
+{
+version => "1.2.3";
+bundlesequence  => { "testbundle"  };
+}
+
+########################################################
+
+bundle agent testbundle
+
+{
+files:
+
+  "/home/mark/tmp/comment_test"
+
+       create    => "true",
+       edit_line => comment_lines_matching;
+}
+
+########################################################
+
+bundle edit_line comment_lines_matching
+  {
+  vars:
+
+    "regexes" slist => { "one.*", "two.*", "four.*" };
+
+  replace_patterns:
+
+   "^($(regexes))$"
+      replace_with => comment("# ");
+  }
+
+########################################
+# Bodies
+########################################
+
+body replace_with comment(c)
+
+{
+replace_value => "$(c) $(match.1)";
+occurrences => "all";
+}
+
+@end verbatim
+
+
+@c ----------------------------------------------------------------------------
+@node Distributed discovery, Developer structures, Pattern matching and referencing, A simple crash course
+@section Distributed discovery
+
+Cfengine's philosophy and modus operandi is to make machines as self-reliant
+as possible. This is the path to scalability. Sometimes we want machines
+to be able to detect one another and sample each others' behaviour. This can
+be accomplished using probes and server functions. 
+
+For example, testing whether services are up and running can be a useful
+probe even from a local host. Cfengine has inbuild functions for generically
+probing the environment; these are designed to encourage decentralized
+monitoring.
+
+@verbatim
+
+body common control
+
+{
+bundlesequence  => { "test"  };
+}
+
+###########################################################
+
+bundle agent test
+
+{     
+vars:
+
+ "hosts" slist => { "server1.example.org", "server2", "server3" };
+ 
+ "up_servers" int =>  selectservers("@(hosts)","80","","","100","alive_servers");
+
+classes:
+
+  "someone_alive" expression => isgreaterthan("$(up_servers)","0");
+
+  "i_am_a_server" expression => regarray("up_servers","$(host)|$(fqhost)");
+
+reports:
+
+  someone_alive::
+
+    "Number of active servers $(up_servers)" action => always;
+
+    "First server $(alive_servers[0]) fails over to $(alive_servers[1])";
+
+
+}
+
+@end verbatim
+
+
+@c ----------------------------------------------------------------------------
+@node Developer structures,  , Distributed discovery, A simple crash course
 @section Developer structures
 
 Developers may note that the internal data-types follow a simple set
@@ -1628,6 +2255,8 @@ Promises repaired 1%, Promises not repaired 0%
 The log-file @file{WORKDIR/promise.log} contains the summary of these reports
 with timestamps. This is the simplest kind of high level audit record of the
 system.
+
+
 
 
 @c ---------------------------------------------------------------------------
@@ -1852,9 +2481,9 @@ files:
 
   # Check cf-execd and schedule is in crontab
 
-
   "$(g.crontab)"
-       edit_line => upgrade_cfexecd;
+       edit_line => upgrade_cfexecd,
+         classes => define("exec_fix");
 
 processes:
 
@@ -2004,60 +2633,60 @@ reports:
 
 rootprocs_high_dev2::
 
-   "RootProc anomaly high 2 dev on $(sys.host) at $(sys.env_time) 
-    measured value $(sys.value_rootprocs) av $(sys.average_rootprocs) 
-    pm $(sys.stddev_rootprocs)"
+   "RootProc anomaly high 2 dev on $(mon.host) at $(mon.env_time) 
+    measured value $(mon.value_rootprocs) av $(mon.av_rootprocs) 
+    pm $(mon.dev_rootprocs)"
 
       showstate => { "rootprocs" };
 
 entropy_www_in_high&anomaly_hosts.www_in_high_anomaly::
 
    "HIGH ENTROPY Incoming www anomaly high anomaly dev!! 
-    on $(sys.host) at $(sys.env_time) 
-    - measured value $(sys.value_www_in) 
-    av $(sys.average_www_in) pm $(sys.stddev_www_in)"
+    on $(mon.host) at $(mon.env_time) 
+    - measured value $(mon.value_www_in) 
+    av $(mon.av_www_in) pm $(mon.dev_www_in)"
    
       showstate => { "incoming.www" };
 
  entropy_www_in_low.anomaly_hosts.www_in_high_anomaly::
 
    "LOW ENTROPY Incoming www anomaly high anomaly dev!! 
-    on $(sys.host) at $(sys.env_time)
+    on $(mon.host) at $(mon.env_time)
      - measured value $(svalue_www_in) 
-    av $(average_www_in) pm $(stddev_www_in)"
+    av $(av_www_in) pm $(dev_www_in)"
 
      showstate => { "incoming.www" };
 
 entropy_tcpsyn_in_low.anomaly_hosts.tcpsyn_in_high_dev2::
 
-   "Anomalous number of new TCP connections on $(sys.host) 
-    at $(sys.env_time) 
-    - measured value $(sys.value_tcpsyn_in) 
-    av $(sys.average_tcpsyn_in) pm $(sys.stddev_tcpsyn_in)"
+   "Anomalous number of new TCP connections on $(mon.host) 
+    at $(mon.env_time) 
+    - measured value $(mon.value_tcpsyn_in) 
+    av $(mon.av_tcpsyn_in) pm $(mon.dev_tcpsyn_in)"
 
      showstate => { "incoming.tcpsyn" };
 
  entropy_dns_in_low.anomaly_hosts.dns_in_high_anomaly::
 
-   "Anomalous (3dev) incoming DNS packets on $(sys.host) 
-    at $(sys.env_time) - measured value $(sys.value_dns_in) 
-    av $(average_dns_in) pm $(sys.stddev_dns_in)"
+   "Anomalous (3dev) incoming DNS packets on $(mon.host) 
+    at $(mon.env_time) - measured value $(mon.value_dns_in) 
+    av $(av_dns_in) pm $(mon.dev_dns_in)"
    
      showstate => { "incoming.dns" };
 
  entropy_dns_in_low.anomaly_hosts.udp_in_high_dev2::
 
    "Anomalous (2dev) incoming (non-DNS) UDP traffic 
-    on $(sys.host) at $(sys.env_time) - measured value 
-    $(sys.value_udp_in) av $(sys.average_udp_in) pm $(sys.stddev_udp_in)"
+    on $(mon.host) at $(mon.env_time) - measured value 
+    $(mon.value_udp_in) av $(mon.av_udp_in) pm $(mon.dev_udp_in)"
 
      showstate => { "incoming.udp" };
 
  anomaly_hosts.icmp_in_high_anomaly.!entropy_icmp_in_high::
 
    "Anomalous low entropy (3dev) incoming ICMP traffic 
-    on $(sys.host) at $(sys.env_time) - measured value $(sys.value_icmp_in) 
-    av $(sys.average_icmp_in) pm $(sys.stddev_icmp_in)"
+    on $(mon.host) at $(mon.env_time) - measured value $(mon.value_icmp_in) 
+    av $(mon.av_icmp_in) pm $(mon.dev_icmp_in)"
    
      showstate => { "incoming.icmp" };
 }
@@ -2483,6 +3112,7 @@ the behaviour of all the components.
 * lastseenexpireafter in common::  
 * output_prefix in common::     
 * domain in common::            
+* require_comments in common::  
 @end menu
 
 @node bundlesequence in common, inputs in common, control common, control common
@@ -2681,7 +3311,7 @@ output_prefix => "my_cf3";
 
 
 
-@node domain in common,  , output_prefix in common, control common
+@node domain in common, require_comments in common, output_prefix in common, control common
 @subsection @code{domain}
 @noindent @b{Type}: string
 
@@ -2711,6 +3341,50 @@ There is no standard, universal or reliable way of determining the
 DNS domain name of a host, so it can be set explicitly to simplify
 discovery and name-lookup.
 
+
+
+
+@node require_comments in common,  , domain in common, control common
+@subsection @code{require_comments}
+@noindent @b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{true}
+          @code{false}
+          @code{yes}
+          @code{no}
+          @code{on}
+          @code{off}
+@end example
+
+@noindent @b{Synopsis}: Warn about promises that do not have comment documentation
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+body common control
+
+{
+common::
+
+require_comments => "true";
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+
+This may be used as a policy Quality Assurance measure, to remind
+policy makers to properly document their promises. When true,
+@code{cf-promises} will report loudly on promises that do not have
+comments.
 
 @node control agent, control server, control common, Control Promises
 @section @code{agent} control promises
@@ -2773,7 +3447,8 @@ Settings describing the details of the fixed behavioural promises made by
 * ifelapsed in agent::          
 * inform in agent::             
 * lastseen in agent::           
-* lastseenexpireafter in agent::  
+* intermittency in agent::      
+* max_children in agent::       
 * mountfilesystems in agent::   
 * nonalphanumfiles in agent::   
 * repchar in agent::            
@@ -3720,7 +4395,7 @@ default output level `permanently' within the class context indicated.
 
 
 
-@node lastseen in agent, lastseenexpireafter in agent, inform in agent, control agent
+@node lastseen in agent, intermittency in agent, inform in agent, control agent
 @subsection @code{lastseen}
 @noindent @b{Type}: (menu option)
 
@@ -3740,6 +4415,17 @@ default output level `permanently' within the class context indicated.
 @noindent @b{Example}:@*
 @*
 
+In control:
+@verbatim
+
+body agent control
+{
+lastseen => "false";
+}
+
+@end verbatim
+
+See also in reports:
 @verbatim
 
 reports:
@@ -3754,40 +4440,101 @@ reports:
 @noindent @b{Notes}:@*
 @*
 
-After this time (hours) has passed, references to the external peer
+In reports: after this time (hours) has passed, references to the external peer
 will be purged from this host's database.
 
+In control: determines whether cfengine will records last seen
+intermittency profiles (reliability diagnostics) in
+@file{WORKDIR/lastseen}. This generates a separate file for each each
+host that connects to the current host.  For central hubs this can
+result is a huge number of files.
 
 
-@node lastseenexpireafter in agent, mountfilesystems in agent, lastseen in agent, control agent
-@subsection @code{lastseenexpireafter}
-@noindent @b{Type}: int
 
-@noindent @b{Allowed input range}: @code{0,99999999999}
+@node intermittency in agent, max_children in agent, lastseen in agent, control agent
+@subsection @code{intermittency}
+@noindent @b{Type}: (menu option)
 
+@noindent @b{Allowed input range}: @*
+@example
+          @code{true}
+          @code{false}
+          @code{yes}
+          @code{no}
+          @code{on}
+          @code{off}
+@end example
 
-@noindent @b{Synopsis}: Time in days after which non-responsive last-seen hosts are purged
+@noindent @b{Synopsis}: true/false store detailed recordings of last observed time for all client-server connections for reliability assessment (false)
 
 
 @noindent @b{Example}:@*
 @*
 
+@verbatim
+
+reports:
+
+  "Comment"
+
+    intermittency => "0.5";
+
+@end verbatim
+
 
 @noindent @b{Notes}:@*
 @*
 
+Report on cfengine peers in the neighbourhood watch whose observed
+irregularity of connection exceeds 0.5 scaled entropy units, meaning
+that they show an erratic pattern of connection.
+
+
+
+@node max_children in agent, mountfilesystems in agent, intermittency in agent, control agent
+@subsection @code{max_children}
+@noindent @b{Type}: int
+
+@noindent @b{Allowed input range}: @code{0,99999999999}
+
+
+@noindent @b{Synopsis}: Maximum number of background tasks that should be allowed concurrently
+
+
+@noindent @b{Example}:@*
+@*
+
 @verbatim
 
-body common control
+body runagent control
 {
-lastseenexpireafter => "72";
+max_children => "10";
+}
+
+# or
+
+body agent control
+{
+max_children => "10";
 }
 
 @end verbatim
 
 
 
-@node mountfilesystems in agent, nonalphanumfiles in agent, lastseenexpireafter in agent, control agent
+@noindent @b{Notes}:@*
+@*
+
+For the run-agent this represents the maximum number of forked
+background processes allowed when parallelizing connections to
+servers. For the agent it represents the number of background jobs
+allowed concurrently. Background jobs often lead to contention of
+the disk resources slowing down tasks considerably; there is thus a law
+of diminishing returns.
+
+
+
+@node mountfilesystems in agent, nonalphanumfiles in agent, max_children in agent, control agent
 @subsection @code{mountfilesystems}
 @noindent @b{Type}: (menu option)
 
@@ -4278,6 +5025,7 @@ specific files must be granted in addition.
 * auditing in server::          
 * bindtointerface in server::   
 * serverfacility in server::    
+* port in server::              
 @end menu
 
 @node cfruncommand in server, maxconnections in server, control server, control server
@@ -4824,7 +5572,7 @@ of the interface must be given as the argument, not the device name.
 
 
 
-@node serverfacility in server,  , bindtointerface in server, control server
+@node serverfacility in server, port in server, bindtointerface in server, control server
 @subsection @code{serverfacility}
 @noindent @b{Type}: (menu option)
 
@@ -4862,6 +5610,50 @@ serverfacility => "LOG_USER";
 @*
 
 See syslog notes.
+
+
+
+@node port in server,  , serverfacility in server, control server
+@subsection @code{port}
+@noindent @b{Type}: int
+
+@noindent @b{Allowed input range}: @code{1024,99999}
+
+
+@noindent @b{Synopsis}: Default port for cfengine server
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+body runagent control
+{
+port => "5308";
+}
+
+body server control
+{
+specialhost::
+ port => "5308";
+
+!specialhost::
+ port => "5308";
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+The standard or registered port number is tcp/5308. Cfengine does not
+presently use its registered udp port with the same number, but this
+could change in the future.
+
+Changing the standard port number is not recommended practice. You should
+not do it without a good reason.
 
 @node control monitor, control runagent, control server, Control Promises
 @section @code{monitor} control promises
@@ -5179,9 +5971,18 @@ port 5308 is assumed.
 
 @verbatim
 
-body copy_from example
+body runagent control
 {
-portnumber => "5308";
+port => "5308";
+}
+
+body server control
+{
+specialhost::
+ port => "5308";
+
+!specialhost::
+ port => "5308";
 }
 
 @end verbatim
@@ -5193,6 +5994,9 @@ portnumber => "5308";
 The standard or registered port number is tcp/5308. Cfengine does not
 presently use its registered udp port with the same number, but this
 could change in the future.
+
+Changing the standard port number is not recommended practice. You should
+not do it without a good reason.
 
 
 
@@ -5384,6 +6188,13 @@ body runagent control
 max_children => "10";
 }
 
+# or
+
+body agent control
+{
+max_children => "10";
+}
+
 @end verbatim
 
 
@@ -5391,8 +6202,12 @@ max_children => "10";
 @noindent @b{Notes}:@*
 @*
 
-The maximum number of forked background processes allowed when parallelizing
-connections to servers.
+For the run-agent this represents the maximum number of forked
+background processes allowed when parallelizing connections to
+servers. For the agent it represents the number of background jobs
+allowed concurrently. Background jobs often lead to contention of
+the disk resources slowing down tasks considerably; there is thus a law
+of diminishing returns.
 
 
 
@@ -5782,6 +6597,7 @@ of the queries.
 * sql_owner in knowledge::      
 * sql_passwd in knowledge::     
 * sql_server in knowledge::     
+* sql_connection_db in knowledge::  
 * query_output in knowledge::   
 * query_engine in knowledge::   
 * style_sheet in knowledge::    
@@ -5871,7 +6687,7 @@ This includes manual generation, ontology and topic map data.
 @noindent @b{Allowed input range}: @*
 @example
           @code{mysql}
-          @code{postgress}
+          @code{postgres}
 @end example
 
 @noindent @b{Synopsis}: Menu option for supported database type
@@ -5990,7 +6806,7 @@ might not be required.
 
 
 
-@node sql_server in knowledge, query_output in knowledge, sql_passwd in knowledge, control knowledge
+@node sql_server in knowledge, sql_connection_db in knowledge, sql_passwd in knowledge, control knowledge
 @subsection @code{sql_server}
 @noindent @b{Type}: string
 
@@ -6020,7 +6836,46 @@ The host name of IP address of the server. The default is to look on the localho
 
 
 
-@node query_output in knowledge, query_engine in knowledge, sql_server in knowledge, control knowledge
+@node sql_connection_db in knowledge, query_output in knowledge, sql_server in knowledge, control knowledge
+@subsection @code{sql_connection_db}
+@noindent @b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: The name of an existing database to connect to in order to create/manage other databases
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+body knowledge control
+{
+sql_connection_db => "mysql";
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+In order to create a database on a database server (all of which
+practice voluntary cooperation), one has to be able to connect
+to the server, however, without an existing database this is not allowed.
+Thus, database servers provide a default database that can be connected
+to in order to thereafter create new databases. These are called
+@code{postgres} and @code{mysql} for their respective database servers.
+
+For the knowledge agent, this setting is made in the control body,
+for database verification promises, it is made in the 
+@code{database_server} body.
+
+
+
+@node query_output in knowledge, query_engine in knowledge, sql_connection_db in knowledge, control knowledge
 @subsection @code{query_output}
 @noindent @b{Type}: (menu option)
 
@@ -6379,6 +7234,7 @@ no longer produces output to the console.
 * style_sheet in reporter::     
 * html_banner in reporter::     
 * html_footer in reporter::     
+* html_embed in reporter::      
 @end menu
 
 @node reports in reporter, report_output in reporter, control reporter, control reporter
@@ -6396,6 +7252,12 @@ no longer produces output to the console.
           @code{last_seen}
           @code{monitor_now}
           @code{monitor_history}
+          @code{monitor_summary}
+          @code{compliance}
+          @code{setuid}
+          @code{file_changes}
+          @code{installed_software}
+          @code{software_updates}
 @end example
 
 @noindent @b{Synopsis}: A list of reports to generate
@@ -6417,7 +7279,9 @@ reports => { "performance", "classes"  };
 @noindent @b{Notes}:@*
 @*
 
-A list of report types that can be generated by this agent.
+A list of report types that can be generated by this agent.  The
+listed items from @code{compliance} onward are available only
+Enterprise editions of cfengine.
 
 
 
@@ -6427,12 +7291,13 @@ A list of report types that can be generated by this agent.
 
 @noindent @b{Allowed input range}: @*
 @example
+          @code{csv}
           @code{html}
           @code{text}
           @code{xml}
 @end example
 
-@noindent @b{Synopsis}: Menu option for generated output format
+@noindent @b{Synopsis}: Menu option for generated output format. Applies only to text reports, graph data remain in xydy format.
 
 
 @noindent @b{Example}:@*
@@ -6724,7 +7589,7 @@ This content is cited when generating HTML output from the knowledge agent.
 
 
 
-@node html_footer in reporter,  , html_banner in reporter, control reporter
+@node html_footer in reporter, html_embed in reporter, html_banner in reporter, control reporter
 @subsection @code{html_footer}
 @noindent @b{Type}: string
 
@@ -6761,6 +7626,45 @@ html_footer => "
 
 This allows us to cite HTML code for formatting reports generated by the reporting and knowledge
 agents.
+
+
+
+@node html_embed in reporter,  , html_footer in reporter, control reporter
+@subsection @code{html_embed}
+@noindent @b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{true}
+          @code{false}
+          @code{yes}
+          @code{no}
+          @code{on}
+          @code{off}
+@end example
+
+@noindent @b{Synopsis}: If true, no header and footer tags will be added to html output
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+body reporter control
+{
+html_embed => "true";
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+Embedded HTML means something that could be put into a frame or table, without
+html or body tags, headers footers etc.
+
 
 @c *****************************************************
 @c * CHAPTER 
@@ -7316,6 +8220,7 @@ are of a generic input/output nature. These are listed below.
 * showstate in reports::        
 * printfile in reports::        
 * friend_pattern in reports::   
+* report_to_file in reports::   
 @end menu
 
 @node lastseen in reports, intermittency in reports, reports in common promises, reports in common promises
@@ -7331,6 +8236,17 @@ are of a generic input/output nature. These are listed below.
 @noindent @b{Example}:@*
 @*
 
+In control:
+@verbatim
+
+body agent control
+{
+lastseen => "false";
+}
+
+@end verbatim
+
+See also in reports:
 @verbatim
 
 reports:
@@ -7345,8 +8261,14 @@ reports:
 @noindent @b{Notes}:@*
 @*
 
-After this time (hours) has passed, references to the external peer
+In reports: after this time (hours) has passed, references to the external peer
 will be purged from this host's database.
+
+In control: determines whether cfengine will records last seen
+intermittency profiles (reliability diagnostics) in
+@file{WORKDIR/lastseen}. This generates a separate file for each each
+host that connects to the current host.  For central hubs this can
+result is a huge number of files.
 
 
 
@@ -7588,7 +8510,7 @@ Include part of a file in a report.
 @end table
 
 
-@node friend_pattern in reports,  , printfile in reports, reports in common promises
+@node friend_pattern in reports, report_to_file in reports, printfile in reports, reports in common promises
 @subsection @code{friend_pattern}
 @noindent @b{Type}: string
 
@@ -7618,11 +8540,45 @@ reports:
 @noindent @b{Notes}:@*
 @*
 
+This regular expression should match hosts we want to exclude from friend reports.
+
+
+
+@node report_to_file in reports,  , friend_pattern in reports, reports in common promises
+@subsection @code{report_to_file}
+@noindent @b{Type}: string
+
+@noindent @b{Allowed input range}: @code{[cC]:\\.*|/.*}
+
+
+@noindent @b{Synopsis}: The path and filename to which output should be appended
+
+
+@noindent @b{Example}:@*
+@*
+
 @verbatim
 
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_friend_pattern_notes.texinfo)
-""
+bundle agent test
+{
+reports:
+
+  linux::
+
+   "$(sys.date),This is a report from $(sys.host)"
+
+       report_to_file => "/tmp/test_log";
+}
+
 @end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+Append the output of the report to the named file instead of standard
+output.  If the file cannot be opened for writing then the report
+defaults to the standard output.
 
 
 
@@ -7664,6 +8620,8 @@ files:
 * action in *::                 
 * classes in *::                
 * ifvarclass in *::             
+* handle in *::                 
+* depends_on in *::             
 * comment in *::                
 @end menu
 
@@ -7859,7 +8817,7 @@ its attempt to keep a promise.
 @noindent @b{Allowed input range}: (arbitrary string)
 
 
-@noindent @b{Synopsis}: A message to be written to the log when the promise is verified
+@noindent @b{Synopsis}: A message to be written to the log when a promise verification leads to a repair
 
 
 @b{Example}:@*
@@ -7887,6 +8845,14 @@ log_string => "$(s)";
 @b{Notes}:@*
 @*
 
+The @code{log_string} works together with @code{log_repair},
+@code{log_kept} etc, to define a string for logging to one of the named
+files depending on promise outcome, or to standard output of the log file
+is stipulared as @samp{stdout}. Log strings on standard output are denoted
+by an @samp{L:} prefix.
+
+Note that @code{log_string} does not interact with @code{log_level},
+which is about regular system output messages.
 
 @item @code{log_level}
 @b{Type}: (menu option)
@@ -7921,6 +8887,142 @@ log_level => "inform";
 Use this as an alternative to auditing to use the syslog mechanism to centralize
 or manage messaging from cfengine. A backup of these messages will still be
 kept in @file{WORKDIR/outputs} if you are using @code{cf-execd}.
+
+@item @code{log_kept}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: This should be filename of a file to which log_string will be saved, if undefined it goes to syslog
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_log_kept_example.texinfo)
+""
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+If this option is specified together with @code{log_string}, the
+current promise will log promise-kept status using the log string to
+this named file. If these log names are absent, the default logging
+destination for the log string is syslog, but only for non-kept
+promises. Only the @code{log_string} is affected by this setting. Other messages
+destined for logging are sent to syslog.
+
+It is intended that named file logs should be different for the three
+cases: promise kept, promise not kept and promise repaired.
+
+@item @code{log_repaired}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: This should be filename of a file to which log_string will be saved, if undefined it goes to syslog
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+bundle agent test
+{
+vars:
+
+  "software" slist => { "/root/xyz", "/tmp/xyz" };
+
+files:
+
+  "$(software)"
+
+    create => "true",
+     action => logme("$(software)");
+
+}
+
+
+body action logme(x)
+{
+log_kept => "/tmp/private_keptlog.log";
+log_failed => "/tmp/private_faillog.log";
+log_repaired => "/tmp/private_replog.log";
+log_string => "$(sys.date) $(x) promise status";
+}
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_log_repaired_notes.texinfo)
+""
+@end verbatim
+
+@item @code{log_failed}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: This should be filename of a file to which log_string will be saved, if undefined it goes to syslog
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+bundle agent test
+{
+vars:
+
+  "software" slist => { "/root/xyz", "/tmp/xyz" };
+
+files:
+
+  "$(software)"
+
+    create => "true",
+     action => logme("$(software)");
+
+}
+
+
+body action logme(x)
+{
+log_kept => "/tmp/private_keptlog.log";
+log_failed => "/tmp/private_faillog.log";
+log_repaired => "/tmp/private_replog.log";
+log_string => "$(sys.date) $(x) promise status";
+}
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+If this option is specified together with @code{log_string}, the
+current promise will log promise-kept status using the log string to
+this named file. If these log names are absent, the default logging
+destination for the log string is syslog, but only for non-kept
+promises. Only the @code{log_string} is affected by this setting. Other messages
+destined for logging are sent to syslog.
+
+It is intended that named file logs should be different for the three
+cases: promise kept, promise not kept and promise repaired.
 
 @item @code{audit}
 @b{Type}: (menu option)
@@ -8059,9 +9161,9 @@ measurement_class => "$(this.promiser) long job scan of /usr";
 @b{Notes}:@*
 @*
 
-By setting this string you switch on performance measurement of the
-promise, and also give it a name. The identifier forms a partial
-identity for optional performance scanning of promises.
+By setting this string you switch on performance measurement for the
+current promise, and also give the measurement a name. The identifier forms a
+partial identity for optional performance scanning of promises of the form:
 
 @example
 @var{ID:promise-type:promiser}.
@@ -8290,7 +9392,7 @@ time limit is useful.
 @end table
 
 
-@node ifvarclass in *, comment in *, classes in *, * in agent promises
+@node ifvarclass in *, handle in *, classes in *, * in agent promises
 @subsection @code{ifvarclass}
 @noindent @b{Type}: string
 
@@ -8376,14 +9478,82 @@ characters, using the same algorithm that cfengine uses.
 
 
 
-@node comment in *,  , ifvarclass in *, * in agent promises
+@node handle in *, depends_on in *, ifvarclass in *, * in agent promises
+@subsection @code{handle}
+@noindent @b{Type}: string
+
+@noindent @b{Allowed input range}: @code{[a-zA-Z0-9_$.]+}
+
+
+@noindent @b{Synopsis}: A unique id-tag string for referring to this as a promisee elsewhere
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+access:
+
+  "/source"
+
+    handle  => "update_rule",
+    admit   => { "127.0.0.1" };
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+A promise handle is like a `goto' label. It allows you to refer to a promise as the promisee
+of @code{depends_on} client of another promise. Handles are essential for mapping dependencies
+and performing impact analyses.
+
+
+
+@node depends_on in *, comment in *, handle in *, * in agent promises
+@subsection @code{depends_on}
+@noindent @b{Type}: slist
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: A list of promise handles that this promise builds on or depends on somehow (for knowledge management)
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+files:
+
+  "/home/mark/tmp/testcopy" 
+
+    builds_on    => { "server_promise_1" },
+    copy_from    => mycopy("/source");
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+This is a list of promise handles for whom this promise is a promisee. In other words,
+we acknowledge that this promise will be affected by the list of promises whose handles
+are specified.
+
+
+
+@node comment in *,  , depends_on in *, * in agent promises
 @subsection @code{comment}
 @noindent @b{Type}: string
 
 @noindent @b{Allowed input range}: (arbitrary string)
 
 
-@noindent @b{Synopsis}: Retained comment about this promise's real intention
+@noindent @b{Synopsis}: A comment about this promise's real intention that follows through the program
 
 
 @noindent @b{Example}:@*
@@ -8539,6 +9709,9 @@ etc..
 
 @end smallexample
 
+If you want to match from a starting location to the end of file, then just omit
+the @code{select_end} promise and it will run to the end of file.
+
 @end table
 @c *****************************************************
 @c * CHAPTER 
@@ -8589,6 +9762,7 @@ types of promises and their corresponding bodies are detailed below.
 
 @menu
 * commands in agent promises::  
+* databases in agent promises::  
 * files in agent promises::     
 * insert_lines in edit_line promises::  
 * field_edits in edit_line promises::  
@@ -8601,7 +9775,7 @@ types of promises and their corresponding bodies are detailed below.
 * storage in agent promises::   
 @end menu
 
-@node commands in agent promises, files in agent promises, Bundles for agent, Bundles for agent
+@node commands in agent promises, databases in agent promises, Bundles for agent, Bundles for agent
 @section @code{commands} promises in @samp{agent}
 
 @*
@@ -9120,48 +10294,491 @@ When the @code{$(allclasses)} variable becomes too large to manipulate convenien
 you can access the complete list of currently defined classes in the file
 @file{/var/cfengine/state/allclasses}.
 
+
+
+@node databases in agent promises, files in agent promises, commands in agent promises, Bundles for agent
+@section @code{databases} promises in @samp{agent}
+
 @*
 
+@i{These features apply to Enterprise versions of cfengine only}.
+
+Cfengine Nova can interact with commonly used database servers to keep
+promises about the structure and content of data within them.
+
+
+There are two main cases of database management to address: small
+embedded databases and large centralized databases. 
+
+Cfengine is a tool whose strength lies distributed management of
+computers.  Databases are often centralized entities that have
+single point of management, so a large monolithic database
+is more easily managed with other tools. However, cfengine can still
+monitor changes and discrepancies, and it can manage smaller embedded
+databases that are distributed in nature, whether they are SQL,
+registry or future types.
+
+So creating 100 new databsaes for test purposes is a task for
+cfengine, but adding a new item to an important production database is
+not a task that we recommend using cfengine for.  
+
+There are three kinds of database supported by Nova:
+
+@table @emph
+
+@item LDAP - The Lightweight Directory Access Protocol
+A hierarchical network database primarily for reading simple schema.
+
+@item SQL - Structured Query Language
+A number of relational databases (currently supported: MySQL, Postgres)
+for reading and writing complex data.
+
+@item Registry - Microsoft Registry
+An embedded database for interfacing with system values in Microsodt Windows.
+
+@end table
+In addition, cfengine uses a  variety of embedded databases
+for its own internals.
+
+
+Cfengine's ability to make promises about databases depends on the
+good grace of the database server. Embedded databases are directly
+part of the system and promises can be made directly. However,
+databases running through a server process (either on the same host or
+on a different host) are independent agents and cfengine cannot make
+promises on their behalf, unless they promise (grant) permission for
+cfengine to make the changes. Thus the pre-requisite for making
+SQL database promises is to grant a point of access on the server.
+
+
 @cartouche
-@smallexample
+@smallexample 
 
-bundle agent main(parameter)
+ databases:
 
-@{
-vars:
+  "@var{database}/@var{subkey or table}"
 
-  "sys_files"    slist        => @{
-                                 "/etc/passwd",
-                                 "/etc/services"
-                                 @};
-files:
+    database_operation => "@var{create/delete/drop}",
+    database_type => "@var{sql/ms_registry}",
+    database_columns => @{ 
+                        "@var{name},@var{type},@var{size}",
+                        "@var{name},@var{type}",
+                        @},
 
-  "$(sys_files)" perms        => p("root","0644"),
-                 changes      => trip_wire;
+    database_server => @var{body};
 
-  "/etc/shadow"  perms        => p("root","0600"),
-                 changes      => trip_wire;
 
-  "/usr"         changes      => trip_wire,
-                 depth_search => recurse("inf");
-
-  "/tmp"         delete       => tidy,
-                 file_select  => days("2"),
-                 depth_search => recurse("inf");
-
-@}
+ body database_server @var{name}
+  @{
+  db_server_owner => "@var{account name}";
+  db_server_password => "@var{password}";
+  db_server_host => "@var{hostname or omit for localhost}";
+  db_server_type => "@var{mysql/posgres}";
+  db_server_connection_db => "@var{database we can connect to}";
+  @}
 
 @end smallexample
 @end cartouche
 
 @*
 
-Agent bundles contain user-defined promises for @code{cf-agent}. The
-types of promises and their corresponding bodies are detailed below.
+@verbatim
+
+body common control
+{
+bundlesequence => { "databases" };
+}
+
+bundle agent databases
+
+{
+#commands:
+
+#  "/usr/bin/createdb cf_topic_maps",
+
+#        contain => as_user("mysql");
+
+databases:
+
+  "cf_topic_maps/topics"
+
+    database_operation => "create",
+    database_type => "sql",
+    database_columns => { 
+                        "topic_name,varchar,256",
+                        "topic_comment,varchar,1024",
+                        "topic_id,varchar,256",
+                        "topic_type,varchar,256",
+                        "topic_extra,varchar,26" 
+                        },
+
+    database_server => myserver;
 
 
 
-@node files in agent promises, insert_lines in edit_line promises, commands in agent promises, Bundles for agent
+}
+
+################################################
+
+body database_server myserver
+{
+any::
+ db_server_owner => "postgres";
+ db_server_password => "";
+ db_server_host => "localhost";
+ db_server_type => "postgres";
+ db_server_connection_db => "postgres";
+none::
+ db_server_owner => "root";
+ db_server_password => "";
+ db_server_host => "localhost";
+ db_server_type => "mysql";
+ db_server_connection_db => "mysql";
+}
+
+body contain as_user(x)
+{
+exec_owner => "$(x)";
+}
+@end verbatim
+
+@*
+
+The promiser in database promises is a concatenation of the database name and underlying tables.
+This presents a simple hierarchical model that looks like a file-system. This is the normal
+structure within the Windows registry for instance. Entity-Relation databases do not normally
+present tables in this way, but no harm is done in representing them as a hierarchy of depth 1.
+
+
+
+@menu
+* database_server in databases::  
+* database_type in databases::  
+* database_operation in databases::  
+* database_columns in databases::  
+* database_rows in databases::  
+* registry_exclude in databases::  
+@end menu
+
+@node database_server in databases, database_type in databases, databases in agent promises, databases in agent promises
+@subsection @code{database_server} (compound body)
+@noindent @b{Type}: (ext body)
+
+@table @samp
+@item @code{db_server_owner}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: User name for database connection
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+db_server_owner => "mark";
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+@item @code{db_server_password}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: Clear text password for database connection
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+db_server_password => "xyz.1234";
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+@item @code{db_server_host}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: Hostname or address for connection to database, blank means localhost
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+db_server_host => "sqlserv.example.org";
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+Hostname or IP address of the server.
+
+@item @code{db_server_type}
+@b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{postgres}
+          @code{mysql}
+@end example
+
+@noindent @b{Synopsis}: The dialect of the database server
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+db_server_type => "postgres";
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+
+@item @code{db_server_connection_db}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: The name of an existing database to connect to in order to create/manage other databases
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+body database_server myserver(x)
+{
+db_server_owner => "$(x)";
+db_server_password => "";
+db_server_host => "localhost";
+db_server_type => "$(mysql)";
+db_server_connection_db => "$(x)";
+}
+
+@end verbatim
+
+@noindent where @samp{x} is currently @code{mysql} or @code{postgres}.
+
+
+@b{Notes}:@*
+@*
+
+In order to create a database on a database server (all of which
+practice voluntary cooperation), one has to be able to connect
+to the server, however, without an existing database this is not allowed.
+Thus, database servers provide a default database that can be connected
+to in order to thereafter create new databases. These are called
+@code{postgres} and @code{mysql} for their respective database servers.
+
+For the knowledge agent, this setting is made in the control body,
+for database verification promises, it is made in the 
+@code{database_server} body.
+
+@end table
+
+
+@node database_type in databases, database_operation in databases, database_server in databases, databases in agent promises
+@subsection @code{database_type}
+@noindent @b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{sql}
+          @code{ms_registry}
+@end example
+
+@noindent @b{Synopsis}: The type of database that is to be manipulated
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+database_type => "@var{ms_registry}";
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+
+
+@node database_operation in databases, database_columns in databases, database_type in databases, databases in agent promises
+@subsection @code{database_operation}
+@noindent @b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{create}
+          @code{delete}
+          @code{drop}
+          @code{cache}
+          @code{verify}
+          @code{restore}
+@end example
+
+@noindent @b{Synopsis}: The nature of the promise - to be or not to be
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+database_operation => "create";
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+
+
+
+@node database_columns in databases, database_rows in databases, database_operation in databases, databases in agent promises
+@subsection @code{database_columns}
+@noindent @b{Type}: slist
+
+@noindent @b{Allowed input range}: @code{.*}
+
+
+@noindent @b{Synopsis}: A list of column definitions to be promised by SQL databases
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+  "cf_topic_maps/topics"
+
+    database_operation => "create",
+    database_type => "sql",
+    database_columns => { 
+                        "topic_name,varchar,256",
+                        "topic_comment,varchar,1024",
+                        "topic_id,varchar,256",
+                        "topic_type,varchar,256",
+                        "topic_extra,varchar,26" 
+                        },
+
+    database_server => myserver;
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+Columns are a list of tuplets (@var{Name,type,size}). Array items are triplets, and fixed size data elements are doublets.
+
+
+
+@node database_rows in databases, registry_exclude in databases, database_columns in databases, databases in agent promises
+@subsection @code{database_rows}
+@noindent @b{Type}: slist
+
+@noindent @b{Allowed input range}: @code{.*,.*}
+
+
+@noindent @b{Synopsis}: An ordered list of row values to be promised by SQL databases
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_database_rows_example.texinfo)
+""
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_database_rows_notes.texinfo)
+""
+@end verbatim
+
+
+
+@node registry_exclude in databases,  , database_rows in databases, databases in agent promises
+@subsection @code{registry_exclude}
+@noindent @b{Type}: slist
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: A list of regular expressions to ignore in key/value verification
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+databases:
+
+ "HKEY_LOCAL_MACHINE\SOFTWARE"
+
+    database_operation => "cache",
+
+    registry_exclude => { ".*Windows.*CurrentVersion.*", 
+                          ".*Touchpad.*", ".*Capabilities.FileAssociations.*", 
+                          ".*Rfc1766.*" , 
+                          ".*Synaptics.SynTP.*", 
+                          ".*SupportedDevices.*8086", 
+                          ".*Microsoft.*ErrorThresholds" 
+                        },
+
+    database_type     => "ms_registry";
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+During recursive Windows registry scanning, this option allows us to ignore keys of values matching a
+list of regular expressions. Some values in the registry are ephemeral and some should not be considered.
+This provdes a convenient way of avoiding names. It is analogous to @code{exclude_dirs} for files.
+
+
+
+@node files in agent promises, insert_lines in edit_line promises, databases in agent promises, Bundles for agent
 @section @code{files} promises in @samp{agent}
 
 @*
@@ -9562,12 +11179,12 @@ Path name and leaf name can be conveniently tested for separately by use
 of appropriate regular expressions.
 
 @item @code{search_mode}
-@b{Type}: string
+@b{Type}: slist
 
 @noindent @b{Allowed input range}: @code{[0-7augorwxst,+-]+}
 
 
-@noindent @b{Synopsis}: Mode mask for acceptable files
+@noindent @b{Synopsis}: A list of mode masks for acceptable file permissions
 
 
 @b{Example}:@*
@@ -9576,9 +11193,53 @@ of appropriate regular expressions.
 
 @verbatim
 
-body file_select example
+#######################################################
+#
+# Searching for permissions
+#
+#######################################################
+
+body common control
+   {
+   any::
+
+      bundlesequence  => { 
+                         "testbundle"
+                         };
+
+   version => "1.2.3";
+   }
+
+############################################
+
+bundle agent testbundle
+
 {
-search_mode => "644";
+files:
+
+  "/home/mark/tmp/testcopy" 
+
+    file_select => by_modes,
+    transformer => "/bin/echo DETECTED $(this.promiser)",
+    depth_search => recurse("inf");
+
+}
+
+############################################
+
+body file_select by_modes
+
+{
+search_mode => { "711" , "666" };
+file_result => "mode";
+}
+
+############################################
+
+body depth_search recurse(d)
+
+{
+depth => "$(d)";
 }
 
 @end verbatim
@@ -9589,6 +11250,8 @@ search_mode => "644";
 
 The mode may be specified in symbolic or numerical form with @samp{+}
 and @samp{-} constraints.
+Note that concatenation @code{ug+s} implies @code{u} OR @code{g},
+ and @code{u+g,u+s} implies @code{u} AND @code{g}.
 
 @item @code{search_size}
 @b{Type}: irange [int,int]
@@ -9620,10 +11283,10 @@ file_result => "size";
 @item @code{search_owners}
 @b{Type}: slist
 
-@noindent @b{Allowed input range}: @code{[a-zA-Z0-9_$.]+}
+@noindent @b{Allowed input range}: (arbitrary string)
 
 
-@noindent @b{Synopsis}: List of acceptable user names or ids for the file
+@noindent @b{Synopsis}: List of acceptable user names or ids for the file, or regexes to match
 
 
 @b{Example}:@*
@@ -9648,10 +11311,10 @@ A list of regular expressions.
 @item @code{search_groups}
 @b{Type}: slist
 
-@noindent @b{Allowed input range}: @code{[a-zA-Z0-9_$.]+}
+@noindent @b{Allowed input range}: (arbitrary string)
 
 
-@noindent @b{Synopsis}: List of acceptable group names or ids for the file
+@noindent @b{Synopsis}: List of acceptable group names or ids for the file, or regexes to match
 
 
 @b{Example}:@*
@@ -9702,7 +11365,7 @@ Extra BSD file system flags.
 @item @code{ctime}
 @b{Type}: irange [int,int]
 
-@noindent @b{Allowed input range}: @code{0,4026531839}
+@noindent @b{Allowed input range}: @code{0,2147483647}
 
 
 @noindent @b{Synopsis}: Range of change times (ctime) for acceptable files
@@ -9734,7 +11397,7 @@ such as permissions.
 @item @code{mtime}
 @b{Type}: irange [int,int]
 
-@noindent @b{Allowed input range}: @code{0,4026531839}
+@noindent @b{Allowed input range}: @code{0,2147483647}
 
 
 @noindent @b{Synopsis}: Range of modification times (mtime) for acceptable files
@@ -9764,7 +11427,7 @@ such as permissions.
 @item @code{atime}
 @b{Type}: irange [int,int]
 
-@noindent @b{Allowed input range}: @code{0,4026531839}
+@noindent @b{Allowed input range}: @code{0,2147483647}
 
 
 @noindent @b{Synopsis}: Range of access times (atime) for acceptable files
@@ -10022,7 +11685,7 @@ For remote copies this refers to the file name on the remote server.
 @item @code{servers}
 @b{Type}: slist
 
-@noindent @b{Allowed input range}: (arbitrary string)
+@noindent @b{Allowed input range}: @code{[A-Za-z0-9_.:-]+}
 
 
 @noindent @b{Synopsis}: List of servers in order of preference from which to copy
@@ -10931,7 +12594,7 @@ The mode string may be symbolic or numerical, like @code{chmod}.
 @item @code{owners}
 @b{Type}: slist
 
-@noindent @b{Allowed input range}: @code{[a-zA-Z0-9_$.]+}
+@noindent @b{Allowed input range}: @code{[a-zA-Z0-9_$.-]+}
 
 
 @noindent @b{Synopsis}: List of acceptable owners or user ids, first is change target
@@ -10959,7 +12622,7 @@ none of the list items matches the true state of the file.
 @item @code{groups}
 @b{Type}: slist
 
-@noindent @b{Allowed input range}: @code{[a-zA-Z0-9_$.]+}
+@noindent @b{Allowed input range}: @code{[a-zA-Z0-9_$.-]+}
 
 
 @noindent @b{Synopsis}: List of acceptable groups of group ids, first is change target
@@ -12020,8 +13683,7 @@ literal object with a name composed of dots and stars.
 @noindent @b{Allowed input range}: @*
 @example
           @code{append}
-          @code{prepend}
-          @code{set}
+          @code{overwrite}
 @end example
 
 @noindent @b{Synopsis}: Editing method for access control list
@@ -12032,29 +13694,30 @@ literal object with a name composed of dots and stars.
 
 @verbatim
 
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_acl_method_example.texinfo)
-""
+body acl template
+
+{
+acl_method => "overwrite";
+acl_type => "posix";
+acl_directory_inherit => "parent";
+aces => { "user:*:r(wwx),-r:allow", "group:*:+rw:allow", "mask:x:allow", "all:r"};
+}
+
 @end verbatim
 
 
 @b{Notes}:@*
 @*
 
-@verbatim
-
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_acl_method_notes.texinfo)
-""
-@end verbatim
 
 @item @code{acl_type}
 @b{Type}: (menu option)
 
 @noindent @b{Allowed input range}: @*
 @example
-          @code{solaris}
-          @code{linux}
+          @code{generic}
+          @code{posix}
           @code{ntfs}
-          @code{afs}
 @end example
 
 @noindent @b{Synopsis}: Access control list type for the affected file system
@@ -12065,21 +13728,196 @@ Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3R
 
 @verbatim
 
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_acl_type_example.texinfo)
-""
+body acl template
+
+{
+acl_method => "overwrite";
+acl_type => "posix";
+acl_directory_inherit => "parent";
+aces => { "user:*:r(wwx),-r:allow", "group:*:+rw:allow", "mask:x:allow", "all:r"};
+}
+
 @end verbatim
 
 
 @b{Notes}:@*
 @*
 
+@item @code{acl_directory_inherit}
+@b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{parent}
+          @code{specify}
+          @code{none}
+@end example
+
+@noindent @b{Synopsis}: Access control list type for the affected file system
+
+
+@b{Example}:@*
+@*
+
 @verbatim
 
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_acl_type_notes.texinfo)
-""
+body acl template
+
+{
+acl_method => "overwrite";
+acl_type => "posix";
+acl_directory_inherit => "parent";
+
+aces => { 
+        "user:*:r(wwx),-r:allow", 
+        "group:*:+rw:allow", 
+        "mask:x:allow", 
+        "all:r"
+        };
+}
+
 @end verbatim
 
-@item @code{acl_entry}
+
+@b{Notes}:@*
+@*
+
+
+
+Directories have ACLs associated with them, but they also have the
+ability to inherit an ACL to sub-objects created within them. POSIX
+calls the former ACL type "access ACL" and the latter "default ACL",
+and we will use the same terminology.
+
+In some file systems, like NTFS, objects can only inherit the access
+ACL of the parent directory (or nothing). There are also differences
+in what is inherited by default. In POSIX, the default ACL is usually
+unset, which results in no ACL inheritance, while NTFS always inherits
+the access ACL to subobjects.
+
+
+@item @code{aces}
+@b{Type}: slist
+
+@noindent @b{Allowed input range}: @code{(group|user|all|mask):([^:]:)*[-+,rwx()]*(:.+)*}
+
+
+@noindent @b{Synopsis}: Native settings for access control entry
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+body acl template
+
+{
+acl_method => "overwrite";
+acl_type => "posix";
+acl_directory_inherit => "parent";
+
+aces => { 
+        "user:*:r(wwx),-r:allow", 
+        "group:*:+rw:allow", 
+        "mask:x:allow", 
+        "all:r"
+        };
+}
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+Form of the
+permissions is:
+
+@cartouche
+@smallexample
+      aces => @{
+              "@var{user:uid:mode[:perm_type]}", ..., 
+              "@var{group:gid:mode[:perm_type]}", ..., 
+              "@var{all:mode[:perm_type]}"
+              @};
+@end smallexample
+@end cartouche
+
+@itemize
+@item @code{user} indicates that the line applies to a user specified
+  by the user identitfier @code{uid}. @code{mode} is the permission
+  mode string.
+
+@item @code{group} indicates that the line applies to a group specified
+  by the group identitfier @code{gid}. @code{mode} is the permission
+  mode string.
+
+@item @code{all} indicates that the line applies to every
+  user. @code{mode} is the permission mode string.
+
+@item @code{uid} is a valid user identifier for the system and
+  cannot be empty. However, @code{uid} can be set to * as a synonym
+  for the entity that owns the file system object (e.g. user:*:r).
+
+@item @code{gid} is a valid group identifier for the system and
+  cannot be empty. However, in some acl types, @code{gid} can be set
+  to * to indicate a special group (e.g. in POSIX this refers to the
+  file group).
+
+@item @code{mode} is one or more strings
+  @code{op}|@code{perms}|(@code{nperms}); a concatenation of @code{op},
+  @code{perms} and optionally (@code{nperms}), see below, separated
+  with commas (e.g. +rx,-w(s)). @code{mode} is parsed from left to
+  right. 
+@c TODO: include support for @code{fullaccess}, @code{noaccess},
+@c and @code{remove}
+
+@item @code{op} specifies the operation on any existing permissions,
+  if the defined ACE already exists. @code{op} can be =, empty, + or
+  -. = or empty sets the permissions to the ACE as stated, + adds and
+  - removes the permissions from any existing ACE.
+  @c TODO: what to do if + or - is used when ACE does not exist?
+
+@item @code{nperms} (optional) specifies file system specific
+  (native) permissions. Only valid if @code{acl_type} is
+  defined. @code{nperms} will only be enforced if the file object is
+  stored on a file system supporting the acl type set in
+  @code{acl_type} (e.g. @code{nperms} will be ignored if
+  @code{acl_type:}@code{ntfs} and the object is stored on a file system
+  not supporting ntfs ACLs). Valid values for @code{nperms} varies with
+  different ACL types, and is defined in subsequent sections.
+
+@item @code{perm_type} (optional) can be set to either @code{allow} or
+  @code{deny}, and defaults to @code{allow}. @code{deny} is only valid
+  if @code{acl_type} is set to an ACL type that support deny
+  permissions. A @code{deny} ACE will only be enforced if the file
+  object is stored on a file system supporting the acl type set in
+  @code{acl_type}.
+@end itemize
+
+@code{gperms} (generic permissions) is a concatenation of zero or more
+of the characters shown in the table below. If left empty,
+none of the permissions are set.
+@c TODO: Should be allowed to set no permissions (empty perms?)
+
+
+@multitable @columnfractions .05 .2 .30 .35
+@headitem Flag @tab Description @tab Semantics on file @tab Semantics on directory
+
+@item @code{r} @tab Read @tab Read data, permissions, attributes @tab Read
+directory contents, permissions, attributes
+@item @code{w} @tab Write @tab Write data @tab Create, delete, rename subobjects
+@item @code{x} @tab Execute @tab Execute file @tab Access subobjects
+@end multitable
+
+
+Note that the @code{r} permission is not neccessary to read an object's
+permissions and attributes in all file systems (e.g. in POSIX, having
+@code{x} on its containing directory is sufficient).
+
+
+@item @code{inherit_aces}
 @b{Type}: slist
 
 @noindent @b{Allowed input range}: @code{.*}
@@ -12093,19 +13931,37 @@ Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3R
 
 @verbatim
 
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_acl_entry_example.texinfo)
-""
+body acl template
+
+{
+acl_method => "overwrite";
+
+acl_type => "specify";
+
+acl_directory_inherit => "parent";
+
+aces         => { 
+                "user:*:r(wwx),-r:allow", 
+                "group:*:+rw:allow", 
+                "mask:x:allow", 
+                "all:r"
+                };
+
+inherit_aces => { 
+                "user:*:r(wwx),-r:allow", 
+                "group:*:+rw:allow", 
+                "mask:x:allow", 
+                "all:r"
+                };
+}
+
 @end verbatim
 
 
 @b{Notes}:@*
 @*
 
-@verbatim
-
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_acl_entry_notes.texinfo)
-""
-@end verbatim
+See notes for @code{aces}.
 
 @end table
 
@@ -12178,6 +14034,62 @@ insert_lines:
 @*
 
 By parameterizing the editing bundle, one can make generic and reusable editing bundles.
+
+Note, when inserting multiple lines anchored to a particular place in
+a file, be careful with your intuition.  If your intention is to
+insert a set of lines in a given order after a marker, then the
+following is incorrect:
+
+@verbatim
+
+bundle edit_lines x
+{
+insert_lines:
+
+  "line one" location => myloc;
+  "line two" location => myloc;
+}
+
+body location myloc
+
+{
+select_line_matching => "^# Right here.*";
+before_after => "after";
+}
+
+@end verbatim
+This will reverse the order of the lines and will not converge, since
+the anchoring after the marker applies independently for each new
+line. This is not a bug, but an error of logic.
+
+What was probably intended was to add multiple ordered lines after the marker,
+which should be a single correlated promise.
+
+@verbatim
+
+bundle edit_lines x
+{
+insert_lines:
+ 
+ "line one$(const.n)line two" location => myloc;
+
+}
+
+@end verbatim
+Or:
+@verbatim
+
+bundle edit_lines x
+{
+insert_lines:
+ 
+  "line one
+line two" location => myloc;
+
+}
+
+@end verbatim
+
 
 
 
@@ -12432,10 +14344,10 @@ in the primary file.
 @item @code{insert_if_not_match_from_list}
 @b{Type}: slist
 
-@noindent @b{Allowed input range}: @code{.*Insert line if it DOES NOT fully match a regex in the list}
+@noindent @b{Allowed input range}: @code{.*}
 
 
-@noindent @b{Synopsis}: (null)
+@noindent @b{Synopsis}: Insert line if it DOES NOT fully match a regex in the list
 
 
 @b{Example}:@*
@@ -13285,45 +15197,6 @@ delete_if_not_contains_from_list => { "substring1", "substring2" };
 Delete lines from the file which do not contain the sub-strings listed.
 
 @end table
-@*
-
-@cartouche
-@smallexample
-
-bundle agent main(parameter)
-
-@{
-vars:
-
-  "sys_files"    slist        => @{
-                                 "/etc/passwd",
-                                 "/etc/services"
-                                 @};
-files:
-
-  "$(sys_files)" perms        => p("root","0644"),
-                 changes      => trip_wire;
-
-  "/etc/shadow"  perms        => p("root","0600"),
-                 changes      => trip_wire;
-
-  "/usr"         changes      => trip_wire,
-                 depth_search => recurse("inf");
-
-  "/tmp"         delete       => tidy,
-                 file_select  => days("2"),
-                 depth_search => recurse("inf");
-
-@}
-
-@end smallexample
-@end cartouche
-
-@*
-
-Agent bundles contain user-defined promises for @code{cf-agent}. The
-types of promises and their corresponding bodies are detailed below.
-
 
 
 @node interfaces in agent promises, methods in agent promises, delete_lines in edit_line promises, Bundles for agent
@@ -13354,11 +15227,19 @@ interfaces can be quite large.
 
 @*
 
-Fill me in (/home/mark/LapTop/Cfengine3/trunk/docs/promise_interfaces_example.texinfo)
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/promise_interfaces_example.texinfo)
+""
+@end verbatim
 
 @*
 
-Fill me in (/home/mark/LapTop/Cfengine3/trunk/docs/promise_interfaces_notes.texinfo)
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/promise_interfaces_notes.texinfo)
+""
+@end verbatim
 
 
 
@@ -13458,45 +15339,6 @@ ipv6_address => "2001:700:700:3:20f:1fff:fe92:2cd3/64";
 
 
 @end table
-@*
-
-@cartouche
-@smallexample
-
-bundle agent main(parameter)
-
-@{
-vars:
-
-  "sys_files"    slist        => @{
-                                 "/etc/passwd",
-                                 "/etc/services"
-                                 @};
-files:
-
-  "$(sys_files)" perms        => p("root","0644"),
-                 changes      => trip_wire;
-
-  "/etc/shadow"  perms        => p("root","0600"),
-                 changes      => trip_wire;
-
-  "/usr"         changes      => trip_wire,
-                 depth_search => recurse("inf");
-
-  "/tmp"         delete       => tidy,
-                 file_select  => days("2"),
-                 depth_search => recurse("inf");
-
-@}
-
-@end smallexample
-@end cartouche
-
-@*
-
-Agent bundles contain user-defined promises for @code{cf-agent}. The
-types of promises and their corresponding bodies are detailed below.
-
 
 
 @node methods in agent promises, packages in agent promises, interfaces in agent promises, Bundles for agent
@@ -13582,45 +15424,6 @@ to a set of parameters.
 @subsection @code{usebundle}
 
 @b{Type}: (ext bundle) (Separate Bundle) 
-@*
-
-@cartouche
-@smallexample
-
-bundle agent main(parameter)
-
-@{
-vars:
-
-  "sys_files"    slist        => @{
-                                 "/etc/passwd",
-                                 "/etc/services"
-                                 @};
-files:
-
-  "$(sys_files)" perms        => p("root","0644"),
-                 changes      => trip_wire;
-
-  "/etc/shadow"  perms        => p("root","0600"),
-                 changes      => trip_wire;
-
-  "/usr"         changes      => trip_wire,
-                 depth_search => recurse("inf");
-
-  "/tmp"         delete       => tidy,
-                 file_select  => days("2"),
-                 depth_search => recurse("inf");
-
-@}
-
-@end smallexample
-@end cartouche
-
-@*
-
-Agent bundles contain user-defined promises for @code{cf-agent}. The
-types of promises and their corresponding bodies are detailed below.
-
 
 
 @node packages in agent promises, processes in agent promises, methods in agent promises, Bundles for agent
@@ -13959,6 +15762,33 @@ package_list_command => "/bin/rpm -qa --queryformat \"%{name} %{version}-%{relea
 This command should provide a complete list of the packages installed on the system.
 It might also list packages that are not installed. Those should be filtered out using
 the @code{package_installed_regex}.
+
+@item @code{package_update_list_command}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: @code{[cC]:\\.*|/.*}
+
+
+@noindent @b{Synopsis}: Command to obtain a list of available patches or updates
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+ package_list_command => "/usr/bin/zypper list-updates";
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+This command, if it exists at all, is presumed to generate a list of available patches
+in the same format as the package-list command of updates or patches that are available
+on the system. Patches might formally be available in the packagae manager's view, but
+if they have already been installed, cfengine will ignore them.
 
 @item @code{package_list_version_regex}
 @b{Type}: string
@@ -14330,7 +16160,9 @@ of a tool like cfengine which patches the system by `other means'.
 body package_method xyz
 
 {
-package_noverify_regex => ".*problem.*";
+# package_noverify_regex => ".*problem.*";
+
+package_noverify_regex => ".*[^\s].*";   # some non-zero output
 }
 
 @end verbatim
@@ -14509,45 +16341,6 @@ packages:
 This selects the operator that compares the promiser to the state of the system
 packages currently installed. If the criterion matches, the policy action is
 scheduled for promise-keeping.
-
-@*
-
-@cartouche
-@smallexample
-
-bundle agent main(parameter)
-
-@{
-vars:
-
-  "sys_files"    slist        => @{
-                                 "/etc/passwd",
-                                 "/etc/services"
-                                 @};
-files:
-
-  "$(sys_files)" perms        => p("root","0644"),
-                 changes      => trip_wire;
-
-  "/etc/shadow"  perms        => p("root","0600"),
-                 changes      => trip_wire;
-
-  "/usr"         changes      => trip_wire,
-                 depth_search => recurse("inf");
-
-  "/tmp"         delete       => tidy,
-                 file_select  => days("2"),
-                 depth_search => recurse("inf");
-
-@}
-
-@end smallexample
-@end cartouche
-
-@*
-
-Agent bundles contain user-defined promises for @code{cf-agent}. The
-types of promises and their corresponding bodies are detailed below.
 
 
 
@@ -15222,7 +17015,7 @@ For instance, characters in the set @samp{NRS<sl+..}
 @item @code{ttime_range}
 @b{Type}: irange [int,int]
 
-@noindent @b{Allowed input range}: @code{0,4026531839}
+@noindent @b{Allowed input range}: @code{0,2147483647}
 
 
 @noindent @b{Synopsis}: Range of integers matching the total elapsed time of a process
@@ -15249,7 +17042,7 @@ This is total accumulated time for a process.
 @item @code{stime_range}
 @b{Type}: irange [int,int]
 
-@noindent @b{Allowed input range}: @code{0,4026531839}
+@noindent @b{Allowed input range}: @code{0,2147483647}
 
 
 @noindent @b{Synopsis}: Range of integers matching the start time of a process
@@ -15465,45 +17258,6 @@ not running.  Processes are signalled first and then restarted later,
 at the end of bundle execution, after all possible corrective actions have
 been made that could influence their execution.
 
-@*
-
-@cartouche
-@smallexample
-
-bundle agent main(parameter)
-
-@{
-vars:
-
-  "sys_files"    slist        => @{
-                                 "/etc/passwd",
-                                 "/etc/services"
-                                 @};
-files:
-
-  "$(sys_files)" perms        => p("root","0644"),
-                 changes      => trip_wire;
-
-  "/etc/shadow"  perms        => p("root","0600"),
-                 changes      => trip_wire;
-
-  "/usr"         changes      => trip_wire,
-                 depth_search => recurse("inf");
-
-  "/tmp"         delete       => tidy,
-                 file_select  => days("2"),
-                 depth_search => recurse("inf");
-
-@}
-
-@end smallexample
-@end cartouche
-
-@*
-
-Agent bundles contain user-defined promises for @code{cf-agent}. The
-types of promises and their corresponding bodies are detailed below.
-
 
 
 @node storage in agent promises,  , processes in agent promises, Bundles for agent
@@ -15670,10 +17424,10 @@ Hostname or IP address, this could be on a SAN.
 @item @code{mount_options}
 @b{Type}: slist
 
-@noindent @b{Allowed input range}: @code{List of option strings to add to the file system table ("fstab")}
+@noindent @b{Allowed input range}: (arbitrary string)
 
 
-@noindent @b{Synopsis}: (null)
+@noindent @b{Synopsis}: List of option strings to add to the file system table ("fstab")
 
 
 @b{Example}:@*
@@ -16038,6 +17792,7 @@ first. In this way, specific promises will override less specific ones.
 * deny in access::              
 * maproot in access::           
 * ifencrypted in access::       
+* resource_type in access::     
 @end menu
 
 @node Access Example, admit in access, access in server promises, access in server promises
@@ -16198,7 +17953,7 @@ files.
 
 
 
-@node ifencrypted in access,  , maproot in access, access in server promises
+@node ifencrypted in access, resource_type in access, maproot in access, access in server promises
 @subsection @code{ifencrypted}
 @noindent @b{Type}: (menu option)
 
@@ -16236,6 +17991,56 @@ access:
 If this flag is true a client cannot access the file object unless
 its connection is encrypted.
 
+
+
+
+@node resource_type in access,  , ifencrypted in access, access in server promises
+@subsection @code{resource_type}
+@noindent @b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{path}
+          @code{literal}
+@end example
+
+@noindent @b{Synopsis}: The type of object being granted access. The default is access to files.
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+
+bundle server access_rules()
+
+{
+vars:
+
+  "localvar" string => "literal string";
+
+access:
+
+  "This is a $(localvar) for remote access"
+ 
+        handle  => "test_scalar",
+  resource_type => "literal",
+        admit   => { "127.0.0.1" };
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+By default, access to resources granted by the server are
+files. However, sometimes it is useful to cache @code{literal}
+strings, hints and data in the server, e.g. the contents of variables,
+hashed passwords etc for easy access. In the case of literal data, the
+promise handle serves as the reference identifier for queries. Queries
+are instigated by function calls by any agent.
 
 
 
@@ -16335,7 +18140,7 @@ identities already trusted on the system.
 @c *****************************************************
 @c * CHAPTER 
 @c *****************************************************
-@node Bundles for knowledge, Special functions, Bundles for server, Top
+@node Bundles for knowledge, Bundles for monitor, Bundles for server, Top
 @chapter Bundles of @code{knowledge}
 
 @*
@@ -16626,6 +18431,8 @@ document.
 @menu
 * represents in occurrences::   
 * representation in occurrences::  
+* web_root in occurrences::     
+* path_root in occurrences::    
 @end menu
 
 @node represents in occurrences, representation in occurrences, occurrences in knowledge promises, occurrences in knowledge promises
@@ -16635,7 +18442,7 @@ document.
 @noindent @b{Allowed input range}: (arbitrary string)
 
 
-@noindent @b{Synopsis}: List of subtopics that disambiguate the context of this reference
+@noindent @b{Synopsis}: List of subtopics that explains the type(s) of information represented by the occurrence
 
 
 @noindent @b{Example}:@*
@@ -16662,7 +18469,7 @@ The sub-topic represented by the document reference in a knowledge base.
 
 
 
-@node representation in occurrences,  , represents in occurrences, occurrences in knowledge promises
+@node representation in occurrences, web_root in occurrences, represents in occurrences, occurrences in knowledge promises
 @subsection @code{representation}
 @noindent @b{Type}: (menu option)
 
@@ -16673,6 +18480,8 @@ The sub-topic represented by the document reference in a knowledge base.
           @code{db}
           @code{file}
           @code{web}
+          @code{image}
+          @code{portal}
 @end example
 
 @noindent @b{Synopsis}: How to interpret the promiser string e.g. actual data or reference to data
@@ -16699,11 +18508,475 @@ occurrences:
 @*
 
 The form of knowledge representation in a topic map occurrence reference.
+If the type @code{portal} is used it assumes that a new website should open in a new
+target window.
+
+
+
+@node web_root in occurrences, path_root in occurrences, representation in occurrences, occurrences in knowledge promises
+@subsection @code{web_root}
+@noindent @b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: Base URL of the occurrence when rendered as a web-URL (replaces path_root)
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_web_root_example.texinfo)
+""
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_web_root_notes.texinfo)
+""
+@end verbatim
+
+
+
+@node path_root in occurrences,  , web_root in occurrences, occurrences in knowledge promises
+@subsection @code{path_root}
+@noindent @b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: Base path of the occurrence when locating file (replaced by web_root)
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_path_root_example.texinfo)
+""
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/bodypart_path_root_notes.texinfo)
+""
+@end verbatim
 
 @c *****************************************************
 @c * CHAPTER 
 @c *****************************************************
-@node Special functions, Special Variables, Bundles for knowledge, Top
+@node Bundles for monitor, Special functions, Bundles for knowledge, Top
+@chapter Bundles of @code{monitor}
+
+@*
+
+@cartouche
+
+@smallexample
+
+bundle monitor example
+@{
+measurements:
+
+     # Discover disk device information
+
+  "/bin/df"
+
+      handle => "free_memory_watch",
+      stream_type => "pipe",
+      data_type => "slist",
+      history_type => "static",
+      units => "device",
+      match_value => file_systems;
+
+
+@}
+
+@end smallexample
+
+@end cartouche
+
+Monitor bundles contain user defined promises for system discovery and monitoring.
+
+@*
+
+
+
+
+
+@menu
+* measurements in monitor promises::  
+@end menu
+
+@node measurements in monitor promises,  , Bundles for monitor, Bundles for monitor
+@section @code{measurements} promises in @samp{monitor}
+
+@*
+
+@i{These features are available only in Enterprise versions of cfengine.}
+
+Cfengine's monitoring component @code{cf-monitord} records a number
+of performance data about the system by default. These include
+process counts, service traffic, load average and cpu utilization and
+temperature when available.
+
+Cfengine Nova extends this in two ways. First it adds a three year
+trend summary based any `shift'-averages. Second, it addd customizable
+promises to monitor or log specific quite specific user data through a
+generic interface. The end result is to either generate a periodic
+time series, like the above mentioned values, or to log the results to
+custom-defined reports.
+
+
+Cfengine Nova adds a new promise type in bundles for the monitoring
+agent. These are written just like all other promises within a bundle
+destined for the agent concerned. In this case:
+
+@verbatim
+bundle monitor watch
+
+{
+measurements:
+
+  # promises ...
+
+}
+
+@end verbatim
+
+It is important to specificy a promise @code{handle} for measurement
+promises, as the names defined in the handle are used to determine the
+name of the log file or variable to which data will be reported. Log
+files are created under @file{WORKDIR/state}. Data that have no history
+type are stored in a special variable context called @samp{mon}, analogous
+to the system variables in @samp{sys}. Thus the values may be used
+in other promises in the form @code{$(mon.handle)}.
+
+@*
+
+@verbatim
+
+  # Follow a special process over time
+  # using cfengine's process cache to avoid resampling
+
+   "/var/cfengine/state/cf_rootprocs"
+
+      handle => "monitor_self_watch",
+      stream_type => "file",
+      data_type => "int",
+      history_type => "none",
+      units => "kB",
+      match_value => proc_value(".*cf-monitord.*",
+        
+         "root\s+[0-9.]+\s+[0-9.]+\s+[0-9.]+\s+[0-9.]+\s+([0-9]+).*");
+
+
+  # Discover disk device information
+
+  "/bin/df"
+
+      handle => "free_memory_watch",
+      stream_type => "pipe",
+      data_type => "slist",
+      history_type => "static",
+      units => "device",
+      match_value => file_systems;
+      # Update this as often as possible
+
+}
+
+
+@end verbatim
+
+@*
+
+The general pattern of these promises is to decide the source of the information either file or pipe,
+determine the data type (integer, string etc.), specify a pattern to match the result in the file stream
+and then specify what to do with the result afterwards.
+
+
+
+@menu
+* stream_type in measurements::  
+* data_type in measurements::   
+* history_type in measurements::  
+* units in measurements::       
+* match_value in measurements::  
+@end menu
+
+@node stream_type in measurements, data_type in measurements, measurements in monitor promises, measurements in monitor promises
+@subsection @code{stream_type}
+@noindent @b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{pipe}
+          @code{file}
+@end example
+
+@noindent @b{Synopsis}: The datatype being collected.
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+stream_type => "pipe";
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+Cfengine treats all input using a stream abstraction. The preferred interface is files, since they
+can be read without incurring the cost of a process. However pipes from executed commands may also
+be invoked.
+
+
+
+@node data_type in measurements, history_type in measurements, stream_type in measurements, measurements in monitor promises
+@subsection @code{data_type}
+@noindent @b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{counter}
+          @code{int}
+          @code{real}
+          @code{string}
+          @code{slist}
+@end example
+
+@noindent @b{Synopsis}: The datatype being collected.
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+  "/bin/df"
+
+      handle => "free_disk_watch",
+      stream_type => "pipe",
+
+      data_type => "slist",
+
+      history_type => "static",
+      units => "device",
+      match_value => file_systems,
+      action => sample_min(10,15);
+
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+When cfengine (Nova) observes data, such as the attached partitions in
+the example above, the datatype determines how that data will be
+handled.  Integer and real values, counters etc., are recorded as
+time-series if the history type is `weekly', or as single values
+otherwise. If multiple items are matched by an observation,
+e.g. several lines in a file match the given regular expression,
+then these can be made into a list by choosing @code{slist}, else
+the first matching item will be selected.
+
+
+
+
+@node history_type in measurements, units in measurements, data_type in measurements, measurements in monitor promises
+@subsection @code{history_type}
+@noindent @b{Type}: (menu option)
+
+@noindent @b{Allowed input range}: @*
+@example
+          @code{weekly}
+          @code{scalar}
+          @code{static}
+          @code{log}
+@end example
+
+@noindent @b{Synopsis}: Whether the data can be seen as a time-series or just an isolated value
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+ "/proc/meminfo"
+
+      handle => "free_memory_watch",
+      stream_type => "file",
+      data_type => "int",
+      history_type => "weekly",
+      units => "kB",
+      match_value => free_memory;
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@table @samp
+@item scalar
+A single value, with compressed statistics is retained.
+@item static
+The value of the data is not expected to change for the lifetime of the daemon.
+@item log
+The measured value is logged as an infinite time-series.
+@item weekly
+A standard cfengine two-dimensional time average (over a weekly period) is retained.
+@end table
+
+
+
+@node units in measurements, match_value in measurements, history_type in measurements, measurements in monitor promises
+@subsection @code{units}
+@noindent @b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: The engineering dimensions of this value or a note about its intent used in plots
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+   "/var/cfengine/state/cf_rootprocs"
+
+      handle => "monitor_self_watch",
+      stream_type => "file",
+      data_type => "int",
+      history_type => "none",
+      units => "kB",
+      match_value => proc_value(".*cf-monitord.*",
+        
+         "root\s+[0-9.]+\s+[0-9.]+\s+[0-9.]+\s+[0-9.]+\s+([0-9]+).*");
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+This is an arbitary string used in documentation only.
+
+
+
+@node match_value in measurements,  , units in measurements, measurements in monitor promises
+@subsection @code{match_value} (compound body)
+@noindent @b{Type}: (ext body)
+
+@table @samp
+@item @code{select_line_matching}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: @code{.*}
+
+
+@noindent @b{Synopsis}: Regular expression for matching line location
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+body location example
+{
+select_line_matching => "^Expression match.* whole line$";
+}
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+The @samp{^$} are not necessary, just remember that the expression must match
+a whole line, not a fragment within a line.
+
+@item @code{select_line_number}
+@b{Type}: int
+
+@noindent @b{Allowed input range}: @code{0,99999999999}
+
+
+@noindent @b{Synopsis}: Read from the n-th line of the output (fixed format)
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+body match_value find_line
+{
+select_line_number => "2";
+#...
+}
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+This is mutually exclusive with @code{select_line_matching}.
+
+@item @code{extraction_regex}
+@b{Type}: string
+
+@noindent @b{Allowed input range}: (arbitrary string)
+
+
+@noindent @b{Synopsis}: Regular expression that should contain a single backreference for extracting a value
+
+
+@b{Example}:@*
+@*
+
+@verbatim
+
+body match_value free_memory
+{
+select_line_matching => "MemFree:.*";
+extraction_regex => "MemFree:\s+([0-9]+).*";
+}
+
+@end verbatim
+
+
+@b{Notes}:@*
+@*
+
+A single backreference should be given to lift the value to be measured out of the text stream.
+
+@end table
+@c *****************************************************
+@c * CHAPTER 
+@c *****************************************************
+@node Special functions, Special Variables, Bundles for monitor, Top
 @chapter Special functions
 
 @menu
@@ -16716,11 +18989,13 @@ The form of knowledge representation in a topic map occurrence reference.
 * Function classmatch::         
 * Function execresult::         
 * Function fileexists::         
+* Function filesexist::         
 * Function getindices::         
 * Function getgid::             
 * Function getuid::             
 * Function groupexists::        
 * Function hash::               
+* Function hashmatch::          
 * Function hostrange::          
 * Function hostinnetgroup::     
 * Function iprange::            
@@ -16732,8 +19007,15 @@ The form of knowledge representation in a topic map occurrence reference.
 * Function isnewerthan::        
 * Function isplain::            
 * Function isvariable::         
+* Function lastnode::           
+* Function ldaparray::          
+* Function ldaplist::           
+* Function ldapvalue::          
 * Function now::                
 * Function on::                 
+* Function peers::              
+* Function peerleader::         
+* Function peerleaders::        
 * Function randomint::          
 * Function readfile::           
 * Function readintarray::       
@@ -16745,11 +19027,15 @@ The form of knowledge representation in a topic map occurrence reference.
 * Function readtcp::            
 * Function regarray::           
 * Function regcmp::             
+* Function registryvalue::      
 * Function regline::            
 * Function reglist::            
+* Function regldap::            
+* Function remotescalar::       
 * Function returnszero::        
 * Function rrange::             
 * Function selectservers::      
+* Function splayclass::         
 * Function splitstring::        
 * Function strcmp::             
 * Function usemodule::          
@@ -17179,7 +19465,7 @@ verification, these function calls are executed resulting in system
 changes that are `covert'. Calls to @code{execresult} should be
 for discovery and information extraction only.
 
-@node Function fileexists, Function getindices, Function execresult, Special functions
+@node Function fileexists, Function filesexist, Function execresult, Special functions
 @section Function fileexists 
 
 
@@ -17226,7 +19512,64 @@ reports:
 The user must have access permissions to the file for this to work
 faithfully.
 
-@node Function getindices, Function getgid, Function fileexists, Special functions
+@node Function filesexist, Function getindices, Function fileexists, Special functions
+@section Function filesexist 
+
+
+@noindent @b{Synopsis}: filesexist(1 args) returns type class
+
+
+@noindent True if the named list of files can ALL be accessed
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+body common control
+
+{
+bundlesequence  => { "example" };
+}
+
+###########################################################
+
+bundle agent example
+
+{     
+vars:
+
+  "mylist" slist => { "/tmp/a", "/tmp/b", "/tmp/c" };
+
+classes:
+
+  "exists" expression => filesexist("@(mylist)");
+
+reports:
+
+  exists::
+
+    "Files exist";
+
+  !exists::
+
+    "Do not exist";
+
+}
+
+
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+The user must have access permissions to the file for this to work
+faithfully.
+
+@node Function getindices, Function getgid, Function filesexist, Special functions
 @section Function getindices 
 
 
@@ -17422,7 +19765,7 @@ reports:
 
 The group may be specified by name or number.
 
-@node Function hash, Function hostrange, Function groupexists, Special functions
+@node Function hash, Function hashmatch, Function groupexists, Special functions
 @section Function hash 
 
 
@@ -17472,7 +19815,63 @@ to get the same answer from this function as you would from every other
 tool, since it depends on how whitespace and end of file characters are
 handled.
 
-@node Function hostrange, Function hostinnetgroup, Function hash, Special functions
+@node Function hashmatch, Function hostrange, Function hash, Special functions
+@section Function hashmatch 
+
+
+@noindent @b{Synopsis}: hashmatch(3 args) returns type class
+
+
+@noindent Compute the hash of arg1, of type arg2 and test if it matches the value in arg 3
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+bundle agent example
+
+{     
+classes:
+
+  "matches" expression => hashmatch("/etc/passwd","md5","c5068b7c2b1707f8939b283a2758a691");
+
+reports:
+
+  matches::
+
+    "File has correct version";
+
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+
+@cartouche
+@example
+
+(class) hashmatch(@var{file},@var{md5|sha1|crypt},@var{hash-comparison});
+
+@end example
+@end cartouche
+
+This function may be used to determine whether a system has a particular
+version of a binary file (e.g. software patch).
+
+@noindent @b{ARGUMENTS}:
+
+@itemize
+@item The file concerned
+@item The type of hash
+@item A string of the hash to which we expect the file to conform.
+@end itemize
+
+@node Function hostrange, Function hostinnetgroup, Function hashmatch, Special functions
 @section Function hostrange 
 
 
@@ -17535,19 +19934,16 @@ This is a pattern matching function for non-regular (enumerated) expressions.
 
 @verbatim
 
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/function_hostinnetgroup_example.texinfo)
-""
+classes:
+
+  "ingroup" expression => hostinnetgroup("my_net_group");
+
 @end verbatim
 
 
 @noindent @b{Notes}:@*
 @*
 
-@verbatim
-
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/function_hostinnetgroup_notes.texinfo)
-""
-@end verbatim
 
 @node Function iprange, Function irange, Function hostinnetgroup, Special functions
 @section Function iprange 
@@ -17920,7 +20316,7 @@ reports:
 @*
 
 
-@node Function isvariable, Function now, Function isplain, Special functions
+@node Function isvariable, Function lastnode, Function isplain, Special functions
 @section Function isvariable 
 
 
@@ -17971,7 +20367,252 @@ reports:
 The variable need only exist. This says nothing about its value. Use @code{regcmp}
 to check variable values.
 
-@node Function now, Function on, Function isvariable, Special functions
+@node Function lastnode, Function ldaparray, Function isvariable, Special functions
+@section Function lastnode 
+
+
+@noindent @b{Synopsis}: lastnode(2 args) returns type string
+
+
+@noindent Extract the last of a separated string, e.g. filename from a path
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/function_lastnode_example.texinfo)
+""
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/function_lastnode_notes.texinfo)
+""
+@end verbatim
+
+@node Function ldaparray, Function ldaplist, Function lastnode, Special functions
+@section Function ldaparray 
+
+
+@noindent @b{Synopsis}: ldaparray(6 args) returns type class
+
+
+@noindent Extract all values from an ldap record
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+classes:
+
+   "gotdata" expression => ldaparray(
+                                    "myarray",
+                                    "ldap://ldap.example.org",
+                                    "dc=cfengine,dc=com",
+                                    "(uid=mark)",
+                                    "subtree",
+                                    "none");
+
+@end verbatim
+
+
+
+@noindent @b{Notes}:@*
+@*
+
+@cartouche
+@example
+
+(class) ldaparray (@var{array},@var{uri},@var{dn},@var{filter},@var{scope},@var{security})
+
+@end example
+@end cartouche
+
+This function retrieves an entire record with all elements and
+populates an associative array with the entries. It returns a class
+which is true if there was a match for the search and false if nothing
+was retrieved.
+
+@noindent @b{ARGUMENTS}:
+
+@table @samp
+@item array
+String name of the array to populate with the result of the search
+@item uri
+String value of the ldap server. e.g. @code{"ldap://ldap.cfengine.com.no"}
+@item dn
+Distinguished name, an ldap formatted name built from components, e.g. "dc=cfengine,dc=com".
+@item filter
+String filter criterion, in ldap search, e.g. "(sn=User)".
+@item scope
+Menu option, the type of ldap search, from 
+@smallexample
+    subtree
+    onelevel
+    base
+@end smallexample
+
+@item security
+Menu option indicating the encryption and authentication settings
+for communication with the LDAP server. These features might be subject
+to machine and server capabilites.
+@smallexample
+     none
+     ssl
+     sasl
+@end smallexample
+@end table
+                             
+
+@node Function ldaplist, Function ldapvalue, Function ldaparray, Special functions
+@section Function ldaplist 
+
+
+@noindent @b{Synopsis}: ldaplist(6 args) returns type slist
+
+
+@noindent Extract all named values from multiple ldap records
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+vars:
+
+   # Get all matching values for "uid" - should be a single record match
+
+  "list" slist =>  ldaplist(
+                           "ldap://ldap.example.org",
+                           "dc=cfengine,dc=com",
+                           "(sn=User)",
+                           "uid",
+                           "subtree",
+                           "none"
+                           );
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@cartouche
+@example
+
+(slist) ldaplist(@var{uri},@var{dn},@var{filter},@var{name},@var{scope},@var{security})
+
+@end example
+@end cartouche
+
+This function retrieves a single field from all matching LDAP records identified by the search
+parameters.
+
+@noindent @b{ARGUMENTS}:
+
+@table @samp
+@item uri
+String value of the ldap server. e.g. @code{"ldap://ldap.cfengine.com.no"}
+@item dn
+Distinguished name, an ldap formatted name built from components, e.g. "dc=cfengine,dc=com".
+@item filter
+String filter criterion, in ldap search, e.g. "(sn=User)".
+@item name
+String value, the name of a single record to be retrieved, e.g. @code{uid}.
+@item scope
+Menu option, the type of ldap search, from the specified root. May take values:
+@smallexample
+    subtree
+    onelevel
+    base
+@end smallexample
+
+@item security
+Menu option indicating the encryption and authentication settings
+for communication with the LDAP server. These features might be subject
+to machine and server capabilites.
+@smallexample
+     none
+     ssl
+     sasl
+@end smallexample
+@end table
+
+@node Function ldapvalue, Function now, Function ldaplist, Special functions
+@section Function ldapvalue 
+
+
+@noindent @b{Synopsis}: ldapvalue(6 args) returns type string
+
+
+@noindent Extract the first matching named value from ldap
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+vars:
+
+   # Get the first matching value for "uid" in schema
+
+  "value" string => ldapvalue(
+                             "ldap://ldap.example.org", 
+                             "dc=cfengine,dc=com",
+                             "(sn=User)",
+                             "uid",
+                             "subtree",
+                             "none"
+                             );
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+
+@cartouche
+@example
+
+(string) ldapvalue(@var{uri},@var{dn},@var{filter},@var{name},@var{scope},@var{security})
+
+@end example
+@end cartouche
+
+This function retrieves a single field from a single LDAP record identified by the search
+parameters. The first matching value it taken.
+
+@noindent @b{ARGUMENTS}:
+
+@table @samp
+@item uri
+String value of the ldap server. e.g. @code{"ldap://ldap.cfengine.com.no"}
+@item dn
+Distinguished name, an ldap formatted name built from components, e.g. "dc=cfengine,dc=com".
+@item filter
+String filter criterion, in ldap search, e.g. "(sn=User)".
+@item name
+String value, the name of a single record to be retrieved, e.g. @code{uid}.
+@item scope
+Menu option, the type of ldap search, from the specified root. May take values:
+@smallexample
+    subtree
+    onelevel
+    base
+@end smallexample
+@end table
+
+@node Function now, Function on, Function ldapvalue, Special functions
 @section Function now 
 
 
@@ -17999,7 +20640,7 @@ file_result => "mtime";
 @*
 
 
-@node Function on, Function randomint, Function now, Special functions
+@node Function on, Function peers, Function now, Special functions
 @section Function on 
 
 
@@ -18048,7 +20689,283 @@ The minutes
 The number of seconds 0-59
 @end table
 
-@node Function randomint, Function readfile, Function on, Special functions
+@node Function peers, Function peerleader, Function on, Special functions
+@section Function peers 
+
+
+@noindent @b{Synopsis}: peers(3 args) returns type slist
+
+
+@noindent Get a list of peers (not including ourself) from the partition to which we belong
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+bundle agent peers
+{
+vars:
+
+  "mygroup" slist => peers("/tmp/hostlist","#.*",4);
+
+  "myleader" string => peerleader("/tmp/hostlist","#.*",4);
+
+  "all_leaders" slist => peerleaders("/tmp/hostlist","#.*",4);
+
+reports:
+
+ linux::
+
+   "mypeer $(mygroup)";
+   "myleader $(myleader)";
+   "another leader $(all_leaders)";
+
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@cartouche
+@example
+
+(slist) peers(@var{file of hosts},@var{comment pattern},@var{group size});
+
+@end example
+@end cartouche
+
+This function returns a list of hostnames that may be considered peers
+of the current host. Peers are defined according to a list of hosts,
+provided as a file in the first argument. This file should contain a
+list (one per line), possible with comments, of fully qualified host
+names. Cfengine breaks up this list into non-overlapping groups of up to
+@var{groupsize}, each of which has a leader which is the first host
+in the group.
+
+
+The current host should belong to this file if it is expected to interact
+with the others. The function returns nothing if the host does not belong
+to the list.
+
+@noindent @b{ARGUMENTS}:
+
+@table @samp
+@item File of hosts
+A path to a list of hosts.
+@item Comment pattern
+A pattern that matches a legal comment in the file
+@item Group size
+A number between 2 and 64 which represents the number of peers in a peer-group.
+An arbitary limit of 64 is set on groups to avoid nonsensical promises.
+@end table
+
+
+Example file:
+
+@smallexample
+one
+two
+three # this is a comment
+four
+five
+six
+seven
+eight
+nine
+ten
+eleven
+twelve
+etc
+
+@end smallexample
+
+@node Function peerleader, Function peerleaders, Function peers, Special functions
+@section Function peerleader 
+
+
+@noindent @b{Synopsis}: peerleader(3 args) returns type string
+
+
+@noindent Get the assigned peer-leader of the partition to which we belong
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+bundle agent peers
+{
+vars:
+
+  "mygroup" slist => peers("/tmp/hostlist","#.*",4);
+
+  "myleader" string => peerleader("/tmp/hostlist","#.*",4);
+
+  "all_leaders" slist => peerleaders("/tmp/hostlist","#.*",4);
+
+reports:
+
+ linux::
+
+   "mypeer $(mygroup)";
+   "myleader $(myleader)";
+   "another leader $(all_leaders)";
+
+}
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+
+@cartouche
+@example
+
+(string) peerleader(@var{file of hosts},@var{comment pattern},@var{group size});
+
+@end example
+@end cartouche
+
+This function returns the name of a ost that may be considered the
+leader of a group of peers of the current host. Peers are defined
+according to a list of hosts, provided as a file in the first
+argument. This file should contain a list (one per line), possible
+with comments, of fully qualified host names. Cfengine breaks up this
+list into non-overlapping groups of up to @var{groupsize}, each of
+which has a leader which is the first host in the group.
+
+The current host should belong to this file if it is expected to interact
+with the others. The function returns nothing if the host does not belong
+to the list.
+
+@noindent @b{ARGUMENTS}:
+
+@table @samp
+@item File of hosts
+A path to a list of hosts.
+@item Comment pattern
+A pattern that matches a legal comment in the file
+@item Group size
+A number between 2 and 64 which represents the number of peers in a peer-group.
+An arbitary limit of 64 is set on groups to avoid nonsensical promises.
+@end table
+
+Example file:
+
+@smallexample
+one
+two
+three # this is a comment
+four
+five
+six
+seven
+eight
+nine
+ten
+eleven
+twelve
+etc
+
+@end smallexample
+
+@node Function peerleaders, Function randomint, Function peerleader, Special functions
+@section Function peerleaders 
+
+
+@noindent @b{Synopsis}: peerleaders(3 args) returns type slist
+
+
+@noindent Get a list of peer leaders from the named partitioning
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+bundle agent peers
+{
+vars:
+
+  "mygroup" slist => peers("/tmp/hostlist","#.*",4);
+
+  "myleader" string => peerleader("/tmp/hostlist","#.*",4);
+
+  "all_leaders" slist => peerleaders("/tmp/hostlist","#.*",4);
+
+reports:
+
+ linux::
+
+   "mypeer $(mygroup)";
+   "myleader $(myleader)";
+   "another leader $(all_leaders)";
+
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@cartouche
+@example
+
+(slist) peers(@var{file of hosts},@var{comment pattern},@var{group size});
+
+@end example
+@end cartouche
+
+This function returns a list of hostnames that may be considered peer
+leaders in the partitioning scheme described in the file of
+hosts. Peers are defined according to a list of hosts, provided as a
+file in the first argument. This file should contain a list (one per
+line), possible with comments, of fully qualified host names. Cfengine
+breaks up this list into non-overlapping groups of up to
+@var{groupsize}, each of which has a leader which is the first host in
+the group.
+
+The current host need not belong to this file.
+
+@noindent @b{ARGUMENTS}:
+
+@table @samp
+@item File of hosts
+A path to a list of hosts.
+@item Comment pattern
+A pattern that matches a legal comment in the file
+@item Group size
+A number between 2 and 64 which represents the number of peers in a peer-group.
+An arbitary limit of 64 is set on groups to avoid nonsensical promises.
+@end table
+
+
+Example file:
+
+@smallexample
+one
+two
+three # this is a comment
+four
+five
+six
+seven
+eight
+nine
+ten
+eleven
+twelve
+etc
+
+@end smallexample
+
+@node Function randomint, Function readfile, Function peerleaders, Special functions
 @section Function randomint 
 
 
@@ -18624,14 +21541,14 @@ The name of the array, with no @samp{$()} surrounding, etc.
 A regular expression to match the content.
 @end table
 
-@node Function regcmp, Function regline, Function regarray, Special functions
+@node Function regcmp, Function registryvalue, Function regarray, Special functions
 @section Function regcmp 
 
 
 @noindent @b{Synopsis}: regcmp(2 args) returns type class
 
 
-@noindent True if arg1 is a regular expression matching arg2
+@noindent True if arg2 is a regular expression matching arg1
 
 
 @noindent @b{Example}:@*
@@ -18675,14 +21592,43 @@ Test data for the regular expression.
 @end table
 
 
-@node Function regline, Function reglist, Function regcmp, Special functions
+@node Function registryvalue, Function regline, Function regcmp, Special functions
+@section Function registryvalue 
+
+
+@noindent @b{Synopsis}: registryvalue(2 args) returns type string
+
+
+@noindent Returns a value for an MS-Win registry key,value pair
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/function_registryvalue_example.texinfo)
+""
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@verbatim
+
+Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/function_registryvalue_notes.texinfo)
+""
+@end verbatim
+
+@node Function regline, Function reglist, Function registryvalue, Special functions
 @section Function regline 
 
 
 @noindent @b{Synopsis}: regline(2 args) returns type class
 
 
-@noindent True if arg1 is a regular expression matching a line in file arg2
+@noindent True if arg2 is a regular expression matching a line in file arg1
 
 
 @noindent @b{Example}:@*
@@ -18752,14 +21698,14 @@ bundle edit_line upgrade_cfexecd
 
 @end verbatim
 
-@node Function reglist, Function returnszero, Function regline, Special functions
+@node Function reglist, Function regldap, Function regline, Special functions
 @section Function reglist 
 
 
 @noindent @b{Synopsis}: reglist(2 args) returns type class
 
 
-@noindent True if arg1 matches any item in the list with id=arg2
+@noindent True if arg2 matches any item in the list with id=arg1
 
 
 @noindent @b{Example}:@*
@@ -18797,7 +21743,141 @@ The list of strings.
 The scalar regular expression string.
 @end table
 
-@node Function returnszero, Function rrange, Function reglist, Special functions
+@node Function regldap, Function remotescalar, Function reglist, Special functions
+@section Function regldap 
+
+
+@noindent @b{Synopsis}: regldap(7 args) returns type class
+
+
+@noindent True if arg6 is a regular expression matching a value item in an ldap search
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+classes:
+
+   "found" expression => regldap(
+                                "ldap://ldap.example.org",
+                                "dc=cfengine,dc=com",
+                                "(sn=User)",
+                                "uid",
+                                "subtree",
+                                "jon.*",
+                                "none"
+                                );
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+
+@cartouche
+@example
+
+(class) regldap(@var{uri},@var{dn},@var{filter},@var{name},@var{scope},@var{regex},@var{security})
+
+@end example
+@end cartouche
+
+This function retrieves a single field from all matching LDAP records identified by the search
+parameters and compares it to a regular expression. If there is a match, true is returned
+else false.
+
+@noindent @b{ARGUMENTS}:
+
+@table @samp
+@item uri
+String value of the ldap server. e.g. @code{"ldap://ldap.cfengine.com.no"}
+@item dn
+Distinguished name, an ldap formatted name built from components, e.g. "dc=cfengine,dc=com".
+@item filter
+String filter criterion, in ldap search, e.g. "(sn=User)".
+@item name
+String value, the name of a single record to be retrieved, e.g. @code{uid}.
+@item scope
+Menu option, the type of ldap search, from the specified root. May take values:
+@smallexample
+    subtree
+    onelevel
+    base
+@end smallexample
+
+@item regex
+A regular expression string to match to the results of an LDAP search. If any
+item matches, the result will be true.
+
+@item security
+Menu option indicating the encryption and authentication settings
+for communication with the LDAP server. These features might be subject
+to machine and server capabilites.
+@smallexample
+     none
+     ssl
+     sasl
+@end smallexample
+@end table
+     
+
+@node Function remotescalar, Function returnszero, Function regldap, Special functions
+@section Function remotescalar 
+
+
+@noindent @b{Synopsis}: remotescalar(3 args) returns type string
+
+
+@noindent Read a scalar value from a remote cfengine server
+
+
+@noindent @b{Example}:@*
+@*
+
+@verbatim
+
+vars:
+
+ "remote" string => remotescalar("test_scalar","127.0.0.1","yes");
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+@cartouche
+@example
+
+(string) remotescalar(@var{resource handle},@var{host/IP address},@var{encrypt});
+
+@end example
+@end cartouche
+
+This function downloads a string from a remote server, using the promise handle
+as a variable identifier. Availability: Enterprise editions of Cfengine only.
+
+@noindent @b{ARGUMENTS}:
+
+@table @samp
+@item resource handle
+The name of the promise on the server side
+@item host or IP address
+The location of the server on which the resource resides.
+@item encrypt
+Whether to encrypt the connection to the server.
+@smallexample
+     true
+     yes
+     false
+     no
+@end smallexample
+@end table
+
+@node Function returnszero, Function rrange, Function remotescalar, Special functions
 @section Function returnszero 
 
 
@@ -18870,7 +21950,7 @@ result rather than the output of the command.
 
 This is not yet used.
 
-@node Function selectservers, Function splitstring, Function rrange, Special functions
+@node Function selectservers, Function splayclass, Function rrange, Special functions
 @section Function selectservers 
 
 
@@ -18945,7 +22025,71 @@ The name of the array to build containing the names of hosts
 that pass the above tests. The array is ordered @code{array_name[0],..} etc.
 @end table
 
-@node Function splitstring, Function strcmp, Function selectservers, Special functions
+@node Function splayclass, Function splitstring, Function selectservers, Special functions
+@section Function splayclass 
+
+
+@noindent @b{Synopsis}: splayclass(2 args) returns type class
+
+
+@noindent True if the first argument's time-slot has arrived, according to a policy in arg2
+
+
+@noindent @b{Example}:@*
+@*
+
+
+@verbatim
+
+body common control
+
+{
+bundlesequence  => { "example" };
+}
+
+###########################################################
+
+bundle agent example
+
+{     
+classes:
+
+  "my_result" expression => splayclass("$(sys.host)$(sys.ipv4)","daily");
+
+reports:
+
+  my_result::
+
+    "Load balanced class activated";
+
+}
+
+@end verbatim
+
+
+@noindent @b{Notes}:@*
+@*
+
+
+The lvalue class evaluates to true if the system clock lies within a scheduled
+time-interval that maps to a hash of the first argument. Different strings will
+hash to different time intervals, and thus one can map tasks to time-intervals.
+
+This function may be used to distribute a task in time over a day or
+an hourly period, depending on the policy in the second argument.
+This is useful for copying resources from a single server, e.g.
+software updates when simultaneous scheduling would lead to a bottleneck.
+
+The function is similar to the splaytime feature in cf-execd, except
+that it allows you to base the decision on any string-criterion on a
+give host.  The entropy (or string-variation) in the first argument
+determines how effectively cfengine will be able to distribute tasks.
+Cfengine instances with the same first argument will yield a true
+result at the same time. Thus tasks could be scheduled according to
+group names for predictability.
+
+
+@node Function splitstring, Function strcmp, Function splayclass, Special functions
 @section Function splitstring 
 
 
@@ -19172,6 +22316,7 @@ The argument must be a user name or user id.
 @menu
 * Variable context const::      
 * Variable context sys::        
+* Variable context mon::        
 @end menu
 
 @node Variable context const, Variable context sys, Special Variables, Special Variables
@@ -19247,7 +22392,7 @@ reports:
 
 
 
-@node Variable context sys,  , Variable context const, Special Variables
+@node Variable context sys, Variable context mon, Variable context const, Special Variables
 @section Variable context @code{sys}
 
 @*
@@ -19282,12 +22427,6 @@ variable itself is class-specific.
 * Variable sys.fqhost::         
 * Variable sys.fstab::          
 * Variable sys.host::           
-* Variable sys.interface::      
-* Variable sys.ipv4::           
-* Variable sys.ipv4[wlan0]::    
-* Variable sys.ipv4_1[wlan0]::  
-* Variable sys.ipv4_2[wlan0]::  
-* Variable sys.ipv4_3[wlan0]::  
 * Variable sys.long_arch::      
 * Variable sys.maildir::        
 * Variable sys.os::             
@@ -19396,7 +22535,7 @@ The location of the system filesystem (mount) table.
 
 @end verbatim
 
-@node Variable sys.host, Variable sys.interface, Variable sys.fstab, Variable context sys
+@node Variable sys.host, Variable sys.long_arch, Variable sys.fstab, Variable context sys
 @subsection Variable sys.host 
 
 @*
@@ -19410,85 +22549,7 @@ is qualified or unqualified with a domain name.
 
 @end verbatim
 
-@node Variable sys.interface, Variable sys.ipv4, Variable sys.host, Variable context sys
-@subsection Variable sys.interface 
-
-@*
-
-The assumed (default) name of the main system interface on this host.
-
-@verbatim
-
-# interface = eth0
-
-@end verbatim
-
-@node Variable sys.ipv4, Variable sys.ipv4[wlan0], Variable sys.interface, Variable context sys
-@subsection Variable sys.ipv4 
-
-@*
-
-All four octets of the IPv4 address of the system interface named
-as the associative array index, e.g. @samp{$(ipv4_1[$(interface)])}.
-
-@verbatim
-
-# The IP on the default interface
-#        ipv4 = 192.168.1.101
-
-# The octets of all interfaces as an associative array
-# ipv4_1[le0] = 192
-# ipv4_2[le0] = 192.168
-# ipv4_3[le0] = 192.168.1
-#   ipv4[le0] = 192.168.1.101
-
-@end verbatim
-
-@node Variable sys.ipv4[wlan0], Variable sys.ipv4_1[wlan0], Variable sys.ipv4, Variable context sys
-@subsection Variable sys.ipv4[wlan0] 
-
-@*
-
-@verbatim
-
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/var_sys_ipv4[wlan0].texinfo)
-""
-@end verbatim
-
-@node Variable sys.ipv4_1[wlan0], Variable sys.ipv4_2[wlan0], Variable sys.ipv4[wlan0], Variable context sys
-@subsection Variable sys.ipv4_1[wlan0] 
-
-@*
-
-@verbatim
-
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/var_sys_ipv4_1[wlan0].texinfo)
-""
-@end verbatim
-
-@node Variable sys.ipv4_2[wlan0], Variable sys.ipv4_3[wlan0], Variable sys.ipv4_1[wlan0], Variable context sys
-@subsection Variable sys.ipv4_2[wlan0] 
-
-@*
-
-@verbatim
-
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/var_sys_ipv4_2[wlan0].texinfo)
-""
-@end verbatim
-
-@node Variable sys.ipv4_3[wlan0], Variable sys.long_arch, Variable sys.ipv4_2[wlan0], Variable context sys
-@subsection Variable sys.ipv4_3[wlan0] 
-
-@*
-
-@verbatim
-
-Fill me in (/home/mark/LapTop/CfengineProjects/CompanyDocuments/trunk/Cfengine3Reference/var_sys_ipv4_3[wlan0].texinfo)
-""
-@end verbatim
-
-@node Variable sys.long_arch, Variable sys.maildir, Variable sys.ipv4_3[wlan0], Variable context sys
+@node Variable sys.long_arch, Variable sys.maildir, Variable sys.host, Variable context sys
 @subsection Variable sys.long_arch 
 
 @*
@@ -19603,7 +22664,833 @@ For non-privileged users it is in the user's home directory:
 
 @end verbatim
 
-@c *****************************************************
+
+
+@node Variable context mon,  , Variable context sys, Special Variables
+@section Variable context @code{mon}
+
+@*
+
+The variables discovered by @code{cf-monitord} are placed in this monitoring
+context. Monitoring variables are expected to be ephemeral properties, rapidly changing.
+
+In enterprise versions of cfengine, custom defined monitoring targets also become
+variables in this context, named by the handle of the promise that defined them.
+
+
+@menu
+* Variable mon.value_users::    
+* Variable mon.average_users::  
+* Variable mon.stddev_users::   
+* Variable mon.value_rootprocs::  
+* Variable mon.average_rootprocs::  
+* Variable mon.stddev_rootprocs::  
+* Variable mon.value_otherprocs::  
+* Variable mon.average_otherprocs::  
+* Variable mon.stddev_otherprocs::  
+* Variable mon.value_diskfree::  
+* Variable mon.average_diskfree::  
+* Variable mon.stddev_diskfree::  
+* Variable mon.value_loadavg::  
+* Variable mon.average_loadavg::  
+* Variable mon.stddev_loadavg::  
+* Variable mon.value_netbiosns_in::  
+* Variable mon.average_netbiosns_in::  
+* Variable mon.stddev_netbiosns_in::  
+* Variable mon.value_netbiosns_out::  
+* Variable mon.average_netbiosns_out::  
+* Variable mon.stddev_netbiosns_out::  
+* Variable mon.value_netbiosdgm_in::  
+* Variable mon.average_netbiosdgm_in::  
+* Variable mon.stddev_netbiosdgm_in::  
+* Variable mon.value_netbiosdgm_out::  
+* Variable mon.average_netbiosdgm_out::  
+* Variable mon.stddev_netbiosdgm_out::  
+* Variable mon.value_netbiosssn_in::  
+* Variable mon.average_netbiosssn_in::  
+* Variable mon.stddev_netbiosssn_in::  
+* Variable mon.value_netbiosssn_out::  
+* Variable mon.average_netbiosssn_out::  
+* Variable mon.stddev_netbiosssn_out::  
+* Variable mon.value_irc_in::   
+* Variable mon.average_irc_in::  
+* Variable mon.stddev_irc_in::  
+* Variable mon.value_irc_out::  
+* Variable mon.average_irc_out::  
+* Variable mon.stddev_irc_out::  
+* Variable mon.value_cfengine_in::  
+* Variable mon.average_cfengine_in::  
+* Variable mon.stddev_cfengine_in::  
+* Variable mon.value_cfengine_out::  
+* Variable mon.average_cfengine_out::  
+* Variable mon.stddev_cfengine_out::  
+* Variable mon.value_nfsd_in::  
+* Variable mon.average_nfsd_in::  
+* Variable mon.stddev_nfsd_in::  
+* Variable mon.value_nfsd_out::  
+* Variable mon.average_nfsd_out::  
+* Variable mon.stddev_nfsd_out::  
+* Variable mon.value_smtp_in::  
+* Variable mon.average_smtp_in::  
+* Variable mon.stddev_smtp_in::  
+* Variable mon.value_smtp_out::  
+* Variable mon.average_smtp_out::  
+* Variable mon.stddev_smtp_out::  
+* Variable mon.value_www_in::   
+* Variable mon.average_www_in::  
+* Variable mon.stddev_www_in::  
+* Variable mon.value_www_out::  
+* Variable mon.average_www_out::  
+* Variable mon.stddev_www_out::  
+* Variable mon.value_ftp_in::   
+* Variable mon.average_ftp_in::  
+* Variable mon.stddev_ftp_in::  
+* Variable mon.value_ftp_out::  
+* Variable mon.average_ftp_out::  
+* Variable mon.stddev_ftp_out::  
+* Variable mon.value_ssh_in::   
+* Variable mon.average_ssh_in::  
+* Variable mon.stddev_ssh_in::  
+* Variable mon.value_ssh_out::  
+* Variable mon.average_ssh_out::  
+* Variable mon.stddev_ssh_out::  
+* Variable mon.value_wwws_in::  
+* Variable mon.average_wwws_in::  
+* Variable mon.stddev_wwws_in::  
+* Variable mon.value_wwws_out::  
+* Variable mon.average_wwws_out::  
+* Variable mon.stddev_wwws_out::  
+* Variable mon.value_icmp_in::  
+* Variable mon.average_icmp_in::  
+* Variable mon.stddev_icmp_in::  
+* Variable mon.value_icmp_out::  
+* Variable mon.average_icmp_out::  
+* Variable mon.stddev_icmp_out::  
+* Variable mon.value_udp_in::   
+* Variable mon.average_udp_in::  
+* Variable mon.stddev_udp_in::  
+* Variable mon.value_udp_out::  
+* Variable mon.average_udp_out::  
+* Variable mon.stddev_udp_out::  
+* Variable mon.value_dns_in::   
+* Variable mon.average_dns_in::  
+* Variable mon.stddev_dns_in::  
+* Variable mon.value_dns_out::  
+* Variable mon.average_dns_out::  
+* Variable mon.stddev_dns_out::  
+* Variable mon.value_tcpsyn_in::  
+* Variable mon.average_tcpsyn_in::  
+* Variable mon.stddev_tcpsyn_in::  
+* Variable mon.value_tcpsyn_out::  
+* Variable mon.average_tcpsyn_out::  
+* Variable mon.stddev_tcpsyn_out::  
+* Variable mon.value_tcpack_in::  
+* Variable mon.average_tcpack_in::  
+* Variable mon.stddev_tcpack_in::  
+* Variable mon.value_tcpack_out::  
+* Variable mon.average_tcpack_out::  
+* Variable mon.stddev_tcpack_out::  
+* Variable mon.value_tcpfin_in::  
+* Variable mon.average_tcpfin_in::  
+* Variable mon.stddev_tcpfin_in::  
+* Variable mon.value_tcpfin_out::  
+* Variable mon.average_tcpfin_out::  
+* Variable mon.stddev_tcpfin_out::  
+* Variable mon.value_tcpmisc_in::  
+* Variable mon.average_tcpmisc_in::  
+* Variable mon.stddev_tcpmisc_in::  
+* Variable mon.value_tcpmisc_out::  
+* Variable mon.average_tcpmisc_out::  
+* Variable mon.stddev_tcpmisc_out::  
+* Variable mon.value_webaccess::  
+* Variable mon.average_webaccess::  
+* Variable mon.stddev_webaccess::  
+* Variable mon.value_weberrors::  
+* Variable mon.average_weberrors::  
+* Variable mon.stddev_weberrors::  
+* Variable mon.value_syslog::   
+* Variable mon.average_syslog::  
+* Variable mon.stddev_syslog::  
+* Variable mon.value_messages::  
+* Variable mon.average_messages::  
+* Variable mon.stddev_messages::  
+* Variable mon.value_temp0::    
+* Variable mon.average_temp0::  
+* Variable mon.stddev_temp0::   
+* Variable mon.value_temp1::    
+* Variable mon.average_temp1::  
+* Variable mon.stddev_temp1::   
+* Variable mon.value_temp2::    
+* Variable mon.average_temp2::  
+* Variable mon.stddev_temp2::   
+* Variable mon.value_temp3::    
+* Variable mon.average_temp3::  
+* Variable mon.stddev_temp3::   
+* Variable mon.value_cpu::      
+* Variable mon.average_cpu::    
+* Variable mon.stddev_cpu::     
+* Variable mon.value_cpu0::     
+* Variable mon.average_cpu0::   
+* Variable mon.stddev_cpu0::    
+* Variable mon.value_cpu1::     
+* Variable mon.average_cpu1::   
+* Variable mon.stddev_cpu1::    
+* Variable mon.value_cpu2::     
+* Variable mon.average_cpu2::   
+* Variable mon.stddev_cpu2::    
+* Variable mon.value_cpu3::     
+* Variable mon.average_cpu3::   
+* Variable mon.stddev_cpu3::    
+@end menu
+
+@node Variable mon.value_users, Variable mon.average_users, Variable context mon, Variable context mon
+@subsection Variable mon.value_users 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Users logged in}.
+@node Variable mon.average_users, Variable mon.stddev_users, Variable mon.value_users, Variable context mon
+@subsection Variable mon.average_users 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Users logged in}.
+@node Variable mon.stddev_users, Variable mon.value_rootprocs, Variable mon.average_users, Variable context mon
+@subsection Variable mon.stddev_users 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Users logged in}.
+@node Variable mon.value_rootprocs, Variable mon.average_rootprocs, Variable mon.stddev_users, Variable context mon
+@subsection Variable mon.value_rootprocs 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Privileged system processes}.
+@node Variable mon.average_rootprocs, Variable mon.stddev_rootprocs, Variable mon.value_rootprocs, Variable context mon
+@subsection Variable mon.average_rootprocs 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Privileged system processes}.
+@node Variable mon.stddev_rootprocs, Variable mon.value_otherprocs, Variable mon.average_rootprocs, Variable context mon
+@subsection Variable mon.stddev_rootprocs 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Privileged system processes}.
+@node Variable mon.value_otherprocs, Variable mon.average_otherprocs, Variable mon.stddev_rootprocs, Variable context mon
+@subsection Variable mon.value_otherprocs 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Non-privileged process}.
+@node Variable mon.average_otherprocs, Variable mon.stddev_otherprocs, Variable mon.value_otherprocs, Variable context mon
+@subsection Variable mon.average_otherprocs 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Non-privileged process}.
+@node Variable mon.stddev_otherprocs, Variable mon.value_diskfree, Variable mon.average_otherprocs, Variable context mon
+@subsection Variable mon.stddev_otherprocs 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Non-privileged process}.
+@node Variable mon.value_diskfree, Variable mon.average_diskfree, Variable mon.stddev_otherprocs, Variable context mon
+@subsection Variable mon.value_diskfree 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Free disk on / partition}.
+@node Variable mon.average_diskfree, Variable mon.stddev_diskfree, Variable mon.value_diskfree, Variable context mon
+@subsection Variable mon.average_diskfree 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Free disk on / partition}.
+@node Variable mon.stddev_diskfree, Variable mon.value_loadavg, Variable mon.average_diskfree, Variable context mon
+@subsection Variable mon.stddev_diskfree 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Free disk on / partition}.
+@node Variable mon.value_loadavg, Variable mon.average_loadavg, Variable mon.stddev_diskfree, Variable context mon
+@subsection Variable mon.value_loadavg 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{% kernel load utilization}.
+@node Variable mon.average_loadavg, Variable mon.stddev_loadavg, Variable mon.value_loadavg, Variable context mon
+@subsection Variable mon.average_loadavg 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{% kernel load utilization}.
+@node Variable mon.stddev_loadavg, Variable mon.value_netbiosns_in, Variable mon.average_loadavg, Variable context mon
+@subsection Variable mon.stddev_loadavg 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{% kernel load utilization}.
+@node Variable mon.value_netbiosns_in, Variable mon.average_netbiosns_in, Variable mon.stddev_loadavg, Variable context mon
+@subsection Variable mon.value_netbiosns_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name lookups (in)}.
+@node Variable mon.average_netbiosns_in, Variable mon.stddev_netbiosns_in, Variable mon.value_netbiosns_in, Variable context mon
+@subsection Variable mon.average_netbiosns_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name lookups (in)}.
+@node Variable mon.stddev_netbiosns_in, Variable mon.value_netbiosns_out, Variable mon.average_netbiosns_in, Variable context mon
+@subsection Variable mon.stddev_netbiosns_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name lookups (in)}.
+@node Variable mon.value_netbiosns_out, Variable mon.average_netbiosns_out, Variable mon.stddev_netbiosns_in, Variable context mon
+@subsection Variable mon.value_netbiosns_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name lookups (out)}.
+@node Variable mon.average_netbiosns_out, Variable mon.stddev_netbiosns_out, Variable mon.value_netbiosns_out, Variable context mon
+@subsection Variable mon.average_netbiosns_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name lookups (out)}.
+@node Variable mon.stddev_netbiosns_out, Variable mon.value_netbiosdgm_in, Variable mon.average_netbiosns_out, Variable context mon
+@subsection Variable mon.stddev_netbiosns_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name lookups (out)}.
+@node Variable mon.value_netbiosdgm_in, Variable mon.average_netbiosdgm_in, Variable mon.stddev_netbiosns_out, Variable context mon
+@subsection Variable mon.value_netbiosdgm_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name datagrams (in)}.
+@node Variable mon.average_netbiosdgm_in, Variable mon.stddev_netbiosdgm_in, Variable mon.value_netbiosdgm_in, Variable context mon
+@subsection Variable mon.average_netbiosdgm_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name datagrams (in)}.
+@node Variable mon.stddev_netbiosdgm_in, Variable mon.value_netbiosdgm_out, Variable mon.average_netbiosdgm_in, Variable context mon
+@subsection Variable mon.stddev_netbiosdgm_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name datagrams (in)}.
+@node Variable mon.value_netbiosdgm_out, Variable mon.average_netbiosdgm_out, Variable mon.stddev_netbiosdgm_in, Variable context mon
+@subsection Variable mon.value_netbiosdgm_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name datagrams (out)}.
+@node Variable mon.average_netbiosdgm_out, Variable mon.stddev_netbiosdgm_out, Variable mon.value_netbiosdgm_out, Variable context mon
+@subsection Variable mon.average_netbiosdgm_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name datagrams (out)}.
+@node Variable mon.stddev_netbiosdgm_out, Variable mon.value_netbiosssn_in, Variable mon.average_netbiosdgm_out, Variable context mon
+@subsection Variable mon.stddev_netbiosdgm_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name datagrams (out)}.
+@node Variable mon.value_netbiosssn_in, Variable mon.average_netbiosssn_in, Variable mon.stddev_netbiosdgm_out, Variable context mon
+@subsection Variable mon.value_netbiosssn_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name sessions (in)}.
+@node Variable mon.average_netbiosssn_in, Variable mon.stddev_netbiosssn_in, Variable mon.value_netbiosssn_in, Variable context mon
+@subsection Variable mon.average_netbiosssn_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name sessions (in)}.
+@node Variable mon.stddev_netbiosssn_in, Variable mon.value_netbiosssn_out, Variable mon.average_netbiosssn_in, Variable context mon
+@subsection Variable mon.stddev_netbiosssn_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name sessions (in)}.
+@node Variable mon.value_netbiosssn_out, Variable mon.average_netbiosssn_out, Variable mon.stddev_netbiosssn_in, Variable context mon
+@subsection Variable mon.value_netbiosssn_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name sessions (out)}.
+@node Variable mon.average_netbiosssn_out, Variable mon.stddev_netbiosssn_out, Variable mon.value_netbiosssn_out, Variable context mon
+@subsection Variable mon.average_netbiosssn_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name sessions (out)}.
+@node Variable mon.stddev_netbiosssn_out, Variable mon.value_irc_in, Variable mon.average_netbiosssn_out, Variable context mon
+@subsection Variable mon.stddev_netbiosssn_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{netbios name sessions (out)}.
+@node Variable mon.value_irc_in, Variable mon.average_irc_in, Variable mon.stddev_netbiosssn_out, Variable context mon
+@subsection Variable mon.value_irc_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{IRC connections (in)}.
+@node Variable mon.average_irc_in, Variable mon.stddev_irc_in, Variable mon.value_irc_in, Variable context mon
+@subsection Variable mon.average_irc_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{IRC connections (in)}.
+@node Variable mon.stddev_irc_in, Variable mon.value_irc_out, Variable mon.average_irc_in, Variable context mon
+@subsection Variable mon.stddev_irc_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{IRC connections (in)}.
+@node Variable mon.value_irc_out, Variable mon.average_irc_out, Variable mon.stddev_irc_in, Variable context mon
+@subsection Variable mon.value_irc_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{IRC connections (out)}.
+@node Variable mon.average_irc_out, Variable mon.stddev_irc_out, Variable mon.value_irc_out, Variable context mon
+@subsection Variable mon.average_irc_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{IRC connections (out)}.
+@node Variable mon.stddev_irc_out, Variable mon.value_cfengine_in, Variable mon.average_irc_out, Variable context mon
+@subsection Variable mon.stddev_irc_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{IRC connections (out)}.
+@node Variable mon.value_cfengine_in, Variable mon.average_cfengine_in, Variable mon.stddev_irc_out, Variable context mon
+@subsection Variable mon.value_cfengine_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{cfengine connections (in)}.
+@node Variable mon.average_cfengine_in, Variable mon.stddev_cfengine_in, Variable mon.value_cfengine_in, Variable context mon
+@subsection Variable mon.average_cfengine_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{cfengine connections (in)}.
+@node Variable mon.stddev_cfengine_in, Variable mon.value_cfengine_out, Variable mon.average_cfengine_in, Variable context mon
+@subsection Variable mon.stddev_cfengine_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{cfengine connections (in)}.
+@node Variable mon.value_cfengine_out, Variable mon.average_cfengine_out, Variable mon.stddev_cfengine_in, Variable context mon
+@subsection Variable mon.value_cfengine_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{cfengine connections (out)}.
+@node Variable mon.average_cfengine_out, Variable mon.stddev_cfengine_out, Variable mon.value_cfengine_out, Variable context mon
+@subsection Variable mon.average_cfengine_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{cfengine connections (out)}.
+@node Variable mon.stddev_cfengine_out, Variable mon.value_nfsd_in, Variable mon.average_cfengine_out, Variable context mon
+@subsection Variable mon.stddev_cfengine_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{cfengine connections (out)}.
+@node Variable mon.value_nfsd_in, Variable mon.average_nfsd_in, Variable mon.stddev_cfengine_out, Variable context mon
+@subsection Variable mon.value_nfsd_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{nfs connections (in)}.
+@node Variable mon.average_nfsd_in, Variable mon.stddev_nfsd_in, Variable mon.value_nfsd_in, Variable context mon
+@subsection Variable mon.average_nfsd_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{nfs connections (in)}.
+@node Variable mon.stddev_nfsd_in, Variable mon.value_nfsd_out, Variable mon.average_nfsd_in, Variable context mon
+@subsection Variable mon.stddev_nfsd_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{nfs connections (in)}.
+@node Variable mon.value_nfsd_out, Variable mon.average_nfsd_out, Variable mon.stddev_nfsd_in, Variable context mon
+@subsection Variable mon.value_nfsd_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{nfs connections (out)}.
+@node Variable mon.average_nfsd_out, Variable mon.stddev_nfsd_out, Variable mon.value_nfsd_out, Variable context mon
+@subsection Variable mon.average_nfsd_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{nfs connections (out)}.
+@node Variable mon.stddev_nfsd_out, Variable mon.value_smtp_in, Variable mon.average_nfsd_out, Variable context mon
+@subsection Variable mon.stddev_nfsd_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{nfs connections (out)}.
+@node Variable mon.value_smtp_in, Variable mon.average_smtp_in, Variable mon.stddev_nfsd_out, Variable context mon
+@subsection Variable mon.value_smtp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{smtp connections (in)}.
+@node Variable mon.average_smtp_in, Variable mon.stddev_smtp_in, Variable mon.value_smtp_in, Variable context mon
+@subsection Variable mon.average_smtp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{smtp connections (in)}.
+@node Variable mon.stddev_smtp_in, Variable mon.value_smtp_out, Variable mon.average_smtp_in, Variable context mon
+@subsection Variable mon.stddev_smtp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{smtp connections (in)}.
+@node Variable mon.value_smtp_out, Variable mon.average_smtp_out, Variable mon.stddev_smtp_in, Variable context mon
+@subsection Variable mon.value_smtp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{smtp connections (out)}.
+@node Variable mon.average_smtp_out, Variable mon.stddev_smtp_out, Variable mon.value_smtp_out, Variable context mon
+@subsection Variable mon.average_smtp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{smtp connections (out)}.
+@node Variable mon.stddev_smtp_out, Variable mon.value_www_in, Variable mon.average_smtp_out, Variable context mon
+@subsection Variable mon.stddev_smtp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{smtp connections (out)}.
+@node Variable mon.value_www_in, Variable mon.average_www_in, Variable mon.stddev_smtp_out, Variable context mon
+@subsection Variable mon.value_www_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{www connections (in)}.
+@node Variable mon.average_www_in, Variable mon.stddev_www_in, Variable mon.value_www_in, Variable context mon
+@subsection Variable mon.average_www_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{www connections (in)}.
+@node Variable mon.stddev_www_in, Variable mon.value_www_out, Variable mon.average_www_in, Variable context mon
+@subsection Variable mon.stddev_www_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{www connections (in)}.
+@node Variable mon.value_www_out, Variable mon.average_www_out, Variable mon.stddev_www_in, Variable context mon
+@subsection Variable mon.value_www_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{www connections (out)}.
+@node Variable mon.average_www_out, Variable mon.stddev_www_out, Variable mon.value_www_out, Variable context mon
+@subsection Variable mon.average_www_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{www connections (out)}.
+@node Variable mon.stddev_www_out, Variable mon.value_ftp_in, Variable mon.average_www_out, Variable context mon
+@subsection Variable mon.stddev_www_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{www connections (out)}.
+@node Variable mon.value_ftp_in, Variable mon.average_ftp_in, Variable mon.stddev_www_out, Variable context mon
+@subsection Variable mon.value_ftp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ftp connections (in)}.
+@node Variable mon.average_ftp_in, Variable mon.stddev_ftp_in, Variable mon.value_ftp_in, Variable context mon
+@subsection Variable mon.average_ftp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ftp connections (in)}.
+@node Variable mon.stddev_ftp_in, Variable mon.value_ftp_out, Variable mon.average_ftp_in, Variable context mon
+@subsection Variable mon.stddev_ftp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ftp connections (in)}.
+@node Variable mon.value_ftp_out, Variable mon.average_ftp_out, Variable mon.stddev_ftp_in, Variable context mon
+@subsection Variable mon.value_ftp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ftp connections (out)}.
+@node Variable mon.average_ftp_out, Variable mon.stddev_ftp_out, Variable mon.value_ftp_out, Variable context mon
+@subsection Variable mon.average_ftp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ftp connections (out)}.
+@node Variable mon.stddev_ftp_out, Variable mon.value_ssh_in, Variable mon.average_ftp_out, Variable context mon
+@subsection Variable mon.stddev_ftp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ftp connections (out)}.
+@node Variable mon.value_ssh_in, Variable mon.average_ssh_in, Variable mon.stddev_ftp_out, Variable context mon
+@subsection Variable mon.value_ssh_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ssh connections (in)}.
+@node Variable mon.average_ssh_in, Variable mon.stddev_ssh_in, Variable mon.value_ssh_in, Variable context mon
+@subsection Variable mon.average_ssh_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ssh connections (in)}.
+@node Variable mon.stddev_ssh_in, Variable mon.value_ssh_out, Variable mon.average_ssh_in, Variable context mon
+@subsection Variable mon.stddev_ssh_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ssh connections (in)}.
+@node Variable mon.value_ssh_out, Variable mon.average_ssh_out, Variable mon.stddev_ssh_in, Variable context mon
+@subsection Variable mon.value_ssh_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ssh connections (out)}.
+@node Variable mon.average_ssh_out, Variable mon.stddev_ssh_out, Variable mon.value_ssh_out, Variable context mon
+@subsection Variable mon.average_ssh_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ssh connections (out)}.
+@node Variable mon.stddev_ssh_out, Variable mon.value_wwws_in, Variable mon.average_ssh_out, Variable context mon
+@subsection Variable mon.stddev_ssh_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ssh connections (out)}.
+@node Variable mon.value_wwws_in, Variable mon.average_wwws_in, Variable mon.stddev_ssh_out, Variable context mon
+@subsection Variable mon.value_wwws_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{wwws connections (in)}.
+@node Variable mon.average_wwws_in, Variable mon.stddev_wwws_in, Variable mon.value_wwws_in, Variable context mon
+@subsection Variable mon.average_wwws_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{wwws connections (in)}.
+@node Variable mon.stddev_wwws_in, Variable mon.value_wwws_out, Variable mon.average_wwws_in, Variable context mon
+@subsection Variable mon.stddev_wwws_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{wwws connections (in)}.
+@node Variable mon.value_wwws_out, Variable mon.average_wwws_out, Variable mon.stddev_wwws_in, Variable context mon
+@subsection Variable mon.value_wwws_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{wwws connections (out)}.
+@node Variable mon.average_wwws_out, Variable mon.stddev_wwws_out, Variable mon.value_wwws_out, Variable context mon
+@subsection Variable mon.average_wwws_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{wwws connections (out)}.
+@node Variable mon.stddev_wwws_out, Variable mon.value_icmp_in, Variable mon.average_wwws_out, Variable context mon
+@subsection Variable mon.stddev_wwws_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{wwws connections (out)}.
+@node Variable mon.value_icmp_in, Variable mon.average_icmp_in, Variable mon.stddev_wwws_out, Variable context mon
+@subsection Variable mon.value_icmp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ICMP packets (in)}.
+@node Variable mon.average_icmp_in, Variable mon.stddev_icmp_in, Variable mon.value_icmp_in, Variable context mon
+@subsection Variable mon.average_icmp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ICMP packets (in)}.
+@node Variable mon.stddev_icmp_in, Variable mon.value_icmp_out, Variable mon.average_icmp_in, Variable context mon
+@subsection Variable mon.stddev_icmp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ICMP packets (in)}.
+@node Variable mon.value_icmp_out, Variable mon.average_icmp_out, Variable mon.stddev_icmp_in, Variable context mon
+@subsection Variable mon.value_icmp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ICMP packets (out)}.
+@node Variable mon.average_icmp_out, Variable mon.stddev_icmp_out, Variable mon.value_icmp_out, Variable context mon
+@subsection Variable mon.average_icmp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ICMP packets (out)}.
+@node Variable mon.stddev_icmp_out, Variable mon.value_udp_in, Variable mon.average_icmp_out, Variable context mon
+@subsection Variable mon.stddev_icmp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{ICMP packets (out)}.
+@node Variable mon.value_udp_in, Variable mon.average_udp_in, Variable mon.stddev_icmp_out, Variable context mon
+@subsection Variable mon.value_udp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{UDP dgrams (in)}.
+@node Variable mon.average_udp_in, Variable mon.stddev_udp_in, Variable mon.value_udp_in, Variable context mon
+@subsection Variable mon.average_udp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{UDP dgrams (in)}.
+@node Variable mon.stddev_udp_in, Variable mon.value_udp_out, Variable mon.average_udp_in, Variable context mon
+@subsection Variable mon.stddev_udp_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{UDP dgrams (in)}.
+@node Variable mon.value_udp_out, Variable mon.average_udp_out, Variable mon.stddev_udp_in, Variable context mon
+@subsection Variable mon.value_udp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{UDP dgrams (out)}.
+@node Variable mon.average_udp_out, Variable mon.stddev_udp_out, Variable mon.value_udp_out, Variable context mon
+@subsection Variable mon.average_udp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{UDP dgrams (out)}.
+@node Variable mon.stddev_udp_out, Variable mon.value_dns_in, Variable mon.average_udp_out, Variable context mon
+@subsection Variable mon.stddev_udp_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{UDP dgrams (out)}.
+@node Variable mon.value_dns_in, Variable mon.average_dns_in, Variable mon.stddev_udp_out, Variable context mon
+@subsection Variable mon.value_dns_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{DNS requests (in)}.
+@node Variable mon.average_dns_in, Variable mon.stddev_dns_in, Variable mon.value_dns_in, Variable context mon
+@subsection Variable mon.average_dns_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{DNS requests (in)}.
+@node Variable mon.stddev_dns_in, Variable mon.value_dns_out, Variable mon.average_dns_in, Variable context mon
+@subsection Variable mon.stddev_dns_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{DNS requests (in)}.
+@node Variable mon.value_dns_out, Variable mon.average_dns_out, Variable mon.stddev_dns_in, Variable context mon
+@subsection Variable mon.value_dns_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{DNS requests (out)}.
+@node Variable mon.average_dns_out, Variable mon.stddev_dns_out, Variable mon.value_dns_out, Variable context mon
+@subsection Variable mon.average_dns_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{DNS requests (out)}.
+@node Variable mon.stddev_dns_out, Variable mon.value_tcpsyn_in, Variable mon.average_dns_out, Variable context mon
+@subsection Variable mon.stddev_dns_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{DNS requests (out)}.
+@node Variable mon.value_tcpsyn_in, Variable mon.average_tcpsyn_in, Variable mon.stddev_dns_out, Variable context mon
+@subsection Variable mon.value_tcpsyn_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP sessions (in)}.
+@node Variable mon.average_tcpsyn_in, Variable mon.stddev_tcpsyn_in, Variable mon.value_tcpsyn_in, Variable context mon
+@subsection Variable mon.average_tcpsyn_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP sessions (in)}.
+@node Variable mon.stddev_tcpsyn_in, Variable mon.value_tcpsyn_out, Variable mon.average_tcpsyn_in, Variable context mon
+@subsection Variable mon.stddev_tcpsyn_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP sessions (in)}.
+@node Variable mon.value_tcpsyn_out, Variable mon.average_tcpsyn_out, Variable mon.stddev_tcpsyn_in, Variable context mon
+@subsection Variable mon.value_tcpsyn_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP sessions (out)}.
+@node Variable mon.average_tcpsyn_out, Variable mon.stddev_tcpsyn_out, Variable mon.value_tcpsyn_out, Variable context mon
+@subsection Variable mon.average_tcpsyn_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP sessions (out)}.
+@node Variable mon.stddev_tcpsyn_out, Variable mon.value_tcpack_in, Variable mon.average_tcpsyn_out, Variable context mon
+@subsection Variable mon.stddev_tcpsyn_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP sessions (out)}.
+@node Variable mon.value_tcpack_in, Variable mon.average_tcpack_in, Variable mon.stddev_tcpsyn_out, Variable context mon
+@subsection Variable mon.value_tcpack_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP acks (in)}.
+@node Variable mon.average_tcpack_in, Variable mon.stddev_tcpack_in, Variable mon.value_tcpack_in, Variable context mon
+@subsection Variable mon.average_tcpack_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP acks (in)}.
+@node Variable mon.stddev_tcpack_in, Variable mon.value_tcpack_out, Variable mon.average_tcpack_in, Variable context mon
+@subsection Variable mon.stddev_tcpack_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP acks (in)}.
+@node Variable mon.value_tcpack_out, Variable mon.average_tcpack_out, Variable mon.stddev_tcpack_in, Variable context mon
+@subsection Variable mon.value_tcpack_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP acks (out)}.
+@node Variable mon.average_tcpack_out, Variable mon.stddev_tcpack_out, Variable mon.value_tcpack_out, Variable context mon
+@subsection Variable mon.average_tcpack_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP acks (out)}.
+@node Variable mon.stddev_tcpack_out, Variable mon.value_tcpfin_in, Variable mon.average_tcpack_out, Variable context mon
+@subsection Variable mon.stddev_tcpack_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP acks (out)}.
+@node Variable mon.value_tcpfin_in, Variable mon.average_tcpfin_in, Variable mon.stddev_tcpack_out, Variable context mon
+@subsection Variable mon.value_tcpfin_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP finish (in)}.
+@node Variable mon.average_tcpfin_in, Variable mon.stddev_tcpfin_in, Variable mon.value_tcpfin_in, Variable context mon
+@subsection Variable mon.average_tcpfin_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP finish (in)}.
+@node Variable mon.stddev_tcpfin_in, Variable mon.value_tcpfin_out, Variable mon.average_tcpfin_in, Variable context mon
+@subsection Variable mon.stddev_tcpfin_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP finish (in)}.
+@node Variable mon.value_tcpfin_out, Variable mon.average_tcpfin_out, Variable mon.stddev_tcpfin_in, Variable context mon
+@subsection Variable mon.value_tcpfin_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP finish (out)}.
+@node Variable mon.average_tcpfin_out, Variable mon.stddev_tcpfin_out, Variable mon.value_tcpfin_out, Variable context mon
+@subsection Variable mon.average_tcpfin_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP finish (out)}.
+@node Variable mon.stddev_tcpfin_out, Variable mon.value_tcpmisc_in, Variable mon.average_tcpfin_out, Variable context mon
+@subsection Variable mon.stddev_tcpfin_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP finish (out)}.
+@node Variable mon.value_tcpmisc_in, Variable mon.average_tcpmisc_in, Variable mon.stddev_tcpfin_out, Variable context mon
+@subsection Variable mon.value_tcpmisc_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP misc (in)}.
+@node Variable mon.average_tcpmisc_in, Variable mon.stddev_tcpmisc_in, Variable mon.value_tcpmisc_in, Variable context mon
+@subsection Variable mon.average_tcpmisc_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP misc (in)}.
+@node Variable mon.stddev_tcpmisc_in, Variable mon.value_tcpmisc_out, Variable mon.average_tcpmisc_in, Variable context mon
+@subsection Variable mon.stddev_tcpmisc_in 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP misc (in)}.
+@node Variable mon.value_tcpmisc_out, Variable mon.average_tcpmisc_out, Variable mon.stddev_tcpmisc_in, Variable context mon
+@subsection Variable mon.value_tcpmisc_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP misc (out)}.
+@node Variable mon.average_tcpmisc_out, Variable mon.stddev_tcpmisc_out, Variable mon.value_tcpmisc_out, Variable context mon
+@subsection Variable mon.average_tcpmisc_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP misc (out)}.
+@node Variable mon.stddev_tcpmisc_out, Variable mon.value_webaccess, Variable mon.average_tcpmisc_out, Variable context mon
+@subsection Variable mon.stddev_tcpmisc_out 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{TCP misc (out)}.
+@node Variable mon.value_webaccess, Variable mon.average_webaccess, Variable mon.stddev_tcpmisc_out, Variable context mon
+@subsection Variable mon.value_webaccess 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Webserver hits}.
+@node Variable mon.average_webaccess, Variable mon.stddev_webaccess, Variable mon.value_webaccess, Variable context mon
+@subsection Variable mon.average_webaccess 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Webserver hits}.
+@node Variable mon.stddev_webaccess, Variable mon.value_weberrors, Variable mon.average_webaccess, Variable context mon
+@subsection Variable mon.stddev_webaccess 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Webserver hits}.
+@node Variable mon.value_weberrors, Variable mon.average_weberrors, Variable mon.stddev_webaccess, Variable context mon
+@subsection Variable mon.value_weberrors 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Webserver errors}.
+@node Variable mon.average_weberrors, Variable mon.stddev_weberrors, Variable mon.value_weberrors, Variable context mon
+@subsection Variable mon.average_weberrors 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Webserver errors}.
+@node Variable mon.stddev_weberrors, Variable mon.value_syslog, Variable mon.average_weberrors, Variable context mon
+@subsection Variable mon.stddev_weberrors 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{Webserver errors}.
+@node Variable mon.value_syslog, Variable mon.average_syslog, Variable mon.stddev_weberrors, Variable context mon
+@subsection Variable mon.value_syslog 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{New log entries (Syslog)}.
+@node Variable mon.average_syslog, Variable mon.stddev_syslog, Variable mon.value_syslog, Variable context mon
+@subsection Variable mon.average_syslog 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{New log entries (Syslog)}.
+@node Variable mon.stddev_syslog, Variable mon.value_messages, Variable mon.average_syslog, Variable context mon
+@subsection Variable mon.stddev_syslog 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{New log entries (Syslog)}.
+@node Variable mon.value_messages, Variable mon.average_messages, Variable mon.stddev_syslog, Variable context mon
+@subsection Variable mon.value_messages 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{New log entries (messages)}.
+@node Variable mon.average_messages, Variable mon.stddev_messages, Variable mon.value_messages, Variable context mon
+@subsection Variable mon.average_messages 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{New log entries (messages)}.
+@node Variable mon.stddev_messages, Variable mon.value_temp0, Variable mon.average_messages, Variable context mon
+@subsection Variable mon.stddev_messages 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{New log entries (messages)}.
+@node Variable mon.value_temp0, Variable mon.average_temp0, Variable mon.stddev_messages, Variable context mon
+@subsection Variable mon.value_temp0 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 0}.
+@node Variable mon.average_temp0, Variable mon.stddev_temp0, Variable mon.value_temp0, Variable context mon
+@subsection Variable mon.average_temp0 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 0}.
+@node Variable mon.stddev_temp0, Variable mon.value_temp1, Variable mon.average_temp0, Variable context mon
+@subsection Variable mon.stddev_temp0 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 0}.
+@node Variable mon.value_temp1, Variable mon.average_temp1, Variable mon.stddev_temp0, Variable context mon
+@subsection Variable mon.value_temp1 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 1}.
+@node Variable mon.average_temp1, Variable mon.stddev_temp1, Variable mon.value_temp1, Variable context mon
+@subsection Variable mon.average_temp1 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 1}.
+@node Variable mon.stddev_temp1, Variable mon.value_temp2, Variable mon.average_temp1, Variable context mon
+@subsection Variable mon.stddev_temp1 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 1}.
+@node Variable mon.value_temp2, Variable mon.average_temp2, Variable mon.stddev_temp1, Variable context mon
+@subsection Variable mon.value_temp2 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 2}.
+@node Variable mon.average_temp2, Variable mon.stddev_temp2, Variable mon.value_temp2, Variable context mon
+@subsection Variable mon.average_temp2 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 2}.
+@node Variable mon.stddev_temp2, Variable mon.value_temp3, Variable mon.average_temp2, Variable context mon
+@subsection Variable mon.stddev_temp2 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 2}.
+@node Variable mon.value_temp3, Variable mon.average_temp3, Variable mon.stddev_temp2, Variable context mon
+@subsection Variable mon.value_temp3 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 3}.
+@node Variable mon.average_temp3, Variable mon.stddev_temp3, Variable mon.value_temp3, Variable context mon
+@subsection Variable mon.average_temp3 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 3}.
+@node Variable mon.stddev_temp3, Variable mon.value_cpu, Variable mon.average_temp3, Variable context mon
+@subsection Variable mon.stddev_temp3 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{CPU Temperature 3}.
+@node Variable mon.value_cpu, Variable mon.average_cpu, Variable mon.stddev_temp3, Variable context mon
+@subsection Variable mon.value_cpu 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization (all)}.
+@node Variable mon.average_cpu, Variable mon.stddev_cpu, Variable mon.value_cpu, Variable context mon
+@subsection Variable mon.average_cpu 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization (all)}.
+@node Variable mon.stddev_cpu, Variable mon.value_cpu0, Variable mon.average_cpu, Variable context mon
+@subsection Variable mon.stddev_cpu 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization (all)}.
+@node Variable mon.value_cpu0, Variable mon.average_cpu0, Variable mon.stddev_cpu, Variable context mon
+@subsection Variable mon.value_cpu0 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 0}.
+@node Variable mon.average_cpu0, Variable mon.stddev_cpu0, Variable mon.value_cpu0, Variable context mon
+@subsection Variable mon.average_cpu0 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 0}.
+@node Variable mon.stddev_cpu0, Variable mon.value_cpu1, Variable mon.average_cpu0, Variable context mon
+@subsection Variable mon.stddev_cpu0 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 0}.
+@node Variable mon.value_cpu1, Variable mon.average_cpu1, Variable mon.stddev_cpu0, Variable context mon
+@subsection Variable mon.value_cpu1 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 1}.
+@node Variable mon.average_cpu1, Variable mon.stddev_cpu1, Variable mon.value_cpu1, Variable context mon
+@subsection Variable mon.average_cpu1 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 1}.
+@node Variable mon.stddev_cpu1, Variable mon.value_cpu2, Variable mon.average_cpu1, Variable context mon
+@subsection Variable mon.stddev_cpu1 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 1}.
+@node Variable mon.value_cpu2, Variable mon.average_cpu2, Variable mon.stddev_cpu1, Variable context mon
+@subsection Variable mon.value_cpu2 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 2}.
+@node Variable mon.average_cpu2, Variable mon.stddev_cpu2, Variable mon.value_cpu2, Variable context mon
+@subsection Variable mon.average_cpu2 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 2}.
+@node Variable mon.stddev_cpu2, Variable mon.value_cpu3, Variable mon.average_cpu2, Variable context mon
+@subsection Variable mon.stddev_cpu2 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 2}.
+@node Variable mon.value_cpu3, Variable mon.average_cpu3, Variable mon.stddev_cpu2, Variable context mon
+@subsection Variable mon.value_cpu3 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 3}.
+@node Variable mon.average_cpu3, Variable mon.stddev_cpu3, Variable mon.value_cpu3, Variable context mon
+@subsection Variable mon.average_cpu3 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 3}.
+@node Variable mon.stddev_cpu3,  , Variable mon.average_cpu3, Variable context mon
+@subsection Variable mon.stddev_cpu3 
+
+Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%CPU utilization 3}.@c *****************************************************
 @c * CHAPTER 
 @c *****************************************************
 @node Logs and records,  , Special Variables, Top
@@ -19628,6 +23515,7 @@ cfengine work directory @file{WORKDIR}.
 * Embedded Databases::          
 * Text logs::                   
 * Reports in outputs::          
+* Additional reports in commcerical cfengine versions::  
 * State information::           
 @end menu
 
@@ -19661,11 +23549,29 @@ in the @code{action} body of a promise.
 @item cfengine_lock_db
 A database of active and inactive locks and their expiry times. Deleting
 this database will reset all lock protections in cfengine.
+
+@item stats.db  
+A database of external file attributes for change management functionality.
+
+@item state/history.db  
+Enterprise level versions of cfengine maintain this long-term trend database.
+
 @item state/cf_observations.db  
 This database contains the current state of the observational history
 of the host as recorded by @code{cf-monitord}.
+
+@item state/promise_compliance.db  
+Enterprise cfengine (Nova and above) database of individual promise compliance history. 
+The database is approximate because promise references can change as policy is
+edited. It quickly approaches accuracy as a policy goes unchanged for more than a day.
+
 @item state/cf_state.db
 A database of persistent classes active on this current host.
+
+@item state/nova_measures.db
+Enterprise cfengine (Nova and above) database of custom measurables.
+@item state/nova_static.db
+Enterprise cfengine (Nova and above) database of static system discovery data.
 @end table
 
 @node Text logs, Reports in outputs, Embedded Databases, Logs and records
@@ -19685,9 +23591,14 @@ new additions to this list.
 A time-stamped log of which files have experienced content changes
 since the last observation, as determined by the hashing algorithms in
 cfengine.
+
+@item state/*_measure.log
+Enterprise level versions of cfengine maintain user-defined logs based on
+specifically promised observations of the system.
+
 @end table
 
-@node Reports in outputs, State information, Text logs, Logs and records
+@node Reports in outputs, Additional reports in commcerical cfengine versions, Text logs, Logs and records
 @section Reports in outputs
 
 The @file{outputs} directory contains a time-stamped list of outputs
@@ -19697,7 +23608,14 @@ E-mail capability or are online, so the reports are kept here. Reports
 are not tidied automatically, so you should delete these files after a
 time to avoid a build up.
 
-@node State information,  , Reports in outputs, Logs and records
+
+@node Additional reports in commcerical cfengine versions, State information, Reports in outputs, Logs and records
+@section Additional reports in commcerical cfengine versions
+
+
+
+
+@node State information,  , Additional reports in commcerical cfengine versions, Logs and records
 @section State information
 
 The cfengine components keep their current process identifier number
@@ -19724,6 +23642,8 @@ was run.
 All files that begin with this prefix refer to cached data that were observed
 by the monitor daemon, and may be used by @code{cf-agent} in @code{reports} with @code{showstate}.
 @end table
+
+
 
 @c =========================================================================
 @c @node Index,  , Cfengine Methods, Top

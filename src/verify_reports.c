@@ -53,7 +53,14 @@ if (thislock.lock == NULL)
 
 PromiseBanner(pp);
 
-CfOut(cf_error,"","R: %s",pp->promiser);
+if (a.report.to_file)
+   {
+   CfFOut(a.report.to_file,cf_error,"","%s",pp->promiser);
+   }
+else
+   {
+   CfOut(cf_error,"","R: %s",pp->promiser);
+   }
 
 if (a.report.haveprintfile)
    {
@@ -418,7 +425,7 @@ while (dbcp->c_get(dbcp, &key, &value, DB_NEXT) == 0)
    
    tthen = (time_t)then;
 
-   snprintf(datebuf,CF_BUFSIZE-1,"%s",ctime(&tthen));
+   snprintf(datebuf,CF_MAXVARSIZE-1,"%s",ctime(&tthen));
    datebuf[strlen(datebuf)-9] = '\0';                     /* Chop off second and year */
 
    snprintf(addr,15,"%s",hostname+1);

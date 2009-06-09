@@ -1130,7 +1130,7 @@ for (i = 0; i < CF_HASHTABLESIZE; i++)
    {
    if (ptr->hashtable[i] != NULL)
       {
-      snprintf(match,CF_BUFSIZE,"%s[",lval);
+      snprintf(match,CF_MAXVARSIZE,"%s[",lval);
       if (strncmp(match,ptr->hashtable[i]->lval,strlen(match)) == 0)
          {
          if (FullTextMatch(regex,ptr->hashtable[i]->rval))
@@ -3113,6 +3113,12 @@ Debug("Time computed from input was: %s\n",ctime(&cftime));
 
 snprintf(buffer,CF_BUFSIZE-1,"%ld",cftime);
 
+if (cftime < 0)
+   {
+   Debug("AGO overflowed, truncating at zero\n");
+   snprintf(buffer,CF_BUFSIZE-1,"%ld",0);
+   }
+
 if ((rval.item = strdup(buffer)) == NULL)
    {
    FatalError("Memory allocation in FnCallAgo");
@@ -3560,6 +3566,89 @@ return rval;
 }
 
 /*********************************************************************/
+
+struct Rval FnCallFileSexist(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_NAKEDLRANGE,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_notype
+      };
+
+  char *listvar;
+  struct Rlist *rp,*files;
+  struct Rval rval;
+  char buffer[CF_BUFSIZE],naked[CF_MAXVARSIZE],rettype;
+  void *retval;
+  struct stat sb;
+
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+listvar = finalargs->item;
+
+if (*listvar == '@')
+   {
+   GetNaked(naked,listvar);
+   }
+else
+   {
+   CfOut(cf_error,"","Function filesexist was promised a list called \"%s\" but this was not found\n",listvar);
+   SetFnCallReturnStatus("filesexist",FNCALL_FAILURE,"File list was not a list found in scope",NULL);
+   rval.item = strdup("!any");
+   rval.rtype = CF_SCALAR;
+   return rval;            
+   }
+
+if (GetVariable(CONTEXTID,naked,&retval,&rettype) == cf_notype)
+   {
+   CfOut(cf_error,"","Function filesexist was promised a list called \"%s\" but this was not found\n",listvar);
+   SetFnCallReturnStatus("filesexist",FNCALL_FAILURE,"File list was not a list found in scope",NULL);
+   rval.item = strdup("!any");
+   rval.rtype = CF_SCALAR;
+   return rval;            
+   }
+
+if (rettype != CF_LIST)
+   {
+   CfOut(cf_error,"","Function filesexist was promised a list called \"%s\" but this variable is not a list\n",listvar);
+   SetFnCallReturnStatus("filesexist",FNCALL_FAILURE,"File list was not a list found in scope",NULL);
+   rval.item = strdup("!any");
+   rval.rtype = CF_SCALAR;
+   return rval;            
+   }
+
+files = (struct Rlist *)retval;
+
+strcpy(buffer,"any");
+
+for (rp = files; rp != NULL; rp=rp->next)
+   {
+   if (stat(rp->item,&sb) == -1)
+      {
+      strcpy(buffer,"!any");
+      break;
+      }
+   }
+
+rval.item = strdup(buffer);
+
+SetFnCallReturnStatus("filesexist",FNCALL_SUCCESS,NULL,NULL);
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
 /* LDAP Nova features                                                */
 /*********************************************************************/
 
@@ -3826,7 +3915,7 @@ if (stat(filename,&sb) == -1)
          }
       else
          {
-         CfOut(cf_error,"stat","Could not examine file %s in readfile",filename);
+         CfOut(cf_inform,"stat","Could not examine file %s in readfile",filename);
          }
       }
    return NULL;
@@ -3931,7 +4020,7 @@ for (sp = file_buffer; hcount < maxent && *sp != '\0'; sp++)
    for (rp = newlist; rp != NULL; rp=rp->next)
       {
       snprintf(name,CF_MAXVARSIZE,"%s[%s][%d]",array_lval,newlist->item,vcount);
-      NewScalar(CONTEXTID,name,rp->item,type);
+      NewScalar(THIS_BUNDLE,name,rp->item,type);
       vcount++;
       }
 

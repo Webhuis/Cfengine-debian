@@ -181,7 +181,7 @@ unit_ldap.cf
 K 25
 svn:wc:ra_dav:version-url
 V 64
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_ldap.cf
+/projects/cfengine-3/!svn/ver/378/trunk/tests/units/unit_ldap.cf
 END
 unit_method.cf
 K 25
@@ -535,7 +535,7 @@ Makefile
 K 25
 svn:wc:ra_dav:version-url
 V 60
-/projects/cfengine-3/!svn/ver/358/trunk/tests/units/Makefile
+/projects/cfengine-3/!svn/ver/378/trunk/tests/units/Makefile
 END
 unit_process_matching.cf
 K 25
@@ -619,7 +619,7 @@ unit_measurements.cf
 K 25
 svn:wc:ra_dav:version-url
 V 72
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_measurements.cf
+/projects/cfengine-3/!svn/ver/372/trunk/tests/units/unit_measurements.cf
 END
 unit_registry.cf
 K 25

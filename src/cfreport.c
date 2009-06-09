@@ -98,6 +98,7 @@ FILE *FPE[CF_OBSERVABLES],*FPQ[CF_OBSERVABLES];
 FILE *FPM[CF_OBSERVABLES];
 
 struct Rlist *REPORTS = NULL;
+struct Rlist *CSVLIST = NULL;
 
 /*******************************************************************/
 /* Command line options                                            */
@@ -510,6 +511,16 @@ for (cp = ControlBodyConstraints(cf_report); cp != NULL; cp=cp->next)
          }
       continue;
       }
+
+   if (strcmp(cp->lval,CFRE_CONTROLBODY[cfre_csv].lval) == 0)
+      {
+      for (rp  = (struct Rlist *)retval; rp != NULL; rp = rp->next)
+         {
+         IdempPrependRScalar(&CSVLIST,rp->item,CF_SCALAR);
+         CfOut(cf_inform,"","Adding %s to the csv2xml list...\n",rp->item);
+         }
+      continue;
+      }
    }
 }
 
@@ -629,7 +640,7 @@ for (rp  = REPORTS; rp != NULL; rp = rp->next)
       SummarizeSoftware(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
       }
 
-   if (strcmp("software_updates",rp->item) == 0)
+   if (strcmp("software_patches",rp->item) == 0)
       {
       CfOut(cf_verbose,"","Creating software update version summary (Cfengine Nova and above)...\n");
       SummarizeUpdates(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
@@ -640,6 +651,17 @@ for (rp  = REPORTS; rp != NULL; rp = rp->next)
       CfOut(cf_verbose,"","Creating setuid report (Cfengine Nova and above)...\n");
       SummarizeSetuid(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
       }
+
+   if (strcmp("variables",rp->item) == 0)
+      {
+      CfOut(cf_verbose,"","Creating variables report (Cfengine Nova and above)...\n");
+      SummarizeVariables(XML,HTML,CSV,EMBEDDED,STYLESHEET,BANNER,FOOTER,WEBDRIVER);
+      }
+   }
+
+if (CSVLIST)
+   {
+   CSV2XML(CSVLIST);
    }
 
 if (strlen(ERASE) > 0)
@@ -780,9 +802,9 @@ while (dbcp->c_get(dbcp, &key, &value, DB_NEXT) == 0)
       fprintf(fout,"%s%s%s",CFRX[cfx_host][cfb],IPString2Hostname(hostname+1),CFRX[cfx_host][cfe]);
       fprintf(fout,"%s%s%s",CFRX[cfx_ip][cfb],hostname+1,CFRX[cfx_ip][cfe]);
       fprintf(fout,"%s%s%s",CFRX[cfx_date][cfb],tbuf,CFRX[cfx_date][cfe]);
-      fprintf(fout,"%s%.2f%s",CFRX[cfx_q][cfb],((double)(now-then))/ticksperhr,CFRX[cfx_q][cfe]);
-      fprintf(fout,"%s%.2f%s",CFRX[cfx_av][cfb],average/ticksperhr,CFRX[cfx_av][cfe]);
-      fprintf(fout,"%s%.2f%s",CFRX[cfx_dev][cfb],sqrt(var)/ticksperhr,CFRX[cfx_dev][cfe]);
+      fprintf(fout,"%s%.2lf%s",CFRX[cfx_q][cfb],((double)(now-then))/ticksperhr,CFRX[cfx_q][cfe]);
+      fprintf(fout,"%s%.2lf%s",CFRX[cfx_av][cfb],average/ticksperhr,CFRX[cfx_av][cfe]);
+      fprintf(fout,"%s%.2lf%s",CFRX[cfx_dev][cfb],sqrt(var)/ticksperhr,CFRX[cfx_dev][cfe]);
       fprintf(fout,"%s",CFRX[cfx_entry][cfe]);
       }
    else if (HTML)
@@ -792,14 +814,14 @@ while (dbcp->c_get(dbcp, &key, &value, DB_NEXT) == 0)
       fprintf(fout,"%s%s%s",CFRH[cfx_host][cfb],IPString2Hostname(hostname+1),CFRH[cfx_host][cfe]);
       fprintf(fout,"%s%s%s",CFRH[cfx_ip][cfb],hostname+1,CFRH[cfx_ip][cfe]);
       fprintf(fout,"%s Last seen at %s%s",CFRH[cfx_date][cfb],tbuf,CFRH[cfx_date][cfe]);
-      fprintf(fout,"%s %.2f hrs ago %s",CFRH[cfx_q][cfb],((double)(now-then))/ticksperhr,CFRH[cfx_q][cfe]);
-      fprintf(fout,"%s Av %.2f hrs %s",CFRH[cfx_av][cfb],average/ticksperhr,CFRH[cfx_av][cfe]);
-      fprintf(fout,"%s &plusmn; %.2f hrs %s",CFRH[cfx_dev][cfb],sqrt(var)/ticksperhr,CFRH[cfx_dev][cfe]);
+      fprintf(fout,"%s %.2lf hrs ago %s",CFRH[cfx_q][cfb],((double)(now-then))/ticksperhr,CFRH[cfx_q][cfe]);
+      fprintf(fout,"%s Av %.2lf hrs %s",CFRH[cfx_av][cfb],average/ticksperhr,CFRH[cfx_av][cfe]);
+      fprintf(fout,"%s &plusmn; %.2lf hrs %s",CFRH[cfx_dev][cfb],sqrt(var)/ticksperhr,CFRH[cfx_dev][cfe]);
       fprintf(fout,"%s",CFRH[cfx_entry][cfe]);
       }
    else if (CSV)
       {
-      fprintf(fout,"%c,%25.25s,%15.15s,%s,%.2f,%.2f,%.2f hrs\n",
+      fprintf(fout,"%c,%25.25s,%15.15s,%s,%.2lf,%.2lf,%.2lf hrs\n",
              *hostname,
              IPString2Hostname(hostname+1),
              addr,
@@ -810,7 +832,7 @@ while (dbcp->c_get(dbcp, &key, &value, DB_NEXT) == 0)
       }
    else
       {
-      fprintf(fout,"IP %c %25.25s %15.15s  @ [%s] not seen for (%.2f) hrs, Av %.2f +/- %.2f hrs\n",
+      fprintf(fout,"IP %c %25.25s %15.15s  @ [%s] not seen for (%.2lf) hrs, Av %.2lf +/- %.2lf hrs\n",
              *hostname,
              IPString2Hostname(hostname+1),
              addr,
@@ -1017,7 +1039,7 @@ void ShowClasses()
   DB *dbp;
   DBC *dbcp;
   DB_ENV *dbenv = NULL;
-  FILE *fout;
+  FILE *fout,*fnotes;
   double now = (double)time(NULL),average = 0, var = 0;
   double ticksperminute = 60.0;
   char name[CF_BUFSIZE],eventname[CF_BUFSIZE];
@@ -1087,6 +1109,7 @@ if (XML)
 
 for (i = 0; i < 1024; i++)
    {
+   *(array[i].name) = '\0';
    array[i].q = -1;
    }
 
@@ -1130,7 +1153,7 @@ while (dbcp->c_get(dbcp, &key, &value, DB_NEXT) == 0)
       if (i++ < 1024)
          {
          strncpy(array[i].date,tbuf,31);
-         strncpy(array[i].name,eventname,255);
+         strncpy(array[i].name,eventname,254);
          array[i].q = average;
          array[i].d = var;
          }
@@ -1145,15 +1168,28 @@ while (dbcp->c_get(dbcp, &key, &value, DB_NEXT) == 0)
 qsort(array,1024,sizeof(struct CEnt),CompareClasses);
 #endif
 
-for (i = 0; array[i].q > 0; i++)
+if ((fnotes = fopen("class_notes","w")) == NULL)
    {
+   CfOut(cf_error,"fopen","Unable to write to %s/class_notes\n",OUTPUTDIR);
+   exit(1);
+   }
+
+for (i = 0; i < 1024; i++)
+   {
+   if (array[i].q <= 0.00001)
+      {
+      continue;
+      }
+
+   fprintf(fnotes,"%s %lf\n",array[i].name,array[i].q);
+   
    if (XML)
       {
       fprintf(fout,"%s",CFRX[cfx_entry][cfb]);
       fprintf(fout,"%s%s%s",CFRX[cfx_event][cfb],array[i].name,CFRX[cfx_event][cfe]);
       fprintf(fout,"%s%s%s",CFRX[cfx_date][cfb],array[i].date,CFRX[cfx_date][cfe]);
-      fprintf(fout,"%s%.4f%s",CFRX[cfx_av][cfb],array[i].q,CFRX[cfx_av][cfe]);
-      fprintf(fout,"%s%.4f%s",CFRX[cfx_dev][cfb],sqrt(array[i].d),CFRX[cfx_dev][cfe]);
+      fprintf(fout,"%s%.4lf%s",CFRX[cfx_av][cfb],array[i].q,CFRX[cfx_av][cfe]);
+      fprintf(fout,"%s%.4lf%s",CFRX[cfx_dev][cfb],sqrt(array[i].d),CFRX[cfx_dev][cfe]);
       fprintf(fout,"%s",CFRX[cfx_entry][cfe]);         
       }
    else if (HTML)
@@ -1161,17 +1197,17 @@ for (i = 0; array[i].q > 0; i++)
       fprintf(fout,"%s",CFRH[cfx_entry][cfb]);
       fprintf(fout,"%s%s%s",CFRH[cfx_event][cfb],array[i].name,CFRH[cfx_event][cfe]);
       fprintf(fout,"%s last occured at %s%s",CFRH[cfx_date][cfb],array[i].date,CFRH[cfx_date][cfe]);
-      fprintf(fout,"%s Probability %.4f %s",CFRH[cfx_av][cfb],array[i].q,CFRH[cfx_av][cfe]);
-      fprintf(fout,"%s &plusmn; %.4f %s",CFRH[cfx_dev][cfb],sqrt(array[i].d),CFRH[cfx_dev][cfe]);
+      fprintf(fout,"%s Probability %.4lf %s",CFRH[cfx_av][cfb],array[i].q,CFRH[cfx_av][cfe]);
+      fprintf(fout,"%s &plusmn; %.4lf %s",CFRH[cfx_dev][cfb],sqrt(array[i].d),CFRH[cfx_dev][cfe]);
       fprintf(fout,"%s",CFRH[cfx_entry][cfe]);
       }
    else if (CSV)
       {
-      fprintf(fout,"%7.4f,%7.4f,%s,%s\n",array[i].q,sqrt(array[i].d),array[i].name,array[i].date);
+      fprintf(fout,"%7.4lf,%7.4lf,%s,%s\n",array[i].q,sqrt(array[i].d),array[i].name,array[i].date);
       }
    else
       {
-      fprintf(fout,"Probability %7.4f +/- %7.4f for %s (last oberved @ %s)\n",array[i].q,sqrt(array[i].d),array[i].name,array[i].date);
+      fprintf(fout,"Probability %7.4lf +/- %7.4lf for %s (last oberved @ %s)\n",array[i].q,sqrt(array[i].d),array[i].name,array[i].date);
       }
    }
 
@@ -1189,6 +1225,7 @@ if (XML)
 dbcp->c_close(dbcp);
 dbp->close(dbp,0);
 fclose(fout);
+fclose(fnotes);
 }
 
 /*******************************************************************/

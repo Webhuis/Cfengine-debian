@@ -3,7 +3,7 @@
 
 body common control
 {
-bundlesequence => { "ldap" };
+bundlesequence => { "ldap" , "followup"};
 }
 
 ###################################################################################################
@@ -39,10 +39,21 @@ reports:
 
  gotdata::
 
-   "Found specific entry data  ...$(myarray[uid]),$(myarray[gecos]), etc";
+   "Found specific entry data  ...$(ldap.myarray[uid]),$(ldap.myarray[gecos]), etc";
 
   found::
 
     "Matched regex";
+
+}
+
+bundle agent followup
+
+{
+reports:
+
+ linux::
+
+   "Different bundle  ...$(ldap.myarray[uid]),$(ldap.myarray[gecos]), etc";
 
 }

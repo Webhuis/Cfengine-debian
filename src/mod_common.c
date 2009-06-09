@@ -54,6 +54,7 @@ struct FnCallType CF_FNCALL_TYPES[] =
    {"classmatch",cf_class,1,"True if the regular expression matches any currently defined class"},
    {"execresult",cf_str,2,"Execute named command and assign output to variable"},
    {"fileexists",cf_class,1,"True if the named file can be accessed"},
+   {"filesexist",cf_class,1,"True if the named list of files can ALL be accessed"},
    {"getindices",cf_slist,1,"Get a list of keys to the array whose id is the argument and assign to variable"},
    {"getgid",cf_int,1,"Return the integer group id of the named group on this host"},
    {"getuid",cf_int,1,"Return the integer user id of the named user on this host"},
@@ -311,17 +312,18 @@ struct BodySyntax CFK_CONTROLBODY[] =
 
 struct BodySyntax CFRE_CONTROLBODY[] = /* enum cfrecontrol */
    {
-   {"reports",cf_olist,"audit,performance,all_locks,active_locks,hashes,classes,last_seen,monitor_now,monitor_history,monitor_summary,compliance,setuid,file_changes,installed_software,software_updates","A list of reports to generate"},
-   {"report_output",cf_opts,"csv,html,text,xml","Menu option for generated output format. Applies only to text reports, graph data remain in xydy format."},
-   {"build_directory",cf_str,".*","The directory in which to generate output files"},
    {"auto_scaling",cf_opts,CF_BOOL,"true/false whether to auto-scale graph output to optimize use of space"},
+   {"build_directory",cf_str,".*","The directory in which to generate output files"},
+   {"csv2xml",cf_slist,"","A list of csv formatted files in the build directory to convert to simple xml"},
    {"error_bars",cf_opts,CF_BOOL,"true/false whether to generate error bars on graph output"},
-   {"time_stamps",cf_opts,CF_BOOL,"true/false whether to generate timestamps on the output directory"},
-   {"query_engine",cf_str,"","Name of a dynamic web-page used to accept and drive queries in a browser"},
-   {"style_sheet",cf_str,"","Name of a style-sheet to be used in rendering html output (added to headers)"},
    {"html_banner",cf_str,"","HTML code for a banner to be added to rendered in html after the header"},
-   {"html_footer",cf_str,"","HTML code for a page footer to be added to rendered in html before the end body tag"},
    {"html_embed",cf_opts,CF_BOOL,"If true, no header and footer tags will be added to html output"},
+   {"html_footer",cf_str,"","HTML code for a page footer to be added to rendered in html before the end body tag"},
+   {"query_engine",cf_str,"","Name of a dynamic web-page used to accept and drive queries in a browser"},
+   {"reports",cf_olist,"audit,performance,all_locks,active_locks,hashes,classes,last_seen,monitor_now,monitor_history,monitor_summary,compliance,setuid,file_changes,installed_software,software_patches,variables","A list of reports that may be generated"},
+   {"report_output",cf_opts,"csv,html,text,xml","Menu option for generated output format. Applies only to text reports, graph data remain in xydy format."},
+   {"style_sheet",cf_str,"","Name of a style-sheet to be used in rendering html output (added to headers)"},
+   {"time_stamps",cf_opts,CF_BOOL,"true/false whether to generate timestamps on the output directory"},
    {NULL,cf_notype,NULL,NULL}
    };
 

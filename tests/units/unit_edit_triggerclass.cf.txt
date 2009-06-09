@@ -1,0 +1,89 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle insert in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'v' (implicit) if context is any
+
+             string => 
+                One potato
+                Two potato
+                Three potahto
+                Four
+                       if body context any
+            Promise (version not specified) belongs to bundle 'insert' (type agent) in file '../tests/units/unit_edit_triggerclass.cf' near line 24
+
+
+   TYPE: files
+
+      files promise by '/tmp/test_insert' (implicit) if context is any
+
+          edit_line => Insert($(insert.v),)         edit_defaults => empty body for type edit_defaults(no parameters)
+               {
+               empty_file_before_editing => true if sub-body context any
+               }
+       if body context any
+            classes => trigger body for type classes
+               arg x
+
+               {
+               promise_repaired =>  {'$(x)'} if sub-body context any
+               }
+            Promise (version not specified) belongs to bundle 'insert' (type agent) in file '../tests/units/unit_edit_triggerclass.cf' near line 35
+
+
+   TYPE: reports
+
+   TYPE: result
+
+      result promise by 'The potatoes are bananas' (implicit) if context is any
+
+            Promise (version not specified) belongs to bundle 'insert' (type agent) in file '../tests/units/unit_edit_triggerclass.cf' near line 43
+
+
+   }
+
+
+Bundle Insert in the context of edit_line
+
+   ARGS:
+
+   scalar arg name
+
+   {
+   TYPE: insert_lines
+
+      insert_lines promise by 'Begin$(const.n) $(name)$(const.n)End' (implicit) if context is any
+
+            Promise (version not specified) belongs to bundle 'Insert' (type edit_line) in file '../tests/units/unit_edit_triggerclass.cf' near line 56
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'insert'} if sub-body context any
+   }
+
+empty body for type edit_defaults(no parameters)
+   {
+   empty_file_before_editing => true if sub-body context any
+   }
+
+trigger body for type classes
+   arg x
+
+   {
+   promise_repaired =>  {'$(x)'} if sub-body context any
+   }
+
