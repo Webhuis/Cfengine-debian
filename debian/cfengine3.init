@@ -50,12 +50,7 @@ CFSERVD_DAEMON=/usr/sbin/cf-serverd
 CFSERVD_NAME=cf-serverd
 CFSERVD_PIDFILE=/var/lib/cfengine3/$CFSERVD_NAME.pid
 
-#CFENVD_DAEMON=/usr/sbin/cf-envd
-#CFENVD_NAME=cf-envd
-#CFENVD_PIDFILE=/var/lib/cfengine3/$CFENVD_NAME.pid
-
 LOGDIR=/var/log/cfengine3  # Log directory to use
-
 
 test -x $DAEMON || exit 0
 
@@ -64,6 +59,7 @@ test -x $DAEMON || exit 0
 # Default options, these can be overriden by the information
 # at /etc/default/$NAME
 DAEMON_OPTS=""          # Additional options given to the server
+#DAEMON_OPTS=""          # Additional options given to the server
 
 DIETIME=10              # Time to wait for the server to die, in seconds
                         # If this value is set too low you might not
@@ -89,7 +85,15 @@ if [ -f /etc/default/$NAME ] ; then
 else 
     RUN_CFSERVD=1
     RUN_CFEXECD=1
-#    RUN_CFENVD=1
+fi
+
+# then build the list of daemons we need to start
+DAEMONS_LIST=""
+if [ $RUN_CFEXECD -eq 1 ]; then
+	DAEMONS_LIST="$DAEMONS_LIST $CFEXECD_DAEMON"
+fi
+if [ $RUN_CFSERVD -eq 1 ]; then
+	DAEMONS_LIST="$DAEMONS_LIST $CFSERVD_DAEMON"
 fi
 
 # Use this if you want the user to explicitly set 'RUN' in
@@ -105,9 +109,8 @@ fi
 if [ -n "$DAEMONUSER" ] ; then
     if getent passwd | grep -q "^$DAEMONUSER:"; then
         # Obtain the uid and gid
-        DAEMONUID=`getent passwd |grep "^$DAEMONUSER:" | awk -F : '{print $3}'`
         DAEMONGID=`getent passwd |grep "^$DAEMONUSER:" | awk -F : '{print $4}'`
-    else
+    lse
         log_failure_msg "The user $DAEMONUSER, required to run $NAME does not exist."
         exit 1
     fi
@@ -131,7 +134,7 @@ running_pid() {
 running() {
     RUN_ALL=0 # by default everything is running
 
-    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON; do
+    for DAEMON in $DAEMONS_LIST; do
         DAEMONNAME=$(basename $DAEMON)
         PIDFILE=/var/lib/cfengine3/$DAEMONNAME.pid
 
@@ -153,7 +156,7 @@ running() {
 
 start_servers() {
 
-    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON; do
+    for DAEMON in $DAEMONS_LIST; do
         DAEMONNAME=$(basename $DAEMON)
         PIDFILE=/var/lib/cfengine3/$DAEMONNAME.pid
 
@@ -163,6 +166,7 @@ start_servers() {
             errcode=$?
         else
         # if we are using a daemonuser then change the user id
+			echo "DAEMON: $DAEMON PIDFILE: $PIDFILE"	
             start-stop-daemon --start --quiet --pidfile $PIDFILE \
                         --chuid $DAEMONUSER \
                         --exec $DAEMON -- $DAEMON_OPTS
@@ -174,6 +178,7 @@ start_servers() {
             stop_servers;
             return $errcode
         fi
+	sleep 2;
     done
 
     return 0;
@@ -182,7 +187,7 @@ start_servers() {
 stop_servers() {
     STOP_ALL=0 # by default we stopped everything
 
-    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON; do
+    for DAEMON in $DAEMONS_LIST; do
         DAEMONNAME=$(basename $DAEMON)
         PIDFILE=/var/lib/cfengine3/$DAEMONNAME.pid
 
@@ -219,7 +224,7 @@ reload_servers() {
 force_stop() {
     STOP_ALL=0 # by default we stopped everything
 
-    for DAEMON in $CFSERVD_DAEMON $CFEXECD_DAEMON; do
+    for DAEMON in $DAEMONS_LIST; do
         DAEMONNAME=$(basename $DAEMON)
         PIDFILE=/var/lib/cfengine3/$DAEMONNAME.pid
 
@@ -265,6 +270,7 @@ case "$1" in
             # this code will detect this issue if STARTTIME is set
             # to a reasonable value
             [ -n "$STARTTIME" ] && sleep $STARTTIME # Wait some time 
+	    ps -efa | grep cf- | grep -v grep
             if  running ;  then
                 # It's ok, the servers started and are running
                 log_end_msg 0

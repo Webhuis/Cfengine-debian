@@ -13,7 +13,6 @@
 
 RUN_CFSERVD=0
 RUN_CFEXECD=0
-RUN_CFENVD=0
 
 # Additional options that are passed to the Daemon.
 DAEMON_OPTS=""
