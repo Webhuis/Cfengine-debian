@@ -128,7 +128,7 @@ void CompilePromises(void);
 
 /* cfstreams.c */
 
-void CfFOut(FILE *fp,char *fmt, ...);
+void CfFOut(char *filename,enum cfreport level,char *errstr,char *fmt, ...);
 void CfOut(enum cfreport level,char *errstr,char *fmt, ...);
 void cfPS(enum cfreport level,char status,char *errstr,struct Promise *pp,struct Attributes attr,char *fmt, ...);
 void CfFile(FILE *fp,char *fmt, ...);
@@ -311,6 +311,7 @@ int CfVerifyTablePromise(CfdbConn *cfdb,char *name,struct Rlist *columns,struct 
 int VerifyDatabasePromise(CfdbConn *cfdb,char *database,struct Attributes a,struct Promise *pp);
 int VerifyTablePromise(CfdbConn *cfdb,char *table,struct Rlist *columns,struct Attributes a,struct Promise *pp);
 void ReportSoftware(struct CfPackageManager *list);
+void ReportPatches(struct CfPackageManager *list);
 void SummarizeSoftware(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
 void SummarizeUpdates(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
 void LoadSlowlyVaryingObservations(void);
@@ -322,6 +323,9 @@ void NotePromiseCompliance(struct Promise *pp,double val);
 time_t GetPromiseCompliance(struct Promise *pp,double *value,double *average,double *var,time_t *lastseen);
 void SyntaxCompletion(char *s);
 int GetRegistryValue(char *key,char *value,char *buffer);
+void NoteVarUsage(void);
+void SummarizeVariables(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
+void CSV2XML(struct Rlist *list);
 
 void *CfLDAPValue(char *uri,char *dn,char *filter,char *name,char *scope,char *sec);
 void *CfLDAPList(char *uri,char *dn,char *filter,char *name,char *scope,char *sec);
@@ -416,6 +420,7 @@ struct Rval FnCallPeerLeader(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallPeerLeaders(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallRegistryValue(struct FnCall *fp,struct Rlist *finalargs);
 struct Rval FnCallLastNode(struct FnCall *fp,struct Rlist *finalargs);
+struct Rval FnCallFileSexist(struct FnCall *fp,struct Rlist *finalargs);
 
 void *CfReadFile(char *filename,int maxsize);
 char *StripPatterns(char *file_buffer,char *pattern);
@@ -779,7 +784,7 @@ struct timespec BeginMeasure(void);
 void EndMeasure(char *eventname,struct timespec start);
 void EndMeasurePromise(struct timespec start,struct Promise *pp);
 void NotePerformance(char *eventname,time_t t,double value);
-void NoteClassUsage(void);
+void NoteClassUsage(struct Item *list);
 void LastSaw(char *hostname,enum roles role);
 int OpenDB(char *filename,DB **dbp);
 int ReadDB(DB *dbp,char *name,void *ptr,int size);
@@ -1125,7 +1130,9 @@ int Linux_Redhat_Version(void);
 int Linux_Suse_Version(void);
 int Linux_Slackware_Version(char *filename);
 int Linux_Debian_Version(void);
-int Linux_Mandrake_Version(void);
+int Linux_Old_Mandriva_Version(void);
+int Linux_New_Mandriva_Version(void);
+int Linux_Mandriva_Version_Real(char *filename, char *relstring, char *vendor);
 void * Lsb_Release(const char *command, const char *key);
 int Lsb_Version(void);
 int VM_Version(void);
@@ -1177,6 +1184,7 @@ void DeleteAllVariables(char *scope);
 int StringContainsVar(char *s,char *v);
 int DefinedVariable(char *name);
 int IsCf3VarString(char *str);
+int IsCf3Scalar(char *str);
 int BooleanControl(char *scope,char *name);
 char *ExtractInnerCf3VarString(char *str,char *substr);
 char *ExtractOuterCf3VarString(char *str,char *substr);
@@ -1222,9 +1230,11 @@ int VerifyMethod(struct Attributes a,struct Promise *pp);
 
 /* verify_packages.c */
 
+void VerifyPromisedPatch(struct Attributes a,struct Promise *pp);
 void VerifyPackagesPromise(struct Promise *pp);
 void ExecutePackageSchedule(struct CfPackageManager *schedule);
 int ExecuteSchedule(struct CfPackageManager *schedule,enum package_actions action);
+int ExecutePatch(struct CfPackageManager *schedule,enum package_actions action);
 int PackageSanityCheck(struct Attributes a,struct Promise *pp);
 int VerifyInstalledPackages(struct CfPackageManager **alllists,struct Attributes a,struct Promise *pp);
 void VerifyPromisedPackage(struct Attributes a,struct Promise *pp);
@@ -1234,12 +1244,13 @@ int PrependListPackageItem(struct CfPackageItem **list,char *item,struct Attribu
 int PrependPackageItem(struct CfPackageItem **list,char *name,char *version,char* arch,struct Attributes a,struct Promise *pp);
 void DeletePackageItems(struct CfPackageItem *pi);
 int PackageMatch(char *n,char *v,char *a,struct Attributes attr,struct Promise *pp);
+int PatchMatch(char *n,char *v,char *a,struct Attributes attr,struct Promise *pp);
 int ComparePackages(char *n,char *v,char *a,struct CfPackageItem *pi,enum version_cmp cmp);
 void ParsePackageVersion(char *version,struct Rlist *num,struct Rlist *sep);
 void SchedulePackageOp(char *name,char *version,char *arch,int installed,int matched,int novers,struct Attributes a,struct Promise *pp);
 int ExecPackageCommand(char *command,int verify,struct Attributes a,struct Promise *pp);
 int PackageInItemList(struct CfPackageItem *list,char *name,char *version,char *arch);
-int PrependUpdateItem(struct CfPackageItem **list,char *item,struct CfPackageItem *chklist,struct Attributes a,struct Promise *pp);
+int PrependPatchItem(struct CfPackageItem **list,char *item,struct CfPackageItem *chklist,struct Attributes a,struct Promise *pp);
 
 /* verify_processes.c */
 

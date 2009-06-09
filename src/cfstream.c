@@ -36,36 +36,71 @@
 
 /*****************************************************************************/
 
-void CfFOut(FILE *fp,char *fmt, ...)
+void CfFOut(char *filename,enum cfreport level,char *errstr,char *fmt, ...)
 
 { va_list ap;
-  char *sp,buffer[CF_BUFSIZE];
-  int endl = false;
+  char *sp,buffer[CF_BUFSIZE],output[CF_BUFSIZE];
+  struct Item *ip,*mess = NULL;
 
 if ((fmt == NULL) || (strlen(fmt) == 0))
    {
    return;
    }
 
+memset(output,0,CF_BUFSIZE);
 va_start(ap,fmt);
 vsnprintf(buffer,CF_BUFSIZE-1,fmt,ap);
 va_end(ap);
+SanitizeBuffer(buffer);
+Chop(buffer);
+AppendItem(&mess,buffer,NULL);
 
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-if (pthread_mutex_lock(&MUTEX_SYSCALL) != 0)
+if ((errstr == NULL) || (strlen(errstr) > 0))
    {
-   return;
+   snprintf(output,CF_BUFSIZE-1,"(%s: %s)",errstr,strerror(errno));
+   AppendItem(&mess,output,NULL);
    }
-#endif
 
-fprintf(fp,"%s",buffer);
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-if (pthread_mutex_unlock(&MUTEX_SYSCALL) != 0)
+switch(level)
    {
-   /* CfLog(cferror,"pthread_mutex_unlock failed","lock");*/
+   case cf_inform:
+       
+       if (INFORM || VERBOSE || DEBUG)
+          {
+          FileReport(mess,VERBOSE,filename);
+          }
+       break;
+       
+   case cf_verbose:
+       
+       if (VERBOSE || DEBUG)
+          {
+          FileReport(mess,VERBOSE,filename);
+          }       
+       break;
+
+   case cf_error:
+
+       FileReport(mess,VERBOSE,filename);
+       MakeLog(mess,level);
+       break;
+
+   case cf_log:
+       
+       if (VERBOSE || DEBUG)
+          {
+          FileReport(mess,VERBOSE,filename);
+          }
+       MakeLog(mess,cf_verbose);
+       break;
+       
+   default:
+       
+       FatalError("Report level unknown");
+       break;       
    }
-#endif 
+
+DeleteItemList(mess);
 }
 
 /*****************************************************************************/
@@ -187,7 +222,9 @@ if (level == cf_error)
       strcpy(handle,"(unknown)");
       }
    
-   snprintf(output,CF_BUFSIZE-1,"I: Report relates to a promise with handle \"%s\" in version %s of \'%s\' near line %d\n",handle,v,pp->audit->filename,pp->lineno);
+   snprintf(output,CF_BUFSIZE-1,"I: Report relates to a promise with handle \"%s\"",handle);
+   AppendItem(&mess,output,NULL);
+   snprintf(output,CF_BUFSIZE-1,"I: Made in version \'%s\' of \'%s\' near line %d",v,pp->audit->filename,pp->lineno);
    AppendItem(&mess,output,NULL);
    
    switch (pp->petype)
@@ -212,7 +249,7 @@ if (level == cf_error)
    
    if (pp->ref)
       {
-      snprintf(output,CF_BUFSIZE-1,"I: Description - %s\n",pp->ref);
+      snprintf(output,CF_BUFSIZE-1,"I: Comment: %s\n",pp->ref);
       AppendItem(&mess,output,NULL);
       }
    }
@@ -420,6 +457,7 @@ void FileReport(struct Item *mess,int prefix,char *filename)
 
 if ((fp = fopen(filename,"a")) == NULL)
    {
+   CfOut(cf_error,"fopen","Could not open log file %s\n",filename);
    fp = stdout;
    }
   

@@ -49,12 +49,12 @@ SetReferenceTime(true);
 SetStartTime(false);
 SetSignals();
 
-if (EnterpriseExpiry("33","May","2109"))
+if (EnterpriseExpiry("24","May","21009"))
    {
    CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise trial has expired.\n");
    exit(1);
    }
-
+   
 if (!NOHARDCLASSES)
    {
    NewScope("const");
@@ -237,7 +237,7 @@ switch (ag)
 void InitializeGA(int argc,char *argv[])
 
 { char *sp;
-  int i,j, seed;
+  int i,j,seed,force = false;
   struct stat statbuf;
   unsigned char s[16],vbuff[CF_BUFSIZE];
   char ebuff[CF_EXPANDSIZE];
@@ -257,7 +257,6 @@ else
 FILE_SEPARATOR = '/';
 strcpy(FILE_SEPARATOR_STR,"/");
 #endif
-
 
 NewClass("any");
 strcpy(VPREFIX,"cf3");
@@ -307,14 +306,15 @@ CfOut(cf_verbose,"","Work directory is %s\n",CFWORKDIR);
 snprintf(HASHDB,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_CHKDB);
 
 snprintf(vbuff,CF_BUFSIZE,"%s/inputs/update.conf",CFWORKDIR);
-MakeParentDirectory(vbuff,true);
+MakeParentDirectory(vbuff,force);
 snprintf(vbuff,CF_BUFSIZE,"%s/bin/cf-agent -D from_cfexecd",CFWORKDIR);
-MakeParentDirectory(vbuff,true);
+MakeParentDirectory(vbuff,force);
 snprintf(vbuff,CF_BUFSIZE,"%s/outputs/spooled_reports",CFWORKDIR);
-MakeParentDirectory(vbuff,true);
+MakeParentDirectory(vbuff,force);
 snprintf(vbuff,CF_BUFSIZE,"%s/lastseen/intermittencies",CFWORKDIR);
-MakeParentDirectory(vbuff,true);
-
+MakeParentDirectory(vbuff,force);
+snprintf(vbuff,CF_BUFSIZE,"%s/reports/various",CFWORKDIR);
+MakeParentDirectory(vbuff,force);
 
 snprintf(vbuff,CF_BUFSIZE,"%s/inputs",CFWORKDIR);
 chmod(vbuff,0700); 
@@ -322,7 +322,7 @@ snprintf(vbuff,CF_BUFSIZE,"%s/outputs",CFWORKDIR);
 chmod(vbuff,0700);
 
 sprintf(ebuff,"%s/state/cf_procs",CFWORKDIR);
-MakeParentDirectory(ebuff,true);
+MakeParentDirectory(ebuff,force);
 
 if (stat(ebuff,&statbuf) == -1)
    {
@@ -633,8 +633,10 @@ if (stat(wfilename,&statbuf) == -1)
 
 if (statbuf.st_mode & (S_IWGRP | S_IWOTH))
    {
+#ifndef NT
    CfOut(cf_error,"","File %s (owner %d) is writable by others (security exception)",wfilename,statbuf.st_uid);
    exit(1);
+#endif
    }
 
 Debug("+++++++++++++++++++++++++++++++++++++++++++++++\n");
@@ -1208,7 +1210,8 @@ for (rp = SUBBUNDLES; rp != NULL; rp=rp->next)
 for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
    {
    scope = bp->name;
-   
+   THIS_BUNDLE = bp->name;
+
    for (sp = bp->subtypes; sp != NULL; sp = sp->next) /* get schedule */
       {
       if (strcmp(sp->name,"classes") == 0)
@@ -1216,7 +1219,7 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
          /* these should not be evaluated here */
          continue;
          }
-      
+
       for (pp = sp->promiselist; pp != NULL; pp=pp->next)
          {
          ExpandPromise(agent,scope,pp,NULL);
@@ -1581,6 +1584,7 @@ CfOut(cf_verbose,"","Initiate variable convergence...\n");
 for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
    {
    SetNewScope(bp->name);
+   THIS_BUNDLE = bp->name;
 
    for (sp = bp->subtypes; sp != NULL; sp = sp->next) /* get schedule */
       {      
@@ -1589,7 +1593,8 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
          CheckVariablePromises(bp->name,sp->promiselist);
          }
 
-      // Should we also set global classes here?
+      // We must also set global classes here?
+      
       if (strcmp(bp->type,"common") == 0&&  strcmp(sp->name,"classes") == 0)
          {
          CheckCommonClassPromises(sp->promiselist);

@@ -1,0 +1,55 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle tryclasses_1 in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by '$(x)' (implicit) if context is any
+
+             string => one       if body context any
+            Promise (version not specified) belongs to bundle 'tryclasses_1' (type agent) in file '../tests/units/unit_classvar_convergence.cf' near line 13
+
+
+   TYPE: classes
+
+      classes promise by 'three' (implicit) if context is any
+
+                and =>  {'$(x)','two'}       if body context any
+            Promise (version not specified) belongs to bundle 'tryclasses_1' (type agent) in file '../tests/units/unit_classvar_convergence.cf' near line 17
+
+
+      classes promise by 'one' (implicit) if context is any
+
+         expression => any       if body context any
+            Promise (version not specified) belongs to bundle 'tryclasses_1' (type agent) in file '../tests/units/unit_classvar_convergence.cf' near line 19
+
+
+      classes promise by 'two' (implicit) if context is any
+
+         expression => any       if body context any
+            Promise (version not specified) belongs to bundle 'tryclasses_1' (type agent) in file '../tests/units/unit_classvar_convergence.cf' near line 20
+
+
+   TYPE: reports
+
+      reports promise by 'Evaluated true' (implicit) if context is three
+
+            Promise (version not specified) belongs to bundle 'tryclasses_1' (type agent) in file '../tests/units/unit_classvar_convergence.cf' near line 26
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'tryclasses_1'} if sub-body context any
+   }
+

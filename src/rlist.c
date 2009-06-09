@@ -219,7 +219,7 @@ DeleteRvalItem(list,CF_LIST);
 
 struct Rlist *IdempAppendRScalar(struct Rlist **start,void *item, char type)
 
-{ char *scalar = strdup((char *)item);
+{ char *scalar = item;
 
 if (type != CF_SCALAR)
    {
@@ -240,7 +240,7 @@ else
 
 struct Rlist *IdempPrependRScalar(struct Rlist **start,void *item, char type)
 
-{ char *scalar = strdup((char *)item);
+{ char *scalar = item;
 
 if (type != CF_SCALAR)
    {
@@ -289,7 +289,7 @@ else
 
 struct Rlist *AppendRScalar(struct Rlist **start,void *item, char type)
 
-{ char *scalar = strdup((char *)item);
+{ char *scalar = item;
 
 if (type != CF_SCALAR)
    {
@@ -303,7 +303,7 @@ return AppendRlist(start,scalar,type);
 
 struct Rlist *PrependRScalar(struct Rlist **start,void *item, char type)
 
-{ char *scalar = strdup((char *)item);
+{ char *scalar = item;
 
 if (type != CF_SCALAR)
    {
@@ -849,7 +849,7 @@ struct Rlist *SplitRegexAsRList(char *string,char *regex,int max,int blanks)
 { struct Rlist *liststart = NULL;
   char format[9], *sp;
   char node[CF_MAXVARSIZE];
-  int start,end;
+  int start,end,b = 0;
   int delta, count = 0;
 
 Debug("\n\nSplit \"%s\" with regex \"%s\" (up to maxent %d)\n\n",string,regex,max);
@@ -881,7 +881,17 @@ if (count < max)
    memset(node,0,CF_MAXVARSIZE);
    strncpy(node,sp,CF_MAXVARSIZE-1);
    
-   if (strlen(node) > 0)
+   if (blanks || strlen(node) > 0)
+      {
+      AppendRScalar(&liststart,node,CF_SCALAR);
+      }
+   }
+else
+   {
+   memset(node,0,CF_MAXVARSIZE);
+   strncpy(node,sp,CF_MAXVARSIZE-1);
+   
+   if (blanks || strlen(node) > 0)
       {
       AppendRScalar(&liststart,node,CF_SCALAR);
       }

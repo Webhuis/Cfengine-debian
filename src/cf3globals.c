@@ -78,6 +78,7 @@ struct PromiseIdent *PROMISE_ID_LIST = NULL;
 struct Item *PROCESSTABLE = NULL;
 struct Item *FSTABLIST = NULL;
 struct Item *ABORTBUNDLEHEAP = NULL;
+struct Item *DONELIST = NULL;
 
 int CF_MOUNTALL = false;
 int CF_SAVEFSTAB = false;
@@ -379,7 +380,7 @@ char REPOSCHAR = '_';
 struct Item *VDEFAULTROUTE=NULL;
 struct Item *VSETUIDLIST = NULL;
 struct Item *SUSPICIOUSLIST = NULL;
-enum classes VSYSTEMHARDCLASS;
+enum classes VSYSTEMHARDCLASS = unused1;
 short NONALPHAFILES = false;
 struct Item *EXTENSIONLIST = NULL;
 struct Item *SPOOLDIRLIST = NULL;
