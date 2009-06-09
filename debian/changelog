@@ -1,4 +1,4 @@
-cfengine3 (3.0.2b1-1) unstable; urgency=low
+cfengine3 (3.0.2a7) unstable; urgency=low
 
  TODO   
         init script
@@ -6,4 +6,4 @@ cfengine3 (3.0.2b1-1) unstable; urgency=low
 
   * Initial release (Closes: #518059)
 
- -- Antonio Radici <antonio@dyne.org>  Fri, 05 Jun 2009 22:13:23 +0100
+ -- Antonio Radici <antonio@dyne.org>  Tue, 09 Jun 2009 20:07:56 +0100
