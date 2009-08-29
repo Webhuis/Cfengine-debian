@@ -1,4 +1,4 @@
-cfengine3 (3.0.2) unstable; urgency=low
+cfengine3 (3.0.2-1) unstable; urgency=low
 
   * Initial release (Closes: #518059)
 
