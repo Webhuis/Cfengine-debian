@@ -1,0 +1,11 @@
+--- a/src/cf3.defs.h
++++ b/src/cf3.defs.h
+@@ -1033,7 +1033,7 @@
+ #endif
+ 
+ #ifdef HAVE_PGSQL_LIBPQ_FE_H
+-#include <pgsql/libpq-fe.h>
++#include </usr/include/postgresql/libpq-fe.h>
+ #endif
+ 
+ #ifdef HAVE_LIBPQ_FE_H
