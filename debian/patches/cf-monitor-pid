@@ -1,0 +1,11 @@
+--- a/src/env_monitor.c
++++ b/src/env_monitor.c
+@@ -339,7 +339,7 @@
+    return;
+    }
+ 
+-WritePID("cf-monitor.pid");
++WritePID("cf-monitord.pid");
+ 
+ OpenSniffer();
+  

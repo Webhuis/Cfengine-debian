@@ -1,4 +1,4 @@
 remove-man-errors
 fix-sharedir-name
 remove-docs
-fix-postgres-path
+cf-monitor-pid
