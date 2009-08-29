@@ -1,4 +1,3 @@
 remove-man-errors
 fix-sharedir-name
 remove-docs
-remove-exec-from-inputs

@@ -202,7 +202,7 @@ fprintf(fout,
         "@titlepage\n"
         "@title Cfengine Reference Manual\n"
         "@subtitle Auto generated, self-healing knowledge\n"
-        "@subtitle for core version %s\n"
+        "@subtitle Documentation for core version %s\n"
 #ifdef HAVE_LIBCFNOVA
         "@subtitle %s\n"
 #endif
@@ -211,7 +211,12 @@ fprintf(fout,
         "@fonttextsize 10\n"
         "@page\n"
         "@vskip 0pt plus 1filll\n"
-        "Copyright @copyright{} in the year of issue Cfengine AS\n"
+        "@cartouche\n"
+        "Under no circumstances shall Cfengine AS be liable for errors or omissions\n"
+        "in this document. All efforts have been made to ensure the correctness of\n"
+        "the information contained herein.\n"
+        "@end cartouche\n"
+        "Copyright @copyright{} from 2008 to the year of issue Cfengine AS\n"
         "@end titlepage\n"
         "@c *************************** File begins here ************************\n"
         "@ifinfo\n"
@@ -237,7 +242,10 @@ fprintf(fout,
         "<h2>Summary of contents</h2>\n"
         
         "@end html\n"
-        "@end ifhtml\n",
+        "@end ifhtml\n"
+        "@iftex\n"
+        "@contents\n"
+        "@end iftex\n",
         VERSION
 #ifdef HAVE_LIBCFNOVA
         ,
@@ -261,10 +269,10 @@ void TexinfoFooter(FILE *fout)
          "@ifhtml\n"
          "@html\n"
          "<a name=\"Contents\">\n"
+         "@contents\n"
          "@end html\n"
          "@end ifhtml\n"
          
-         "@contents\n"
          "@c  The file is structured like a programming language. Each chapter\n"
          "@c  starts with a chapter comment.\n"
          "@c\n"

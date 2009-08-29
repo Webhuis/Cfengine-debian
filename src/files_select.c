@@ -44,7 +44,7 @@ if (!attr.haveselect)
    return true;
    }
 
-if (S_ISDIR(sb->st_mode) || attr.select.name == NULL)
+if (attr.select.name == NULL)
    {
    PrependItem(&leaf_attr,"leaf_name","");
    }
@@ -102,6 +102,13 @@ if (SelectModeMatch(sb,attr.select.perms))
    PrependItem(&leaf_attr,"mode","");
    }
 
+#if defined HAVE_CHFLAGS 
+if (SelectBSDMatch(sb,attr.select.bsdflags,pp))
+   {
+   PrependItem(&leaf_attr,"bsdflags","");
+   }
+#endif
+
 if (SelectTimeMatch(sb->st_atime,attr.select.min_atime,attr.select.max_atime))
    { 
    PrependItem(&leaf_attr,"atime","");
@@ -110,6 +117,11 @@ if (SelectTimeMatch(sb->st_atime,attr.select.min_atime,attr.select.max_atime))
 if (SelectTimeMatch(sb->st_ctime,attr.select.min_ctime,attr.select.max_ctime))
    { 
    PrependItem(&leaf_attr,"ctime","");
+   }
+
+if (SelectSizeMatch(sb->st_size,attr.select.min_size,attr.select.max_size))
+   { 
+   PrependItem(&leaf_attr,"size","");
    }
 
 if (SelectTimeMatch(sb->st_mtime,attr.select.min_mtime,attr.select.max_mtime))
@@ -146,6 +158,21 @@ return result;
 
 /*******************************************************************/
 /* Level                                                           */
+/*******************************************************************/
+
+int SelectSizeMatch(size_t size,size_t min,size_t max)
+
+{ struct Item *leafattrib = NULL;
+  struct Rlist *rp;
+
+if (size <= max && size >= min)
+   {
+   return true;
+   }
+  
+return false;
+}
+
 /*******************************************************************/
 
 int SelectTypeMatch(struct stat *lstatptr,struct Rlist *crit)
@@ -321,7 +348,7 @@ for  (rp = list; rp != NULL; rp=rp->next)
 
    if (!ParseModeString(rp->item,&plus,&minus))
       {
-      CfOut(cf_error,"","Problem validating a mode string \"%s\" in search filter",rp->item);
+      CfOut(cf_error,""," !! Problem validating a mode string \"%s\" in search filter",rp->item);
       continue;
       }
 
@@ -335,6 +362,34 @@ for  (rp = list; rp != NULL; rp=rp->next)
       }   
    }
 
+return false;
+} 
+
+/*******************************************************************/
+
+int SelectBSDMatch(struct stat *lstatptr,struct Rlist *bsdflags,struct Promise *pp)
+
+{
+#if defined HAVE_CHFLAGS
+  u_long newflags,plus,minus;
+  struct Rlist *rp;
+
+if (!ParseFlagString(bsdflags,&plus,&minus))
+   {
+   CfOut(cf_error,""," !! Problem validating a BSD flag string");
+   PromiseRef(cf_error,pp);
+   }
+
+newflags = (lstatptr->st_flags & CHFLAGS_MASK) ;
+newflags |= plus;
+newflags &= ~minus;
+
+if ((newflags & CHFLAGS_MASK) == (lstatptr->st_flags & CHFLAGS_MASK))    /* file okay */
+   {
+   return true;
+   }
+#endif
+  
 return false;
 } 
 

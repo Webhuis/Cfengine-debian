@@ -57,7 +57,7 @@ AppendItem(&mess,buffer,NULL);
 
 if ((errstr == NULL) || (strlen(errstr) > 0))
    {
-   snprintf(output,CF_BUFSIZE-1,"(%s: %s)",errstr,strerror(errno));
+   snprintf(output,CF_BUFSIZE-1," !!! System reports error for %s: \"%s\"",errstr,strerror(errno));
    AppendItem(&mess,output,NULL);
    }
 
@@ -126,7 +126,7 @@ AppendItem(&mess,buffer,NULL);
 
 if ((errstr == NULL) || (strlen(errstr) > 0))
    {
-   snprintf(output,CF_BUFSIZE-1,"(%s: %s)",errstr,strerror(errno));
+   snprintf(output,CF_BUFSIZE-1," !!! System error for %s: \"%s\"",errstr,strerror(errno));
    AppendItem(&mess,output,NULL);
    }
 
@@ -198,7 +198,7 @@ AppendItem(&mess,buffer,NULL);
 
 if ((errstr == NULL) || (strlen(errstr) > 0))
    {
-   snprintf(output,CF_BUFSIZE-1,"%s: %s",errstr,strerror(errno));
+   snprintf(output,CF_BUFSIZE-1," !!! System reports error for %s: \"%s\"",errstr,strerror(errno));
    AppendItem(&mess,output,NULL);
    }
 
@@ -221,11 +221,24 @@ if (level == cf_error)
       {
       strcpy(handle,"(unknown)");
       }
-   
-   snprintf(output,CF_BUFSIZE-1,"I: Report relates to a promise with handle \"%s\"",handle);
+
+   if (INFORM || VERBOSE || DEBUG)
+      {
+      snprintf(output,CF_BUFSIZE-1,"I: Report relates to a promise with handle \"%s\"",handle);
+      AppendItem(&mess,output,NULL);
+      }
+
+   if (pp->audit)
+      {
+      snprintf(output,CF_BUFSIZE-1,"I: Made in version \'%s\' of \'%s\' near line %d",v,pp->audit->filename,pp->lineno);
+      }
+   else
+      {
+      snprintf(output,CF_BUFSIZE-1,"I: Promise is made internally by cfengine");
+      }
+
    AppendItem(&mess,output,NULL);
-   snprintf(output,CF_BUFSIZE-1,"I: Made in version \'%s\' of \'%s\' near line %d",v,pp->audit->filename,pp->lineno);
-   AppendItem(&mess,output,NULL);
+
    
    switch (pp->petype)
       {

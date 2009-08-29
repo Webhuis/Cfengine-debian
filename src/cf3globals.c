@@ -38,24 +38,25 @@
 /* flags                                                                     */
 /*****************************************************************************/
 
-short SHOWREPORTS = false;
+int SHOWREPORTS = false;
 
 /*****************************************************************************/
 /* operational state                                                         */
 /*****************************************************************************/
 
-short VERBOSE = false;
-short INFORM = false;
-short PARSING = false;
-short CFPARANOID = false;
+int VERBOSE = false;
+int INFORM = false;
+int PARSING = false;
+int CFPARANOID = false;
 int REQUIRE_COMMENTS = CF_UNDEFINED;
+int LOOKUP = false;
 
 struct utsname VSYSNAME;
 
 FILE *FREPORT_HTML = NULL;
 FILE *FREPORT_TXT = NULL;
 FILE *FKNOW = NULL;
-short XML = false;
+int XML = false;
 struct FnCallStatus FNCALL_STATUS;
 
 int CFA_MAXTHREADS = 10;
@@ -66,7 +67,7 @@ int AM_BACKGROUND_PROCESS = false;
 char *THIS_BUNDLE = NULL;
 char THIS_AGENT[CF_MAXVARSIZE];
 enum cfagenttype THIS_AGENT_TYPE;
-short INSTALL_SKIP = false;
+int INSTALL_SKIP = false;
 int FACILITY;
 time_t PROMISETIME;
 
@@ -76,9 +77,12 @@ struct Rlist *MOUNTEDFSLIST = NULL;
 struct Rlist *SERVERLIST = NULL;
 struct PromiseIdent *PROMISE_ID_LIST = NULL;
 struct Item *PROCESSTABLE = NULL;
+struct Item *ROTATED = NULL;
 struct Item *FSTABLIST = NULL;
 struct Item *ABORTBUNDLEHEAP = NULL;
 struct Item *DONELIST = NULL;
+struct Rlist *CBUNDLESEQUENCE = NULL;
+
 
 int CF_MOUNTALL = false;
 int CF_SAVEFSTAB = false;
@@ -87,6 +91,18 @@ int ABORTBUNDLE = false;
 int BOOTSTRAP = false;
 
 char HASHDB[CF_BUFSIZE];
+
+/*****************************************************************************/
+/* Measurements                                                              */
+/*****************************************************************************/
+
+double METER_KEPT[meter_endmark];
+double METER_REPAIRED[meter_endmark];
+
+double Q_MEAN;
+double Q_SIGMA;
+double Q_MAX;
+double Q_MIN;
 
 /*****************************************************************************/
 /* Internal data structures                                                  */
@@ -112,6 +128,14 @@ int LASTSEENEXPIREAFTER = CF_WEEK;
 int LASTSEEN = true;
 
 struct Topic *TOPIC_MAP = NULL;
+
+char POLICY_SERVER[CF_BUFSIZE];
+
+char WEBDRIVER[CF_MAXVARSIZE];
+char BANNER[2*CF_BUFSIZE];
+char FOOTER[CF_BUFSIZE];
+char STYLESHEET[CF_BUFSIZE];
+char AGGREGATION[CF_BUFSIZE];
 
 /*****************************************************************************/
 /* Constants                                                                 */
@@ -202,13 +226,13 @@ char *CF_AGENTTYPES[] = /* see enum cfagenttype */
 
 double FORGETRATE = 0.7;
 
-short IGNORELOCK = false;
-short DONTDO = false;
-short DEBUG = false;
-short D1 = false;
-short D2 = false;
-short AUDIT = false;
-short LOGGING = false;
+int IGNORELOCK = false;
+int DONTDO = false;
+int DEBUG = false;
+int D1 = false;
+int D2 = false;
+int AUDIT = false;
+int LOGGING = false;
 
 char  VFQNAME[CF_MAXVARSIZE];
 char  VUQNAME[CF_MAXVARSIZE];
@@ -359,18 +383,18 @@ int RPCTIMEOUT = 60;          /* seconds */
 pid_t ALARM_PID = -1;
 int SENSIBLEFILECOUNT = 2;
 int SENSIBLEFSSIZE = 1000;
-short SKIPIDENTIFY = false;
-short ALL_SINGLECOPY = false;
-short FULLENCRYPT = false;
+int SKIPIDENTIFY = false;
+int ALL_SINGLECOPY = false;
+int FULLENCRYPT = false;
 int EDITFILESIZE = 10000;
-short NOHARDCLASSES=false;
+int NOHARDCLASSES=false;
 int VIFELAPSED = 1;
 int VEXPIREAFTER = 120;
-short UNDERSCORE_CLASSES=false;
+int UNDERSCORE_CLASSES=false;
 int CHECKSUMUPDATES = false;
 char BINDINTERFACE[CF_BUFSIZE];
-short MINUSF = false;
-short EXCLAIM = true;
+int MINUSF = false;
+int EXCLAIM = true;
 
 mode_t DEFAULTMODE = (mode_t) 0755;
 
@@ -381,7 +405,7 @@ struct Item *VDEFAULTROUTE=NULL;
 struct Item *VSETUIDLIST = NULL;
 struct Item *SUSPICIOUSLIST = NULL;
 enum classes VSYSTEMHARDCLASS = unused1;
-short NONALPHAFILES = false;
+int NONALPHAFILES = false;
 struct Item *EXTENSIONLIST = NULL;
 struct Item *SPOOLDIRLIST = NULL;
 struct Item *NONATTACKERLIST = NULL;
@@ -519,4 +543,10 @@ char *OBS[CF_OBSERVABLES][2] =
     "spare","unused",
     "spare","unused",
     };
+
+char *UNITS[CF_OBSERVABLES];
+time_t DATESTAMPS[CF_OBSERVABLES];
+
+
+
 

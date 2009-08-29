@@ -1,9 +1,5 @@
-cfengine3 (3.0.2a7) unstable; urgency=low
-
- TODO   
-        init script
-        analyse compatibility with cfengine2
+cfengine3 (3.0.2) unstable; urgency=low
 
   * Initial release (Closes: #518059)
 
- -- Antonio Radici <antonio@dyne.org>  Tue, 09 Jun 2009 20:07:56 +0100
+ -- Antonio Radici <antonio@dyne.org>  Sat, 29 Aug 2009 10:07:19 +0100

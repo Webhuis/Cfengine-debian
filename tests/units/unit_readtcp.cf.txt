@@ -1,0 +1,46 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle example in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'my80' (implicit) if context is any
+
+             string => readtcp(research.iu.hio.no,80,GET /index.php HTTP/1.1$(const.r)$(const.n)Host: research.iu.hio.no$(const.r)$(const.n)$(const.r)$(const.n),400,)            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_readtcp.cf' near line 16
+
+
+   TYPE: classes
+
+      classes promise by 'server_ok' (implicit) if context is any
+
+         expression => recmp(.*Content-Type:.*,$(my80),)            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_readtcp.cf' near line 20
+
+
+   TYPE: reports
+
+      reports promise by 'Server is alive' (implicit) if context is server_ok
+
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_readtcp.cf' near line 26
+
+
+      reports promise by 'Server is not responding' (implicit) if context is !server_ok
+
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_readtcp.cf' near line 30
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'example'} if sub-body context any
+   }
+

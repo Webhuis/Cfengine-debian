@@ -182,7 +182,8 @@ int FailedProtoReply(char *buf);
 
 /* chflags.c */
 
-int ParseFlagString (char *flagstring, u_long *plusmask, u_long *minusmask);
+int ParseFlagString (struct Rlist *flags, u_long *plusmask, u_long *minusmask);
+u_long ConvertBSDBits(char *s);
 
 /* communication.c */
 
@@ -223,6 +224,7 @@ struct PromiseIdent *PromiseIdExists(char *handle);
 
 /* conversion.c */
 
+long Months2Seconds(int m);
 enum cfinterval Str2Interval(char *s);
 enum cfdbtype Str2dbType(char *s);
 char *Rlist2String(struct Rlist *list,char *sep);
@@ -281,8 +283,18 @@ int IsProcessType(char *s);
 
 /* enterprise_stubs.c */
 
+void Aggregate(void);
+void SetPolicyServer(char *name);
+int IsEnterprise(void);
 void EnterpriseVersion(void);
+void EnterpriseContext(void);
+char *GetProcessOptions(void);
 int EnterpriseExpiry(char *day,char *month,char *year);
+char *GetConsolePrefix(void);
+char *MailSubject(void);
+void CheckAutoBootstrap(void);
+pid_t StartTwin(int argc,char **argv);
+void SignalTwin(void);
 void InitMeasurements(void);
 void BundleNode(FILE *fp,char *bundle);
 void BodyNode(FILE *fp,char *bundle,int call);
@@ -292,6 +304,7 @@ void RegisterBundleDependence(char *absscope,struct Promise *pp);
 void MapPromiseToTopic(FILE *fp,struct Promise *pp,char *version);
 void Nova_MapPromiseToTopic(FILE *fp,struct Promise *pp,char *version);
 void ShowTopicRepresentation(FILE *fp);
+void PreSanitizePromise(struct Promise *pp);
 void Nova_ShowTopicRepresentation(FILE *fp);
 void NotePromiseConditionals(struct Promise *pp);
 void DependencyGraph(struct Topic *map);
@@ -306,7 +319,7 @@ void VerifyMeasurement(double *this,struct Attributes a,struct Promise *pp);
 void SetMeasurementPromises(struct Item **classlist);
 void LongHaul(void);
 void VerifyACL(char *file,struct Attributes a, struct Promise *pp);
-int CheckACLSyntax(struct CfACL acl,struct Promise *pp);
+int CheckACLSyntax(char *file,struct CfACL acl,struct Promise *pp);
 int CfVerifyTablePromise(CfdbConn *cfdb,char *name,struct Rlist *columns,struct Attributes a,struct Promise *pp);
 int VerifyDatabasePromise(CfdbConn *cfdb,char *database,struct Attributes a,struct Promise *pp);
 int VerifyTablePromise(CfdbConn *cfdb,char *table,struct Rlist *columns,struct Attributes a,struct Promise *pp);
@@ -326,17 +339,19 @@ int GetRegistryValue(char *key,char *value,char *buffer);
 void NoteVarUsage(void);
 void SummarizeVariables(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web);
 void CSV2XML(struct Rlist *list);
-
 void *CfLDAPValue(char *uri,char *dn,char *filter,char *name,char *scope,char *sec);
 void *CfLDAPList(char *uri,char *dn,char *filter,char *name,char *scope,char *sec);
 void *CfLDAPArray(char *array,char *uri,char *dn,char *filter,char *scope,char *sec);
 void *CfRegLDAP(char *uri,char *dn,char *filter,char *name,char *scope,char *regex,char *sec);
 void CacheUnreliableValue(char *caller,char *handle,char *buffer);
 int RetrieveUnreliableValue(char *caller,char *handle,char *buffer);
+void ReviveOther(int argc,char **argv);
+void GrandSummary(void);
 
 /* env_context.c */
 
 int Abort(void);
+int ValidClassName(char *name);
 void KeepClassContextPromise(struct Promise *pp);
 int ContextSanityCheck(struct Attributes a);
 void PushPrivateClassContext(void);
@@ -366,6 +381,7 @@ int GetORAtom (char *start, char *buffer);
 int GetANDAtom (char *start, char *buffer);
 int CountEvalAtoms (char *class);
 int IsBracketed (char *s);
+void SaveClassEnvironment(void);
 
 /* evalfunction.c */
 
@@ -491,7 +507,7 @@ int EditColumns(struct Item *file_start,struct Item *file_end,struct Attributes 
 int EditLineByColumn(struct Rlist **columns,struct Attributes a,struct Promise *pp);
 int EditColumn(struct Rlist **columns,struct Attributes a,struct Promise *pp);
 int SanityCheckInsertions(struct Attributes a);
-int SelectInsertion(char *line,struct Attributes a,struct Promise *pp);
+int SelectLine(char *line,struct Attributes a,struct Promise *pp);
 
 /* files_links.c */
 
@@ -551,6 +567,7 @@ int CfReadLine(char *buff,int size,FILE *fp);
 
 /* files_names.c */
 
+int IsDir(char *path);
 int EmptyString(char *s);
 int ExpandOverflow(char *str1,char *str2);
 char *JoinPath(char *path,char *leaf);
@@ -629,6 +646,8 @@ int SelectPathRegexMatch(char *filename,char *crit);
 int SelectExecRegexMatch(char *filename,char *crit,char *prog);
 int SelectIsSymLinkTo(char *filename,struct Rlist *crit);
 int SelectExecProgram(char *filename,char *crit);
+int SelectSizeMatch(size_t size,size_t min,size_t max);
+int SelectBSDMatch(struct stat *lstatptr,struct Rlist *bsdflags,struct Promise *pp);
 
 /* fncall.c */
 
@@ -682,6 +701,7 @@ void WritePID(char *filename);
 void OpenReports(char *agents);
 void CloseReports(char *agents);
 char *InputLocation(char *filename);
+int BadBundleSequence(enum cfagenttype agent);
 
 /* granules.c  */
 
@@ -890,6 +910,7 @@ struct TopicAssociation *AssociationExists(struct TopicAssociation *list,char *f
 struct Occurrence *OccurrenceExists(struct Occurrence *list,char *locator,enum representations repy_type);
 int TypedTopicMatch(char *ttopic1,char *ttopic2);
 void DeTypeTopic(char *typdetopic,char *topic,char *type);
+void DeTypeCanonicalTopic(char *typed_topic,char *topic,char *type);
 char *TypedTopic(char *topic,char *type);
 char *GetLongTopicName(CfdbConn *cfdb,struct Topic *list,char *topic_name);
 char *URLHint(char *s);
@@ -979,7 +1000,8 @@ void DeletePromises(struct Promise *pp);
 void DeleteDeRefPromise(char *scopeid,struct Promise *pp);
 void PromiseRef(enum cfreport level,struct Promise *pp);
 struct Promise *NewPromise(char *typename,char *promiser);
-void HashPromise(struct Promise *pp,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhashes type);
+void HashPromise(char *salt,struct Promise *pp,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhashes type);
+void DebugPromise(struct Promise *pp);
 
 /* recursion.c */
 

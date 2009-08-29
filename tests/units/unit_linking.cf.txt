@@ -1,0 +1,72 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle testbundle in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: files
+
+      files promise by '/home/mark/tmp/passwd' (implicit) if context is any
+
+          link_from => linkdetails body for type linkfrom
+               arg tofile
+
+               {
+               source => $(tofile) if sub-body context any
+               link_type => symlink if sub-body context any
+               when_no_source => force if sub-body context any
+               }
+         move_obstructions => true       if body context any
+            Promise (version 1.2.3) belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_linking.cf' near line 31
+
+
+      files promise by '/home/mark/tmp/linktest' (implicit) if context is any
+
+          link_from => linkchildren body for type linkfrom
+               arg tofile
+
+               {
+               source => $(tofile) if sub-body context any
+               link_type => symlink if sub-body context any
+               when_no_source => force if sub-body context any
+               link_children => true if sub-body context any
+               when_linking_children => if_no_such_file if sub-body context any
+               }
+            Promise (version 1.2.3) belongs to bundle 'testbundle' (type agent) in file '../tests/units/unit_linking.cf' near line 37
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   version => 1.2.3 if sub-body context any
+   bundlesequence =>  {'testbundle'} if sub-body context any
+   }
+
+linkdetails body for type linkfrom
+   arg tofile
+
+   {
+   source => $(tofile) if sub-body context any
+   link_type => symlink if sub-body context any
+   when_no_source => force if sub-body context any
+   }
+
+linkchildren body for type linkfrom
+   arg tofile
+
+   {
+   source => $(tofile) if sub-body context any
+   link_type => symlink if sub-body context any
+   when_no_source => force if sub-body context any
+   link_children => true if sub-body context any
+   when_linking_children => if_no_such_file if sub-body context any
+   }
+

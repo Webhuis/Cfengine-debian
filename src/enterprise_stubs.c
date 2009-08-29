@@ -56,6 +56,28 @@ struct Averages SHIFT_VALUE;
 
 /*****************************************************************************/
 
+int IsEnterprise()
+
+{
+#if defined HAVE_LIBCFNOVA || defined HAVE_LIBCFCONSTELLATION || defined HAVE_LIBCFGALAXY
+return true;
+#else
+return false;
+#endif
+}
+
+/*****************************************************************************/
+
+void EnterpriseContext()
+
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_EnterpriseContext();
+#endif
+}
+
+/*****************************************************************************/
+
 void EnterpriseVersion()
 
 {
@@ -74,6 +96,94 @@ return Nova_EnterpriseExpiry(day,month,year);
 #else
 return false;
 #endif
+}
+
+/*****************************************************************************/
+
+void CheckAutoBootstrap()
+
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_CheckAutoBootstrap();
+#else
+#endif
+}
+
+/*****************************************************************************/
+
+char *GetConsolePrefix()
+    
+{
+#ifdef HAVE_LIBCFNOVA
+ return "nova>";
+#else
+ return "cf3";
+#endif
+}
+
+/*****************************************************************************/
+
+pid_t StartTwin(int argc,char **argv)
+
+/* Self-monitor in case of crash or binary change */
+    
+{
+#ifdef HAVE_LIBCFNOVA
+return Nova_StartTwin(argc,argv);
+#else
+return 0;
+#endif
+}
+
+/*****************************************************************************/
+
+void SignalTwin()
+
+/* Self-monitor in case of crash or binary change */
+    
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_SignalTwin();
+#else
+#endif
+}
+
+/*****************************************************************************/
+
+void ReviveOther(int argc,char **argv)
+
+/* Self-monitor in case of crash or binary change */
+    
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_ReviveOther(argc,argv);
+#else
+#endif
+}
+
+/*****************************************************************************/
+
+char *MailSubject()
+
+{ static char buffer[CF_BUFSIZE];
+#ifdef HAVE_LIBCFNOVA
+ strcpy(buffer,"nova");
+#else
+ buffer[0] = '\0';
+#endif
+return buffer;
+}
+
+/*****************************************************************************/
+
+void SetPolicyServer(char *name)
+
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_SetPolicyServer(name);
+#else
+ CfOut(cf_verbose,"","Setting policy server requires version Nova or above");
+#endif 
 }
 
 /*****************************************************************************/
@@ -130,6 +240,17 @@ void NotePromiseCompliance(struct Promise *pp,double val)
 {
 #ifdef HAVE_LIBCFNOVA
  Nova_NotePromiseCompliance(pp,val);
+#else
+#endif
+}
+
+/*****************************************************************************/
+
+void PreSanitizePromise(struct Promise *pp)
+
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_PreSanitizePromise(pp);
 #else
 #endif
 }
@@ -270,7 +391,8 @@ Nova_DumpSlowlyVaryingObservations();
 void GetClassName(int i,char *name)
 {
 #ifdef HAVE_LIBCFNOVA
-Nova_GetClassName(i,name);
+ char desc[CF_BUFSIZE];
+ Nova_GetClassName(i,name,desc);
 #else
 strcpy(name,OBS[i][0]);
 #endif
@@ -281,7 +403,9 @@ strcpy(name,OBS[i][0]);
 void LookUpClassName(int i,char *name)
 {
 #ifdef HAVE_LIBCFNOVA
-Nova_LookupClassName(i,name);
+ char desc[CF_BUFSIZE];
+
+Nova_LookupClassName(i,name,desc);
 #else
 strcpy(name,OBS[i][0]);
 #endif
@@ -381,6 +505,18 @@ void SummarizeCompliance(int xml,int html,int csv,int embed,char *stylesheet,cha
 
 /*****************************************************************************/
 
+void GrandSummary()
+
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_GrandSummary();
+#else
+ CfOut(cf_verbose,"","# Reporting feature is only available in version Nova and above\n");
+#endif
+}
+
+/*****************************************************************************/
+
 void CSV2XML(struct Rlist *list)
 
 {
@@ -389,6 +525,16 @@ void CSV2XML(struct Rlist *list)
 #else
  CfOut(cf_verbose,"","# Format conversion feature is only available in version Nova and above\n");
 #endif
+}
+
+/*****************************************************************************/
+
+void Aggregate()
+
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_Aggregate();
+#endif 
 }
 
 /*****************************************************************************/
@@ -555,11 +701,11 @@ Nova_VerifyACL(file,a,pp);
 
 /*****************************************************************************/
 
-int CheckACLSyntax(struct CfACL acl,struct Promise *pp)
+int CheckACLSyntax(char *file,struct CfACL acl,struct Promise *pp)
 
 {
 #ifdef HAVE_LIBCFNOVA
-return Nova_CheckACLSyntax(acl,pp);
+return Nova_CheckACLSyntax(file,acl,pp);
 #else
 return true;
 #endif
@@ -589,7 +735,9 @@ int GetRegistryValue(char *key,char *value,char *buffer)
 # ifdef NT
 return Nova_CopyRegistryValue(key,value,buffer);
 # endif
+return 0;
 #else
+return 0;
 #endif
 }
 
@@ -754,6 +902,20 @@ return Nova_VerifyTablePromise(cfdb,name,columns,a,pp);
 #else
 CfOut(cf_verbose,"","Verifying SQL table promises is only available with Cfengine Nova or above");
 return false;
+#endif
+}
+
+/*****************************************************************************/
+/* Misc                                                                      */
+/*****************************************************************************/
+
+char *GetProcessOptions()
+{
+#ifdef HAVE_LIBCFNOVA
+ return Nova_GetProcessOptions();
+#else
+CfOut(cf_verbose,"","Verifying SQL table promises is only available with Cfengine Nova or above");
+return VPSOPTS[VSYSTEMHARDCLASS];
 #endif
 }
 
