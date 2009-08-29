@@ -1,16 +1,11 @@
 # Compulsory line, this is a version 3 file
 version=3
 
-http://www.cfengine.org/downloads/ cfengine-(3.*)\.tar\.gz
+# usually the cfengine maintainer releases versions like x.x.xb7 or x.x.xa4
+# *before* the official version, which does not contain any letter, so we need
+# to adapt our version otherwise uscan will believe, for example, that 3.0.2 is
+# older than 3.0.2b3
+opts="uversionmangle=s/(\w\d)/~$1/" \
+http://theforest.dyne.org/cfengine.html /tarballs/cfengine-(.*)\.tar\.gz
+#http://www.cfengine.org/pages/downloads /tarballs/cfengine-(.*)\.tar\.gz
 
-# Uncomment to examine a Webserver directory
-#http://www.example.com/pub/cfengine-(.*)\.tar\.gz
-
-# Uncommment to examine a FTP server
-#ftp://ftp.example.com/pub/cfengine-(.*)\.tar\.gz debian uupdate
-
-# Uncomment to find new files on sourceforge, for devscripts >= 2.9
-# http://sf.net/cfengine/cfengine-(.*)\.tar\.gz
-
-# Uncomment to find new files on GooglePages
-# http://example.googlepages.com/foo.html cfengine-(.*)\.tar\.gz
