@@ -6,6 +6,4 @@ version=3
 # to adapt our version otherwise uscan will believe, for example, that 3.0.2 is
 # older than 3.0.2b3
 opts="uversionmangle=s/(\w\d)/~$1/" \
-http://theforest.dyne.org/cfengine.html /tarballs/cfengine-(.*)\.tar\.gz
-#http://www.cfengine.org/pages/downloads /tarballs/cfengine-(.*)\.tar\.gz
-
+http://www.cfengine.org/pages/downloads /tarballs/cfengine-(.*)\.tar\.gz
