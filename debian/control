@@ -2,7 +2,8 @@ Source: cfengine3
 Section: admin
 Priority: optional
 Maintainer: Antonio Radici <antonio@dyne.org>
-Build-Depends: debhelper (>= 7), autotools-dev, quilt
+Build-Depends: debhelper (>= 7), autotools-dev, quilt, libdb-dev, 
+ libssl-dev, flex, bison, autoconf, automake, libtool
 Standards-Version: 3.8.3
 DM-Upload-Allowed: yes
 Homepage: http://www.cfengine.org/
