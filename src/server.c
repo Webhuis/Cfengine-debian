@@ -176,6 +176,7 @@ void CheckOpts(int argc,char **argv)
 
 { extern char *optarg;
   char ld_library_path[CF_BUFSIZE];
+  char arg[CF_BUFSIZE];
   struct Item *actionList;
   int optindex = 0;
   int c;
@@ -185,6 +186,12 @@ while ((c=getopt_long(argc,argv,"d:vIf:D:N:VSxLFM",OPTIONS,&optindex)) != EOF)
   switch ((char) c)
       {
       case 'f':
+
+          if (optarg && strlen(optarg) < 5)
+             {
+             snprintf(arg,CF_MAXVARSIZE," -f used but argument \"%s\" incorrect",optarg);
+             FatalError(arg);
+             }
 
           strncpy(VINPUTFILE,optarg,CF_BUFSIZE-1);
           VINPUTFILE[CF_BUFSIZE-1] = '\0';
@@ -309,6 +316,9 @@ if (listen(sd,queuesize) == -1)
    CfOut(cf_error,"listen","listen failed");
    exit(1);
    }
+
+dummyattr.transaction.ifelapsed = 0;
+dummyattr.transaction.expireafter = 1;
 
 thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
 
@@ -746,6 +756,8 @@ if (NewPromiseProposals())
    DeleteAuthList(VDENY);
    //DeleteRlist(VINPUTLIST); This is just a pointer, cannot free it
 
+   VSYSTEMHARDCLASS = unused1;
+   
    DeleteAllScope();
 
    strcpy(VDOMAIN,"undefined.domain");
@@ -1483,7 +1495,7 @@ else
 
 CfOut(cf_inform,"","Executing command %s\n",ebuff);
  
-if ((pp = cf_popen(ebuff,"r")) == NULL)
+if ((pp = cf_popen_sh(ebuff,"r")) == NULL)
    {
    CfOut(cf_error,"pipe","Couldn't open pipe to command %s\n",ebuff);
    snprintf(sendbuffer,CF_BUFSIZE,"Unable to run %s\n",ebuff);
@@ -2185,7 +2197,7 @@ int AuthenticationDialogue(struct cfd_connection *conn,char *recvbuffer, int rec
 
 if (PRIVKEY == NULL || PUBKEY == NULL)
    {
-   CfOut(cf_error,"","No public/private key pair exists, create one with cfkey\n");
+   CfOut(cf_error,"","No public/private key pair exists, create one with cf-key\n");
    return false;
    }
  
@@ -2755,7 +2767,10 @@ if (uid != 0 && !args->connect->maproot) /* should remote root be local root */
       }
    else
       {
-      /* We are not the owner of the file and we don't care about groups */
+#ifndef NT
+      /* We are not the owner of the file and we don't care about groups -
+         Win does not map these permissions reliably, so drop this check. */
+      
       if (statbuf.st_mode & S_IROTH)
          {
          Debug("Caller %s not owner of the file but permission granted\n",(args->connect)->username);
@@ -2764,11 +2779,11 @@ if (uid != 0 && !args->connect->maproot) /* should remote root be local root */
          {
          Debug("Caller %s is not the owner of the file\n",(args->connect)->username);
          RefuseAccess(args->connect,sendbuffer,args->buf_size,"");
-         CfOut(cf_error,"open","Open error of file [%s]\n",filename);         
          snprintf(sendbuffer,CF_BUFSIZE,"%s",CF_FAILEDSTR);
          SendSocketStream(sd,sendbuffer,args->buf_size,0);
          return;
          }
+#endif
       }
    }
  

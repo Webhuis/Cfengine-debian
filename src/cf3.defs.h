@@ -52,7 +52,7 @@
 /* Fundamental (meta) types                                              */
 /*************************************************************************/
 
-#define CF3COPYRIGHT "(C) Cfengine AS 2008"
+#define CF3COPYRIGHT "(C) Cfengine AS 2008-"
 
 #define CF_SCALAR 's'
 #define CF_LIST   'l'
@@ -72,7 +72,7 @@
 #define CF_INBUNDLE 2
 
 #define CF_MAX_NESTING 3
-#define CF_DONEPASSES  3
+#define CF_DONEPASSES  4
 
 #define CF_TIME_SIZE 32
 
@@ -228,7 +228,6 @@ enum cfgcontrol
 
 enum cfacontrol
    {
-   cfa_maxconnections,
    cfa_abortclasses,
    cfa_abortbundleclasses,
    cfa_addclasses,
@@ -255,6 +254,7 @@ enum cfacontrol
    cfa_lastseen,
    cfa_intermittency,
    cfa_max_children,
+   cfa_maxconnections,
    cfa_mountfilesystems,
    cfa_nonalphanumfiles,
    cfa_repchar,
@@ -364,6 +364,7 @@ enum cfkcontrol
 
 enum cfrecontrol
    {
+   cfre_aggregation_point,
    cfre_autoscale,
    cfre_builddir,
    cfre_csv,
@@ -436,7 +437,8 @@ enum cfeditorder
 #define CF_CHARRANGE "^.$"
 
 #define CF_MODERANGE   "[0-7augorwxst,+-]+"
-#define CF_CLASSRANGE  "[a-zA-Z0-9_!&$|.()]+"
+#define CF_BSDFLAGRANGE "[+-]*[(arch|archived|nodump|opaque|sappnd|sappend|schg|schange|simmutable|sunlnk|sunlink|uappnd|uappend|uchg|uchange|uimmutable|uunlnk|uunlink)]+"
+#define CF_CLASSRANGE  "[a-zA-Z0-9_!&@@$|.()]+"
 #define CF_IDRANGE     "[a-zA-Z0-9_$.]+"
 #define CF_USERRANGE   "[a-zA-Z0-9_$.-]+"
 #define CF_FNCALLRANGE "[a-zA-Z0-9_().$@]+"
@@ -1121,6 +1123,7 @@ struct FileCopy
    enum cfbackupoptions backup;
    int stealth;
    int preserve;
+   int collapse;
    int check_root;
    int type_check;
    int force_update;
@@ -1161,11 +1164,10 @@ struct FileSelect
    {
    struct Rlist *name;
    struct Rlist *path;
-   struct Rlist *perms;      
+   struct Rlist *perms;
+   struct Rlist *bsdflags;      
    struct Rlist *owners;
    struct Rlist *groups;
-   u_long plus_flags;     /* for *BSD chflags */
-   u_long minus_flags;    /* for *BSD chflags */
    long max_size;
    long min_size;
    time_t max_ctime;
@@ -1543,6 +1545,18 @@ struct Attributes
    char *path_root;
    char *web_root;
    };
+
+enum cf_meter
+{
+meter_compliance_week,
+meter_compliance_day,
+meter_compliance_hour,
+meter_patch_day,
+meter_soft_day,
+meter_comms_hour,
+meter_anomalies_day,
+meter_endmark
+};
 
 #include "prototypes3.h"
 

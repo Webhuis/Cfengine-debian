@@ -578,7 +578,7 @@ else if (ShellCommandReturnsZero(comm,useshell))
    }
 else
    {
-   SetFnCallReturnStatus("returnszero",FNCALL_FAILURE,strerror(errno),NULL);   
+   SetFnCallReturnStatus("returnszero",FNCALL_SUCCESS,strerror(errno),NULL);   
    strcpy(buffer,"!any");
    }
  
@@ -830,6 +830,9 @@ switch ((minblocks))
             break;
    case 11: snprintf(class,CF_MAXVARSIZE,"Min55_00.%s",hrs);
             break;
+   default:
+       strcpy(class,"never");
+       break;
    }
 
 if (IsDefinedClass(class))
@@ -898,7 +901,7 @@ maxbytes = finalargs->next->next->next->item;
 val = Str2Int(maxbytes);
 portnum = (short) Str2Int(port);
 
-if (val < 0 || portnum < 0)
+if (val < 0 || portnum < 0 || THIS_AGENT_TYPE == cf_common)
    {
    SetFnCallReturnStatus("readtcp",FNCALL_FAILURE,"port number or maxbytes out of range",NULL);
    rval.item = NULL;
@@ -1289,6 +1292,7 @@ struct Rval FnCallSelectServers(struct FnCall *fp,struct Rlist *finalargs)
   short portnum;
   struct Attributes attr;
   void *retval;
+  struct Promise *pp;
 
 buffer[0] = '\0';  
 ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
@@ -1366,6 +1370,8 @@ if (THIS_AGENT_TYPE != cf_agent)
    return rval;         
    }
 
+pp = NewPromise("select_server","function"); 
+
 for (rp = hostnameip; rp != NULL; rp=rp->next)
    {
    Debug("Want to read %d bytes from port %d at %s\n",val,portnum,rp->item);
@@ -1375,7 +1381,7 @@ for (rp = hostnameip; rp != NULL; rp=rp->next)
    attr.copy.force_ipv4 = false;
    attr.copy.portnumber = portnum;
    
-   if (!ServerConnect(conn,rp->item,attr,NULL))
+   if (!ServerConnect(conn,rp->item,attr,pp))
       {
       CfOut(cf_inform,"socket","Couldn't open a tcp socket");
       DeleteAgentConn(conn);
@@ -1434,6 +1440,8 @@ for (rp = hostnameip; rp != NULL; rp=rp->next)
    close(conn->sd);
    DeleteAgentConn(conn);
    }
+
+DeletePromise(pp);
 
 /* Return the subset that is alive and responding correctly */
 
@@ -1546,7 +1554,7 @@ else if (stat(finalargs->next->item,&tobuf) == -1)
    SetFnCallReturnStatus("isaccessedbefore",FNCALL_FAILURE,strerror(errno),NULL);   
    strcpy(buffer,"!any");
    }
-else if (frombuf.st_atime > tobuf.st_atime)
+else if (frombuf.st_atime < tobuf.st_atime)
    {
    strcpy(buffer,"any");
    SetFnCallReturnStatus("isaccessedbefore",FNCALL_SUCCESS,NULL,NULL);   
@@ -3105,7 +3113,7 @@ cftime -= d[cfa_sec];
 cftime -= d[cfa_min] * 60;
 cftime -= d[cfa_hour] * 3600;
 cftime -= d[cfa_day] * 24 * 3600;
-cftime -= d[cfa_month] * 30 * 24 * 3600;
+cftime -= Months2Seconds(d[cfa_month]);
 cftime -= d[cfa_year] * 365 * 24 * 3600;
 
 Debug("Total negative offset = %.1f minutes\n",(double)(CFSTARTTIME-cftime)/60.0);
@@ -3324,7 +3332,7 @@ struct Rval FnCallReadStringList(struct FnCall *fp,struct Rlist *finalargs,enum 
   struct Rlist *rp,*newlist = NULL;
   struct Rval rval;
   char *filename,*comment,*split,fnname[CF_MAXVARSIZE];
-  int maxent,maxsize,count = 0,noerrors = true,purge = true;
+  int maxent,maxsize,count = 0,noerrors = true,blanks = false;
   char *file_buffer = NULL;
 
 ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
@@ -3359,13 +3367,14 @@ else
 
    if (file_buffer == NULL)
       {
+      SetFnCallReturnStatus(fnname,FNCALL_SUCCESS,NULL,NULL);
       rval.item = NULL;
       rval.rtype = CF_LIST;
       return rval;
       }
    else
       {
-      newlist = SplitRegexAsRList(file_buffer,split,maxent,purge);
+      newlist = SplitRegexAsRList(file_buffer,split,maxent,blanks);
       }
    }
 
@@ -4157,3 +4166,4 @@ for (sp = id; *sp != '\0'; sp++)
 
 return true;
 }
+

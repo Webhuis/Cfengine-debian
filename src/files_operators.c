@@ -114,13 +114,14 @@ else
    {
    if (!DONTDO)
       {
+      mode_t saveumask = umask(0);
       mode_t filemode = 0600;  /* Decide the mode for filecreation */
 
       if (GetConstraint("mode",pp->conlist,CF_SCALAR) == NULL)
          {
          /* Relying on umask is risky */
          filemode = 0600;
-         CfOut(cf_verbose,"","No mode was set, choose plain file default %o\n",filemode);
+         CfOut(cf_verbose,""," -> No mode was set, choose plain file default %o\n",filemode);
          }
       else
          {
@@ -128,16 +129,18 @@ else
          }
 
       MakeParentDirectory(file,attr.move_obstructions);
-      
+
       if ((fd = creat(file,filemode)) == -1)
          { 
-         cfPS(cf_inform,CF_FAIL,"creat",pp,attr,"Error creating file %s, mode = %o\n",file,filemode);
+         cfPS(cf_inform,CF_FAIL,"creat",pp,attr," !! Error creating file %s, mode = %o\n",file,filemode);
+         umask(saveumask);
          return false;
          }
       else
          {
          cfPS(cf_inform,CF_CHG,"",pp,attr," -> Created file %s, mode = %o\n",file,filemode);
          close(fd);
+         umask(saveumask);
          }
       }
    }
@@ -170,7 +173,7 @@ int ScheduleCopyOperation(char *destination,struct Attributes attr,struct Promis
 
 { struct cfagent_connection *conn;
 
- CfOut(cf_verbose,""," -> Copy file %s from %s check\n",destination,pp->promiser);  
+ CfOut(cf_verbose,""," -> Copy file %s from %s check\n",destination,attr.copy.source);  
   
 if (attr.copy.servers == NULL || strcmp(attr.copy.servers->item,"localhost") == 0)
    {
@@ -402,7 +405,7 @@ newperm &= ~(attr.perms.minus);
 
 if (S_ISDIR(dstat->st_mode))  
    {
-   if (!attr.perms.rxdirs)
+   if (attr.perms.rxdirs)
       {
       Debug("Directory...fixing x bits\n");
       
@@ -458,7 +461,7 @@ if (S_ISLNK(dstat->st_mode))             /* No point in checking permission on a
    return;
    }
 
-if (attr.acl.acl_method != cfacl_nomethod)
+if (attr.acl.acl_entries)
    { 
    VerifyACL(file,attr,pp); 
    }
@@ -499,17 +502,18 @@ else
    }
  
 #if defined HAVE_CHFLAGS  /* BSD special flags */
-newflags = (dstat->st_flags & CHFLAGS_MASK) ;
-newperm |= attr.perms.plus_flags;
-newperm &= ~(attr.perms.minus_flags);
+
+newflags = (dstat->st_flags & CHFLAGS_MASK);
+newflags |= attr.perms.plus_flags;
+newflags &= ~(attr.perms.minus_flags);
 
 if ((newflags & CHFLAGS_MASK) == (dstat->st_flags & CHFLAGS_MASK))    /* file okay */
    {
-   Debug("BSD File okay, flags = %o, current = %o\n",(newflags & CHFLAGS_MASK),(dstat->st_flags & CHFLAGS_MASK));
+   Debug("BSD File okay, flags = %x, current = %x\n",(newflags & CHFLAGS_MASK),(dstat->st_flags & CHFLAGS_MASK));
    }
 else
    {
-   Debug("BSD Fixing %s, newflags = %o, flags = %o\n",file,(newflags & CHFLAGS_MASK),(dstat->st_flags & CHFLAGS_MASK));
+   Debug("BSD Fixing %s, newflags = %x, flags = %x\n",file,(newflags & CHFLAGS_MASK),(dstat->st_flags & CHFLAGS_MASK));
    
    switch (attr.transaction.action)
       {
@@ -522,9 +526,9 @@ else
 
           if (! DONTDO)
              {
-             if (chflags (file,newflags & CHFLAGS_MASK) == -1)
+             if (chflags(file,newflags & CHFLAGS_MASK) == -1)
                 {
-                cfPS(cf_error,CF_DENIED,"chflags",pp,attr,"chflags failed on %s\n",file);
+                cfPS(cf_error,CF_DENIED,"chflags",pp,attr," !! Failed setting BSD flags %x on %s\n",newflags,file);
                 break;
                 }
              else
@@ -881,7 +885,7 @@ void VerifyName(char *path,struct stat *sb,struct Attributes attr,struct Promise
 
 { mode_t newperm;
   struct stat dsb;
- 
+
 if (lstat(path,&dsb) == -1)
    {
    cfPS(cf_inform,CF_NOP,"",pp,attr,"File object named %s is not there (promise kept)",path);
@@ -889,7 +893,10 @@ if (lstat(path,&dsb) == -1)
    }
 else
    {
-   CfOut(cf_inform,""," !! Warning - file object %s exists, contrary to promise\n",path);
+   if (attr.rename.rotate == CF_NOINT)
+      {
+      CfOut(cf_inform,""," !! Warning - file object %s exists, contrary to promise\n",path);
+      }
    }
 
 if (attr.rename.newname)
@@ -907,7 +914,7 @@ if (attr.rename.newname)
          {
          if (rename(path,attr.rename.newname) == -1)
             {
-            cfPS(cf_error,CF_FAIL,"rename",pp,attr,"Error occurred while renaming %s\n",path);
+            cfPS(cf_error,CF_FAIL,"rename",pp,attr," !! Error occurred while renaming %s\n",path);
             return;
             }
          }
@@ -1044,7 +1051,6 @@ if (attr.rename.rotate == 0)
    return;
    }
 
-
 if (attr.rename.rotate > 0)
    {
    if (!DONTDO)
@@ -1093,14 +1099,20 @@ else
          CfOut(cf_inform,"unlink","Keeping directory %s\n",path);
          return;
          }
+
+      if (strcmp(path,pp->promiser) == 0)
+         {
+         /* This is the parent and we cannot delete it from here - must delete separately*/
+         return;
+         }
       
       if (rmdir(lastnode) == -1)
          {
-         cfPS(cf_verbose,CF_FAIL,"rmdir",pp,attr,"Delete directory %s failed\n",path);
+         cfPS(cf_verbose,CF_FAIL,"rmdir",pp,attr," !! Delete directory %s failed (node called %s)\n",path,lastnode);
          }            
       else
          {
-         cfPS(cf_inform,CF_CHG,"",pp,attr,"Deleted directory %s\n",path);
+         cfPS(cf_inform,CF_CHG,"",pp,attr," -> Deleted directory %s\n",path);
          }
       }
    }   
@@ -1114,7 +1126,7 @@ if (! DONTDO)
    {
    if (utime(path,NULL) != -1)
       {
-      cfPS(cf_inform,CF_CHG,"",pp,attr,"Touched (updated time stamps) %s\n",path);
+      cfPS(cf_inform,CF_CHG,"",pp,attr," -> Touched (updated time stamps) %s\n",path);
       }
    else
       {
@@ -1920,10 +1932,17 @@ void RotateFiles(char *name,int number)
 
 { int i, fd;
   struct stat statbuf;
-  char filename[CF_BUFSIZE],vbuff[CF_BUFSIZE];
+  char from[CF_BUFSIZE],to[CF_BUFSIZE];
   struct Attributes attr;
   struct Promise dummyp;
   
+if (IsItemIn(ROTATED,name))
+   {
+   return;
+   }
+
+PrependItem(&ROTATED,name,NULL);
+
 if (stat(name,&statbuf) == -1)
    {
    CfOut(cf_verbose,"","No access to file %s\n",name);
@@ -1932,61 +1951,60 @@ if (stat(name,&statbuf) == -1)
 
 for (i = number-1; i > 0; i--)
    {
-   snprintf(filename,CF_BUFSIZE,"%s.%d",name,i);
-   snprintf(vbuff,CF_BUFSIZE,"%s.%d",name, i+1);
+   snprintf(from,CF_BUFSIZE,"%s.%d",name,i);
+   snprintf(to,CF_BUFSIZE,"%s.%d",name, i+1);
    
-   if (rename(filename,vbuff) == -1)
+   if (rename(from,to) == -1)
       {
-      Debug("Rename failed in RotateFiles %s -> %s\n",name,filename);
+      Debug("Rename failed in RotateFiles %s -> %s\n",name,from);
       }
 
-   snprintf(filename,CF_BUFSIZE,"%s.%d.gz",name,i);
-   snprintf(vbuff,CF_BUFSIZE,"%s.%d.gz",name, i+1);
+   snprintf(from,CF_BUFSIZE,"%s.%d.gz",name,i);
+   snprintf(to,CF_BUFSIZE,"%s.%d.gz",name, i+1);
    
-   if (rename(filename,vbuff) == -1)
+   if (rename(from,to) == -1)
       {
-      Debug("Rename failed in RotateFiles %s -> %s\n",name,filename);
+      Debug("Rename failed in RotateFiles %s -> %s\n",name,from);
       }
 
-   snprintf(filename,CF_BUFSIZE,"%s.%d.Z",name,i);
-   snprintf(vbuff,CF_BUFSIZE,"%s.%d.Z",name, i+1);
+   snprintf(from,CF_BUFSIZE,"%s.%d.Z",name,i);
+   snprintf(to,CF_BUFSIZE,"%s.%d.Z",name, i+1);
    
-   if (rename(filename,vbuff) == -1)
+   if (rename(from,to) == -1)
       {
-      Debug("Rename failed in RotateFiles %s -> %s\n",name,filename);
+      Debug("Rename failed in RotateFiles %s -> %s\n",name,from);
       }   
 
-   snprintf(filename,CF_BUFSIZE,"%s.%d.bz",name,i);
-   snprintf(vbuff,CF_BUFSIZE,"%s.%d.bz",name, i+1);
+   snprintf(from,CF_BUFSIZE,"%s.%d.bz",name,i);
+   snprintf(to,CF_BUFSIZE,"%s.%d.bz",name, i+1);
    
-   if (rename(filename,vbuff) == -1)
+   if (rename(from,to) == -1)
       {
-      Debug("Rename failed in RotateFiles %s -> %s\n",name,filename);
+      Debug("Rename failed in RotateFiles %s -> %s\n",name,from);
       }   
 
-   snprintf(filename,CF_BUFSIZE,"%s.%d.bz2",name,i);
-   snprintf(vbuff,CF_BUFSIZE,"%s.%d.bz2",name, i+1);
+   snprintf(from,CF_BUFSIZE,"%s.%d.bz2",name,i);
+   snprintf(to,CF_BUFSIZE,"%s.%d.bz2",name, i+1);
    
-   if (rename(filename,vbuff) == -1)
+   if (rename(from,to) == -1)
       {
-      Debug("Rename failed in RotateFiles %s -> %s\n",name,filename);
-      }   
-
+      Debug("Rename failed in RotateFiles %s -> %s\n",name,from);
+      }
    }
 
-snprintf(vbuff,CF_BUFSIZE,"%s.1",name);
+snprintf(to,CF_BUFSIZE,"%s.1",name);
 memset(&dummyp,0,sizeof(dummyp));
 memset(&attr,0,sizeof(attr));
 dummyp.this_server = "localdisk";
 
-if (CopyRegularFileDisk(name,vbuff,attr,&dummyp) == -1)
+if (CopyRegularFileDisk(name,to,attr,&dummyp) == -1)
    {
-   Debug2("cfengine: copy failed in RotateFiles %s -> %s\n",name,vbuff);
+   Debug2("cfengine: copy failed in RotateFiles %s -> %s\n",name,to);
    return;
    }
 
-chmod(vbuff,statbuf.st_mode);
-chown(vbuff,statbuf.st_uid,statbuf.st_gid); 
+chmod(to,statbuf.st_mode);
+chown(to,statbuf.st_uid,statbuf.st_gid); 
 chmod(name,0600);                             /* File must be writable to empty ..*/
  
 if ((fd = creat(name,statbuf.st_mode)) == -1)

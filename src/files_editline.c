@@ -40,8 +40,8 @@ enum editlinetypesequence
    elp_classes,
    elp_delete,
    elp_columns,
-   elp_replace,
    elp_insert,
+   elp_replace,
    elp_reports,
    elp_none
    };
@@ -52,8 +52,8 @@ char *EDITLINETYPESEQUENCE[] =
    "classes",
    "delete_lines",
    "field_edits",
-   "replace_patterns",
    "insert_lines",
+   "replace_patterns",
    "reports",
    NULL
    };
@@ -172,6 +172,8 @@ if (pp->done)
    return;
    }
 
+PromiseBanner(pp);
+
 if (strcmp("classes",pp->agentsubtype) == 0)
    {
    KeepClassContextPromise(pp);
@@ -190,15 +192,15 @@ if (strcmp("field_edits",pp->agentsubtype) == 0)
    return;
    }
 
-if (strcmp("replace_patterns",pp->agentsubtype) == 0)
-   {
-   VerifyPatterns(pp);
-   return;
-   }
-
 if (strcmp("insert_lines",pp->agentsubtype) == 0)
    {
    VerifyLineInsertions(pp);
+   return;
+   }
+
+if (strcmp("replace_patterns",pp->agentsubtype) == 0)
+   {
+   VerifyPatterns(pp);
    return;
    }
 
@@ -225,7 +227,7 @@ void VerifyLineDeletions(struct Promise *pp)
 	 
 a = GetDeletionAttributes(pp);
 
-snprintf(lockname,CF_BUFSIZE-1,"filedeletion-%s",pp->promiser);
+snprintf(lockname,CF_BUFSIZE-1,"filedeletion-%s-%s",pp->promiser,pp->this_server);
 thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
 
 if (thislock.lock == NULL)
@@ -269,7 +271,7 @@ void VerifyColumnEdits(struct Promise *pp)
 
 a = GetColumnAttributes(pp);
 
-snprintf(lockname,CF_BUFSIZE-1,"filecolumnedits-%s",pp->promiser);
+snprintf(lockname,CF_BUFSIZE-1,"filecolumnedits-%s-%s",pp->promiser,pp->this_server);
 thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
 
 if (thislock.lock == NULL)
@@ -343,7 +345,7 @@ CfOut(cf_verbose,""," -> Looking at pattern %s\n",pp->promiser);
 
 a = GetReplaceAttributes(pp);
 
-snprintf(lockname,CF_BUFSIZE-1,"filepatterns-%s",pp->promiser);
+snprintf(lockname,CF_BUFSIZE-1,"filepatterns-%s-%s",pp->promiser,pp->this_server);
 thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
 
 if (thislock.lock == NULL)
@@ -400,7 +402,7 @@ if (!SanityCheckInsertions(a))
    return;
    }
 
-snprintf(lockname,CF_BUFSIZE-1,"filepatterns-%s",pp->promiser);
+snprintf(lockname,CF_BUFSIZE-1,"filepatterns-%s-%s",pp->promiser,pp->this_server);
 thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
 
 if (thislock.lock == NULL)
@@ -543,7 +545,12 @@ if (a.location.before_after == cfe_after)
    {
    for (ip = *start; ip != NULL; ip=ip->next)
       {
-      if (ip == end_ptr || ip->next == NULL)
+      if (ip->next != NULL && ip->next == end_ptr)
+         {
+         return InsertMissingLinesAtLocation(start,begin_ptr,end_ptr,ip,prev,a,pp);
+         }
+
+      if (ip->next == NULL)
          {
          return InsertMissingLinesAtLocation(start,begin_ptr,end_ptr,ip,prev,a,pp);
          }
@@ -580,6 +587,11 @@ if (a.sourcetype && strcmp(a.sourcetype,"file") == 0)
       fgets(buf,CF_BUFSIZE,fin);
       Chop(buf);
 
+      if (feof(fin) && strlen(buf) == 0)
+         {
+         break;
+         }
+      
       if (a.expandvars)
          {
          ExpandScalar(buf,exp);
@@ -589,7 +601,7 @@ if (a.sourcetype && strcmp(a.sourcetype,"file") == 0)
          strcpy(exp,buf);
          }
 
-      if (!SelectInsertion(exp,a,pp))
+      if (!SelectLine(exp,a,pp))
          {
          continue;
          }
@@ -629,7 +641,7 @@ else
          sscanf(sp,"%[^\n]",buf);
          sp += strlen(buf);
          
-         if (!SelectInsertion(buf,a,pp))
+         if (!SelectLine(buf,a,pp))
             {
             continue;
             }
@@ -696,6 +708,12 @@ for (ip = *start; ip != NULL; ip = np)
       match = FullTextMatch(pp->promiser,ip->name);
       }
 
+   if (!SelectLine(ip->name,a,pp))
+      {
+      np = ip->next;
+      continue;
+      }
+         
    if (in_region && match)
       {
       if (a.transaction.action == cfa_warn)
@@ -868,7 +886,7 @@ return retval;
 
 int EditColumns(struct Item *file_start,struct Item *file_end,struct Attributes a,struct Promise *pp)
 
-{ char separator[CF_EXPANDSIZE]; 
+{ char separator[CF_MAXVARSIZE]; 
   int s,e,retval = false;
   struct CfRegEx rex;
   struct Item *ip;
@@ -903,8 +921,16 @@ for (ip = file_start; ip != file_end; ip=ip->next)
       return false;
       }
 
-   strncpy(separator,ip->name+s,e-s);
+   if (e-s > CF_MAXVARSIZE / 2)
+      {
+      CfOut(cf_error,""," !! Line split criterion matches a huge part of the line -- seems to be in error");
+      return false;
+      }
+
    
+   strncpy(separator,ip->name+s,e-s);
+   separator[e-s]='\0';
+
    columns = SplitRegexAsRList(ip->name,a.column.column_separator,CF_INFINITY,a.column.blanks_ok);
    retval = EditLineByColumn(&columns,a,pp);
 
@@ -1193,12 +1219,12 @@ return false;
 
 /***************************************************************************/
 
-int SelectInsertion(char *line,struct Attributes a,struct Promise *pp)
+int SelectLine(char *line,struct Attributes a,struct Promise *pp)
 
 { struct Rlist *rp,*c;
   int s,e;
   char *selector;
- 
+
 if (c = a.line_select.startwith_from_list)
    {
    for (rp = c; rp != NULL; rp=rp->next)
@@ -1222,7 +1248,7 @@ if (c = a.line_select.not_startwith_from_list)
       
       if (strncmp(selector,line,strlen(selector)) == 0)
          {
-         return true;
+         return false;
          }      
       }
 

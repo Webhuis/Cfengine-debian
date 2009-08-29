@@ -19,11 +19,16 @@ bundle agent testbundle
 {
 files:
 
-  "/home/mark/tmp/testcopy" 
+  "/home/mark/tmp/test_to" 
 
     delete => tidyfiles,
     file_select => zero_age,
     depth_search => recurse("inf");
+
+  # Now delete the parent.
+
+  "/home/mark/tmp/testcopy" 
+    delete => tidyfiles;
 }
 
 #########################################################
@@ -41,7 +46,7 @@ body delete tidyfiles
 
 {
 dirlinks => "delete";
-rmdirs   => "false"; 
+rmdirs   => "true"; 
 }
 
 #########################################################

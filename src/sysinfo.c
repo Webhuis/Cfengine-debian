@@ -199,11 +199,21 @@ else
    strcpy(VFQNAME,VSYSNAME.nodename);
    NewClass(CanonifyName(VFQNAME));
    
-   while(VSYSNAME.nodename[n++] != '.')
+   while(VSYSNAME.nodename[n++] != '.' && VSYSNAME.nodename[n] != '\0')
       {
       }
    
-   strncpy(VUQNAME,VSYSNAME.nodename,n-1);
+   strncpy(VUQNAME,VSYSNAME.nodename,n);
+
+   if (VUQNAME[n-1] == '.')
+      {
+      VUQNAME[n-1] = '\0';
+      }
+   else
+      {
+      VUQNAME[n] = '\0';
+      }
+   
    NewClass(CanonifyName(VUQNAME));
    }
   
@@ -247,6 +257,7 @@ NewScalar("sys","resolv",VRESOLVCONF[VSYSTEMHARDCLASS],cf_str);
 NewScalar("sys","maildir",VMAILDIR[VSYSTEMHARDCLASS],cf_str);
 
 LoadSlowlyVaryingObservations();
+EnterpriseContext();
 
 if (strlen(VDOMAIN) > 0)
    {
@@ -408,7 +419,7 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
       continue;
       }
 
-   if (strlen(ifp->ifr_name) == 0)
+   if (ifp->ifr_name == NULL || strlen(ifp->ifr_name) == 0)
       {
       continue;
       }
@@ -428,11 +439,11 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
    
    if (UNDERSCORE_CLASSES)
       {
-      snprintf(workbuf, CF_BUFSIZE, "_net_iface_%s", CanonifyName(ifp->ifr_name));
+      snprintf(workbuf,CF_BUFSIZE, "_net_iface_%s", CanonifyName(ifp->ifr_name));
       }
    else
       {
-      snprintf(workbuf, CF_BUFSIZE, "net_iface_%s", CanonifyName(ifp->ifr_name));
+      snprintf(workbuf,CF_BUFSIZE, "net_iface_%s", CanonifyName(ifp->ifr_name));
       }
 
    NewClass(workbuf);
@@ -495,6 +506,7 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
             
             strcpy(ip,VIPADDRESS);
             i = 3;
+
             for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
                {
                if (*sp == '.')
@@ -508,45 +520,42 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
             return;
             }
          
+         strncpy(ip,"ipv4_",CF_MAXVARSIZE);
+         strncat(ip,inet_ntoa(sin->sin_addr),CF_MAXVARSIZE-6);
+         NewClass(CanonifyName(ip));
+
          if (!ipdefault)
             {
             ipdefault = true;
-            strncpy(ip,"ipv4_",CF_MAXVARSIZE);
-            strncat(ip,inet_ntoa(sin->sin_addr),CF_MAXVARSIZE-6);
-            NewClass(CanonifyName(ip));
             NewScalar("sys","ipv4",inet_ntoa(sin->sin_addr),cf_str);
-            
+         
             strcpy(VIPADDRESS,inet_ntoa(sin->sin_addr));
-            AppendItem(&IPADDRESSES,VIPADDRESS,"");
+            }
 
-            for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
+         AppendItem(&IPADDRESSES,VIPADDRESS,"");
+         
+         for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
+            {
+            if (*sp == '.')
                {
-               if (*sp == '.')
-                  {
-                  *sp = '\0';
-                  NewClass(CanonifyName(ip));
-                  }
+               *sp = '\0';
+               NewClass(CanonifyName(ip));
                }
             }
          
-         /* Matching variables */
+         strcpy(ip,inet_ntoa(sin->sin_addr));
+         snprintf(name,CF_MAXVARSIZE-1,"ipv4[%s]",CanonifyName(ifp->ifr_name));
+         NewScalar("sys",name,ip,cf_str);
          
-         if (first_address)
+         i = 3;
+         
+         for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
             {
-            strcpy(ip,inet_ntoa(sin->sin_addr));
-            snprintf(name,CF_MAXVARSIZE-1,"ipv4[%s]",CanonifyName(ifp->ifr_name));
-            NewScalar("sys",name,ip,cf_str);
-            
-            i = 3;
-            
-            for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
+            if (*sp == '.')
                {
-               if (*sp == '.')
-                  {
-                  *sp = '\0';
-                  snprintf(name,CF_MAXVARSIZE-1,"ipv4_%d[%s]",i--,CanonifyName(ifp->ifr_name));
-                  NewScalar("sys",name,ip,cf_str);
-                  }
+               *sp = '\0';
+               snprintf(name,CF_MAXVARSIZE-1,"ipv4_%d[%s]",i--,CanonifyName(ifp->ifr_name));
+               NewScalar("sys",name,ip,cf_str);
                }
             }
          }
@@ -616,6 +625,7 @@ while (!feof(fp))
 
       DeleteVariable("mon",name);
       NewScalar("mon",name,value,cf_str);
+      Debug(" -> Setting new monitoring scalar %s => %s",name,value);
       }
    else
       {

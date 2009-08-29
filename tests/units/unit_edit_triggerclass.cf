@@ -1,7 +1,7 @@
 
 #######################################################
 #
-# Insert a number of lines
+# Insert a number of lines and trigger a followup if edited
 #
 #######################################################
 
@@ -34,11 +34,17 @@ files:
 
      edit_line => Insert("$(insert.v)"),
      edit_defaults => empty,
-     classes => trigger("result");
+     classes => trigger("edited");
+
+commands:
+
+ edited::
+
+  "/bin/echo make bananas";
 
 reports:
 
-  result::
+  edited::
 
     "The potatoes are bananas";
 

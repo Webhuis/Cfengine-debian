@@ -17,14 +17,13 @@ vars:
 
   "array[cf-monitord]" string => "The monitor";
   "array[cf-serverd]" string => "The server";
-  "array[cf-execd]" string => "The executor, not executionist";
+  "array[cf-execd]" string => "The executor, not executioner";
 
-commands:
+reports:
 
-   "/bin/echo $(component) is"
+  cfengine_3::
 
-            args => "$(array[$(component)])";
-
+   "/bin/echo $(component) is $(array[$(component)])";
 
 }
 

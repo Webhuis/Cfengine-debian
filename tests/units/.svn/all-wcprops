@@ -13,7 +13,7 @@ unit_accessed_before.cf
 K 25
 svn:wc:ra_dav:version-url
 V 75
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_accessed_before.cf
+/projects/cfengine-3/!svn/ver/462/trunk/tests/units/unit_accessed_before.cf
 END
 unit_controlclasses.cf
 K 25
@@ -91,7 +91,7 @@ unit_tidy_all_files.cf
 K 25
 svn:wc:ra_dav:version-url
 V 74
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_tidy_all_files.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_tidy_all_files.cf
 END
 unit_disable_and_rotate_files.cf
 K 25
@@ -157,7 +157,7 @@ unit_change_detect.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_change_detect.cf
+/projects/cfengine-3/!svn/ver/436/trunk/tests/units/unit_change_detect.cf
 END
 unit_classes_global.cf
 K 25
@@ -175,7 +175,7 @@ topic_map.ltm
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/topic_map.ltm
+/projects/cfengine-3/!svn/ver/420/trunk/tests/units/topic_map.ltm
 END
 unit_ldap.cf
 K 25
@@ -199,7 +199,7 @@ unit_readtcp.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_readtcp.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_readtcp.cf
 END
 unit_badpromise.cf
 K 25
@@ -235,7 +235,7 @@ unit_copylinks.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_copylinks.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_copylinks.cf
 END
 unit_definitions.cf
 K 25
@@ -253,7 +253,7 @@ unit_edit_sectioned_file.cf
 K 25
 svn:wc:ra_dav:version-url
 V 79
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_edit_sectioned_file.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_edit_sectioned_file.cf
 END
 unit_getuid.cf
 K 25
@@ -271,13 +271,13 @@ unit_update.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_update.cf
+/projects/cfengine-3/!svn/ver/390/trunk/tests/units/unit_update.cf
 END
 unit_hash.cf
 K 25
 svn:wc:ra_dav:version-url
 V 64
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_hash.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_hash.cf
 END
 unit_package_yum.cf
 K 25
@@ -313,7 +313,7 @@ unit_selectservers.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_selectservers.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_selectservers.cf
 END
 unit_mount_fs.cf
 K 25
@@ -331,7 +331,7 @@ unit_linking.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_linking.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_linking.cf
 END
 unit_null_config.cf
 K 25
@@ -397,7 +397,7 @@ unit_changedbefore.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_changedbefore.cf
+/projects/cfengine-3/!svn/ver/462/trunk/tests/units/unit_changedbefore.cf
 END
 unit_epimenides.cf
 K 25
@@ -415,7 +415,7 @@ Makefile.am
 K 25
 svn:wc:ra_dav:version-url
 V 63
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/Makefile.am
+/projects/cfengine-3/!svn/ver/410/trunk/tests/units/Makefile.am
 END
 unit_backreferences_files.cf
 K 25
@@ -451,7 +451,7 @@ Makefile.in
 K 25
 svn:wc:ra_dav:version-url
 V 63
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/Makefile.in
+/projects/cfengine-3/!svn/ver/429/trunk/tests/units/Makefile.in
 END
 unit_ldap.cf.txt
 K 25
@@ -505,13 +505,13 @@ unit_remove_deadlinks.cf
 K 25
 svn:wc:ra_dav:version-url
 V 76
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_remove_deadlinks.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_remove_deadlinks.cf
 END
 topic_map.sql
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/topic_map.sql
+/projects/cfengine-3/!svn/ver/420/trunk/tests/units/topic_map.sql
 END
 unit_process_signalling.cf
 K 25
@@ -535,7 +535,7 @@ Makefile
 K 25
 svn:wc:ra_dav:version-url
 V 60
-/projects/cfengine-3/!svn/ver/378/trunk/tests/units/Makefile
+/projects/cfengine-3/!svn/ver/468/trunk/tests/units/Makefile
 END
 unit_process_matching.cf
 K 25
@@ -583,7 +583,7 @@ unit_edit_insert_lines.cf
 K 25
 svn:wc:ra_dav:version-url
 V 77
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_edit_insert_lines.cf
+/projects/cfengine-3/!svn/ver/436/trunk/tests/units/unit_edit_insert_lines.cf
 END
 unit_root_passwd.cf
 K 25
@@ -601,7 +601,7 @@ unit_ago.cf
 K 25
 svn:wc:ra_dav:version-url
 V 63
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_ago.cf
+/projects/cfengine-3/!svn/ver/410/trunk/tests/units/unit_ago.cf
 END
 unit-env.cf
 K 25
@@ -613,13 +613,13 @@ unit_readlist.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_readlist.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_readlist.cf
 END
 unit_measurements.cf
 K 25
 svn:wc:ra_dav:version-url
 V 72
-/projects/cfengine-3/!svn/ver/372/trunk/tests/units/unit_measurements.cf
+/projects/cfengine-3/!svn/ver/436/trunk/tests/units/unit_measurements.cf
 END
 unit_registry.cf
 K 25
@@ -661,13 +661,13 @@ unit_classmatch.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_classmatch.cf
+/projects/cfengine-3/!svn/ver/462/trunk/tests/units/unit_classmatch.cf
 END
 unit_edit_column_files.cf
 K 25
 svn:wc:ra_dav:version-url
 V 77
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_edit_column_files.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_edit_column_files.cf
 END
 unit_resolveconf.cf
 K 25
@@ -691,7 +691,7 @@ unit_edit_deletenotmatch.cf
 K 25
 svn:wc:ra_dav:version-url
 V 79
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_edit_deletenotmatch.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_edit_deletenotmatch.cf
 END
 unit_edit_replace_string.cf
 K 25
@@ -733,7 +733,7 @@ unit_select_mode.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_select_mode.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_select_mode.cf
 END
 unit_iprange.cf
 K 25
@@ -751,7 +751,7 @@ unit_loops.cf
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_loops.cf
+/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_loops.cf
 END
 unit_warnifline.cf
 K 25
@@ -793,7 +793,7 @@ unit_server_copy_remote.cf
 K 25
 svn:wc:ra_dav:version-url
 V 78
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_server_copy_remote.cf
+/projects/cfengine-3/!svn/ver/436/trunk/tests/units/unit_server_copy_remote.cf
 END
 unit_varclass.cf
 K 25

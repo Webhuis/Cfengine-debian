@@ -59,11 +59,19 @@ if (strcmp(pp->bundletype,"common") == 0)
    if (EvalClassExpression(a.context.expression,pp))
       {
       CfOut(cf_verbose,""," ?> defining additional global class %s\n",pp->promiser);
-      NewClass(pp->promiser);
+
+      if (!ValidClassName(pp->promiser))
+         {
+         cfPS(cf_error,CF_FAIL,"",pp,a," !! Attempted to name a class \"%s\", which is an illegal class identifier",pp->promiser);
+         }
+      else
+         {
+         NewClass(pp->promiser);
+         }
       }
 
    /* These are global and loaded once */
-   *(pp->donep) = true;
+   //*(pp->donep) = true;
 
    return;
    }
@@ -73,13 +81,20 @@ if (strcmp(pp->bundletype,THIS_AGENT) == 0 || FullTextMatch("edit_.*",pp->bundle
    if (EvalClassExpression(a.context.expression,pp))
       {
       Debug(" ?> defining explicit class %s\n",pp->promiser);
-      NewBundleClass(pp->promiser,pp->bundle);
+
+      if (!ValidClassName(pp->promiser))
+         {
+         cfPS(cf_error,CF_FAIL,"",pp,a," !! Attempted to name a class \"%s\", which is an illegal class identifier",pp->promiser);
+         }
+      else
+         {
+         NewBundleClass(pp->promiser,pp->bundle);
+         }
       }
 
    // Private to bundle, can be reloaded
 
-   *(pp->donep) = false;
-   
+   *(pp->donep) = false;   
    return;
    }
 }
@@ -307,7 +322,10 @@ void AddEphemeralClasses(struct Rlist *classlist)
 
 for (rp = classlist; rp != NULL; rp = rp->next)
    {
-   NewClass(rp->item);
+   if (!IsItemIn(VHEAP,rp->item))
+      {
+      NewClass(rp->item);
+      }
    }
 }
 
@@ -509,6 +527,12 @@ if (*classes == NULL)
    return false;
    }
 
+if (strchr(*classes,'$') || strchr(*classes,'@'))
+   {
+   Debug("Class expression did not evaluate");
+   return true;
+   }
+
 if (*classes && IsDefinedClass(*classes))
    {
    return false;
@@ -517,6 +541,41 @@ else
    {
    return true;
    }
+}
+
+/*******************************************************************/
+
+void SaveClassEnvironment()
+
+{ struct Item *ip;
+  char file[CF_BUFSIZE];
+  FILE *fp;
+ 
+snprintf(file,CF_BUFSIZE,"%s/state/allclasses.txt",CFWORKDIR);
+
+if ((fp = fopen(file,"w")) == NULL)
+   {
+   CfOut(cf_inform,"","Could not open allclasses cache file");
+   return;
+   }
+
+for (ip = VHEAP; ip != NULL; ip=ip->next)
+   {
+   if (!IsItemIn(VNEGHEAP,ip->name))
+      {
+      fprintf(fp,"%s\n",ip->name);
+      }
+   }
+ 
+for (ip = VADDCLASSES; ip != NULL; ip=ip->next)
+   {
+   if (!IsItemIn(VNEGHEAP,ip->name))
+      {
+      fprintf(fp,"%s\n",ip->name);
+      }
+   }
+
+fclose(fp);
 }
 
 /*****************************************************************************/
@@ -535,6 +594,11 @@ int EvalClassExpression(struct Constraint *cp,struct Promise *pp)
   struct Rval newret;
   struct FnCall *fp;
 
+if (cp == NULL)
+   {
+   CfOut(cf_error,""," !! EvalClassExpression internal diagnostic discovered an ill-formed condition");
+   }
+
 switch (cp->type) 
    {
    case CF_FNCALL:
@@ -547,6 +611,16 @@ switch (cp->type)
        cp->type = newret.rtype;
        break;
 
+   case CF_LIST:
+       for (rp = (struct Rlist *)cp->rval; rp != NULL; rp = rp->next)
+          {
+          newret = EvaluateFinalRval("this",rp->item,rp->type,true,pp);
+          DeleteRvalItem(rp->item,rp->type);
+          rp->item = newret.item;
+          rp->type = newret.rtype;
+          }
+       break;
+       
    default:
 
        newret = ExpandPrivateRval("this",cp->rval,cp->type);
@@ -558,6 +632,11 @@ switch (cp->type)
 
 if (strcmp(cp->lval,"expression") == 0)
    {
+   if (cp->type != CF_SCALAR)
+      {
+      return false;
+      }
+
    if (IsDefinedClass((char *)cp->rval))
       {
       return true;
@@ -570,6 +649,11 @@ if (strcmp(cp->lval,"expression") == 0)
 
 if (strcmp(cp->lval,"not") == 0)
    {
+   if (cp->type != CF_SCALAR)
+      {
+      return false;
+      }
+
    if (IsDefinedClass((char *)cp->rval))
       {
       return false;
@@ -600,8 +684,15 @@ if (strcmp(cp->lval,"dist") == 0)
 fluct = drand48(); /* Get random number 0-1 */
 cum = 0.0;
 
+/* If we get here, anything remaining on the RHS must be a clist */
+
 for (rp = (struct Rlist *)cp->rval; rp != NULL; rp = rp->next)
    {
+   if (rp->type != CF_SCALAR)
+      {
+      return false;
+      }
+
    result = IsDefinedClass((char *)(rp->item));
 
    result_and = result_and && result;
@@ -616,6 +707,7 @@ for (rp = (struct Rlist *)cp->rval; rp != NULL; rp = rp->next)
       if ((fluct < cum) || rp->next == NULL)
          {
          snprintf(buffer,CF_MAXVARSIZE-1,"%s_%s",pp->promiser,rp->item);
+
          if (strcmp(pp->bundletype,"common") == 0)
             {
             NewClass(buffer);
@@ -624,6 +716,7 @@ for (rp = (struct Rlist *)cp->rval; rp != NULL; rp = rp->next)
             {
             NewBundleClass(buffer,pp->bundle);
             }
+
          Debug(" ?? \'Strategy\' distribution class interval -> %s\n",buffer);
          return true;
          }
@@ -855,6 +948,20 @@ for (sp = class; *sp != '\0'; sp++)
 
 Debug("EvaluateORString(%s) returns %d\n",class,result); 
 return result;
+}
+
+/*********************************************************************/
+
+int ValidClassName(char *name)
+{
+if (FullTextMatch(CF_CLASSRANGE,name))
+   {
+   return true;
+   }
+else
+   {
+   return false;
+   }
 }
 
 /*********************************************************************/
@@ -1104,7 +1211,7 @@ for (sp = class; *sp != '\0'; sp++)
 if (bracklevel != 0)
    {
    char output[CF_BUFSIZE];
-   snprintf(output,CF_BUFSIZE,"Bracket mismatch, in [class=%s], level = %d\n",class,bracklevel);
+   snprintf(output,CF_BUFSIZE,"Bracket mismatch, in [class=\"%s\"], level = %d\n",class,bracklevel);
    yyerror(output);
    FatalError("Aborted");
    }
