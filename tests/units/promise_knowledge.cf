@@ -13,6 +13,22 @@ references::
   "promises have been made by";
   "makes promises";
   "is a promise made by";
+system_reports::
+  "audit report";
+  "performance report";
+  "all_locks report";
+  "active_locks report";
+  "hashes report";
+  "classes report";
+  "lastseen report";
+  "monitor now report";
+  "monitor history report";
+  "monitor summary report";
+  "compliance report";
+  "setuid report";
+  "file_changes report";
+  "installed software report";
+  "software patches report";
 system_policy::
   "bundles";
   "bodies";
@@ -234,6 +250,15 @@ body_constraints::
    "friend_pattern" association => a("is a body constraint of type","string","has possible body constraints"),
           comment => "Regular expression to keep selected hosts from the friends report list";
 promise_types::
+   "reports";
+body_constraints::
+   "report_to_file"
+   comment => "The path and filename to which output should be appended",
+   association => a("is a possible body constraint for","promise_types::reports","can have body constraints");
+body_constraints::
+   "report_to_file" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "The path and filename to which output should be appended";
+promise_types::
    "*";
 body_constraints::
    "action"
@@ -269,6 +294,24 @@ body_constraints::
 body_constraints::
    "log_level" association => a("is a body constraint of type","(menu option)","has possible body constraints"),
           comment => "The reporting level sent to syslog";
+   "log_kept"
+   comment => "This should be filename of a file to which log_string will be saved, if undefined it goes to syslog",
+   association => a("is a possible sub-body constraint for","action","may have sub-body constraints");
+body_constraints::
+   "log_kept" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "This should be filename of a file to which log_string will be saved, if undefined it goes to syslog";
+   "log_repaired"
+   comment => "This should be filename of a file to which log_string will be saved, if undefined it goes to syslog",
+   association => a("is a possible sub-body constraint for","action","may have sub-body constraints");
+body_constraints::
+   "log_repaired" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "This should be filename of a file to which log_string will be saved, if undefined it goes to syslog";
+   "log_failed"
+   comment => "This should be filename of a file to which log_string will be saved, if undefined it goes to syslog",
+   association => a("is a possible sub-body constraint for","action","may have sub-body constraints");
+body_constraints::
+   "log_failed" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "This should be filename of a file to which log_string will be saved, if undefined it goes to syslog";
    "audit"
    comment => "true/false switch for detailed audit records of this promise",
    association => a("is a possible sub-body constraint for","action","may have sub-body constraints");
@@ -597,18 +640,18 @@ body_constraints::
    "search_size" association => a("is a body constraint of type","irange [int,int]","has possible body constraints"),
           comment => "Integer range of file sizes";
    "search_owners"
-   comment => "List of acceptable user names or ids for the file",
+   comment => "List of acceptable user names or ids for the file, or regexes to match",
    association => a("is a possible sub-body constraint for","file_select","may have sub-body constraints");
 body_constraints::
    "search_owners" association => a("is a body constraint of type","slist","has possible body constraints"),
-          comment => "List of acceptable user names or ids for the file";
+          comment => "List of acceptable user names or ids for the file, or regexes to match";
    "search_owners" association => a("is a list of type","slist","is used in");
    "search_groups"
-   comment => "List of acceptable group names or ids for the file",
+   comment => "List of acceptable group names or ids for the file, or regexes to match",
    association => a("is a possible sub-body constraint for","file_select","may have sub-body constraints");
 body_constraints::
    "search_groups" association => a("is a body constraint of type","slist","has possible body constraints"),
-          comment => "List of acceptable group names or ids for the file";
+          comment => "List of acceptable group names or ids for the file, or regexes to match";
    "search_groups" association => a("is a list of type","slist","is used in");
    "search_bsdflags"
    comment => "String of flags for bsd file system flags expected set",
@@ -1288,11 +1331,11 @@ body_constraints::
    "replace_value" association => a("is a body constraint of type","string","has possible body constraints"),
           comment => "Value used to replace regular expression matches in search";
    "occurrences"
-   comment => "Menu option to replace all occurrences or just first",
+   comment => "Menu option to replace all occurrences or just first (NB the latter is non-convergent)",
    association => a("is a possible sub-body constraint for","replace_with","may have sub-body constraints");
 body_constraints::
    "occurrences" association => a("is a body constraint of type","(menu option)","has possible body constraints"),
-          comment => "Menu option to replace all occurrences or just first";
+          comment => "Menu option to replace all occurrences or just first (NB the latter is non-convergent)";
 promise_types::
    "delete_lines";
 body_constraints::
@@ -1435,6 +1478,36 @@ body_constraints::
 body_constraints::
    "package_list_arch_regex" association => a("is a body constraint of type","string","has possible body constraints"),
           comment => "Regular expression with one backreference to extract package architecture string";
+   "package_patch_list_command"
+   comment => "Command to obtain a list of available patches or updates",
+   association => a("is a possible sub-body constraint for","package_method","may have sub-body constraints");
+body_constraints::
+   "package_patch_list_command" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "Command to obtain a list of available patches or updates";
+   "package_patch_version_regex"
+   comment => "Regular expression with one backreference to extract update version string",
+   association => a("is a possible sub-body constraint for","package_method","may have sub-body constraints");
+body_constraints::
+   "package_patch_version_regex" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "Regular expression with one backreference to extract update version string";
+   "package_patch_name_regex"
+   comment => "Regular expression with one backreference to extract update name string",
+   association => a("is a possible sub-body constraint for","package_method","may have sub-body constraints");
+body_constraints::
+   "package_patch_name_regex" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "Regular expression with one backreference to extract update name string";
+   "package_patch_arch_regex"
+   comment => "Regular expression with one backreference to extract update architecture string",
+   association => a("is a possible sub-body constraint for","package_method","may have sub-body constraints");
+body_constraints::
+   "package_patch_arch_regex" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "Regular expression with one backreference to extract update architecture string";
+   "package_patch_installed_regex"
+   comment => "Regular expression which matches packages that are already installed",
+   association => a("is a possible sub-body constraint for","package_method","may have sub-body constraints");
+body_constraints::
+   "package_patch_installed_regex" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "Regular expression which matches packages that are already installed";
    "package_version_regex"
    comment => "Regular expression with one backreference to extract package version string",
    association => a("is a possible sub-body constraint for","package_method","may have sub-body constraints");
@@ -1854,11 +1927,11 @@ promise_types::
    "occurrences";
 body_constraints::
    "represents"
-   comment => "List of subtopics that disambiguate the context of this reference",
+   comment => "List of subtopics that explains the type(s) of information represented by the occurrence",
    association => a("is a possible body constraint for","promise_types::occurrences","can have body constraints");
 body_constraints::
    "represents" association => a("is a body constraint of type","slist","has possible body constraints"),
-          comment => "List of subtopics that disambiguate the context of this reference";
+          comment => "List of subtopics that explains the type(s) of information represented by the occurrence";
    "represents" association => a("is a list of type","slist","is used in");
 promise_types::
    "occurrences";
@@ -1869,6 +1942,24 @@ body_constraints::
 body_constraints::
    "representation" association => a("is a body constraint of type","(menu option)","has possible body constraints"),
           comment => "How to interpret the promiser string e.g. actual data or reference to data";
+promise_types::
+   "occurrences";
+body_constraints::
+   "web_root"
+   comment => "Base URL of the occurrence when rendered as a web-URL (replaces path_root)",
+   association => a("is a possible body constraint for","promise_types::occurrences","can have body constraints");
+body_constraints::
+   "web_root" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "Base URL of the occurrence when rendered as a web-URL (replaces path_root)";
+promise_types::
+   "occurrences";
+body_constraints::
+   "path_root"
+   comment => "Base path of the occurrence when locating file (replaced by web_root)",
+   association => a("is a possible body constraint for","promise_types::occurrences","can have body constraints");
+body_constraints::
+   "path_root" association => a("is a body constraint of type","string","has possible body constraints"),
+          comment => "Base path of the occurrence when locating file (replaced by web_root)";
 promise_types::
    "measurements";
 body_constraints::
@@ -1956,6 +2047,8 @@ functions::
     association => a("returns data-type","string","is returned by function");
  "fileexists"     comment => "True if the named file can be accessed",
     association => a("returns data-type","class","is returned by function");
+ "filesexist"     comment => "True if the named list of files can ALL be accessed",
+    association => a("returns data-type","class","is returned by function");
  "getindices"     comment => "Get a list of keys to the array whose id is the argument and assign to variable",
     association => a("returns data-type","slist","is returned by function");
  "getgid"     comment => "Return the integer group id of the named group on this host",
@@ -1966,6 +2059,8 @@ functions::
     association => a("returns data-type","class","is returned by function");
  "hash"     comment => "Return the hash of arg1, type arg2 and assign to a variable",
     association => a("returns data-type","string","is returned by function");
+ "hashmatch"     comment => "Compute the hash of arg1, of type arg2 and test if it matches the value in arg 3",
+    association => a("returns data-type","class","is returned by function");
  "hostrange"     comment => "True if the current host lies in the range of enumerated hostnames specified",
     association => a("returns data-type","class","is returned by function");
  "hostinnetgroup"     comment => "True if the current host is in the named netgroup",
@@ -1988,6 +2083,8 @@ functions::
     association => a("returns data-type","class","is returned by function");
  "isvariable"     comment => "True if the named variable is defined",
     association => a("returns data-type","class","is returned by function");
+ "lastnode"     comment => "Extract the last of a separated string, e.g. filename from a path",
+    association => a("returns data-type","string","is returned by function");
  "ldaparray"     comment => "Extract all values from an ldap record",
     association => a("returns data-type","class","is returned by function");
  "ldaplist"     comment => "Extract all named values from multiple ldap records",
@@ -1998,6 +2095,12 @@ functions::
     association => a("returns data-type","int","is returned by function");
  "on"     comment => "Convert an exact date/time to an integer system representation",
     association => a("returns data-type","int","is returned by function");
+ "peers"     comment => "Get a list of peers (not including ourself) from the partition to which we belong",
+    association => a("returns data-type","slist","is returned by function");
+ "peerleader"     comment => "Get the assigned peer-leader of the partition to which we belong",
+    association => a("returns data-type","string","is returned by function");
+ "peerleaders"     comment => "Get a list of peer leaders from the named partitioning",
+    association => a("returns data-type","slist","is returned by function");
  "randomint"     comment => "Generate a random integer between the given limits",
     association => a("returns data-type","int","is returned by function");
  "readfile"     comment => "Read max number of bytes from named file and assign to variable",
@@ -2020,6 +2123,8 @@ functions::
     association => a("returns data-type","class","is returned by function");
  "regcmp"     comment => "True if arg2 is a regular expression matching arg1",
     association => a("returns data-type","class","is returned by function");
+ "registryvalue"     comment => "Returns a value for an MS-Win registry key,value pair",
+    association => a("returns data-type","string","is returned by function");
  "regline"     comment => "True if arg2 is a regular expression matching a line in file arg1",
     association => a("returns data-type","class","is returned by function");
  "reglist"     comment => "True if arg2 matches any item in the list with id=arg1",
@@ -2034,6 +2139,8 @@ functions::
     association => a("returns data-type","rrange [real,real]","is returned by function");
  "selectservers"     comment => "Select tcp servers which respond correctly to a query and return their number, set array of names",
     association => a("returns data-type","int","is returned by function");
+ "splayclass"     comment => "True if the first argument's time-slot has arrived, according to a policy in arg2",
+    association => a("returns data-type","class","is returned by function");
  "splitstring"     comment => "Convert a string in arg1 into a list of max arg3 strings by splitting on a regular expression in arg2",
     association => a("returns data-type","slist","is returned by function");
  "strcmp"     comment => "True if the two strings match exactly",
@@ -2046,54 +2153,379 @@ functions::
 topics:
 
 bundles::
-  "acls";
+  "update";
 contexts::
   "any";
 promisers::
 
-  "/media/flash/acl/test_dir"
-      association => a("occurs in bundle","bundles::acls","bundle contains promiser");
-  "/media/flash/acl/test_dir"
-      association => a("makes promise of type","promise_types::files","promises have been made by");
-  "/media/flash/acl/test_dir"
-      association => a("makes promises","promise_unit_acl_generic_cf_16","is a promise made by");
+  "master_location"
+      association => a("occurs in bundle","bundles::update","bundle contains promiser");
+  "master_location"
+      association => a("makes promise of type","promise_types::vars","promises have been made by");
+  "master_location"
+      association => a("makes promises","promise_unit_update_cf_13","is a promise made by");
 promise_types::
-  "files" association => a("is employed in bundle","acls","employs promises of type");
+  "vars" association => a("is employed in bundle","update","employs promises of type");
 promises::
 
-"promise_unit_acl_generic_cf_16"
-   comment => "(Uncommented promise of type <i>files</i> made by: /media/flash/acl/test_dir..)";
-"promise_unit_acl_generic_cf_16" association => a("is activated by class context","any","activates promises");
-"promise_unit_acl_generic_cf_16" association => a("is a promise of type","files","has current exemplars");
+"promise_unit_update_cf_13"
+   comment => "(Uncommented promise of type <i>vars</i> made by: master_location..)";
+"promise_unit_update_cf_13" association => a("is activated by class context","any","activates promises");
+"promise_unit_update_cf_13" association => a("is a promise of type","vars","has current exemplars");
 
  occurrences:
-promise_unit_acl_generic_cf_16::
-"promises.cf.html#promise_unit_acl_generic_cf_16"
-   comment => "A promise of type files made by: /media/flash/acl/test_dir",
-   represents => { "any", "files" };
+promise_unit_update_cf_13::
+"promises.cf.html#promise_unit_update_cf_13"
+   comment => "A promise of type vars made by: master_location",
+   represents => { "any", "vars" };
 
 any::
-"promises.cf.html#promise_unit_acl_generic_cf_16"
-   represents => { "promise", "/media/flash/acl/test_dir", "files" };
+"promises.cf.html#promise_unit_update_cf_13"
+   represents => { "promise", "master_location", "vars" };
 
-acls::
-"promises.cf.html#bundle_acls"
+update::
+"promises.cf.html#bundle_update"
    represents => { "bundle reference" };
 
-acl::
-"promises.cf.html#promise_unit_acl_generic_cf_16"
-   represents => { "used in promise", "promise_unit_acl_generic_cf_16" };
+string::
+"promises.cf.html#promise_unit_update_cf_13"
+   represents => { "used in promise", "promise_unit_update_cf_13" };
 
-acl_method::
-"promises.cf.html#promise_unit_acl_generic_cf_16"
-   represents => { "used in promise", "promise_unit_acl_generic_cf_16" };
 
-acl_type::
-"promises.cf.html#promise_unit_acl_generic_cf_16"
-   represents => { "used in promise", "promise_unit_acl_generic_cf_16" };
+topics:
 
-aces::
-"promises.cf.html#promise_unit_acl_generic_cf_16"
-   represents => { "used in promise", "promise_unit_acl_generic_cf_16" };
+bundles::
+  "update";
+contexts::
+  "any";
+promisers::
+
+  "pservers"
+      association => a("occurs in bundle","bundles::update","bundle contains promiser");
+  "pservers"
+      association => a("makes promise of type","promise_types::vars","promises have been made by");
+  "pservers"
+      association => a("makes promises","promise_unit_update_cf_15","is a promise made by");
+promise_types::
+  "vars" association => a("is employed in bundle","update","employs promises of type");
+promises::
+
+"promise_unit_update_cf_15"
+   comment => "IP address to locate your policy host.";
+"promise_unit_update_cf_15" association => a("is activated by class context","any","activates promises");
+"promise_unit_update_cf_15" association => a("is a promise of type","vars","has current exemplars");
+
+ occurrences:
+promise_unit_update_cf_15::
+"promises.cf.html#promise_unit_update_cf_15"
+   comment => "IP address to locate your policy host.",
+   represents => { "any", "vars" };
+
+any::
+"promises.cf.html#promise_unit_update_cf_15"
+   represents => { "promise", "pservers", "vars" };
+
+update::
+"promises.cf.html#bundle_update"
+   represents => { "bundle reference" };
+
+int::
+"promises.cf.html#promise_unit_update_cf_15"
+   represents => { "used in promise", "promise_unit_update_cf_15" };
+
+comment::
+"promises.cf.html#promise_unit_update_cf_15"
+   represents => { "used in promise", "promise_unit_update_cf_15" };
+
+"IP address to locate your policy host."
+   representation => "literal",
+
+   represents => { "promise_unit_update_cf_15" };
+promise_unit_update_cf_15::
+"IP address to locate your policy host."
+   representation => "literal",
+
+   represents => { "comment" };
+
+topics:
+
+bundles::
+  "update";
+contexts::
+  "!have_ppkeys";
+promisers::
+
+  "/usr/local/sbin/cf-key"
+      association => a("occurs in bundle","bundles::update","bundle contains promiser");
+  "/usr/local/sbin/cf-key"
+      association => a("makes promise of type","promise_types::commands","promises have been made by");
+  "/usr/local/sbin/cf-key"
+      association => a("makes promises","promise_unit_update_cf_31","is a promise made by");
+promise_types::
+  "commands" association => a("is employed in bundle","update","employs promises of type");
+promises::
+
+"promise_unit_update_cf_31"
+   comment => "(Uncommented promise of type <i>commands</i> made by: /usr/local/sbin/cf-key..)";
+"promise_unit_update_cf_31" association => a("is activated by class context","!have_ppkeys","activates promises");
+"promise_unit_update_cf_31" association => a("is a promise of type","commands","has current exemplars");
+
+ occurrences:
+promise_unit_update_cf_31::
+"promises.cf.html#promise_unit_update_cf_31"
+   comment => "A promise of type commands made by: /usr/local/sbin/cf-key",
+   represents => { "!have_ppkeys", "commands" };
+
+_have_ppkeys::
+"promises.cf.html#promise_unit_update_cf_31"
+   represents => { "promise", "/usr/local/sbin/cf-key", "commands" };
+
+update::
+"promises.cf.html#bundle_update"
+   represents => { "bundle reference" };
+
+
+topics:
+
+bundles::
+  "update";
+contexts::
+  "xx";
+promisers::
+
+  "/var/cfengine/inputs"
+      association => a("occurs in bundle","bundles::update","bundle contains promiser");
+  "/var/cfengine/inputs"
+      association => a("makes promise of type","promise_types::files","promises have been made by");
+  "/var/cfengine/inputs"
+      association => a("makes promises","update_policy","is a promise made by");
+promise_types::
+  "files" association => a("is employed in bundle","update","employs promises of type");
+promises::
+
+"update_policy"
+   comment => "(Uncommented promise of type <i>files</i> made by: /var/cfengine/inputs..)";
+"update_policy" association => a("is activated by class context","xx","activates promises");
+"update_policy" association => a("is a promise of type","files","has current exemplars");
+
+ occurrences:
+update_policy::
+"promises.cf.html#update_policy"
+   comment => "A promise of type files made by: /var/cfengine/inputs",
+   represents => { "xx", "files" };
+
+xx::
+"promises.cf.html#update_policy"
+   represents => { "promise", "/var/cfengine/inputs", "files" };
+
+update::
+"promises.cf.html#bundle_update"
+   represents => { "bundle reference" };
+
+handle::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+perms::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+mode::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+copy_from::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+source::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+compare::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+trustkey::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+servers::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+depth_search::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+depth::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+action::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+ifelapsed::
+"promises.cf.html#update_policy"
+   represents => { "used in promise", "update_policy" };
+
+
+topics:
+
+bundles::
+  "update";
+contexts::
+  "xx";
+promisers::
+
+  "/var/cfengine/bin"
+      association => a("occurs in bundle","bundles::update","bundle contains promiser");
+  "/var/cfengine/bin"
+      association => a("makes promise of type","promise_types::files","promises have been made by");
+  "/var/cfengine/bin"
+      association => a("makes promises","promise_unit_update_cf_47","is a promise made by");
+promise_types::
+  "files" association => a("is employed in bundle","update","employs promises of type");
+promises::
+
+"promise_unit_update_cf_47"
+   comment => "(Uncommented promise of type <i>files</i> made by: /var/cfengine/bin..)";
+"promise_unit_update_cf_47" association => a("is activated by class context","xx","activates promises");
+"promise_unit_update_cf_47" association => a("is a promise of type","files","has current exemplars");
+
+ occurrences:
+promise_unit_update_cf_47::
+"promises.cf.html#promise_unit_update_cf_47"
+   comment => "A promise of type files made by: /var/cfengine/bin",
+   represents => { "xx", "files" };
+
+xx::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "promise", "/var/cfengine/bin", "files" };
+
+update::
+"promises.cf.html#bundle_update"
+   represents => { "bundle reference" };
+
+perms::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+mode::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+copy_from::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+source::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+compare::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+trustkey::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+servers::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+depth_search::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+depth::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+action::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+ifelapsed::
+"promises.cf.html#promise_unit_update_cf_47"
+   represents => { "used in promise", "promise_unit_update_cf_47" };
+
+
+topics:
+
+bundles::
+  "update";
+contexts::
+  "any|bootstrap_mode.policy_host";
+promisers::
+
+  "I am the policy host - i.e. with ipv4 address $(policy_server[0])"
+      association => a("occurs in bundle","bundles::update","bundle contains promiser");
+  "I am the policy host - i.e. with ipv4 address $(policy_server[0])"
+      association => a("makes promise of type","promise_types::reports","promises have been made by");
+  "I am the policy host - i.e. with ipv4 address $(policy_server[0])"
+      association => a("makes promises","promise_unit_update_cf_56","is a promise made by");
+promise_types::
+  "reports" association => a("is employed in bundle","update","employs promises of type");
+promises::
+
+"promise_unit_update_cf_56"
+   comment => "(Uncommented promise of type <i>reports</i> made by: I am the policy host - i...)";
+"promise_unit_update_cf_56" association => a("is activated by class context","any|bootstrap_mode.policy_host","activates promises");
+"promise_unit_update_cf_56" association => a("is a promise of type","reports","has current exemplars");
+
+ occurrences:
+promise_unit_update_cf_56::
+"promises.cf.html#promise_unit_update_cf_56"
+   comment => "A promise of type reports made by: I am the policy host - i.e. with ipv4 address $(policy_server[0])",
+   represents => { "any|bootstrap_mode.policy_host", "reports" };
+
+any_bootstrap_mode_policy_host::
+"promises.cf.html#promise_unit_update_cf_56"
+   represents => { "promise", "I am the policy host - i.e. with ipv4 address $(policy_server[0])", "reports" };
+
+update::
+"promises.cf.html#bundle_update"
+   represents => { "bundle reference" };
+
+
+topics:
+
+bundles::
+  "update";
+contexts::
+  "nofile";
+promisers::
+
+  "found file"
+      association => a("occurs in bundle","bundles::update","bundle contains promiser");
+  "found file"
+      association => a("makes promise of type","promise_types::reports","promises have been made by");
+  "found file"
+      association => a("makes promises","promise_unit_update_cf_60","is a promise made by");
+promise_types::
+  "reports" association => a("is employed in bundle","update","employs promises of type");
+promises::
+
+"promise_unit_update_cf_60"
+   comment => "(Uncommented promise of type <i>reports</i> made by: found file..)";
+"promise_unit_update_cf_60" association => a("is activated by class context","nofile","activates promises");
+"promise_unit_update_cf_60" association => a("is a promise of type","reports","has current exemplars");
+
+ occurrences:
+promise_unit_update_cf_60::
+"promises.cf.html#promise_unit_update_cf_60"
+   comment => "A promise of type reports made by: found file",
+   represents => { "nofile", "reports" };
+
+nofile::
+"promises.cf.html#promise_unit_update_cf_60"
+   represents => { "promise", "found file", "reports" };
+
+update::
+"promises.cf.html#bundle_update"
+   represents => { "bundle reference" };
 
 }

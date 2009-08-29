@@ -16,7 +16,7 @@ dnl
 dnl The version in the next line is the only one to set
 dnl
 
-AM_INIT_AUTOMAKE(cfengine, 3.0.2a7)   dnl remember to set version
+AM_INIT_AUTOMAKE(cfengine, 3.0.2)   dnl remember to set version
 
 AM_CONFIG_HEADER(src/conf.h)
 
@@ -78,7 +78,7 @@ AC_CHECK_LIB(m,main)
 dnl Look for cf enterprise versions
 
 AC_CHECK_LIB(cfnova,main)
-AC_CHECK_LIB(cfcontellation,main)
+AC_CHECK_LIB(cfconstellation,main)
 AC_CHECK_LIB(cfgalaxy,main)
 
 AC_CHECK_LIB(ldap,ldap_get_values_len)
@@ -466,6 +466,8 @@ dnl ######################################################################
 
 AC_CHECK_HEADERS(graphviz/gvc.h)
 AC_CHECK_LIB(gvc,main)
+AC_CHECK_LIB(gd,main)
+AC_CHECK_HEADERS(gd.h)
 
 dnl ######################################################################
 dnl Checks for data types
@@ -754,6 +756,7 @@ AC_ARG_WITH(workdir,
 		fi
 
      	AC_DEFINE_UNQUOTED(WORKDIR, "${WORKDIR}")
+        AC_SUBST(workdir, "${WORKDIR}")
 	],
 	[
            WORKDIR=/var/cfengine

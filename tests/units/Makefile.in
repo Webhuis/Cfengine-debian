@@ -193,8 +193,9 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-doc_DATA = README 
-EXTRA_DIST = * README
+workdir = @workdir@
+doc_DATA = *.cf README 
+EXTRA_DIST = *.cf README
 MAINTAINERCLEANFILES = Makefile.in mdate-sh
 all: all-am
 

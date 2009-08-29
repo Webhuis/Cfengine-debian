@@ -221,6 +221,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+workdir = @workdir@
 SUBDIRS = pub src tests docs inputs
 EXTRA_DIST = acconfig.h COPYING ChangeLog INSTALL NEWS README LICENSE
 doc_DATA = README ChangeLog INSTALL NEWS

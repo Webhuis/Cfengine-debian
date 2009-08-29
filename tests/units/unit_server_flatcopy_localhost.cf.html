@@ -1,0 +1,160 @@
+<html>  <head>    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />    <title>      Cfengine Site Policy Summary (version 1.2.3)    </title>    <link rel="stylesheet" href="/cf_enterprise.css" type="text/css" media="screen" />  </head>  <body><h1>Cfengine Site Policy Summary (version 1.2.3)</h1><p><a name="bundle_testbundle"></a><div id="bundle"><table class=border><tr><td><h2> Bundle <span class="bodytype">agent</span> <span class="bodyname">testbundle</span>
+ <tr><td> ARGS:</td></tr>
+
+<tr><td><table class="border"><tr><td><tr><td><a name="type_files"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_server_flatcopy_localhost_cf_33"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_testbundle">[PARENT BUNDLE]</a>&nbsp;
+<a href="reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">files</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'/home/mark/tmp/testflatcopy'</b> make the promise to default promisee 'cf-agent' (about files)...
+
+<br><span class="lval">........................comment</span> => test copy promise , if body <a href="#class_context">context</a> any
+<br><span class="lval">........................copy_from</span> =>  <span class="bodytype">copy_from</span> <a href="#body_mycopy"><span class="bodyname">mycopy</span>(<span class="args">from</span>,
+<span class="args">server</span>,
+)</a><br><span class="lval">.............................source</span> => '<span class="rval">$(from)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................servers</span> => '<span class="rval"> {'$(server)'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................compare</span> => '<span class="rval">digest'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................verify</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................copy_backup</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................purge</span> => '<span class="rval">false'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................type_check</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................force_ipv4</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................trustkey</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................collapse_destination_dir</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">........................perms</span> =>  <span class="bodytype">perms</span> <a href="#body_system"><span class="bodyname">system</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................mode</span> => '<span class="rval">0644'</span> if sub-body context <span class="class">any</span>
+ , if body <a href="#class_context">context</a> any
+<br><span class="lval">........................depth_search</span> =>  <span class="bodytype">depth_search</span> <a href="#body_recurse"><span class="bodyname">recurse</span>(<span class="args">d</span>,
+)</a><br><span class="lval">.............................depth</span> => '<span class="rval">$(d)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">........................classes</span> =>  <span class="bodytype">classes</span> <a href="#body_satisfied"><span class="bodyname">satisfied</span>(<span class="args">x</span>,
+)</a><br><span class="lval">.............................promise_repaired</span> => '<span class="rval"> {'$(x)'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................persist_time</span> => '<span class="rval">0'</span> if sub-body context <span class="class">any</span>
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_server_flatcopy_localhost.cf</i>' near line 33</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_server_flatcopy_localhost_cf_42"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_testbundle">[PARENT BUNDLE]</a>&nbsp;
+<a href="reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">files</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'/home/mark/tmp/testcopy/single_file'</b> make the promise to default promisee 'cf-agent' (about files)...
+
+<br><span class="lval">........................comment</span> => test copy promise , if body <a href="#class_context">context</a> any
+<br><span class="lval">........................copy_from</span> =>  <span class="bodytype">copy_from</span> <a href="#body_mycopy"><span class="bodyname">mycopy</span>(<span class="args">from</span>,
+<span class="args">server</span>,
+)</a><br><span class="lval">.............................source</span> => '<span class="rval">$(from)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................servers</span> => '<span class="rval"> {'$(server)'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................compare</span> => '<span class="rval">digest'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................verify</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................copy_backup</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................purge</span> => '<span class="rval">false'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................type_check</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................force_ipv4</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................trustkey</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................collapse_destination_dir</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">........................perms</span> =>  <span class="bodytype">perms</span> <a href="#body_system"><span class="bodyname">system</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................mode</span> => '<span class="rval">0644'</span> if sub-body context <span class="class">any</span>
+ , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_server_flatcopy_localhost.cf</i>' near line 42</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td><a name="type_reports"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_server_flatcopy_localhost_cf_50"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_testbundle">[PARENT BUNDLE]</a>&nbsp;
+<a href="reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">reports</span>, <a href="#class_context">context</a> is <span class="class">copy_ok</span> <br><hr>
+
+Resource object <b>'Files were copied..'</b> make the promise to default promisee 'cf-agent' (about reports)...
+
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_server_flatcopy_localhost.cf</i>' near line 50</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></h2></table></div>
+<a name="bundle_access_rules"></a><div id="bundle"><table class=border><tr><td><h2> Bundle <span class="bodytype">server</span> <span class="bodyname">access_rules</span>
+ <tr><td> ARGS:</td></tr>
+
+<tr><td><table class="border"><tr><td><tr><td><a name="type_access"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_server_flatcopy_localhost_cf_115"></a>
+<div id="nav">
+<a href="promises.cf.html#bundle_access_rules">[PARENT BUNDLE]</a>&nbsp;
+<a href="reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">access</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'/home/mark/LapTop'</b> make the promise to default promisee 'cf-server' (about access)...
+
+<br><span class="lval">........................admit</span> => <span class="rval"> {'127.0.0.1'}</span> , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>access_rules</b> (type server) in '<i>../tests/units/unit_server_flatcopy_localhost.cf</i>' near line 115</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></h2></table></div>
+<h1>All Bodies</h1><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_control"></a> <span class="bodytype">common</span> <a href="#body_control"><span class="bodyname">control</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................bundlesequence</span> => '<span class="rval"> {'testbundle'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................version</span> => '<span class="rval">1.2.3'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_system"></a> <span class="bodytype">perms</span> <a href="#body_system"><span class="bodyname">system</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................mode</span> => '<span class="rval">0644'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_recurse"></a> <span class="bodytype">depth_search</span> <a href="#body_recurse"><span class="bodyname">recurse</span>(<span class="args">d</span>,
+)</a><br><span class="lval">.............................depth</span> => '<span class="rval">$(d)'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_mycopy"></a> <span class="bodytype">copy_from</span> <a href="#body_mycopy"><span class="bodyname">mycopy</span>(<span class="args">from</span>,
+<span class="args">server</span>,
+)</a><br><span class="lval">.............................source</span> => '<span class="rval">$(from)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................servers</span> => '<span class="rval"> {'$(server)'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................compare</span> => '<span class="rval">digest'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................verify</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................copy_backup</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................purge</span> => '<span class="rval">false'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................type_check</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................force_ipv4</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................trustkey</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................collapse_destination_dir</span> => '<span class="rval">true'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_satisfied"></a> <span class="bodytype">classes</span> <a href="#body_satisfied"><span class="bodyname">satisfied</span>(<span class="args">x</span>,
+)</a><br><span class="lval">.............................promise_repaired</span> => '<span class="rval"> {'$(x)'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................persist_time</span> => '<span class="rval">0'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_control"></a> <span class="bodytype">server</span> <a href="#body_control"><span class="bodyname">control</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................allowconnects</span> => '<span class="rval"> {'127.0.0.1','::1'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................allowallconnects</span> => '<span class="rval"> {'127.0.0.1','::1'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................trustkeysfrom</span> => '<span class="rval"> {'127.0.0.1','::1'}'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p></div></body></html>

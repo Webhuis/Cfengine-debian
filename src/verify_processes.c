@@ -62,15 +62,6 @@ if (a.signals != NULL && a.process_stop != NULL)
 promised_zero = (a.process_count.min_range == 0 && a.process_count.max_range == 0);
 promised_any = (a.process_count.min_range == CF_NOINT);
 
-if (!promised_any && !promised_zero)
-   {
-   if (IsStringIn(a.signals,"term") || IsStringIn(a.signals,"kill"))
-      {
-      CfOut(cf_error,"","Promise constraint conflicts - %s processes cannot have non-zero count if terminated",pp->promiser);
-      PromiseRef(cf_error,pp);
-      ret = false;
-      }
-   }
 
 if (a.restart_class)
    {
@@ -98,7 +89,14 @@ void VerifyProcesses(struct Attributes a, struct Promise *pp)
 { struct CfLock thislock;
  char lockname[CF_BUFSIZE];
 
-snprintf(lockname,CF_BUFSIZE-1,"proc-%s-%s",pp->promiser,a.restart_class);
+if (a.restart_class)
+   {
+   snprintf(lockname,CF_BUFSIZE-1,"proc-%s-%s",pp->promiser,a.restart_class);
+   }
+else
+   {
+   snprintf(lockname,CF_BUFSIZE-1,"proc-%s-norestart",pp->promiser);
+   }
  
 thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
 
@@ -203,15 +201,25 @@ if (a.process_count.min_range != CF_NOINT) /* if a range is specified */
       cfPS(cf_verbose,CF_NOP,"",pp,a," -> Process promise for %s is kept",pp->promiser);
       out_of_range = false;
       }
+   }
+else
+   {
+   out_of_range = true;
+   }
 
-   if (a.transaction.action == cfa_warn)
-      {
-      do_signals = false;
-      }
-   else
-      {
-      do_signals = true;
-      }
+if (!out_of_range)
+   {
+   return;
+   }
+
+
+if (a.transaction.action == cfa_warn)
+   {
+   do_signals = false;
+   }
+else
+   {
+   do_signals = true;
    }
 
 /* signal/kill promises for existing matches */

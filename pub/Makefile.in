@@ -206,6 +206,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+workdir = @workdir@
 AM_CFLAGS = @CFLAGS@ @GCC_CFLAG@
 INCLUDES = @BERKELEY_DB_CFLAGS@ @OPENSSL_LIB_CPPFLAGS@
 noinst_LIBRARIES = libcfpub.a

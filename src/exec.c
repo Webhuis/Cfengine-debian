@@ -48,13 +48,13 @@ char MAILTO[CF_BUFSIZE];
 char MAILFROM[CF_BUFSIZE];
 char EXECCOMMAND[CF_BUFSIZE];
 char VMAILSERVER[CF_BUFSIZE];
-
 struct Item *SCHEDULE = NULL;
 
-int  MAXLINES = 30;
-int  SPLAYTIME = 0;
+pid_t MYTWIN = 0;
+int   MAXLINES = 30;
+int   SPLAYTIME = 0;
 const int INF_LINES = -2;
-short NOSPLAY = false;
+int NOSPLAY = false;
 
 extern struct BodySyntax CFEX_CONTROLBODY[];
 
@@ -68,6 +68,7 @@ int FileChecksum(char *filename,unsigned char digest[EVP_MAX_MD_SIZE+1],char typ
 int CompareResult(char *filename,char *prev_file);
 void MailResult(char *file,char *to);
 int Dialogue(int sd,char *s);
+void Apoptosis(void);
 
 /*******************************************************************/
 /* Command line options                                            */
@@ -79,7 +80,7 @@ int Dialogue(int sd,char *s);
             "splay the start time of executions across the network\n"
             "and work as a class-based clock for scheduling.";
  
- struct option OPTIONS[17] =
+ struct option OPTIONS[18] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -124,9 +125,7 @@ CheckOpts(argc,argv);
 GenericInitialize(argc,argv,"executor");
 ThisAgentInit();
 KeepPromises();
-
 StartServer(argc,argv);
-
 return 0;
 }
 
@@ -137,6 +136,7 @@ return 0;
 void CheckOpts(int argc,char **argv)
 
 { extern char *optarg;
+  char arg[CF_BUFSIZE];
   struct Item *actionList;
   int optindex = 0;
   int c;
@@ -147,6 +147,12 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != 
   switch ((char) c)
       {
       case 'f':
+
+          if (optarg && strlen(optarg) < 5)
+             {
+             snprintf(arg,CF_MAXVARSIZE," -f used but argument \"%s\" incorrect",optarg);
+             FatalError(arg);
+             }
 
           strncpy(VINPUTFILE,optarg,CF_BUFSIZE-1);
           VINPUTFILE[CF_BUFSIZE-1] = '\0';
@@ -209,7 +215,7 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != 
           ONCE = true;
           NO_FORK = true;
           break;
-          
+
       case 'V': Version("cf-execd");
           exit(0);
           
@@ -226,7 +232,7 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != 
           exit(1);
           
       }
-  }
+   }
 }
 
 /*****************************************************************************/
@@ -234,13 +240,28 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != 
 void ThisAgentInit()
 
 { char vbuff[CF_BUFSIZE];
- 
+
 umask(077);
 LOGGING = true;
 MAILTO[0] = '\0';
 MAILFROM[0] = '\0';
 VMAILSERVER[0] = '\0';
 EXECCOMMAND[0] = '\0';
+
+if (SCHEDULE == NULL)
+   {
+   AppendItem(&SCHEDULE,"Min00",NULL);
+   AppendItem(&SCHEDULE,"Min05",NULL);
+   AppendItem(&SCHEDULE,"Min10",NULL);
+   AppendItem(&SCHEDULE,"Min15",NULL);
+   AppendItem(&SCHEDULE,"Min20",NULL);
+   AppendItem(&SCHEDULE,"Min25",NULL);   
+   AppendItem(&SCHEDULE,"Min30",NULL);
+   AppendItem(&SCHEDULE,"Min35",NULL);
+   AppendItem(&SCHEDULE,"Min45",NULL);
+   AppendItem(&SCHEDULE,"Min50",NULL);
+   AppendItem(&SCHEDULE,"Min55",NULL);
+   }
 }
 
 /*****************************************************************************/
@@ -313,6 +334,8 @@ for (cp = ControlBodyConstraints(cf_executor); cp != NULL; cp=cp->next)
       {
       struct Rlist *rp;
       Debug("schedule ...\n");
+      DeleteItemList(SCHEDULE);
+      SCHEDULE = NULL;
       
       for (rp  = (struct Rlist *) retval; rp != NULL; rp = rp->next)
          {
@@ -331,32 +354,43 @@ void StartServer(int argc,char **argv)
 
 { int pid,time_to_run = false;
   time_t now = time(NULL);
-  struct Promise *pp = NewPromise("exec_cfengine","the executor agent");
+  struct Promise *pp = NewPromise("exec_cfengine","the executor agent"); 
   struct Attributes dummyattr;
   struct CfLock thislock;
- 
+
 Banner("Starting executor");
 memset(&dummyattr,0,sizeof(dummyattr));
 
+dummyattr.restart_class = "nonce";
 dummyattr.transaction.ifelapsed = CF_EXEC_IFELAPSED;
 dummyattr.transaction.expireafter = CF_EXEC_EXPIREAFTER;
 
-if ((!NO_FORK) && (fork() != 0))
+if (!ONCE)
    {
-   CfOut(cf_inform,"","cfExec starting %.24s\n",ctime(&now));
-   exit(0);
+   thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
+
+   if (thislock.lock == NULL)
+      {
+      return;
+      }
    }
 
-thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
+Apoptosis();
 
-if (thislock.lock == NULL)
+if ((!NO_FORK) && (fork() != 0))
    {
-   return;
+   CfOut(cf_inform,"","cf-execd starting %.24s\n",ctime(&now));
+   exit(0);
    }
 
 if (!NO_FORK)
    {
    ActAsDaemon(0);
+   }
+
+if (!ONCE)
+   {
+   MYTWIN = StartTwin(argc,argv);
    }
 
 WritePID("cf-execd.pid");
@@ -371,6 +405,8 @@ umask(077);
 
 if (ONCE)
    {
+   CfOut(cf_verbose,"","Sleeping for splaytime %d seconds\n\n",SPLAYTIME);
+   sleep(SPLAYTIME);
    LocalExec((void *)0);
    }
 else
@@ -441,14 +477,83 @@ else
          LocalExec((void *)1);  
 #endif
          }
+
+      ReviveOther(argc,argv);
       }
    }
 
-YieldCurrentLock(thislock);
+if (!ONCE)
+   {
+   YieldCurrentLock(thislock);
+   }
 }
 
 /*****************************************************************************/
 /* Level                                                                     */
+/*****************************************************************************/
+
+void Apoptosis()
+
+{ struct Promise pp;
+  struct Rlist *signals = NULL, *owners = NULL;
+  char mypid[32],pidrange[32];
+  struct passwd *mpw = getpwuid(getuid());
+  char *psopts = GetProcessOptions();
+
+if (ONCE || VSYSTEMHARDCLASS == cfnt)
+   {
+   /* Otherwise we'll just kill off long jobs */
+   return;
+   }
+  
+CfOut(cf_verbose,""," !! Programmed pruning of the scheduler cluster");
+  
+pp.promiser = "/var/cfengine/.*/cf-execd";
+pp.promisee = "cfengine";
+pp.classes = "any";
+pp.petype = CF_SCALAR;
+pp.lineno = 0;
+pp.audit = NULL;
+pp.conlist = NULL;
+
+pp.bundletype = "agent";
+pp.bundle = "exec_apoptosis";
+pp.ref = "Programmed death";
+pp.agentsubtype = "processes";
+pp.done = false;
+pp.next = NULL;
+pp.cache = NULL;
+pp.inode_cache = NULL;
+pp.this_server = NULL;
+pp.donep = &(pp.done);
+pp.conn = NULL;
+
+snprintf(mypid,31,"%s",mpw->pw_name);
+
+PrependRlist(&signals,"term",CF_SCALAR);
+PrependRlist(&owners,mypid,CF_SCALAR);
+
+AppendConstraint(&(pp.conlist),"signals",signals,CF_LIST,"any");
+AppendConstraint(&(pp.conlist),"process_select",strdup("true"),CF_SCALAR,"any");
+AppendConstraint(&(pp.conlist),"process_owner",owners,CF_LIST,"any");
+AppendConstraint(&(pp.conlist),"ifelapsed",strdup("0"),CF_SCALAR,"any");
+AppendConstraint(&(pp.conlist),"process_count",strdup("true"),CF_SCALAR,"any");
+AppendConstraint(&(pp.conlist),"match_range",strdup("0,4"),CF_SCALAR,"any");
+AppendConstraint(&(pp.conlist),"process_result",strdup("process_owner.process_count"),CF_SCALAR,"any");
+
+CfOut(cf_verbose,""," -> Looking for cf-execd processes owned by %s",mypid);
+
+if (LoadProcessTable(&PROCESSTABLE,psopts))
+   {
+   VerifyProcessesPromise(&pp);   
+   }
+
+DeleteItemList(PROCESSTABLE);
+DeleteRlist(signals);
+DeleteRlist(owners);
+CfOut(cf_verbose,""," !! Pruning complete");
+}
+
 /*****************************************************************************/
 
 int ScheduleRun()
@@ -456,8 +561,11 @@ int ScheduleRun()
 { time_t now;
   char timekey[64];
   struct Item *ip;
-
+  
 CfOut(cf_verbose,"","Sleeping...\n");
+
+SignalTwin();
+
 sleep(60);                /* 1 Minute resolution is enough */ 
 
 now = time(NULL);
@@ -474,6 +582,7 @@ AddTimeClass(timekey);
 for (ip = SCHEDULE; ip != NULL; ip = ip->next)
    {
    CfOut(cf_verbose,"","Checking schedule %s...\n",ip->name);
+
    if (IsDefinedClass(ip->name))
       {
       CfOut(cf_verbose,"","Waking up the agent at %s ~ %s \n",timekey,ip->name);
@@ -525,7 +634,6 @@ pthread_sigmask(SIG_BLOCK,&sigmask,NULL);
 #ifdef HAVE_PTHREAD
 tid = (int) pthread_self();
 #endif
-
  
 CfOut(cf_verbose,"","------------------------------------------------------------------\n\n");
 CfOut(cf_verbose,"","  LocalExec(%sscheduled) at %s\n", scheduled_run ? "" : "not ", ctime(&starttime));
@@ -841,9 +949,7 @@ Debug("Looking up hostname %s\n\n",VMAILSERVER);
 if ((hp = gethostbyname(VMAILSERVER)) == NULL)
    {
    printf("Unknown host: %s\n", VMAILSERVER);
-   printf("Make sure that fully qualified names can be looked up at your site!\n");
-   printf("i.e. www.gnu.org, not just www. If you use NIS or /etc/hosts\n");
-   printf("make sure that the full form is registered too as an alias!\n");
+   printf("Make sure that fully qualified names can be looked up at your site.\n");
    fclose(fp);
    return;
    }
@@ -913,23 +1019,23 @@ sprintf(vbuff,"RCPT TO: <%s>\r\n",to);
 Debug("%s",vbuff);
 
 if (!Dialogue(sd,vbuff))
-    {
-    goto mail_err;
-    }
+   {
+   goto mail_err;
+   }
 
 if (!Dialogue(sd,"DATA\r\n"))
-    {
-    goto mail_err;
-    }
+   {
+   goto mail_err;
+   }
 
 if (anomaly)
    {
-   sprintf(vbuff,"Subject: **!! [%s/%s]\r\n",VFQNAME,VIPADDRESS);
+   sprintf(vbuff,"Subject: %s **!! [%s/%s]\r\n",MailSubject(),VFQNAME,VIPADDRESS);
    Debug("%s",vbuff);
    }
 else
    {
-   sprintf(vbuff,"Subject: [%s/%s]\r\n",VFQNAME,VIPADDRESS);
+   sprintf(vbuff,"Subject: %s [%s/%s]\r\n",MailSubject(),VFQNAME,VIPADDRESS);
    Debug("%s",vbuff);
    }
  

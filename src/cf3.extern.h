@@ -30,6 +30,12 @@
 
 extern struct PromiseParser P;
 extern int REQUIRE_COMMENTS;
+extern char POLICY_SERVER[CF_BUFSIZE];
+
+extern char WEBDRIVER[CF_MAXVARSIZE];
+extern char BANNER[2*CF_BUFSIZE];
+extern char FOOTER[CF_BUFSIZE];
+extern char STYLESHEET[CF_BUFSIZE];
 
 extern struct Bundle *BUNDLES;
 extern struct Body *BODIES;
@@ -46,7 +52,8 @@ extern struct Rlist *ACCESSLIST;
 extern struct Topic *TOPIC_MAP;
 extern struct PromiseIdent *PROMISE_ID_LIST;
 extern struct Item *DONELIST;
-
+extern struct Rlist *CBUNDLESEQUENCE;
+extern struct Item *ROTATED;
 extern double FORGETRATE;
 
 extern struct Rlist *CF_STCK;
@@ -55,6 +62,7 @@ extern int CFA_BACKGROUND;
 extern int CFA_BACKGROUND_LIMIT;
 extern int AM_BACKGROUND_PROCESS;
 
+extern int LOOKUP;
 extern int BOOTSTRAP;
 extern int XML;
 extern FILE *FREPORT_HTML;
@@ -72,8 +80,8 @@ extern int CFA_MAXTHREADS;
 extern char *THIS_BUNDLE;
 extern char THIS_AGENT[CF_MAXVARSIZE];
 extern enum cfagenttype THIS_AGENT_TYPE;
-extern short INSTALL_SKIP;
-extern short SHOWREPORTS;
+extern int INSTALL_SKIP;
+extern int SHOWREPORTS;
 extern int FACILITY;
 extern time_t PROMISETIME;
 extern int ABORTBUNDLE;
@@ -97,6 +105,17 @@ extern char *SHIFT_TEXT[];
 
 extern char FILE_SEPARATOR;
 extern char FILE_SEPARATOR_STR[2];
+
+extern time_t DATESTAMPS[CF_OBSERVABLES];
+extern char AGGREGATION[CF_BUFSIZE];
+extern char *UNITS[CF_OBSERVABLES];
+
+extern double METER_KEPT[meter_endmark];
+extern double METER_REPAIRED[meter_endmark];
+extern double Q_MEAN;
+extern double Q_SIGMA;
+extern double Q_MAX;
+extern double Q_MIN;
 
 /***********************************************************/
 /* SYNTAX MODULES                                          */

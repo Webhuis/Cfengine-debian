@@ -13,7 +13,7 @@ Makefile.in
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/Makefile.in
+/projects/cfengine-3/!svn/ver/429/trunk/tests/file_masters/Makefile.in
 END
 promises.cf
 K 25
@@ -37,13 +37,13 @@ library.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/library.cf
+/projects/cfengine-3/!svn/ver/414/trunk/tests/file_masters/library.cf
 END
 Makefile
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/378/trunk/tests/file_masters/Makefile
+/projects/cfengine-3/!svn/ver/468/trunk/tests/file_masters/Makefile
 END
 README
 K 25

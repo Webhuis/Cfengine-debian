@@ -1,6 +1,6 @@
 #######################################################
 #
-# Compressing files
+# Searching for permissions
 #
 #######################################################
 
@@ -24,19 +24,19 @@ files:
 
   "/home/mark/tmp/testcopy" 
 
-    file_select => pdf_files,
-    transformer => "/usr/bin/gzip $(this.promiser)",
+    file_select => by_modes,
+    transformer => "/bin/echo DETECTED $(this.promiser)",
     depth_search => recurse("inf");
 
 }
 
 ############################################
 
-body file_select pdf_files
+body file_select by_modes
 
 {
-leaf_name => { ".*.pdf" , ".*.fdf" };
-file_result => "leaf_name";
+search_mode => { "711" , "666" };
+file_result => "mode";
 }
 
 ############################################

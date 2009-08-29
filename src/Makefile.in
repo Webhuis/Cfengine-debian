@@ -100,6 +100,7 @@ am_libpromises_la_OBJECTS = libpromises_la-cf3parse.lo \
 	libpromises_la-pipes.lo libpromises_la-html.lo \
 	libpromises_la-interfaces.lo libpromises_la-storage_tools.lo \
 	libpromises_la-verify_reports.lo \
+	libpromises_la-verify_processes.lo \
 	libpromises_la-enterprise_stubs.lo \
 	libpromises_la-mod_common.lo libpromises_la-mod_access.lo \
 	libpromises_la-mod_exec.lo libpromises_la-mod_methods.lo \
@@ -116,10 +117,10 @@ libpromises_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 sbinPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(sbin_PROGRAMS)
 am_cf_agent_OBJECTS = agent.$(OBJEXT) verify_files.$(OBJEXT) \
-	verify_processes.$(OBJEXT) verify_storage.$(OBJEXT) \
-	verify_exec.$(OBJEXT) verify_methods.$(OBJEXT) \
-	verify_interfaces.$(OBJEXT) verify_packages.$(OBJEXT) \
-	verify_databases.$(OBJEXT) agentdiagnostic.$(OBJEXT)
+	verify_storage.$(OBJEXT) verify_exec.$(OBJEXT) \
+	verify_methods.$(OBJEXT) verify_interfaces.$(OBJEXT) \
+	verify_packages.$(OBJEXT) verify_databases.$(OBJEXT) \
+	agentdiagnostic.$(OBJEXT)
 cf_agent_OBJECTS = $(am_cf_agent_OBJECTS)
 cf_agent_LDADD = $(LDADD)
 cf_agent_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
@@ -337,6 +338,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+workdir = @workdir@
 AM_CFLAGS = $(GCC_CFLAG) @CFLAGS@  
 AM_YFLAGS = -d
 LDADD = $(BERKELEY_DB_LDFLAGSD) $(BERKELEY_DB_LIB) $(OPENSSL_LIB_LDFLAGS) $(OPENSSL_LIB_LIB) libpromises.la 
@@ -415,6 +417,7 @@ libpromises_la_SOURCES = \
 	interfaces.c							\
 	storage_tools.c							\
 	verify_reports.c						\
+	verify_processes.c						\
 	enterprise_stubs.c						\
 	mod_common.c							\
 	mod_access.c							\
@@ -442,7 +445,6 @@ cf_report_SOURCES = \
 cf_agent_SOURCES = \
 	agent.c								\
 	verify_files.c							\
-	verify_processes.c						\
 	verify_storage.c						\
 	verify_exec.c							\
 	verify_methods.c						\
@@ -749,6 +751,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-timeout.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-transaction.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-vars.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-verify_processes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-verify_reports.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@
@@ -763,7 +766,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_measurements.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_methods.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_packages.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_processes.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_storage.Po@am__quote@
 
 .c.o:
@@ -1248,6 +1250,13 @@ libpromises_la-verify_reports.lo: verify_reports.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='verify_reports.c' object='libpromises_la-verify_reports.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-verify_reports.lo `test -f 'verify_reports.c' || echo '$(srcdir)/'`verify_reports.c
+
+libpromises_la-verify_processes.lo: verify_processes.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-verify_processes.lo -MD -MP -MF $(DEPDIR)/libpromises_la-verify_processes.Tpo -c -o libpromises_la-verify_processes.lo `test -f 'verify_processes.c' || echo '$(srcdir)/'`verify_processes.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/libpromises_la-verify_processes.Tpo $(DEPDIR)/libpromises_la-verify_processes.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='verify_processes.c' object='libpromises_la-verify_processes.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-verify_processes.lo `test -f 'verify_processes.c' || echo '$(srcdir)/'`verify_processes.c
 
 libpromises_la-enterprise_stubs.lo: enterprise_stubs.c
 @am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-enterprise_stubs.lo -MD -MP -MF $(DEPDIR)/libpromises_la-enterprise_stubs.Tpo -c -o libpromises_la-enterprise_stubs.lo `test -f 'enterprise_stubs.c' || echo '$(srcdir)/'`enterprise_stubs.c

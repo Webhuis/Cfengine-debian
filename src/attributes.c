@@ -36,7 +36,7 @@
 
 struct Attributes GetFilesAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.havedepthsearch = GetBooleanConstraint("depth_search",pp->conlist);
 attr.haveselect = GetBooleanConstraint("file_select",pp->conlist);
@@ -85,6 +85,18 @@ if (DEBUG)
    ShowAttributes(attr);
    }
 
+if (attr.haverename || attr.havedelete || attr.haveperms || attr.havechange ||
+    attr.havecopy || attr.havelink || attr.haveedit || attr.create || attr.touch || attr.transformer)
+   {
+   }
+else
+   {
+   if (THIS_AGENT_TYPE == cf_common)
+      {
+      cfPS(cf_error,CF_WARN,"",pp,attr," !! files promise makes no intention about system state");
+      }
+   }
+
 return attr;
 }
 
@@ -92,7 +104,7 @@ return attr;
 
 struct Attributes GetReportsAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -105,7 +117,7 @@ return attr;
 
 struct Attributes GetPackageAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -117,7 +129,7 @@ return attr;
 
 struct Attributes GetDatabaseAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -129,7 +141,7 @@ return attr;
 
 struct Attributes GetClassContextAttributes(struct Promise *pp)
 
-{ struct Attributes a;
+{ static struct Attributes a;
 
 a.transaction = GetTransactionConstraints(pp);
 a.classes = GetClassDefinitionConstraints(pp);
@@ -142,7 +154,7 @@ return a;
 
 struct Attributes GetExecAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.contain = GetExecContainConstraints(pp);
 attr.havecontain = GetBooleanConstraint("contain",pp->conlist);
@@ -166,7 +178,7 @@ return attr;
 
 struct Attributes GetProcessAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.signals = GetListConstraint("signals",pp->conlist);
 attr.process_stop = (char *)GetConstraint("process_stop",pp->conlist,CF_SCALAR);
@@ -192,7 +204,7 @@ return attr;
 
 struct Attributes GetStorageAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
  
 attr.mount = GetMountConstraints(pp);
 attr.volume = GetVolumeConstraints(pp);
@@ -216,7 +228,7 @@ return attr;
 
 struct Attributes GetMethodAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
  
 attr.havebundle = GetBundleConstraint("usebundle",pp->conlist);
 
@@ -235,7 +247,7 @@ return attr;
 
 struct Attributes GetInterfacesAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
  
 attr.havetcpip = GetBundleConstraint("usebundle",pp->conlist);
 attr.tcpip = GetTCPIPAttributes(pp);
@@ -255,7 +267,7 @@ return attr;
 
 struct Attributes GetTopicsAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.fwd_name = GetConstraint("forward_relationship",pp->conlist,CF_SCALAR);
 attr.bwd_name = GetConstraint("backward_relationship",pp->conlist,CF_SCALAR);
@@ -267,7 +279,7 @@ return attr;
 
 struct Attributes GetOccurrenceAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
   char *value;
 
 attr.represents = GetListConstraint("represents",pp->conlist);
@@ -282,7 +294,7 @@ return attr;
 
 struct Attributes GetMeasurementAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.measure = GetMeasurementConstraint(pp);
     
@@ -303,7 +315,7 @@ return attr;
 
 struct ExecContain GetExecContainConstraints(struct Promise *pp)
 
-{ struct ExecContain e;
+{ static struct ExecContain e;
  
 e.useshell = GetBooleanConstraint("useshell",pp->conlist);
 e.umask = GetOctalConstraint("umask",pp->conlist);
@@ -322,7 +334,8 @@ return e;
 
 struct Recursion GetRecursionConstraints(struct Promise *pp)
 
-{ struct Recursion r;
+{ static struct Recursion r;
+ 
 r.travlinks = GetBooleanConstraint("traverse_links",pp->conlist);
 r.rmdeadlinks = GetBooleanConstraint("rmdeadlinks",pp->conlist);
 r.depth = GetIntConstraint("depth",pp->conlist);
@@ -343,13 +356,13 @@ return r;
 
 struct CfACL GetAclConstraints(struct Promise *pp)
 
-{ struct CfACL ac;
+{ static struct CfACL ac;
 
 ac.acl_method = Str2AclMethod(GetConstraint("acl_method",pp->conlist,CF_SCALAR));
 ac.acl_type = Str2AclType(GetConstraint("acl_type",pp->conlist,CF_SCALAR));
 ac.acl_directory_inherit = Str2AclInherit(GetConstraint("acl_directory_inherit",pp->conlist,CF_SCALAR));
 ac.acl_entries = GetListConstraint("aces",pp->conlist);
-ac.acl_inherit_entries = GetListConstraint("inherit_aces",pp->conlist);
+ac.acl_inherit_entries = GetListConstraint("specify_inherit_aces",pp->conlist);
 return ac;
 }
 
@@ -357,8 +370,9 @@ return ac;
 
 struct FilePerms GetPermissionConstraints(struct Promise *pp)
 
-{ struct FilePerms p;
+{ static struct FilePerms p;
   char *value;
+  struct Rlist *list;
                 
 value = (char *)GetConstraint("mode",pp->conlist,CF_SCALAR);
 
@@ -371,9 +385,9 @@ if (!ParseModeString(value,&p.plus,&p.minus))
    PromiseRef(cf_error,pp);
    }
 
-value = (char *)GetConstraint("bsdflags",pp->conlist,CF_SCALAR);
+list = GetListConstraint("bsdflags",pp->conlist);
 
-if (!ParseFlagString(value,&p.plus_flags,&p.minus_flags))
+if (list && !ParseFlagString(list,&p.plus_flags,&p.minus_flags))
    {
    CfOut(cf_error,"","Problem validating a BSD flag string");
    PromiseRef(cf_error,pp);
@@ -384,6 +398,13 @@ p.groups = Rlist2GidList((struct Rlist *)GetConstraint("groups",pp->conlist,CF_L
 p.findertype = (char *)GetConstraint("findertype",pp->conlist,CF_SCALAR);
 p.rxdirs = GetBooleanConstraint("rxdirs",pp->conlist);
 
+// The default should be true
+
+if (!GetConstraint("rxdirs",pp->conlist,CF_SCALAR))
+   {
+   p.rxdirs = true;
+   }
+
 return p;
 }
 
@@ -391,10 +412,12 @@ return p;
 
 struct FileSelect GetSelectConstraints(struct Promise *pp)
 
-{ struct FileSelect s;
+{ static struct FileSelect s;
   char *value;
   struct Rlist *rp;
   mode_t plus,minus;
+  u_long fplus,fminus;
+  int entries = false;
   
 s.name = (struct Rlist *)GetConstraint("leaf_name",pp->conlist,CF_LIST);
 s.path = (struct Rlist *)GetConstraint("path_name",pp->conlist,CF_LIST);
@@ -416,31 +439,67 @@ for  (rp = s.perms; rp != NULL; rp=rp->next)
       }
    }
 
-value = (char *)GetConstraint("search_bsdflags",pp->conlist,CF_SCALAR);
+s.bsdflags = GetListConstraint("search_bsdflags",pp->conlist);
 
-if (!ParseFlagString(value,&s.plus_flags,&s.minus_flags))
+fplus = 0;
+fminus = 0;
+
+if (!ParseFlagString(s.bsdflags,&fplus,&fminus))
    {
    CfOut(cf_error,"","Problem validating a BSD flag string");
    PromiseRef(cf_error,pp);
+   }
+
+if (s.name||s.path||s.filetypes||s.issymlinkto||s.perms||s.bsdflags)
+   {
+   entries = true;
    }
 
 s.owners = (struct Rlist *)GetConstraint("search_owners",pp->conlist,CF_LIST);
 s.groups = (struct Rlist *)GetConstraint("search_groups",pp->conlist,CF_LIST);
 
 value = (char *)GetConstraint("search_size",pp->conlist,CF_SCALAR);
-IntRange2Int(value,&s.min_size,&s.max_size,pp);
+if (value)
+   {
+   entries++;
+   }
+
+IntRange2Int(value,(long *)&s.min_size,(long *)&s.max_size,pp);
 value = (char *)GetConstraint("ctime",pp->conlist,CF_SCALAR);
-IntRange2Int(value,&s.min_ctime,&s.max_ctime,pp);
+if (value)
+   {
+   entries++;
+   }
+
+IntRange2Int(value,(long *)&s.min_ctime,(long *)&s.max_ctime,pp);
 value = (char *)GetConstraint("atime",pp->conlist,CF_SCALAR);
-IntRange2Int(value,&s.min_atime,&s.max_atime,pp);
+if (value)
+   {
+   entries++;
+   }
+IntRange2Int(value,(long *)&s.min_atime,(long *)&s.max_atime,pp);
 value = (char *)GetConstraint("mtime",pp->conlist,CF_SCALAR);
-IntRange2Int(value,&s.min_mtime,&s.max_mtime,pp);
+if (value)
+   {
+   entries++;
+   }
+
+IntRange2Int(value,(long *)&s.min_mtime,(long *)&s.max_mtime,pp);
+
 s.exec_regex = (char *)GetConstraint("exec_regex",pp->conlist,CF_SCALAR);
 s.exec_program = (char *)GetConstraint("exec_program",pp->conlist,CF_SCALAR);
 
+if (s.owners||s.min_size||s.exec_regex||s.exec_program)
+   {
+   entries = true;
+   }
+
 if ((s.result = (char *)GetConstraint("file_result",pp->conlist,CF_SCALAR)) == NULL)
    {
-   s.result = "leaf_name.path_name.file_types.owner.group.mode.ctime.mtime.atime.size.exec_regex.issymlinkto.exec_program";
+   if (!entries)
+      {
+      CfOut(cf_error,""," !! file_select body missing its a file_result return value");
+      }
    }
 
 return s;
@@ -450,7 +509,7 @@ return s;
 
 struct TransactionContext GetTransactionConstraints(struct Promise *pp)
 
-{ struct TransactionContext t;
+{ static struct TransactionContext t;
  char *value;
 
 value = GetConstraint("action_policy",pp->conlist,CF_SCALAR);
@@ -501,7 +560,7 @@ return t;
 
 struct DefineClasses GetClassDefinitionConstraints(struct Promise *pp)
 
-{ struct DefineClasses c;
+{ static struct DefineClasses c;
  char *pt = NULL;
 
 c.change = (struct Rlist *)GetListConstraint("promise_repaired",pp->conlist);
@@ -536,7 +595,7 @@ return c;
 
 struct FileDelete GetDeleteConstraints(struct Promise *pp)
 
-{ struct FileDelete f;
+{ static struct FileDelete f;
   char *value;
 
 value = (char *)GetConstraint("dirlinks",pp->conlist,CF_SCALAR);
@@ -558,7 +617,7 @@ return f;
 
 struct FileRename GetRenameConstraints(struct Promise *pp)
 
-{ struct FileRename r;
+{ static struct FileRename r;
   char *value;
 
 value = (char *)GetConstraint("disable_mode",pp->conlist,CF_SCALAR);
@@ -581,7 +640,7 @@ return r;
 
 struct FileChange GetChangeMgtConstraints(struct Promise *pp)
 
-{ struct FileChange c;
+{ static struct FileChange c;
   char *value;
 
 value = (char *)GetConstraint("hash",pp->conlist,CF_SCALAR);
@@ -635,7 +694,7 @@ return c;
 
 struct FileCopy GetCopyConstraints(struct Promise *pp)
 
-{ struct FileCopy f;
+{ static struct FileCopy f;
   char *value;
   long min,max;
 
@@ -674,6 +733,7 @@ else
    }
        
 f.stealth = GetBooleanConstraint("stealth",pp->conlist);
+f.collapse = GetBooleanConstraint("collapse_destination_dir",pp->conlist);
 f.preserve = GetBooleanConstraint("preserve",pp->conlist);
 f.type_check = GetBooleanConstraint("type_check",pp->conlist);
 f.force_update = GetBooleanConstraint("force_update",pp->conlist);
@@ -698,7 +758,7 @@ return f;
 
 struct FileLink GetLinkConstraints(struct Promise *pp)
 
-{ struct FileLink f;
+{ static struct FileLink f;
   char *value;
   
 f.source = (char *)GetConstraint("source",pp->conlist,CF_SCALAR);
@@ -741,7 +801,7 @@ return f;
 
 struct EditDefaults GetEditDefaults(struct Promise *pp)
 
-{ struct EditDefaults e;
+{ static struct EditDefaults e;
   char *value;
 
 e.maxfilesize = GetIntConstraint("max_file_size",pp->conlist);
@@ -775,7 +835,7 @@ return e;
 
 struct Context GetContextConstraints(struct Promise *pp)
 
-{ struct Context a;
+{ static struct Context a;
   struct Constraint *cp;
   int i;
 
@@ -801,7 +861,7 @@ return a;
 
 struct Packages GetPackageConstraints(struct Promise *pp)
 
-{ struct Packages p;
+{ static struct Packages p;
   enum package_actions action;
   enum version_cmp operator;
   enum action_policy change_policy;
@@ -856,36 +916,98 @@ return p;
 
 struct ProcessSelect GetProcessFilterConstraints(struct Promise *pp)
 
-{ struct ProcessSelect p;
+{ static struct ProcessSelect p;
   char *value;
- 
+  int entries = 0;
+   
 p.owner = GetListConstraint("process_owner",pp->conlist);
 
 value = (char *)GetConstraint("pid",pp->conlist,CF_SCALAR);
+
+if (value)
+   {
+   entries++;
+   }
+
 IntRange2Int(value,&p.min_pid,&p.max_pid,pp);
 value = (char *)GetConstraint("ppid",pp->conlist,CF_SCALAR);
+
+if (value)
+   {
+   entries++;
+   }
+
 IntRange2Int(value,&p.min_ppid,&p.max_ppid,pp);
 value = (char *)GetConstraint("pgid",pp->conlist,CF_SCALAR);
+
+if (value)
+   {
+   entries++;
+   }
+
 IntRange2Int(value,&p.min_pgid,&p.max_pgid,pp);
 value = (char *)GetConstraint("rsize",pp->conlist,CF_SCALAR);
+
+if (value)
+   {
+   entries++;
+   }
+
 IntRange2Int(value,&p.min_rsize,&p.max_rsize,pp);
 value = (char *)GetConstraint("vsize",pp->conlist,CF_SCALAR);
+if (value)
+   {
+   entries++;
+   }
+
 IntRange2Int(value,&p.min_rsize,&p.max_rsize,pp);
 value = (char *)GetConstraint("ttime_range",pp->conlist,CF_SCALAR);
-IntRange2Int(value,&p.min_ttime,&p.max_ttime,pp);
+if (value)
+   {
+   entries++;
+   }
+
+IntRange2Int(value,(long *)&p.min_ttime,(long *)&p.max_ttime,pp);
 value = (char *)GetConstraint("stime_range",pp->conlist,CF_SCALAR);
-IntRange2Int(value,&p.min_stime,&p.max_stime,pp);
+if (value)
+   {
+   entries++;
+   }
+
+IntRange2Int(value,(long *)&p.min_stime,(long *)&p.max_stime,pp);
 
 p.status = (char *)GetConstraint("status",pp->conlist,CF_SCALAR);
 p.command = (char *)GetConstraint("command",pp->conlist,CF_SCALAR);
 p.tty = (char *)GetConstraint("tty",pp->conlist,CF_SCALAR);
 
 value = (char *)GetConstraint("priority",pp->conlist,CF_SCALAR);
+if (value)
+   {
+   entries++;
+   }
+
 IntRange2Int(value,&p.min_pri,&p.max_pri,pp);
 value = (char *)GetConstraint("threads",pp->conlist,CF_SCALAR);
+if (value)
+   {
+   entries++;
+   }
+
 IntRange2Int(value,&p.min_thread,&p.max_thread,pp);
 
-p.process_result = (char *)GetConstraint("process_result",pp->conlist,CF_SCALAR);
+if (p.owner||p.status||p.command||p.tty)
+   {
+   entries = true;
+   }
+
+if ((p.process_result = (char *)GetConstraint("process_result",pp->conlist,CF_SCALAR)) == NULL)
+   {
+   if (entries)
+      {
+      CfOut(cf_error,""," !! process_select body missing its a process_result return value");
+      }
+   }
+
 return p;
 }
 
@@ -894,7 +1016,7 @@ return p;
 
 struct ProcessCount GetMatchesConstraints(struct Promise *pp)
 
-{ struct ProcessCount p;
+{ static struct ProcessCount p;
   char *value;
 
 value = (char *)GetConstraint("match_range",pp->conlist,CF_SCALAR);
@@ -951,7 +1073,7 @@ printf(".....................................................\n\n");
 
 struct Attributes GetInsertionAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.havelocation = GetBooleanConstraint("location",pp->conlist);
 attr.location = GetLocationAttributes(pp);
@@ -980,8 +1102,8 @@ return attr;
 
 struct EditLocation GetLocationAttributes(struct Promise *pp)
 
-{ struct EditLocation e;
- char *value;
+{ static struct EditLocation e;
+  char *value;
 
 e.line_matching = GetConstraint("select_line_matching",pp->conlist,CF_SCALAR);;
 
@@ -1004,7 +1126,7 @@ return e;
 
 struct Attributes GetDeletionAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.not_matching = GetBooleanConstraint("not_matching",pp->conlist);
 
@@ -1029,7 +1151,7 @@ return attr;
 
 struct Attributes GetColumnAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.havecolumn = GetBooleanConstraint("edit_field",pp->conlist);
 attr.column = GetColumnConstraints(pp);
@@ -1052,7 +1174,7 @@ return attr;
 
 struct Attributes GetReplaceAttributes(struct Promise *pp)
 
-{ struct Attributes attr;
+{ static struct Attributes attr;
 
 attr.havereplace = GetBooleanConstraint("replace_patterns",pp->conlist);
 attr.replace = GetReplaceConstraints(pp);
@@ -1078,7 +1200,7 @@ return attr;
 
 struct EditRegion GetRegionConstraints(struct Promise *pp)
 
-{ struct EditRegion e;
+{ static struct EditRegion e;
 
 e.select_start = GetConstraint("select_start",pp->conlist,CF_SCALAR);
 e.select_end = GetConstraint("select_end",pp->conlist,CF_SCALAR);
@@ -1090,7 +1212,7 @@ return e;
 
 struct EditReplace GetReplaceConstraints(struct Promise *pp)
 
-{ struct EditReplace r;
+{ static struct EditReplace r;
 
 r.replace_value = GetConstraint("replace_value",pp->conlist,CF_SCALAR);
 r.occurrences = GetConstraint("occurrences",pp->conlist,CF_SCALAR);
@@ -1102,7 +1224,7 @@ return r;
 
 struct EditColumn GetColumnConstraints(struct Promise *pp)
 
-{ struct EditColumn c;
+{ static struct EditColumn c;
  char *value;
 
 c.column_separator = GetConstraint("field_separator",pp->conlist,CF_SCALAR);
@@ -1131,7 +1253,7 @@ return c;
 
 struct StorageMount GetMountConstraints(struct Promise *pp)
 
-{ struct StorageMount m;
+{ static struct StorageMount m;
 
 m.mount_type = GetConstraint("mount_type",pp->conlist,CF_SCALAR);
 m.mount_source = GetConstraint("mount_source",pp->conlist,CF_SCALAR);
@@ -1147,7 +1269,7 @@ return m;
 
 struct StorageVolume GetVolumeConstraints(struct Promise *pp)
 
-{ struct StorageVolume v;
+{ static struct StorageVolume v;
   char *value;
 
 v.check_foreign = GetBooleanConstraint("check_foreign",pp->conlist);
@@ -1167,7 +1289,7 @@ return v;
 
 struct CfTcpIp GetTCPIPAttributes(struct Promise *pp)
 
-{ struct CfTcpIp t;
+{ static struct CfTcpIp t;
 
 t.ipv4_address = GetConstraint("ipv4_address",pp->conlist,CF_SCALAR);
 t.ipv4_netmask = GetConstraint("ipv4_netmask",pp->conlist,CF_SCALAR);
@@ -1179,7 +1301,7 @@ return t;
 
 struct Report GetReportConstraints(struct Promise *pp)
 
-{ struct Report r;
+{ static struct Report r;
 
 if (GetConstraint("lastseen",pp->conlist,CF_SCALAR))
    {
@@ -1226,7 +1348,7 @@ return r;
 
 struct LineSelect GetInsertSelectConstraints(struct Promise *pp)
 
-{ struct LineSelect s;
+{ static struct LineSelect s;
 
 s.startwith_from_list = GetListConstraint("insert_if_startwith_from_list",pp->conlist);
 s.not_startwith_from_list = GetListConstraint("insert_if_not_startwith_from_list",pp->conlist);
@@ -1242,7 +1364,7 @@ return s;
 
 struct LineSelect GetDeleteSelectConstraints(struct Promise *pp)
 
-{ struct LineSelect s;
+{ static struct LineSelect s;
 
 s.startwith_from_list = GetListConstraint("delete_if_startwith_from_list",pp->conlist);
 s.not_startwith_from_list = GetListConstraint("delete_if_not_startwith_from_list",pp->conlist);
@@ -1258,7 +1380,7 @@ return s;
 
 struct Measurement GetMeasurementConstraint(struct Promise *pp)
 
-{ struct Measurement m;
+{ static struct Measurement m;
   char *value;
  
 m.stream_type = GetConstraint("stream_type",pp->conlist,CF_SCALAR);
@@ -1284,7 +1406,7 @@ return m;
 
 struct CfDatabase GetDatabaseConstraints(struct Promise *pp)
 
-{ struct CfDatabase d;
+{ static struct CfDatabase d;
   char *value;
 
 d.db_server_owner = GetConstraint("db_server_owner",pp->conlist,CF_SCALAR);

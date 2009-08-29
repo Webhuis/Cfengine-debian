@@ -110,7 +110,8 @@ if (expandregex) /* Expand one regex link and hand down */
    struct Attributes dummyattr;
 
    memset(&dummyattr,0,sizeof(dummyattr));
- 
+   memset(regex,0,CF_BUFSIZE);
+
    strncpy(regex,ip->name,CF_BUFSIZE-1);
 
    if ((dirh=opendir(pbuffer)) == NULL)
@@ -208,6 +209,27 @@ DeleteItemList(path);
 
 /*********************************************************************/
 
+int IsDir(char *path)
+{
+/*
+Checks if the object pointed to by path exists and is a directory.
+Returns true if so, false otherwise.
+*/
+struct stat sb;
+
+if (stat(path, &sb) != -1)
+   {
+   if (S_ISDIR(sb.st_mode))
+      {
+      return true;
+      }
+   }
+
+return false;
+}
+
+/*********************************************************************/
+
 int EmptyString(char *s)
 
 { char *sp;
@@ -244,6 +266,7 @@ char *JoinPath(char *path,char *leaf)
 
 { int len = strlen(leaf);
 
+Chop(path);
 AddSlash(path);
 
 if ((strlen(path)+len) > (CF_BUFSIZE - CF_BUFFERMARGIN))
@@ -261,7 +284,8 @@ return path;
 char *JoinSuffix(char *path,char *leaf)
 
 { int len = strlen(leaf);
- 
+
+Chop(path);
 DeleteSlash(path);
       
 if ((strlen(path)+len) > (CF_BUFSIZE - CF_BUFFERMARGIN))

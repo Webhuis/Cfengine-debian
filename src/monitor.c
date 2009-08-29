@@ -251,9 +251,10 @@ signal(SIGCHLD,SIG_IGN);
 signal(SIGUSR1,HandleSignals);
 signal(SIGUSR2,HandleSignals);
 
-HISTO = false;
+HISTO = true;
 FORGETRATE = 0.6;
 
+InitMeasurements();
 MonInitialize();
 }
 

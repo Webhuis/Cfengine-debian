@@ -102,12 +102,6 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
       return;
       }
 
-   if (!JoinPath(newto,dirp->d_name))
-      {
-      cf_closedir(dirh);
-      return;
-      }
-
    if (attr.recursion.travlinks || attr.copy.link_type == cfa_notlinked)
       {
       /* No point in checking if there are untrusted symlinks here,
@@ -122,9 +116,28 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
    else
       {
       if (cf_lstat(newfrom,&sb,attr,pp) == -1)
-         {
+         {         
          CfOut(cf_verbose,"cf_stat"," !! (Can't stat %s)\n",newfrom);
          continue;
+         }
+      }
+
+   /* If we are tracking subdirs in copy, then join else don't add*/
+
+   if (attr.copy.collapse)
+      {
+      if (!S_ISDIR(sb.st_mode) && !JoinPath(newto,dirp->d_name))
+         {
+         cf_closedir(dirh);
+         return;
+         }      
+      }
+   else
+      {
+      if (!JoinPath(newto,dirp->d_name))
+         {
+         cf_closedir(dirh);
+         return;
          }
       }
 
@@ -148,8 +161,10 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
          }
 
       memset(&dsb,0,sizeof(struct stat));
-      
-      if (stat(newto,&dsb) == -1)
+
+      /* Only copy dirs if we are tracking subdirs */
+
+      if (!attr.copy.collapse && (stat(newto,&dsb) == -1))
          {
          if (mkdir(newto,0700) == -1)
             {
@@ -165,7 +180,12 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
          }
 
       CfOut(cf_verbose,""," ->>  Entering %s\n",newto);
-      VerifyCopiedFileAttributes(newto,&dsb,&sb,attr,pp);
+
+      if (!attr.copy.collapse)
+         {
+         VerifyCopiedFileAttributes(newto,&dsb,&sb,attr,pp);
+         }
+      
       SourceSearchAndCopy(newfrom,newto,maxrecurse-1,attr,pp);
       }
    else
@@ -226,6 +246,10 @@ if (lstat(path,&oslb) == -1)  /* Careful if the object is a link */
    }
 else
    {
+   if (a.create||a.touch)
+      {
+      cfPS(cf_verbose,CF_NOP,"",pp,a," -> File %s exists as promised",path);
+      }
    exists = true;
    }
 
@@ -492,25 +516,23 @@ void PurgeLocalFiles(struct Item *filelist,char *localdir,struct Attributes attr
 
 Debug("PurgeLocalFiles(%s)\n",localdir);
 
- /* If we purge with no authentication we wipe out EVERYTHING ! */ 
-
- /* We should be chdir inside the directory here */
-
 if (strlen(localdir) < 2)
    {
    CfOut(cf_error,"","Purge of %s denied -- too dangerous!",localdir);
    return;
    }
- 
+
+ /* If we purge with no authentication we wipe out EVERYTHING ! */ 
+
 if (pp->conn && !pp->conn->authenticated)
    {
-   CfOut(cf_verbose,""," !! Not purging local copy %s - no authenticated contact with a source\n",localdir);
+   CfOut(cf_verbose,""," !! Not purge local files %s - no authenticated contact with a source\n",localdir);
    return;
    }
 
 if (!attr.havedepthsearch)
    {
-   CfOut(cf_verbose,""," !! No depth search when copying %s so no refrece from which to purge\n",localdir);
+   CfOut(cf_verbose,""," !! No depth search when copying %s so purging does not apply\n",localdir);
    return;
    }
 
@@ -558,10 +580,15 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
             struct Attributes purgeattr;
             memset(&purgeattr,0,sizeof(purgeattr));
 
+            /* Deletion is based on a files promise */
+            
             purgeattr.havedepthsearch = true;
             purgeattr.havedelete = true;
+            purgeattr.delete.dirlinks = cfa_linkdelete;
+            purgeattr.delete.rmdirs = true;
             purgeattr.recursion.depth = CF_INFINITY;
             purgeattr.recursion.travlinks = false;
+            purgeattr.recursion.xdev = false;
 
             SetSearchDevice(&sb,pp);
 
@@ -781,7 +808,7 @@ if (found == -1)
          return;
          }
 
-      cfPS(cf_inform,CF_CHG,"",pp,attr,"Created fifo %s", destfile);
+      cfPS(cf_inform,CF_CHG,"",pp,attr," -> Created fifo %s", destfile);
 #endif
       }
    else
@@ -811,7 +838,7 @@ else
    {
    int ok_to_copy = false;
    
-   CfOut(cf_verbose,"","Destination file %s already exists\n",destfile);
+   CfOut(cf_verbose,""," -> Destination file %s already exists\n",destfile);
    
    if (!attr.copy.force_update)
       {
@@ -1124,69 +1151,76 @@ int FileSanityChecks(char *path,struct Attributes a,struct Promise *pp)
 {
 if (a.havelink && a.havecopy)
    {
-   CfOut(cf_error,"","Promise constraint conflicts - %s file cannot both be a copy of and a link to the source",path);
+   CfOut(cf_error,""," !! Promise constraint conflicts - %s file cannot both be a copy of and a link to the source",path);
    PromiseRef(cf_error,pp);
    return false;
    }
 
 if (a.haveeditline && a.haveeditxml)
    {
-   CfOut(cf_error,"","Promise constraint conflicts - %s editing file as both line and xml makes no sense",path);
+   CfOut(cf_error,""," !! Promise constraint conflicts - %s editing file as both line and xml makes no sense",path);
    PromiseRef(cf_error,pp);
    return false;
    }
 
 if (a.havedepthsearch && a.haveedit)
    {
-   CfOut(cf_error,"","Recursive depth_searches are not compatible with general file editing",path);
+   CfOut(cf_error,""," !! Recursive depth_searches are not compatible with general file editing",path);
    PromiseRef(cf_error,pp);
    return false;
    }
 
 if (a.havedelete && (a.create||a.havecopy||a.haveedit||a.haverename))
    {
-   CfOut(cf_error,"","Promise constraint conflicts - %s cannot be deleted and exist at the same time",path);
+   CfOut(cf_error,""," !! Promise constraint conflicts - %s cannot be deleted and exist at the same time",path);
    PromiseRef(cf_error,pp);
    return false;
    }
 
 if (a.haverename && (a.create||a.havecopy||a.haveedit))
    {
-   CfOut(cf_error,"","Promise constraint conflicts - %s cannot be renamed/moved and exist there at the same time",path);
+   CfOut(cf_error,""," !! Promise constraint conflicts - %s cannot be renamed/moved and exist there at the same time",path);
    PromiseRef(cf_error,pp);
    return false;
    }
 
 if (a.havedelete && a.havedepthsearch && !a.haveselect)
    {
-   CfOut(cf_error,"","Dangerous or ambiguous promise - %s specifies recursive deletion but has no file selection criteria",path);
+   CfOut(cf_error,""," !! Dangerous or ambiguous promise - %s specifies recursive deletion but has no file selection criteria",path);
    PromiseRef(cf_error,pp);
    return false;
    }
 
 if (a.havedelete && a.haverename)
    {
-   CfOut(cf_error,"","File %s cannot promise both deletion and renaming",path);
+   CfOut(cf_error,""," !! File %s cannot promise both deletion and renaming",path);
    PromiseRef(cf_error,pp);
    return false;
    }
 
 if (a.havecopy && a.havedepthsearch && a.havedelete)
    {
-   CfOut(cf_inform,"","Warning: depth_search of %s applies to both delete and copy, but these refer to different searches (source/destination)",pp->promiser);
+   CfOut(cf_inform,""," !! Warning: depth_search of %s applies to both delete and copy, but these refer to different searches (source/destination)",pp->promiser);
    PromiseRef(cf_inform,pp);
    }
 
 if (a.transaction.background && a.transaction.audit)
    {
-   CfOut(cf_error,"","Auditing cannot be performed on backgrounded promises (this might change).",pp->promiser);
+   CfOut(cf_error,""," !! Auditing cannot be performed on backgrounded promises (this might change).",pp->promiser);
    PromiseRef(cf_error,pp);
    return false;
    }
 
 if ((a.havecopy || a.havelink) && a.transformer)
    {
-   CfOut(cf_error,"","File object(s) %s cannot both be a copy of source and transformed simultaneously",pp->promiser);
+   CfOut(cf_error,""," !! File object(s) %s cannot both be a copy of source and transformed simultaneously",pp->promiser);
+   PromiseRef(cf_error,pp);
+   return false;
+   }
+
+if (a.haveselect && a.select.result == NULL)
+   {
+   CfOut(cf_error,""," !! Missing file_result attribute in file_select body",pp->promiser);
    PromiseRef(cf_error,pp);
    return false;
    }
@@ -1292,23 +1326,31 @@ void LinkCopy(char *sourcefile,char *destfile,struct stat *sb,struct Attributes 
   struct stat dsb;
 
 /* Link the file to the source, instead of copying */
+
+linkbuf[0] = '\0';
   
-if (cf_readlink(sourcefile,linkbuf,CF_BUFSIZE,attr,pp) == -1)
+if (S_ISLNK(sb->st_mode) && cf_readlink(sourcefile,linkbuf,CF_BUFSIZE,attr,pp) == -1)
    {
    cfPS(cf_error,CF_FAIL,"",pp,attr,"Can't readlink %s\n",sourcefile);
    return;
    }
-
-CfOut(cf_verbose,"","Checking link from %s to %s\n",destfile,linkbuf);
-
-if (attr.copy.link_type == cfa_absolute && !IsAbsoluteFileName(linkbuf))      /* Not absolute path - must fix */
+else if (S_ISLNK(sb->st_mode))
    {
-   char vbuff[CF_BUFSIZE];
-   strcpy(vbuff,sourcefile);
-   ChopLastNode(vbuff);
-   AddSlash(vbuff);
-   strncat(vbuff,linkbuf,CF_BUFSIZE-1);
-   strncpy(linkbuf,vbuff,CF_BUFSIZE-1);
+   CfOut(cf_verbose,"","Checking link from %s to %s\n",destfile,linkbuf);
+   
+   if (attr.copy.link_type == cfa_absolute && !IsAbsoluteFileName(linkbuf))      /* Not absolute path - must fix */
+      {
+      char vbuff[CF_BUFSIZE];
+      strcpy(vbuff,sourcefile);
+      ChopLastNode(vbuff);
+      AddSlash(vbuff);
+      strncat(vbuff,linkbuf,CF_BUFSIZE-1);
+      strncpy(linkbuf,vbuff,CF_BUFSIZE-1);
+      }
+   }
+else
+   {
+   strcpy(linkbuf,sourcefile);
    }
 
 lastnode=ReadLastNode(sourcefile);
@@ -1360,7 +1402,7 @@ if (succeed)
       VerifyCopiedFileAttributes(destfile,&dsb,sb,attr,pp);
       }
    
-   cfPS(cf_inform,CF_CHG,"",pp,attr,"Created link %s", destfile);
+   cfPS(cf_inform,CF_CHG,"",pp,attr," -> Created link %s", destfile);
    }
 }
 
@@ -1768,17 +1810,17 @@ if (!FixCompressedArrayValue(i,value,&(pp->inode_cache)))
     /* Not root hard link, remove to preserve consistency */
    if (DONTDO)
       {
-      CfOut(cf_verbose,"","Need to remove old hard link %s to preserve structure..\n",value);
+      CfOut(cf_verbose,""," !! Need to remove old hard link %s to preserve structure..\n",value);
       }
    else
       {
       if (attr.transaction.action = cfa_warn)
          {
-         CfOut(cf_verbose,"","Need to remove old hard link %s to preserve structure..\n",value);
+         CfOut(cf_verbose,""," !! Need to remove old hard link %s to preserve structure..\n",value);
          }
       else
          {
-         CfOut(cf_verbose,"","Removing old hard link %s to preserve structure..\n",value);
+         CfOut(cf_verbose,""," -> Removing old hard link %s to preserve structure..\n",value);
          unlink(value);
          }
       }

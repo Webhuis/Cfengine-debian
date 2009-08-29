@@ -1,0 +1,28 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle example in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'dim_array' (implicit) if context is any
+
+                int => 10       if body context any
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_stringarray.cf' near line 17
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'example'} if sub-body context any
+   }
+

@@ -111,18 +111,21 @@ if (CF_STCKFRAME == 1)
    /* Must not set pp->done = true for editfiles etc */
    }
 
-HashPromise(pp,digest,cf_md5);
+HashPromise(operand,pp,digest,cf_md5);
 strcpy(str_digest,HashPrint(cf_md5,digest));
 
 /* As a backup to "done" we need something immune to re-use */
 
-if (IsItemIn(DONELIST,str_digest))
+if (THIS_AGENT_TYPE == cf_agent)
    {
-   CfOut(cf_verbose,""," -> This promise has already been verified");
-   return this;
+   if (IsItemIn(DONELIST,str_digest))
+      {
+      CfOut(cf_verbose,""," -> This promise has already been verified");
+      return this;
+      }
+   
+   PrependItem(&DONELIST,str_digest,NULL);
    }
-
-PrependItem(&DONELIST,str_digest,NULL);
 
 /* Finally if we're supposed to ignore locks ... do the remaining stuff */
 

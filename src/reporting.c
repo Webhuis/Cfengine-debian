@@ -57,7 +57,7 @@ char *CFX[][2] =
 
 char *CFH[][2] =
    {
-    "<html><head>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"http://www.cfengine.org/css/promises.css\" />\n</head>\n","</html>",
+    "<html><head>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"/cf_enterprise.css\" />\n</head>\n","</html>",
     "<div id=\"bundle\"><table class=border><tr><td><h2>","</td></tr></h2></table></div>",
     "<div id=\"block\"><table class=border cellpadding=5 width=800>","</table></div>",
     "<tr><th>","</th></tr>",
@@ -88,29 +88,35 @@ void ShowContext(void)
 
  /* Text output */
 
+CfOut(cf_verbose,"","");
+  
 if (VERBOSE||DEBUG)
    {
    snprintf(vbuff,CF_BUFSIZE,"Host %s's basic classified context",VFQNAME);
    ReportBanner(vbuff);
    
-   CfOut(cf_verbose,"","Defined Classes = ( ");
+   printf("%s  -> Defined hard classes = { ",VPREFIX);
    
    for (ptr = VHEAP; ptr != NULL; ptr=ptr->next)
       {
       printf("%s ",ptr->name);
       }
    
-   printf(")\n");
+   printf("}\n");
+
+   CfOut(cf_verbose,"","");
    
-   CfOut (cf_verbose,"","\nNegated Classes = ( ");
+   printf("%s  -> Negated Classes = { ",VPREFIX);
    
    for (ptr = VNEGHEAP; ptr != NULL; ptr=ptr->next)
       {
       printf("%s ",ptr->name);
       }
    
-   printf (")\n");
+   printf ("}\n");
    }
+
+CfOut(cf_verbose,"","");
 
 /* HTML output */
 
@@ -182,12 +188,14 @@ else
    {
    v = "not specified";
    }
-  
+
 ReportBanner("Promises");
 
+snprintf(vbuff,CF_BUFSIZE-1,"Cfengine Site Policy Summary (version %s)",v);
+
+CfHtmlHeader(FREPORT_HTML,vbuff,STYLESHEET,WEBDRIVER,BANNER);
+    
 fprintf(FREPORT_HTML,"<p>");
-fprintf(FREPORT_HTML,"<h1>Cfengine Site Policy Summary (version %s)</h1> ",v);
-fprintf(FREPORT_HTML,"%s\n",CFH[cfx_head][cfb]);
   
 for (bp = bundles; bp != NULL; bp=bp->next)
    {
@@ -254,7 +262,7 @@ for (bdp = bodies; bdp != NULL; bdp=bdp->next)
    fprintf(FREPORT_HTML,"</p>");
    }
 
-fprintf(FREPORT_HTML,"%s\n",CFH[cfx_head][cfe]);
+CfHtmlFooter(FREPORT_HTML,FOOTER);
 }
 
 /*******************************************************************/

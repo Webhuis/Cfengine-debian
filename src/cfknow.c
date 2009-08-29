@@ -93,10 +93,6 @@ char SQL_PASSWD[CF_MAXVARSIZE];
 char SQL_SERVER[CF_MAXVARSIZE];
 char SQL_CONNECT_NAME[CF_MAXVARSIZE];
 char TOPIC_CMD[CF_MAXVARSIZE];
-char WEBDRIVER[CF_MAXVARSIZE];
-char BANNER[2*CF_BUFSIZE];
-char FOOTER[CF_BUFSIZE];
-char STYLESHEET[CF_MAXVARSIZE];
 enum cfdbtype SQL_TYPE = cfd_notype;
 int HTML = false;
 int WRITE_SQL = false;
@@ -167,8 +163,8 @@ if (strlen(TOPIC_CMD) == 0)
    {
    KeepPromiseBundles();
    VerifyOntology();
-   ShowOntology(); // all types and assocs
-   ShowTopicMapLTM(); // all types and assocs
+   ShowOntology();
+   ShowTopicMapLTM();
    GenerateSQL();
    GenerateManual();
    GenerateGraph();
@@ -195,18 +191,26 @@ return 0;
 void CheckOpts(int argc,char **argv)
 
 { extern char *optarg;
+  char arg[CF_BUFSIZE];
   struct Item *actionList;
   int optindex = 0;
   int c;
   char ld_library_path[CF_BUFSIZE];
 
 strcpy(TOPIC_CMD,"");
+LOOKUP = false;
 
 while ((c=getopt_long(argc,argv,"ghHd:vVf:S:st:r:mM",OPTIONS,&optindex)) != EOF)
   {
   switch ((char) c)
       {
       case 'f':
+
+          if (optarg && strlen(optarg) < 5)
+             {
+             snprintf(arg,CF_MAXVARSIZE," -f used but argument \"%s\" incorrect",optarg);
+             FatalError(arg);
+             }
 
           strncpy(VINPUTFILE,optarg,CF_BUFSIZE-1);
           VINPUTFILE[CF_BUFSIZE-1] = '\0';
@@ -237,9 +241,13 @@ while ((c=getopt_long(argc,argv,"ghHd:vVf:S:st:r:mM",OPTIONS,&optindex)) != EOF)
 
       case 'r':
           ISREGEX = true;
+          LOOKUP = true;
+          SHOWREPORTS = false;
 
       case 't':
           strcpy(TOPIC_CMD,optarg);
+          LOOKUP = true;
+          SHOWREPORTS = false;
           break;
 
       case 's':
@@ -597,6 +605,11 @@ void ShowOntology()
   struct Item *generic_types = NULL;
   struct Item *ip;
 
+if (LOOKUP)
+   {
+   return;
+   }
+  
 AddSlash(BUILD_DIR);
 snprintf(filename,CF_BUFSIZE-1,"%sontology.html",BUILD_DIR);
 
@@ -1245,9 +1258,9 @@ else
    rep_type = cfk_url;
    }
 
-if (BlockTextMatch("[.&|]+",pp->classes,&s,&e))
+if (BlockTextMatch("[&|]+",pp->classes,&s,&e))
    {
-   CfOut(cf_error,"","Class should be a single topic for occurrences - %s does not make sense",pp->classes);
+   CfOut(cf_error,"","Class should be a single topic or typed TYPE.TOPIC for occurrences - %s does not make sense",pp->classes);
    return;
    }
 
@@ -1276,7 +1289,7 @@ switch (rep_type)
 
        if ((tp = GetCanonizedTopic(TOPIC_MAP,pp->classes)) == NULL)
           {
-          CfOut(cf_error,"","Class missing - canonical identifier \"%s\" was not previously defined so we can't map it to occurrences (problem with bundlesequence?)",pp->classes);
+          CfOut(cf_error,"","Type context \"%s\" must be defined in order to map it to occurrences (ordering problem with bundlesequence?)",pp->classes);
           return;
           }
        
@@ -1814,7 +1827,7 @@ while(CfFetchRow(cfdb))
       continue;
       }
 
-   AddTopic(&topics_this_type,topic_name,topic_type);
+   AddCommentedTopic(&topics_this_type,topic_name,topic_comment,topic_type);
    }
 
 CfDeleteQuery(cfdb);
@@ -2207,8 +2220,54 @@ void ShowTextResults(char *this_name,char *this_type,char *this_comment,struct T
 
 printf("\nTopic \"%s\" found in the context of \"%s\"\n",this_name,this_type);
 
+printf("\nResults:\n\n");
 
-printf("\nTopics of the type %s:\n\n",this_name);
+for (oc = occurrences; oc != NULL; oc=oc->next)
+   {
+   if (oc->represents == NULL)
+      {
+      printf("(direct)");
+      }
+   else
+      {
+      for (rp = oc->represents; rp != NULL; rp=rp->next)
+         {
+         printf("   %s: ",(char *)rp->item);
+         }
+      }
+   switch (oc->rep_type)
+      {
+      case cfk_url:
+      case cfk_web:
+          printf(" %s (URL)\n",oc->locator);
+          break;
+      case cfk_file:
+          printf("%s (file)\n",oc->locator);
+          break;
+      case cfk_db:
+          printf(" %s (DB)\n",oc->locator);
+          break;          
+      case cfk_literal:
+          printf(" \"%s\" (Text)\n",oc->locator);
+          break;
+      case cfk_image:
+          printf("(Image)\n",oc->locator);
+          break;
+      default:
+          break;
+      }
+
+   count++;
+   }
+
+if (count == 0)
+   {
+   printf("\n    (none)\n");
+   }
+
+count = 0;
+
+printf("\n\nTopics of the type %s:\n\n",this_name);
 
 for (tp = topics_this_type; tp != NULL; tp=tp->next)
    {
@@ -2230,53 +2289,6 @@ for (ta = associations; ta != NULL; ta=ta->next)
    for (rp = ta->associates; rp != NULL; rp=rp->next)
       {
       printf("    - %s\n",rp->item);
-      }
-
-   count++;
-   }
-
-if (count == 0)
-   {
-   printf("\n    (none)\n");
-   }
-
-count = 0;
-
-printf("\nOccurrences of this topic:\n\n");
-
-for (oc = occurrences; oc != NULL; oc=oc->next)
-   {
-   if (oc->represents == NULL)
-      {
-      printf("(direct)");
-      }
-   else
-      {
-      for (rp = oc->represents; rp != NULL; rp=rp->next)
-         {
-         printf("   %s: ",(char *)rp->item);
-         }
-      }
-   switch (oc->rep_type)
-      {
-      case cfk_url:
-      case cfk_web:
-          printf(" %s (URL)",oc->locator);
-          break;
-      case cfk_file:
-          printf("%s (file)",oc->locator);
-          break;
-      case cfk_db:
-          printf(" %s (DB)",oc->locator);
-          break;          
-      case cfk_literal:
-          printf(" \"%s\" (Text)",oc->locator);
-          break;
-      case cfk_image:
-          printf("(Image)",oc->locator);
-          break;
-      default:
-          break;
       }
 
    count++;
@@ -2366,11 +2378,14 @@ fprintf(fout,"\"%s\" in map version %s</div>\n",NextTopic(this_type,""),v);
 
 if (occurrences != NULL)
    {
+   char embed_link[CF_BUFSIZE];
+   embed_link[0] = '\0';
+   
    count = 0;
    
    fprintf(fout,"<p><div id=\"occurrences\">");
    
-   CfOut(cf_error,"","\n<h2>Occurrences of this topic:</h2>\n\n");
+   CfOut(cf_error,"","\n<h2>Results for this topic:</h2>\n\n");
    
    fprintf(fout,"<ul>\n");
    
@@ -2386,7 +2401,13 @@ if (occurrences != NULL)
 	 
          for (rp = oc->represents; rp != NULL; rp=rp->next)
             {
-            fprintf(fout,"%s, ",NextTopic((char *)rp->item,""));
+//            fprintf(fout,"%s, ",NextTopic((char *)rp->item,""));
+            fprintf(fout,"%s, ",rp->item);
+
+            if (strlen(embed_link) == 0 && (strncmp(rp->item,"http",4) == 0 || *(char *)(rp->item) == '/'))
+               {
+               strcpy(embed_link,rp->item);
+               }
             }
          
          fprintf(fout,":");
@@ -2410,7 +2431,14 @@ if (occurrences != NULL)
              fprintf(fout,"<p> \"%s\" (Text)</p>",oc->locator);
              break;
          case cfk_image:
-             fprintf(fout,"<p><div id=\"embedded_image\"><a href=\"%s\"><img src=\"%s\"></a></div></p>",oc->locator,oc->locator);
+             if (strlen(embed_link)> 0)
+                {
+                fprintf(fout,"<p><div id=\"embedded_image\"><a href=\"%s\"><img src=\"%s\"></a></div></p>",embed_link,oc->locator);
+                }
+             else
+                {
+                fprintf(fout,"<p><div id=\"embedded_image\"><a href=\"%s\"><img src=\"%s\"></a></div></p>",oc->locator,oc->locator);
+                }
              break;
          case cfk_portal:
              fprintf(fout,"<p><a href=\"%s\" target=\"_blank\">%s</a> </span>(URL)",oc->locator,oc->locator);
@@ -2606,6 +2634,7 @@ if ((tp = GetCanonizedTopic(TOPIC_MAP,pp->classes)) == NULL)
    return;
    }
 
+Chop(a.path_root);
 sp = file + strlen(a.path_root) + 1;
 
 FullTextMatch(pp->promiser,sp);

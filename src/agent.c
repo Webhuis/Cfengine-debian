@@ -71,7 +71,7 @@ char *TYPESEQUENCE[] =
 int main (int argc,char *argv[]);
 void CheckAgentAccess(struct Rlist *list);
 void KeepAgentPromise(struct Promise *pp);
-void NewTypeContext(enum typesequence type);
+int NewTypeContext(enum typesequence type);
 void DeleteTypeContext(enum typesequence type);
 void ClassBanner(enum typesequence type);
 void ParallelFindAndVerifyFilesPromises(struct Promise *pp);
@@ -88,37 +88,41 @@ extern struct Rlist *SERVERLIST;
             "in the system. In that sense it is the most important\n"
             "part of the cfengine suite.\n";
 
- struct option OPTIONS[13] =
+ struct option OPTIONS[15] =
       {
-      { "help",no_argument,0,'h' },
-      { "debug",optional_argument,0,'d' },
-      { "verbose",no_argument,0,'v' },
-      { "dry-run",no_argument,0,'n'},
-      { "version",no_argument,0,'V' },
       { "bootstrap",no_argument,0,'B' },
-      { "file",required_argument,0,'f'},
+      { "bundlesequence",required_argument,0,'b' },
+      { "debug",optional_argument,0,'d' },
       { "define",required_argument,0,'D' },
+      { "diagnostic",no_argument,0,'x'},
+      { "dry-run",no_argument,0,'n'},
+      { "file",required_argument,0,'f'},
+      { "help",no_argument,0,'h' },
+      { "inform",no_argument,0,'I'},
       { "negate",required_argument,0,'N' },
       { "no-lock",no_argument,0,'K'},
-      { "inform",no_argument,0,'I'},
-      { "diagnostic",no_argument,0,'x'},
+      { "policy-server",required_argument,0,'s' },
+      { "verbose",no_argument,0,'v' },
+      { "version",no_argument,0,'V' },
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[13] =
+ char *HINTS[15] =
       {
-      "Print the help message",
-      "Set debugging level 0,1,2",
-      "Output verbose information about the behaviour of the agent",
-      "All talk and no action mode - make no changes, only inform of promises not kept",
-      "Output the version of the software",
       "Bootstrap/repair a cfengine configuration from failsafe file in the current directory",
-      "Specify an alternative input file than the default",
+      "Set or override bundlesequence from command line",
+      "Set debugging level 0,1,2",
       "Define a list of comma separated classes to be defined at the start of execution",
+      "Activate internal diagnostics (developers only)",
+      "All talk and no action mode - make no changes, only inform of promises not kept",
+      "Specify an alternative input file than the default",      
+      "Print the help message",
+      "Print basic information about changes made to the system, i.e. promises repaired",
       "Define a list of comma separated classes to be undefined at the start of execution",
       "Ignore locking constraints during execution (ifelapsed/expireafter) if \"too soon\" to run",
-      "Print basic information about changes made to the system, i.e. promises repaired",
-      "Activate internal diagnostics (developers only)",
+      "Define the server name or IP address of the a policy server (for use with bootstrap)",
+      "Output verbose information about the behaviour of the agent",
+      "Output the version of the software",
       NULL
       };
 
@@ -145,23 +149,44 @@ return 0;
 void CheckOpts(int argc,char **argv)
 
 { extern char *optarg;
+  char arg[CF_BUFSIZE];
   struct Item *actionList;
   int optindex = 0;
   int c;
 
 /* Because of the MacOS linker we have to call this from each agent
    individually before Generic Initialize */
+
+POLICY_SERVER[0] = '\0';
   
-while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:VSxMB",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:xMBb:",OPTIONS,&optindex)) != EOF)
   {
   switch ((char) c)
       {
       case 'f':
 
+          if (optarg == NULL)
+             {
+             FatalError(" -f used but no argument");
+             }
+
+          if (optarg && strlen(optarg) < 5)
+             {
+             snprintf(arg,CF_MAXVARSIZE," -f used but argument \"%s\" incorrect",optarg);
+             FatalError(arg);
+             }
+
           strncpy(VINPUTFILE,optarg,CF_BUFSIZE-1);
           MINUSF = true;
           break;
 
+      case 'b':
+          if (optarg)
+             {
+             CBUNDLESEQUENCE = SplitStringAsRList(optarg,',');
+             }
+          break;
+          
       case 'd': 
           NewClass("opt_debug");
           switch ((optarg==NULL) ? '3' : *optarg)
@@ -183,6 +208,11 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:VSxMB",OPTIONS,&optindex)) != EOF)
       case 'B':
           BOOTSTRAP = true;
           MINUSF = true;
+          NewClass("bootstrap_mode");
+          break;
+
+      case 's':
+          strncpy(POLICY_SERVER,optarg,CF_BUFSIZE-1);
           break;
           
       case 'K': IGNORELOCK = true;
@@ -364,10 +394,11 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_addclasses].lval) == 0)
       {
       struct Rlist *rp;
-      CfOut(cf_verbose,"","ADD classes from ...\n");
+      CfOut(cf_verbose,"","-> Add classes ...\n");
       
       for (rp  = (struct Rlist *) retval; rp != NULL; rp = rp->next)
          {
+         CfOut(cf_verbose,""," -> ... %s\n",rp->item);
          NewClass(rp->item);
          }
       
@@ -558,7 +589,7 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
       }
    }
 
-if (GetVariable("control_common","CFG_CONTROLBODY[cfg_lastseenexpireafter]",&retval,&rettype) != cf_notype)
+if (GetVariable("control_common",CFG_CONTROLBODY[cfg_lastseenexpireafter].lval,&retval,&rettype) != cf_notype)
    {
    LASTSEENEXPIREAFTER = Str2Int(retval);
    }
@@ -575,9 +606,17 @@ void KeepPromiseBundles()
   void *retval;
   int ok = true;
 
-if (GetVariable("control_common","bundlesequence",&retval,&rettype) == cf_notype)
+if (CBUNDLESEQUENCE)
    {
-   CfOut(cf_error,"","No bundlesequence in the common control body");
+   CfOut(cf_inform,""," >> Using command line specified bundlesequence");
+   retval = CBUNDLESEQUENCE;
+   rettype = CF_LIST;
+   }
+else if (GetVariable("control_common","bundlesequence",&retval,&rettype) == cf_notype)
+   {
+   CfOut(cf_error,""," !! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+   CfOut(cf_error,""," !! No bundlesequence in the common control body");
+   CfOut(cf_error,""," !! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
    exit(1);
    }
 
@@ -612,7 +651,7 @@ for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
    
    if (!(GetBundle(name,"agent")||(GetBundle(name,"common"))))
       {
-      CfOut(cf_error,"","Bundle %s listed in the bundlesequence was not found\n",name);
+      CfOut(cf_error,"","Bundle \"%s\" listed in the bundlesequence was not found\n",name);
       ok = false;
       }
    }
@@ -624,8 +663,9 @@ if (!ok)
 
 if (VERBOSE || DEBUG)
    {
-   CfOut(cf_verbose,"","Bundlesequence => ");
+   printf("%s -> Bundlesequence => ",VPREFIX);
    ShowRval(stdout,retval,rettype);
+   printf("\n");
    }
 
 /* If all is okay, go ahead and evaluate */
@@ -685,11 +725,15 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
 
       BannerSubType(bp->name,sp->name,pass);
       SetScope(bp->name);
-      
-      NewTypeContext(type);
+
+      if (!NewTypeContext(type))
+         {
+         continue;
+         }
 
       for (pp = sp->promiselist; pp != NULL; pp=pp->next)
          {
+         SaveClassEnvironment();
          ExpandPromise(cf_agent,bp->name,pp,KeepAgentPromise);
 
          if (Abort())
@@ -712,7 +756,7 @@ void CheckAgentAccess(struct Rlist *list)
 
 { char id[CF_MAXVARSIZE];
   struct passwd *pw;
-  struct Rlist *rp;
+  struct Rlist *rp,*rp2;
   struct stat sb;
   uid_t uid;
   int access = false;
@@ -735,9 +779,9 @@ if (VINPUTLIST != NULL)
       
       if (ACCESSLIST)
          {
-         for (rp  = ACCESSLIST; rp != NULL; rp = rp->next)
+         for (rp2  = ACCESSLIST; rp2 != NULL; rp2 = rp2->next)
             {
-            if (Str2Uid(rp->item,NULL,NULL) == sb.st_uid)
+            if (Str2Uid(rp2->item,NULL,NULL) == sb.st_uid)
                {
                access = true;
                break;
@@ -884,11 +928,12 @@ if (putenv(s) != 0)
 /* Type context                                                      */
 /*********************************************************************/
 
-void NewTypeContext(enum typesequence type)
+int NewTypeContext(enum typesequence type)
 
 { int maxconnections,i;
   struct Item *procdata = NULL;
-  char *psopts = VPSOPTS[VSYSTEMHARDCLASS];
+  char *psopts = GetProcessOptions();
+
 // get maxconnections
 
 switch(type)
@@ -904,14 +949,8 @@ switch(type)
      
        if (!LoadProcessTable(&PROCESSTABLE,psopts))
           {
-          struct Promise dummyp;
-          struct Attributes dummyattr;
-          memset(&dummyp,0,sizeof(dummyp));
-          memset(&dummyattr,0,sizeof(dummyattr));
-          dummyattr.transaction.audit = true;
-          dummyattr.transaction.log_level = cf_inform;
-          cfPS(cf_error,CF_FAIL,"",&dummyp,dummyattr,"Unable to read the process table\n","");
-          return;
+          CfOut(cf_error,"","Unable to read the process table - cannot keep process promises\n","");
+          return false;
           }
        break;
 
@@ -929,6 +968,8 @@ switch(type)
        INSTALLED_PACKAGE_LISTS = NULL;
        break;
    }
+
+return true;
 }
 
 /*********************************************************************/

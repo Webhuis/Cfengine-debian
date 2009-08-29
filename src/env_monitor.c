@@ -47,7 +47,7 @@
 
 unsigned int HISTOGRAM[CF_OBSERVABLES][7][CF_GRAINS];
 
-int HISTO = false;
+int HISTO = true;
 
 /* persistent observations */
 
@@ -317,13 +317,6 @@ void StartServer(int argc,char **argv)
   struct Attributes dummyattr;
   struct CfLock thislock;
 
-thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
-
-if (thislock.lock == NULL)
-   {
-   return;
-   }
-
 if ((!NO_FORK) && (fork() != 0))
    {
    CfOut(cf_inform,"","cf-monitord: starting\n");
@@ -334,8 +327,17 @@ if (!NO_FORK)
    {
    ActAsDaemon(0);
    }
+  
+memset(&dummyattr,0,sizeof(dummyattr));
+dummyattr.transaction.ifelapsed = 0;
+dummyattr.transaction.expireafter = 0;
 
-/* Same lock name as cf2 */
+thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
+
+if (thislock.lock == NULL)
+   {
+   return;
+   }
 
 WritePID("cf-monitor.pid");
 
@@ -459,6 +461,11 @@ Debug("========================= GET Q ==============================\n");
 
 ENTROPIES = NULL;
 
+for (i = 0; i < CF_OBSERVABLES; i++)
+   {
+   THIS[i] = 0.0;
+   }
+
 GatherProcessData();
 GatherCPUData();
 GatherLoadData(); 
@@ -515,8 +522,23 @@ for (i = 0; i < CF_OBSERVABLES; i++)
    newvals.Q[i].q = THIS[i];
    LOCALAV.Q[i].q = THIS[i];
 
-   /* Periodic */
-       
+   /* Overflow protection */
+
+   if (currentvals->Q[i].expect < 0)
+      {
+      currentvals->Q[i].expect = 0;
+      }
+   
+   if (currentvals->Q[i].q < 0)
+      {
+      currentvals->Q[i].q = 0;
+      }
+
+   if (currentvals->Q[i].var < 0)
+      {
+      currentvals->Q[i].var = 0;
+      }
+
    This[i] = RejectAnomaly(THIS[i],currentvals->Q[i].expect,currentvals->Q[i].var,LOCALAV.Q[i].expect,LOCALAV.Q[i].var);
 
    Debug("Current %s.q %lf\n",name,currentvals->Q[i].q);
@@ -530,12 +552,21 @@ for (i = 0; i < CF_OBSERVABLES; i++)
    
    delta2 = (This[i] - currentvals->Q[i].expect)*(This[i] - currentvals->Q[i].expect);
 
-   newvals.Q[i].var = WAverage(delta2,currentvals->Q[i].var,WAGE);
-   LOCALAV.Q[i].var = WAverage(newvals.Q[i].var,LOCALAV.Q[i].var,ITER);
+   if (currentvals->Q[i].var > delta2*2.0)
+      {
+      /* Clean up past anomalies */
+      newvals.Q[i].var = delta2;
+      LOCALAV.Q[i].var = WAverage(newvals.Q[i].var,LOCALAV.Q[i].var,ITER);
+      }
+   else
+      {
+      newvals.Q[i].var = WAverage(delta2,currentvals->Q[i].var,WAGE);
+      LOCALAV.Q[i].var = WAverage(newvals.Q[i].var,LOCALAV.Q[i].var,ITER);
+      }
 
-   CfOut(cf_verbose,"","New %s.q %lf\n",name,newvals.Q[i].q);
-   CfOut(cf_verbose,"","New %s.var %lf\n",name,newvals.Q[i].var);
-   CfOut(cf_verbose,"","New %s.ex %lf\n",name,newvals.Q[i].expect);
+   CfOut(cf_verbose,"","New[%d] %s.q %lf\n",i,name,newvals.Q[i].q);
+   CfOut(cf_verbose,"","New[%d] %s.var %lf\n",i,name,newvals.Q[i].var);
+   CfOut(cf_verbose,"","New[%d] %s.ex %lf\n",i,name,newvals.Q[i].expect);
 
    CfOut(cf_verbose,"","%s = %lf -> (%lf#%lf) local [%lf#%lf]\n",name,This[i],newvals.Q[i].expect,sqrt(newvals.Q[i].var),LOCALAV.Q[i].expect,sqrt(LOCALAV.Q[i].var));
 
@@ -546,11 +577,7 @@ for (i = 0; i < CF_OBSERVABLES; i++)
    }
    
 UpdateAverages(t,newvals);
- 
-if (WAGE > CFGRACEPERIOD)
-   {
-   UpdateDistributions(t,currentvals);  /* Distribution about mean */
-   }
+UpdateDistributions(t,currentvals);  /* Distribution about mean */
  
 return newvals;
 }
@@ -574,7 +601,6 @@ if (++LDT_POS >= LDT_BUFSIZE)
       }
    }
 
-  
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
    /* Note AVG should contain n+1 but not SUM, hence funny increments */
@@ -717,6 +743,7 @@ for (i = 0; i < CF_OBSERVABLES; i++)
          }
       }
 
+   /* Not using these for now
    snprintf(buff,CF_MAXVARSIZE,"ldtbuf_%s=%s",name,ldt_buff);
    AppendItem(&classlist,buff,"");
 
@@ -725,6 +752,7 @@ for (i = 0; i < CF_OBSERVABLES; i++)
    
    snprintf(buff,CF_MAXVARSIZE,"ldtlimit_%s=%.2f",name,anomaly_chi_limit[i]);
    AppendItem(&classlist,buff,"");
+   */
    }
 
 SetMeasurementPromises(&classlist);
@@ -815,7 +843,7 @@ if (strstr(arrival,"proto TCP") || strstr(arrival,"ack"))
    
     switch (flag)
        {
-       case 'S': Debug("%1.1f: TCP new connection from %s to %s - i am %s\n",ITER,src,dest,VIPADDRESS);
+       case 'S': Debug("%1.1lf: TCP new connection from %s to %s - i am %s\n",ITER,src,dest,VIPADDRESS);
            if (isme_dest)
               {
               THIS[ob_tcpsyn_in]++;
@@ -828,7 +856,7 @@ if (strstr(arrival,"proto TCP") || strstr(arrival,"ack"))
               }       
            break;
            
-       case 'F': Debug("%1.1f: TCP end connection from %s to %s\n",ITER,src,dest);
+       case 'F': Debug("%1.1lf: TCP end connection from %s to %s\n",ITER,src,dest);
            if (isme_dest)
               {
               THIS[ob_tcpfin_in]++;
@@ -841,7 +869,7 @@ if (strstr(arrival,"proto TCP") || strstr(arrival,"ack"))
               }       
            break;
            
-       default: Debug("%1.1f: TCP established from %s to %s\n",ITER,src,dest);
+       default: Debug("%1.1lf: TCP established from %s to %s\n",ITER,src,dest);
            
            if (isme_dest)
               {
@@ -865,7 +893,7 @@ else if (strstr(arrival,".53"))
    isme_dest = IsInterfaceAddress(dest);
    isme_src = IsInterfaceAddress(src);
    
-   Debug("%1.1f: DNS packet from %s to %s\n",ITER,src,dest);
+   Debug("%1.1lf: DNS packet from %s to %s\n",ITER,src,dest);
    if (isme_dest)
       {
       THIS[ob_dns_in]++;
@@ -885,7 +913,7 @@ else if (strstr(arrival,"proto UDP"))
    isme_dest = IsInterfaceAddress(dest);
    isme_src = IsInterfaceAddress(src);
    
-   Debug("%1.1f: UDP packet from %s to %s\n",ITER,src,dest);
+   Debug("%1.1lf: UDP packet from %s to %s\n",ITER,src,dest);
    if (isme_dest)
       {
       THIS[ob_udp_in]++;
@@ -905,7 +933,7 @@ else if (strstr(arrival,"proto ICMP"))
    isme_dest = IsInterfaceAddress(dest);
    isme_src = IsInterfaceAddress(src);
    
-   Debug("%1.1f: ICMP packet from %s to %s\n",ITER,src,dest);
+   Debug("%1.1lf: ICMP packet from %s to %s\n",ITER,src,dest);
    
    if (isme_dest)
       {
@@ -920,7 +948,7 @@ else if (strstr(arrival,"proto ICMP"))
    }
 else
    {
-   Debug("%1.1f: Miscellaneous undirected packet (%.100s)\n",ITER,arrival);
+   Debug("%1.1lf: Miscellaneous undirected packet (%.100s)\n",ITER,arrival);
    
    THIS[ob_tcpmisc_in]++;
    
@@ -1073,7 +1101,7 @@ while (!feof(fp))
    THIS[index] = dq;
    LASTQ[index] = q;
 
-   CfOut(cf_verbose,"","Set %s=%d to %.1f after %d 100ths of a second \n",OBS[index][1],index,q,total_time);         
+   CfOut(cf_verbose,"","Set %s=%d to %.1lf after %d 100ths of a second \n",OBS[index][1],index,THIS[index],total_time);         
    }
 
 fclose(fp);
@@ -1427,11 +1455,12 @@ if (!OpenDB(AVDB,&dbp))
 
 CfOut(cf_inform,"","Updated averages at %s\n",timekey);
 
-WriteDB(dbp,timekey,&value,sizeof(struct Averages));
+//WriteDB(dbp,timekey,&value,sizeof(struct Averages));
+
+WriteDB(dbp,timekey,&newvals,sizeof(struct Averages));
 WriteDB(dbp,"DATABASE_AGE",&AGE,sizeof(double)); 
 
 dbp->close(dbp,0);
-
 HistoryUpdate(newvals);
 }
 
@@ -1441,15 +1470,15 @@ void UpdateDistributions(char *timekey,struct Averages *av)
 
 { int position; 
   int day,i,time_to_update = true;
+  FILE *fp;
+  char filename[CF_BUFSIZE];
  
 /* Take an interval of 4 standard deviations from -2 to +2, divided into CF_GRAINS
    parts. Centre each measurement on CF_GRAINS/2 and scale each measurement by the
    std-deviation for the current time.
  */
-if (HISTO)
+if (HISTO && IsDefinedClass("Min40_45"))
    {
-   time_to_update = (int) (3600.0*rand()/(RAND_MAX+1.0)) > 2400;
-   
    day = Day2Number(timekey);
    
    for (i = 0; i < CF_OBSERVABLES; i++)
@@ -1462,36 +1491,31 @@ if (HISTO)
          }
       }
    
-   if (time_to_update)
+      
+   snprintf(filename,CF_BUFSIZE,"%s/state/histograms",CFWORKDIR);
+   
+   if ((fp = fopen(filename,"w")) == NULL)
       {
-      FILE *fp;
-      char filename[CF_BUFSIZE];
-      
-      snprintf(filename,CF_BUFSIZE,"%s/state/histograms",CFWORKDIR);
-      
-      if ((fp = fopen(filename,"w")) == NULL)
-         {
-         CfOut(cf_error,"fopen","Unable to save histograms");
-         return;
-         }
-      
-      for (position = 0; position < CF_GRAINS; position++)
-         {
-         fprintf(fp,"%u ",position);
-         
-         for (i = 0; i < CF_OBSERVABLES; i++)
-            {
-            for (day = 0; day < 7; day++)
-               {
-               fprintf(fp,"%u ",HISTOGRAM[i][day][position]);
-               }
-            }
-         fprintf(fp,"\n");
-         }
-      
-      fclose(fp);
+      CfOut(cf_error,"fopen","Unable to save histograms");
+      return;
       }
-   }
+   
+   for (position = 0; position < CF_GRAINS; position++)
+      {
+      fprintf(fp,"%u ",position);
+      
+      for (i = 0; i < CF_OBSERVABLES; i++)
+         {
+         for (day = 0; day < 7; day++)
+            {
+            fprintf(fp,"%u ",HISTOGRAM[i][day][position]);
+            }
+         }
+      fprintf(fp,"\n");
+      }
+   
+   fclose(fp);
+      }
 }
 
 /*****************************************************************************/
@@ -1658,13 +1682,13 @@ void SetVariable(char *name,double value,double average,double stddev,struct Ite
 
 { char var[CF_BUFSIZE];
 
-sprintf(var,"value_%s=%d",name,(int)value);
+snprintf(var,CF_MAXVARSIZE,"value_%s=%.0lf",name,value);
 AppendItem(classlist,var,"");
 
-sprintf(var,"av_%s=%1.1f",name,average);
+snprintf(var,CF_MAXVARSIZE,"av_%s=%.2lf",name,average);
 AppendItem(classlist,var,"");
 
-sprintf(var,"dev_%s=%1.1f",name,stddev);
+snprintf(var,CF_MAXVARSIZE,"dev_%s=%.2lf",name,stddev);
 AppendItem(classlist,var,""); 
 }
 
@@ -1698,6 +1722,11 @@ double RejectAnomaly(double new,double average,double variance,double localav,do
 if (average == 0)
    {
    return new;
+   }
+
+if (new > big_number*4.0)
+   {
+   return 0.0;
    }
 
 if (new > big_number)

@@ -1,0 +1,204 @@
+<html>  <head>    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />    <title>      Cfengine Site Policy Summary (version 1.2.3)    </title>    <link rel="stylesheet" href="/cf_enterprise.css" type="text/css" media="screen" />  </head>  <body><h1>Cfengine Site Policy Summary (version 1.2.3)</h1><p><a name="bundle_test"></a><div id="bundle"><table class=border><tr><td><h2> Bundle <span class="bodytype">agent</span> <span class="bodyname">test</span>
+ <tr><td> ARGS:</td></tr>
+
+<tr><td><table class="border"><tr><td><tr><td><a name="type_vars"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_20"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_test">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">vars</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'hosts'</b> make the promise to default promisee 'cf-agent' (about vars)...
+
+<br><span class="lval">........................slist</span> => <span class="rval"> {'slogans.iu.hio.no','eternity.iu.hio.no','nexus.iu.hio.no'}</span> , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>test</b> (type agent) in '<i>../tests/units/unit_selectservers.cf</i>' near line 20</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_24"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_test">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">vars</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'up_servers'</b> make the promise to default promisee 'cf-agent' (about vars)...
+
+<br><span class="lval">........................int</span> => 0 , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>test</b> (type agent) in '<i>../tests/units/unit_selectservers.cf</i>' near line 24</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td><a name="type_classes"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_28"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_test">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">classes</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'someone_alive'</b> make the promise to default promisee 'cf-agent' (about classes)...
+
+<br><span class="lval">........................expression</span> => isgreaterthan($(up_servers),0,)<p><small>Promise (version 1.2.3) belongs to bundle <b>test</b> (type agent) in '<i>../tests/units/unit_selectservers.cf</i>' near line 28</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_30"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_test">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">classes</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'i_am_a_server'</b> make the promise to default promisee 'cf-agent' (about classes)...
+
+<br><span class="lval">........................expression</span> => regarray(up_servers,$(host)|$(fqhost),)<p><small>Promise (version 1.2.3) belongs to bundle <b>test</b> (type agent) in '<i>../tests/units/unit_selectservers.cf</i>' near line 30</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td><a name="type_reports"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_36"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_test">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">reports</span>, <a href="#class_context">context</a> is <span class="class">someone_alive</span> <br><hr>
+
+Resource object <b>'Number of active servers $(up_servers)'</b> make the promise to default promisee 'cf-agent' (about reports)...
+
+<br><span class="lval">........................action</span> =>  <span class="bodytype">action</span> <a href="#body_always"><span class="bodyname">always</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................ifelapsed</span> => '<span class="rval">0'</span> if sub-body context <span class="class">any</span>
+ , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>test</b> (type agent) in '<i>../tests/units/unit_selectservers.cf</i>' near line 36</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_38"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_test">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">reports</span>, <a href="#class_context">context</a> is <span class="class">someone_alive</span> <br><hr>
+
+Resource object <b>'First server $(alive_servers[0]) fails over to $(alive_servers[1])'</b> make the promise to default promisee 'cf-agent' (about reports)...
+
+<p><small>Promise (version 1.2.3) belongs to bundle <b>test</b> (type agent) in '<i>../tests/units/unit_selectservers.cf</i>' near line 38</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></h2></table></div>
+<a name="bundle_testbundle"></a><div id="bundle"><table class=border><tr><td><h2> Bundle <span class="bodytype">agent</span> <span class="bodyname">testbundle</span>
+ <tr><td> ARGS:</td></tr>
+
+<tr><td><table class="border"><tr><td><tr><td><a name="type_vars"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_79"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_testbundle">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">vars</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'remote'</b> make the promise to default promisee 'cf-agent' (about vars)...
+
+<br><span class="lval">........................string</span> => <remote scalar> , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_selectservers.cf</i>' near line 79</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td><a name="type_reports"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_85"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_testbundle">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">reports</span>, <a href="#class_context">context</a> is <span class="class">linux</span> <br><hr>
+
+Resource object <b>'Receive value $(remote)'</b> make the promise to default promisee 'cf-agent' (about reports)...
+
+<p><small>Promise (version 1.2.3) belongs to bundle <b>testbundle</b> (type agent) in '<i>../tests/units/unit_selectservers.cf</i>' near line 85</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></h2></table></div>
+<a name="bundle_access_rules"></a><div id="bundle"><table class=border><tr><td><h2> Bundle <span class="bodytype">server</span> <span class="bodyname">access_rules</span>
+ <tr><td> ARGS:</td></tr>
+
+<tr><td><table class="border"><tr><td><tr><td><a name="type_vars"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_selectservers_cf_108"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_access_rules">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">vars</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'localvar'</b> make the promise to default promisee 'cf-server' (about vars)...
+
+<br><span class="lval">........................string</span> => literal string , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>access_rules</b> (type server) in '<i>../tests/units/unit_selectservers.cf</i>' near line 108</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+<tr><td><a name="type_access"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="test_scalar"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_access_rules">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">access</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'This is a $(localvar) for remote access'</b> make the promise to default promisee 'cf-server' (about access)...
+
+<br><span class="lval">........................handle</span> => test_scalar , if body <a href="#class_context">context</a> any
+<br><span class="lval">........................resource_type</span> => literal , if body <a href="#class_context">context</a> any
+<br><span class="lval">........................admit</span> => <span class="rval"> {'127.0.0.1'}</span> , if body <a href="#class_context">context</a> any
+<p><small>Promise (version 1.2.3) belongs to bundle <b>access_rules</b> (type server) in '<i>../tests/units/unit_selectservers.cf</i>' near line 114</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></h2></table></div>
+<h1>All Bodies</h1><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_control"></a> <span class="bodytype">common</span> <a href="#body_control"><span class="bodyname">control</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................bundlesequence</span> => '<span class="rval"> {'test'}'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_always"></a> <span class="bodytype">action</span> <a href="#body_always"><span class="bodyname">always</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................ifelapsed</span> => '<span class="rval">0'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_control"></a> <span class="bodytype">common</span> <a href="#body_control"><span class="bodyname">control</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................bundlesequence</span> => '<span class="rval"> {'testbundle'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................version</span> => '<span class="rval">1.2.3'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_control"></a> <span class="bodytype">server</span> <a href="#body_control"><span class="bodyname">control</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................allowconnects</span> => '<span class="rval"> {'127.0.0.1','::1'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................allowallconnects</span> => '<span class="rval"> {'127.0.0.1','::1'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................trustkeysfrom</span> => '<span class="rval"> {'127.0.0.1','::1'}'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................allowusers</span> => '<span class="rval"> {'mark'}'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p></div></body></html>
