@@ -1,5 +1,6 @@
 to fix the name of /usr/share/<packagename> to cfengine3 rather than
 cfengine
+
 --- a/configure.ac
 +++ b/configure.ac
 @@ -16,7 +16,7 @@

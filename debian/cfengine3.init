@@ -45,7 +45,7 @@ DESC=cfengine3
 CFEXECD_DAEMON=/usr/sbin/cf-execd
 CFSERVD_DAEMON=/usr/sbin/cf-serverd
 CFMONITORD_DAEMON=/usr/sbin/cf-monitord
-PIDROOT=/var/lib/cfengine3
+PIDROOT=/var/run
 
 # Return-status
 RETVAL=0
@@ -175,8 +175,8 @@ case "$1" in
             *) exit 0;;
         esac
    
-		if [ ! -f /var/lib/cfengine3/inputs/promises.cf ]; then
-			log_daemon_msg "\nSkipping cfengine3, /var/lib/cfengine3/inputs/promises.cf missing"
+		if [ ! -f /etc/cfengine3/promises.cf ]; then
+			log_daemon_msg "\nSkipping cfengine3, /etc/cfengine3/promises.cf missing"
 			log_end_msg 0
 			exit 0
 		fi
@@ -186,13 +186,13 @@ case "$1" in
             start_server $CFMONITORD_DAEMON 
             running $CFMONITORD_DAEMON || RETVAL=1
         fi
-        if [ "$RUN_CFEXECD" = "1" ]; then
-            start_server $CFEXECD_DAEMON
-            running $CFEXECD_DAEMON || RETVAL=1
-        fi
         if [ "$RUN_CFSERVD" = "1" ]; then
             start_server $CFSERVD_DAEMON
             running $CFSERVD_DAEMON || RETVAL=1
+        fi
+        if [ "$RUN_CFEXECD" = "1" ]; then
+            start_server $CFEXECD_DAEMON
+            running $CFEXECD_DAEMON || RETVAL=1
         fi
         log_end_msg $RETVAL
         ;;
@@ -204,14 +204,14 @@ case "$1" in
                 stop_server $CFMONITORD_DAEMON || RETVAL=1
             fi
         fi
-        if [ "$RUN_CFEXECD" = "1" ]; then
-            if running $CFEXECD_DAEMON; then
-                stop_server $CFEXECD_DAEMON || RETVAL=1
-            fi
-        fi
         if [ "$RUN_CFSERVD" = "1" ]; then
             if running $CFSERVD_DAEMON; then
                 stop_server $CFSERVD_DAEMON || RETVAL=1
+            fi
+        fi
+        if [ "$RUN_CFEXECD" = "1" ]; then
+            if running $CFEXECD_DAEMON; then
+                stop_server $CFEXECD_DAEMON || RETVAL=1
             fi
         fi
         log_end_msg $RETVAL

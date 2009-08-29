@@ -1,10 +1,13 @@
 some docs don't need to be distributed so we will remove them, we will also remove
-cf-promise.8 because it's an empty manpage, we will use cf-promises.8 instead
+cf-promise.8 because it's an empty manpage, we will use cf-promises.8 instead.
+Additionally all tests/ are removed, they don't are docs at all
+
 --- a/Makefile.am
 +++ b/Makefile.am
 @@ -1,10 +1,10 @@
  
- SUBDIRS = pub src tests docs inputs
+-SUBDIRS = pub src tests docs inputs
++SUBDIRS = pub src docs inputs
  
 -EXTRA_DIST = acconfig.h COPYING ChangeLog INSTALL NEWS README LICENSE
 +EXTRA_DIST = acconfig.h ChangeLog

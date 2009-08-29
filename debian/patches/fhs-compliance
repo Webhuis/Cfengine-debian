@@ -1,0 +1,29 @@
+A patch to implement various things to be FHS (and Debian policy)
+compliant: PID files will go to /var/run and the configuration files
+will go to /etc/cfengine3 (same as we did with cfengine2).
+
+That symlink is created by debian/links but we need to remove the
+actual creation of the inputs dir any cf-* binary will fail
+
+--- a/src/generic_agent.c
++++ b/src/generic_agent.c
+@@ -359,8 +359,9 @@
+ 
+    snprintf(HASHDB,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_CHKDB);
+ 
+-   snprintf(vbuff,CF_BUFSIZE,"%s/inputs/update.conf",CFWORKDIR);
++ /*  snprintf(vbuff,CF_BUFSIZE,"%s/inputs/update.conf",CFWORKDIR);
+    MakeParentDirectory(vbuff,force);
++  */
+    snprintf(vbuff,CF_BUFSIZE,"%s/bin/cf-agent -D from_cfexecd",CFWORKDIR);
+    MakeParentDirectory(vbuff,force);
+    snprintf(vbuff,CF_BUFSIZE,"%s/outputs/spooled_reports",CFWORKDIR);
+@@ -1588,7 +1589,7 @@
+ 
+ { FILE *fp;
+ 
+-snprintf(PIDFILE,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,filename);
++snprintf(PIDFILE,CF_BUFSIZE-1,"/var/run/%s",filename);
+ 
+ if ((fp = fopen(PIDFILE,"w")) == NULL)
+    {
