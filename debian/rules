@@ -75,8 +75,10 @@ install: build
                 $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/
 	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/inputs \
                 $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/examples
+	# remove the README because it does not contain anything useful
+	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/README	
 	# clean the not-needed static libraries
-	/bin/rm $(CURDIR)/debian/cfengine3/usr/lib/libpromises.*a
+	/bin/rm -rf $(CURDIR)/debian/cfengine3/usr/lib
 
 # Build architecture-independent files here.
 binary-indep: install
@@ -86,8 +88,8 @@ binary-indep: install
 binary-arch: install
 	dh_testdir
 	dh_testroot
-#	dh_installchangelogs ChangeLog
-	dh_installdocs -XNEWS -XREADME -XINSTALL
+	dh_installchangelogs
+	dh_installdocs
 	dh_installexamples
 #	dh_install
 #	dh_installmenu
