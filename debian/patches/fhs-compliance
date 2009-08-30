@@ -1,6 +1,7 @@
 A patch to implement various things to be FHS (and Debian policy)
-compliant: PID files will go to /var/run and the configuration files
-will go to /etc/cfengine3 (same as we did with cfengine2).
+compliant: PID files will go to /var/run; the configuration files
+will go to /etc/cfengine3 (same as we did with cfengine2); logs to
+/var/log
 
 That symlink is created by debian/links but we need to remove the
 actual creation of the inputs dir any cf-* binary will fail
@@ -18,6 +19,15 @@ actual creation of the inputs dir any cf-* binary will fail
     snprintf(vbuff,CF_BUFSIZE,"%s/bin/cf-agent -D from_cfexecd",CFWORKDIR);
     MakeParentDirectory(vbuff,force);
     snprintf(vbuff,CF_BUFSIZE,"%s/outputs/spooled_reports",CFWORKDIR);
+@@ -997,7 +998,7 @@
+    FatalError("Uname couldn't get kernel name info!!\n");
+    }
+  
+-snprintf(LOGFILE,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
++snprintf(LOGFILE,CF_BUFSIZE,"/var/log/cfagent.%s.log",VSYSNAME.nodename);
+ VSETUIDLOG = strdup(LOGFILE); 
+  
+ snprintf(vbuff,CF_BUFSIZE,"%s/.",CFWORKDIR);
 @@ -1588,7 +1589,7 @@
  
  { FILE *fp;
@@ -27,3 +37,36 @@ actual creation of the inputs dir any cf-* binary will fail
  
  if ((fp = fopen(PIDFILE,"w")) == NULL)
     {
+--- a/src/agent.c
++++ b/src/agent.c
+@@ -280,7 +280,7 @@
+ CFA_MAXTHREADS = 30;
+ EDITFILESIZE = 100000;
+ 
+-snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
++snprintf(filename,CF_BUFSIZE,"/var/log/cfagent.%s.log",VSYSNAME.nodename);
+ 
+ if ((fp = fopen(filename,"a")) == NULL)
+    {
+--- a/src/files_interfaces.c
++++ b/src/files_interfaces.c
+@@ -312,7 +312,7 @@
+    return;
+    }
+ 
+-snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
++snprintf(filename,CF_BUFSIZE,"/var/log/cfagent.%s.log",VSYSNAME.nodename);
+ 
+ if (!LoadFileAsItemList(&VSETUIDLIST,filename,a,pp))
+    {
+--- a/src/transaction.c
++++ b/src/transaction.c
+@@ -152,7 +152,7 @@
+    sum = (CF_MACROALPHABET * sum + cc_operand[i]) % CF_HASHTABLESIZE;
+    }
+ 
+-snprintf(cflog,CF_BUFSIZE,"%s/cf3.%.40s.runlog",CFWORKDIR,host);
++snprintf(cflog,CF_BUFSIZE,"/var/log/cf3.%.40s.runlog",host);
+ snprintf(cflock,CF_BUFSIZE,"lock.%.100s.%s.%.100s_%d_%s",pp->bundle,cc_operator,cc_operand,sum,str_digest);
+ snprintf(cflast,CF_BUFSIZE,"last.%.100s.%s.%.100s_%d_%s",pp->bundle,cc_operator,cc_operand,sum,str_digest);
+ 
