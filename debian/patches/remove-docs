@@ -1,0 +1,17 @@
+remove these docs otherwise dh_installdocs will install them
+ignoring --exclude
+
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1,10 +1,9 @@
+ 
+ SUBDIRS = pub src tests docs inputs
+ 
+-EXTRA_DIST = acconfig.h COPYING ChangeLog INSTALL NEWS README LICENSE
++EXTRA_DIST = acconfig.h
+ 
+ docdir = @docdir@
+-doc_DATA = README ChangeLog INSTALL NEWS
+ 
+ #
+ # Some basic clean ups
