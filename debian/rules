@@ -69,6 +69,15 @@ install: build
 	# Add here commands to install the package into debian/cfengine3.
 	$(MAKE) DESTDIR=$(CURDIR)/debian/cfengine3 install
 
+	# clean the cfengine share directory and copy over the needed files
+	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/*cf
+	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ \
+                $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/
+	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/inputs \
+                $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/examples
+	# clean the not-needed static libraries
+	/bin/rm $(CURDIR)/debian/cfengine3/usr/lib/libpromises.*a
+
 # Build architecture-independent files here.
 binary-indep: install
 # We have nothing to do by default.
@@ -77,8 +86,8 @@ binary-indep: install
 binary-arch: install
 	dh_testdir
 	dh_testroot
-	dh_installchangelogs ChangeLog
-	dh_installdocs
+#	dh_installchangelogs ChangeLog
+	dh_installdocs -XNEWS -XREADME -XINSTALL
 	dh_installexamples
 #	dh_install
 #	dh_installmenu

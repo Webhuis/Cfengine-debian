@@ -5,5 +5,5 @@ version=3
 # *before* the official version, which does not contain any letter, so we need
 # to adapt our version otherwise uscan will believe, for example, that 3.0.2 is
 # older than 3.0.2b3
-opts="uversionmangle=s/(\w\d)/~$1/" \
+opts="uversionmangle=s/([a-z]\d)/~$1/i" \
 http://www.cfengine.org/pages/downloads /tarballs/cfengine-(.*)\.tar\.gz
