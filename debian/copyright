@@ -9,8 +9,12 @@ Copyright: 2008, Cfengine AS
 License: GPL-3
 
 Files: pub/getopt*
-Copyright: 2008, Cfengine AS
+Copyright: 1987-1994, Free Software Foundation, Inc.
 License LGPL-2+
+
+Files: pub/snprintf.c
+Copyright: 1999, Mark Martinec
+License: Frontier Artistic License
 
 Files: debian/*
 Copyright: 2009, Antonio Radici <antonio@dyne.org>
@@ -40,3 +44,12 @@ License: LGPL-2+
     later version.
     A copy of the LGPL-2 can be found at /usr/share/common-licenses/LGPL-2 on
     any Debian system.
+
+License: Frontier Artistic License
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the "Frontier Artistic License".
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty
+    of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    A copy of the Frontier Artistic License can be found at 
+    http://spinwardstars.com/frontier/fal.html

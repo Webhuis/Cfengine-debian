@@ -71,6 +71,10 @@ install: build
 
 	# clean the cfengine share directory and copy over the needed files
 	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/*cf
+	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/NEWS
+	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/INSTALL
+	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/README
+	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ChangeLog
 	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ \
                 $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/
 	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/inputs \
