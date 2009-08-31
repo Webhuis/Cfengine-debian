@@ -2,3 +2,5 @@ config.guess
 config.sub
 debian/stamp-patched
 .pc/
+build-stamp
+docs/*.8
