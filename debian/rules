@@ -34,7 +34,6 @@ endif
 ifneq "$(wildcard /usr/share/misc/config.guess)" ""
 	cp -f /usr/share/misc/config.guess config.guess
 endif
-	autoreconf -vfi
 	./configure $(CROSS) --prefix=/usr --with-sql=no --with-workdir=/var/lib/cfengine3 --mandir=\$${prefix}/share/man --infodir=\$${prefix}/share/info CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs"
 
 
@@ -79,8 +78,6 @@ install: build
                 $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/
 	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/inputs \
                 $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/examples
-	# remove the README because it does not contain anything useful
-	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/README	
 	# clean the not-needed static libraries
 	/bin/rm -rf $(CURDIR)/debian/cfengine3/usr/lib
 
