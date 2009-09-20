@@ -4,3 +4,6 @@ debian/stamp-patched
 .pc/
 build-stamp
 docs/*.8
+src/*o
+tests/file_operands/Makefile
+tests/units/Makefile
