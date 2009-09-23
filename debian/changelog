@@ -1,5 +1,5 @@
-cfengine3 (3.0.2-1) unstable; urgency=low
+cfengine3 (3.0.2+dfsg-1) unstable; urgency=low
 
   * Initial release (Closes: #518059)
 
- -- Antonio Radici <antonio@dyne.org>  Sat, 29 Aug 2009 10:07:19 +0100
+ -- Antonio Radici <antonio@dyne.org>  Wed, 23 Sep 2009 20:52:47 +0100
