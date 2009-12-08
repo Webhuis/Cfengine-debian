@@ -11,6 +11,7 @@ cfengine3 (3.0.2+dfsg-2) unstable; urgency=low
       compliant paths (Closes: 552144)
     + remove-man-errors: fix for some minor typos (Closes: 552473)
     + rename-doesnt-fail: prevent failures if rename fails (Closes: 555932)
+    + fix-error-typos: to fix a small typo in cf-agent, so lintian is happy
   * debian/README.Debian: 
     + warn people to modify site.cf before starting the daemons
 

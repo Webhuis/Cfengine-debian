@@ -3,3 +3,4 @@ cf-monitor-pid
 fhs-compliance
 fix-examples-paths
 rename-doesnt-fail
+fix-error-typos
