@@ -1,8 +1,11 @@
 cfengine3 (3.0.2+dfsg-2) unstable; urgency=low
 
-  * debian/control: adding missing full stops
+  * debian/control: 
+    + adding missing full stops (Closes: 550108)
+    + updating my mail to antonio@debian.org
+    + adding a B-D to libpcre3-dev (Closes: 552520)
 
- -- Antonio Radici <antonio@dyne.org>  Sun, 11 Oct 2009 18:47:00 +0100
+ -- Antonio Radici <antonio@debian.org>  Tue, 08 Dec 2009 16:19:24 +0000
 
 cfengine3 (3.0.2+dfsg-1) unstable; urgency=low
 
