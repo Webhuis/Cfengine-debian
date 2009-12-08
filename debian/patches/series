@@ -2,3 +2,4 @@ remove-man-errors
 cf-monitor-pid
 fhs-compliance
 fix-examples-paths
+rename-doesnt-fail
