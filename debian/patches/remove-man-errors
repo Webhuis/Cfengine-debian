@@ -12,6 +12,21 @@ file; I'm removing all the man errors from here
        }
     else
        {
+@@ -1538,12 +1538,12 @@
+ printf(".SH SYNOPSIS:\n\n %s [options]\n\n.SH DESCRIPTION:\n\n%s\n",GetArg0(component),id);
+ 
+ printf(".B cfengine\n"
+-       "is a self-healing configuration and change management based system. You can think of"
++       "is a self-healing configuration and change management based system. You can think of \n"
+        ".B cfengine\n"
+        "as a very high level language, much higher level than Perl or shell. A"
+        "single statement is called a promise, and compliance can result in many hundreds of files"
+        "being created, or the permissions of many hundreds of"
+-       "files being set. The idea of "
++       "files being set. The idea of \n"
+        ".B cfengine\n"
+        "is to create a one or more sets of configuration files which will"
+        "classify and describe the setup of every host in a network.\n");
 @@ -1554,7 +1554,7 @@
     {
     if (options[i].has_arg)
