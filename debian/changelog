@@ -7,7 +7,10 @@ cfengine3 (3.0.2+dfsg-2) unstable; urgency=low
     + cfengine2 no longer in Conflicts (Closes: 555479)
   * debian/rules: do not compress .cf files
   * debian/patches:
-     + fix-example-paths added, to adapt examples to our FHS compliant paths
+    + fix-example-paths added, to adapt examples to our FHS 
+      compliant paths (Closes: 552144)
+  * debian/README.Debian: 
+    + warn people to modify site.cf before starting the daemons
 
  -- Antonio Radici <antonio@debian.org>  Tue, 08 Dec 2009 16:19:24 +0000
 

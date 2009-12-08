@@ -14,6 +14,12 @@ proper variables; the daemons won't be started unless there is an
 working you can do:
 
 cp /usr/share/doc/cfengine3/examples/* /etc/cfengine3/
+
+At this point you MUST adapt /etc/cfengine3/site.cf to your needs, you may want
+to remove the blank auth for the user 'mark' (the author of cfengine), and
+anything that update your config files
+
+When everything is ready you can start the daemons:
 /etc/init.d/cfengine3 start
 
 *) By default we are not starting any daemon, in most of your installations you
