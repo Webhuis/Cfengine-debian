@@ -106,7 +106,7 @@ binary-arch: install
 	dh_installman
 	dh_link
 	dh_strip --dbg-package=cfengine3-dbg
-	dh_compress
+	dh_compress -X.cf
 	dh_fixperms
 #	dh_perl
 #	dh_makeshlibs

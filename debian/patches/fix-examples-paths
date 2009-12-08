@@ -1,0 +1,47 @@
+The purpose of this patch is to fix all the pats according to what was modified
+by the fhs-compliance patch; see #552144 for more details
+
+I'm also removing the auto-update of the binaries because the debian package is
+supposed to update the binaries, rather than cf-execd itself
+
+--- a/inputs/library.cf
++++ b/inputs/library.cf
+@@ -109,7 +109,7 @@
+ 
+     exec_fix::
+ 
+-      "0,5,10,15,20,25,30,35,40,45,50,55 * * * * /var/cfengine/bin/cf-execd -F";
++      "0,5,10,15,20,25,30,35,40,45,50,55 * * * * /usr/sbin/cf-execd -F";
+ 
+   replace_patterns:
+ 
+--- a/inputs/update.cf
++++ b/inputs/update.cf
+@@ -8,19 +8,12 @@
+ 
+ files:
+ 
+-  "/var/cfengine/inputs" 
++  "/var/lib/cfengine3/inputs"
+ 
+     perms => u_p("600"),
+     copy_from => mycopy("$(master_location)","localhost"),
+     depth_search => recurse("inf"),
+     action => immediate;
+-
+-  "/var/cfengine/bin" 
+-
+-    perms => u_p("700"),
+-    copy_from => mycopy("/usr/local/sbin","localhost"),
+-    depth_search => recurse("inf"),
+-    action => immediate;
+ }
+ 
+ ############################################
+@@ -55,4 +48,4 @@
+ body action immediate
+ {
+ ifelapsed => "1";
+-}
+\ No newline at end of file
++}
