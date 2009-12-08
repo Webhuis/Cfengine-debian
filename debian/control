@@ -12,7 +12,6 @@ Vcs-Git: git://git.debian.org/git/collab-maint/cfengine3.git
 
 Package: cfengine3
 Architecture: any
-Conflicts: cfengine2
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: tool for configuring and maintaining network machines
  Cfengine is a suite of programs for integrated autonomic management 
