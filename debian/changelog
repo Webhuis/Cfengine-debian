@@ -1,5 +1,8 @@
 cfengine3 (3.0.4+dfsg-1) unstable; urgency=low
    * debian/watch: modified to catch the newest versions
+   * debian/control:
+      + removed DMUA
+      + bumped Standards-Version to 3.8.4 (no changed needed)
 
  -- Antonio Radici <antonio@dyne.org>  Fri, 30 Apr 2010 08:11:20 +0100
 
