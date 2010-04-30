@@ -89,13 +89,16 @@ void ShowContext(void)
  /* Text output */
 
 CfOut(cf_verbose,"","");
-  
+
+ptr = SortItemListNames(VHEAP);
+VHEAP = ptr;
+
 if (VERBOSE||DEBUG)
    {
    snprintf(vbuff,CF_BUFSIZE,"Host %s's basic classified context",VFQNAME);
    ReportBanner(vbuff);
    
-   printf("%s  -> Defined hard classes = { ",VPREFIX);
+   printf("%s  -> Defined classes = { ",VPREFIX);
    
    for (ptr = VHEAP; ptr != NULL; ptr=ptr->next)
       {
@@ -120,7 +123,7 @@ CfOut(cf_verbose,"","");
 
 /* HTML output */
 
-
+/*
 fprintf(FREPORT_HTML,"<div id=\"contextclasses\">");
 fprintf(FREPORT_HTML,"<table class=border><tr>");
 fprintf(FREPORT_HTML,"<tr><th colspan=2><h1>Agent's hard context classes</h1></th></tr>\n");
@@ -143,6 +146,7 @@ for (ptr = VNEGHEAP; ptr != NULL; ptr=ptr->next)
    }
 
 fprintf(FREPORT_HTML,"</ul></td></tr></table></div><p>\n");
+*/
 }
 
 /*******************************************************************/
@@ -332,7 +336,10 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
              }
           else
              {
+             fprintf(FREPORT_HTML,"%s",CFH[cfx_rval][cfb]);
              ShowRval(FREPORT_HTML,cp->rval,cp->type); /* literal */
+             fprintf(FREPORT_HTML,"%s",CFH[cfx_rval][cfe]);
+
              ShowRval(FREPORT_TXT,cp->rval,cp->type); /* literal */
              }
           break;
@@ -364,7 +371,7 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
    if (cp->type != CF_FNCALL)
       {
       Indent(indent);
-      fprintf(FREPORT_HTML," , if body <a href=\"#class_context\">context</a> %s\n",cp->classes);
+      fprintf(FREPORT_HTML," , if body <a href=\"#class_context\">context</a> <span class=\"context\">%s</span>\n",cp->classes);
       fprintf(FREPORT_TXT," if body context %s\n",cp->classes);
       }
      
@@ -375,11 +382,13 @@ var = 0;
 val = 0;
 last = 0;
 
+
+#ifdef HAVE_LIBCFNOVA
 lastseen = GetPromiseCompliance(pp,&val,&av,&var,&last);
 
 if (lastseen) /* This only gives something in Nova or higher */
    {
-   strncpy(vbuff,ctime(&lastseen),CF_MAXVARSIZE);
+   strncpy(vbuff,cf_ctime(&lastseen),CF_MAXVARSIZE);
    Chop(vbuff);
    
    fprintf(FREPORT_HTML,"<hr><p><div id=\"compliance\">Compliance last checked on %s. At that time the system was ",vbuff);
@@ -398,6 +407,9 @@ if (lastseen) /* This only gives something in Nova or higher */
 
    fprintf(FREPORT_HTML," Average compliance %.1lf pm %.1lf percent. </div>",av*100.0,sqrt(var)*100.0);
    }
+#else
+fprintf(FREPORT_HTML,"<hr><p><div id=\"compliance\">Compliance level checking only in Cfengine Nova and above</div>",vbuff);
+#endif
 
 if (pp->audit)
    {

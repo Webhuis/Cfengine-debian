@@ -393,7 +393,7 @@ if (cfdb->rowdata)
 char *EscapeSQL(CfdbConn *cfdb,char *query)
 
 { static char result[CF_BUFSIZE];
- char *spf,*spt;
+  char *spf,*spt;
 
 if (!cfdb->connected)
    {
@@ -430,4 +430,5 @@ return result;
 }
 
 /* EOF */
+
 

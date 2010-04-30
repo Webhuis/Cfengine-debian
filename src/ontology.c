@@ -38,35 +38,38 @@ void AddTopic(struct Topic **list,char *name,char *type)
 
 { struct Topic *tp;
 
-if (TopicExists(*list,name,type))
+if (tp = TopicExists(*list,name,type))
    {
-   CfOut(cf_verbose,"","Topic %s already defined\n",name);
-   return;
+   CfOut(cf_verbose,""," ! Topic %s already defined\n",name);
    }
- 
-if ((tp = (struct Topic *)malloc(sizeof(struct Topic))) == NULL)
+else
    {
-   CfOut(cf_error,"malloc","Memory failure in AddTopic");
-   FatalError("");
-   }
+   if ((tp = (struct Topic *)malloc(sizeof(struct Topic))) == NULL)
+      {
+      CfOut(cf_error,"malloc"," !! Memory failure in AddTopic");
+      FatalError("");
+      }
+   
+   if ((tp->topic_name = strdup(name)) == NULL)
+      {
+      CfOut(cf_error,"malloc"," !! Memory failure in AddTopic");
+      FatalError("");
+      }
+   
+   if ((tp->topic_type = strdup(type)) == NULL)
+      {
+      CfOut(cf_error,"malloc"," !! Memory failure in AddTopic");
+      FatalError("");
+      }
+   
+   tp->topic_comment = NULL;
+   tp->associations = NULL;
+   tp->occurrences = NULL;
+   tp->next = *list;
+   *list = tp;
 
-if ((tp->topic_name = strdup(name)) == NULL)
-   {
-   CfOut(cf_error,"malloc","Memory failure in AddTopic");
-   FatalError("");
+   CF_NODES++;
    }
-
-if ((tp->topic_type = strdup(type)) == NULL)
-   {
-   CfOut(cf_error,"malloc","Memory failure in AddTopic");
-   FatalError("");
-   }
-
-tp->topic_comment = NULL;
-tp->associations = NULL;
-tp->occurrences = NULL;
-tp->next = *list;
-*list = tp;
 }
 
 
@@ -76,47 +79,58 @@ void AddCommentedTopic(struct Topic **list,char *name,char *comment,char *type)
 
 { struct Topic *tp;
 
-if (TopicExists(*list,name,type))
+if (tp = TopicExists(*list,name,type))
    {
-   CfOut(cf_verbose,"","Topic %s already defined\n",name);
-   return;
-   }
- 
-if ((tp = (struct Topic *)malloc(sizeof(struct Topic))) == NULL)
-   {
-   CfOut(cf_error,"malloc","Memory failure in AddTopic");
-   FatalError("");
-   }
+   CfOut(cf_verbose,""," -> Topic %s already defined, ok\n",name);
 
-if ((tp->topic_name = strdup(name)) == NULL)
-   {
-   CfOut(cf_error,"malloc","Memory failure in AddTopic");
-   FatalError("");
-   }
-
-if (comment)
-   {
-   if ((tp->topic_comment = strdup(comment)) == NULL)
+   if (comment && tp->topic_comment == NULL)
       {
-      CfOut(cf_error,"malloc","Memory failure in AddTopic");
-      FatalError("");
+      if ((tp->topic_comment = strdup(comment)) == NULL)
+         {
+         CfOut(cf_error,"malloc","Memory failure in AddTopic");
+         FatalError("");
+         }
       }
    }
 else
    {
-   tp->topic_comment = NULL;
+   if ((tp = (struct Topic *)malloc(sizeof(struct Topic))) == NULL)
+      {
+      CfOut(cf_error,"malloc"," !! Memory failure in AddTopic");
+      FatalError("");
+      }
+   
+   if ((tp->topic_name = strdup(name)) == NULL)
+      {
+      CfOut(cf_error,"malloc"," !! Memory failure in AddTopic");
+      FatalError("");
+      }
+   
+   if (comment)
+      {
+      if ((tp->topic_comment = strdup(comment)) == NULL)
+         {
+         CfOut(cf_error,"malloc","Memory failure in AddTopic");
+         FatalError("");
+         }
+      }
+   else
+      {
+      tp->topic_comment = NULL;
+      }
+   
+   if ((tp->topic_type = strdup(type)) == NULL)
+      {
+      CfOut(cf_error,"malloc","Memory failure in AddTopic");
+      FatalError("");
+      }
+   
+   tp->occurrences = NULL;
+   tp->associations = NULL;
+   tp->next = *list;
+   *list = tp;
+   CF_NODES++;
    }
-
-if ((tp->topic_type = strdup(type)) == NULL)
-   {
-   CfOut(cf_error,"malloc","Memory failure in AddTopic");
-   FatalError("");
-   }
-
-tp->occurrences = NULL;
-tp->associations = NULL;
-tp->next = *list;
-*list = tp;
 }
 
 /*****************************************************************************/
@@ -131,7 +145,7 @@ strncpy(assoc_type,CanonifyName(fwd_name),CF_MAXVARSIZE-1);
 
 if (associates == NULL || associates->item == NULL)
    {
-   CfOut(cf_error,"A topic must have at least one associate in association %s",fwd_name);
+   CfOut(cf_error," !! A topic must have at least one associate in association %s",fwd_name);
    return;
    }
 
@@ -178,7 +192,9 @@ else
 for (rp = associates; rp != NULL; rp=rp->next)
    {
    /* Defer checking until we have whole ontlogy - all types */
+   CfOut(cf_verbose,""," ---> Adding associate '%s'",rp->item);
    IdempPrependRScalar(&(ta->associates),rp->item,rp->type);
+   CF_EDGES++;
    }
 }
 
@@ -190,7 +206,7 @@ void AddOccurrence(struct Occurrence **list,char *reference,struct Rlist *repres
   struct TopRepresentation *tr;
   struct Rlist *rp;
 
-if (!(op = OccurrenceExists(*list,reference,rtype)))
+if ((op = OccurrenceExists(*list,reference,rtype)) == NULL)
    {
    if ((op = (struct Occurrence *)malloc(sizeof(struct Occurrence))) == NULL)
       {
@@ -203,13 +219,15 @@ if (!(op = OccurrenceExists(*list,reference,rtype)))
    op->rep_type = rtype;   
    op->next = *list;
    *list = op;
+   CF_EDGES++;
+   CF_NODES++;
    }
 
 /* Occurrence now exists, so add new subtype promises */
 
 if (represents == NULL)
    {
-   CfOut(cf_error,"","Topic occurrence \"%s\" claims to represent no aspect of its topic, discarding...",reference);
+   CfOut(cf_error,""," !! Topic occurrence \"%s\" claims to represent no aspect of its topic, discarding...",reference);
    return;
    }
 
@@ -226,7 +244,15 @@ char *TypedTopic(char *topic,char *type)
 { static char name[CF_MAXVARSIZE];
 
 Debug("TYPE(%s)/TOPIC(%s)",type,topic);
-snprintf(name,CF_MAXVARSIZE,"%s::%s",type,topic);
+if (type && strlen(type) > 0)
+   {
+   snprintf(name,CF_MAXVARSIZE,"%s::%s",type,topic);
+   }
+else
+   {
+   snprintf(name,CF_MAXVARSIZE,"%s",topic);
+   }
+
 return name;
 }
 
@@ -304,8 +330,6 @@ topic2[0] = '\0';
 DeTypeTopic(ttopic1,topic1,type1);
 DeTypeTopic(ttopic2,topic2,type2);
 
-CfOut(cf_verbose,"","Comparing: (%s)=(%s)\n",topic1,topic2);
-
 if (strlen(type1) > 0 && strlen(type2) > 0)
    {
    if (strcmp(topic1,topic2) == 0 && strcmp(type1,type2) == 0)
@@ -326,56 +350,6 @@ return false;
 
 /*****************************************************************************/
 
-char *GetLongTopicName(CfdbConn *cfdb,struct Topic *list,char *topic_name)
-
-{ struct Topic *tp;
-  static char longname[CF_BUFSIZE];
-  char type[CF_MAXVARSIZE],topic[CF_MAXVARSIZE];
-  int match = false;
- 
-DeTypeTopic(topic_name,topic,type);
-  
-for (tp = list; tp != NULL; tp=tp->next)
-   {
-   if (strlen(type) > 0)
-      {
-      if ((strcmp(topic,tp->topic_name) == 0) && (strcmp(type,tp->topic_type) == 0))
-         {
-         match = true;
-         break;
-         }
-      }
-   else
-      {
-      if (strcmp(topic,tp->topic_name) == 0)
-         {
-         match = true;
-         break;
-         }
-      }
-   }
-
-if (match)
-   {
-   /* deprecate this form snprintf(longname,CF_BUFSIZE,"%s (%s)",tp->comment,topic); */
-   snprintf(longname,CF_BUFSIZE,"%s",topic);
-   }
-
-if (match && cfdb)
-   {
-   return EscapeSQL(cfdb,longname);
-   }
-else
-   {
-   return longname;
-   }
-
-CfOut(cf_error,"","Could not assemble long name for a known topic %s - something funny going on",topic_name);
-return NULL;
-}
-
-/*****************************************************************************/
-
 char *URLHint(char *url)
 
 { char *sp;
@@ -391,7 +365,7 @@ return sp;
 /* Level                                                                     */
 /*****************************************************************************/
 
-int TopicExists(struct Topic *list,char *topic_name,char *topic_type)
+struct Topic *TopicExists(struct Topic *list,char *topic_name,char *topic_type)
 
 { struct Topic *tp;
   char l[CF_BUFSIZE],r[CF_BUFSIZE];
@@ -402,12 +376,12 @@ for (tp = list; tp != NULL; tp=tp->next)
       {
       if (topic_type && strcmp(tp->topic_type,topic_type) != 0)
          {
-         CfOut(cf_inform,"","Topic \"%s\" already exists, but it promises type \"%s\" not \"%s\"\n",topic_name,tp->topic_type,topic_type);
-         return false;         
+         CfOut(cf_inform,""," !! Topic \"%s\" already exists, but it promises type \"%s\" not \"%s\"\n",topic_name,tp->topic_type,topic_type);
+         return NULL;         
          }
       else
          {
-         return true;
+         return tp;
          }
       }
 
@@ -416,11 +390,11 @@ for (tp = list; tp != NULL; tp=tp->next)
    
    if (strcmp(l,r) == 0)
       {
-      CfOut(cf_inform,"","Topic \"%s\" exists with different capitalization \"%s\" this could be a broken promise\n",topic_name,tp->topic_name);
+      CfOut(cf_inform,""," ! Topic \"%s\" exists with different capitalization \"%s\" this could be a broken promise\n",topic_name,tp->topic_name);
       }
    }
 
-return false;
+return NULL;
 }
 
 /*****************************************************************************/
@@ -454,25 +428,34 @@ if (bwd == NULL || (bwd && strlen(bwd) == 0))
 
 for (ta = list; ta != NULL; ta=ta->next)
    {
-   if (strcmp(fwd,ta->fwd_name) == 0)
+   if (fwd && (strcmp(fwd,ta->fwd_name) == 0))
       {
       CfOut(cf_verbose,"","Association %s exists already\n",fwd);
       yfwd = true;
       }
-   else if (fwd)
+   else if (fwd && ta->fwd_name)
       {
       strncpy(l,ToLowerStr(fwd),CF_MAXVARSIZE);
       strncpy(r,ToLowerStr(ta->fwd_name),CF_MAXVARSIZE);
       
       if (strcmp(l,r) == 0)
          {
-         CfOut(cf_error,"","Association \"%s\" exists with different capitalization \"%s\" this could be a broken promise\n",fwd,ta->fwd_name);
+         CfOut(cf_error,""," ! Association \"%s\" exists with different capitalization \"%s\"\n",fwd,ta->fwd_name);
+         yfwd = true;
+         }
+      else
+         {
+         yfwd = false;
          }
       }
-   
-   if (bwd && strcmp(bwd,ta->bwd_name) == 0)
+   else
       {
-      CfOut(cf_verbose,"","Association %s exists already\n",bwd);
+      yfwd = false;
+      }
+
+   if (bwd && (strcmp(bwd,ta->bwd_name) == 0))
+      {
+      CfOut(cf_verbose,""," ! Association %s exists already\n",bwd);
       ybwd = true;
       }
    else if (bwd && ta->bwd_name)
@@ -482,36 +465,28 @@ for (ta = list; ta != NULL; ta=ta->next)
       
       if (strcmp(l,r) == 0)
          {
-         CfOut(cf_inform,"","Association \"%s\" exists with different capitalization \"%s\" this could be a broken promise\n",bwd,ta->bwd_name);
+         CfOut(cf_inform,""," ! Association \"%s\" exists with different capitalization \"%s\"\n",bwd,ta->bwd_name);
          }
+
+      ybwd = true;
+      }
+   else if (!bwd && ta->bwd_name == NULL)
+      {
+      ybwd = true;
+      }
+   else
+      {
+      ybwd = false;
       }
    
-   if (ta->bwd_name && strcmp(fwd,ta->bwd_name) == 0)
+   if (ta->bwd_name && (strcmp(fwd,ta->bwd_name) == 0) && bwd && (strcmp(bwd,ta->fwd_name) == 0))
       {
-      CfOut(cf_inform,"","Association \"%s\" exists already but in opposite orientation\n",fwd);
-      return ta;
-      }
-
-   if (bwd && strcmp(bwd,ta->fwd_name) == 0)
-      {
-      CfOut(cf_inform,"","Association \"%s\" exists already but in opposite orientation\n",bwd);
+      CfOut(cf_inform,""," ! Association \"%s\" exists already but in opposite orientation\n",fwd);
       return ta;
       }
 
    if (yfwd && ybwd)
       {
-      return ta;
-      }
-   
-   if (yfwd && !ybwd)
-      {
-      CfOut(level,"","Association \"%s\" exists but the reverse association is missing\n",fwd);
-      return ta;
-      }
-   
-   if (!yfwd && ybwd)
-      {
-      CfOut(level,"","The reverse association \"%s\" exists but the forward association is missing\n",fwd);
       return ta;
       }
    }

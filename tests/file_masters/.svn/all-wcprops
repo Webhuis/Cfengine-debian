@@ -1,25 +1,25 @@
 K 25
 svn:wc:ra_dav:version-url
 V 58
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters
+/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters
 END
 failsafe.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/failsafe.cf
+/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters/failsafe.cf
 END
 Makefile.in
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/429/trunk/tests/file_masters/Makefile.in
+/projects/cfengine-3/!svn/ver/677/trunk/tests/file_masters/Makefile.in
 END
 promises.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/promises.cf
+/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters/promises.cf
 END
 Makefile.am
 K 25
@@ -31,19 +31,13 @@ update.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/update.cf
+/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters/update.cf
 END
 library.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/414/trunk/tests/file_masters/library.cf
-END
-Makefile
-K 25
-svn:wc:ra_dav:version-url
-V 67
-/projects/cfengine-3/!svn/ver/468/trunk/tests/file_masters/Makefile
+/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters/library.cf
 END
 README
 K 25

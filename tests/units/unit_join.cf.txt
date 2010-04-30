@@ -1,0 +1,41 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle test in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'mylist' (implicit) if context is any
+
+              slist =>  {'one','two','three','four','five'}       if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_join.cf' near line 24
+
+
+      vars promise by 'scalar' (implicit) if context is any
+
+             string =>        if body context any
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_join.cf' near line 26
+
+
+   TYPE: reports
+
+      reports promise by 'Concatenated $(scalar)' (implicit) if context is linux
+
+            Promise (version not specified) belongs to bundle 'test' (type agent) in file '../tests/units/unit_join.cf' near line 32
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'test'} if sub-body context any
+   }
+

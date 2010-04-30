@@ -139,17 +139,27 @@ return false;
 
 void *CopyRvalItem(void *item, char type)
 
-{ struct Rlist *rp,*start = NULL;
+{ struct Rlist *rp,*srp,*start = NULL;
   struct FnCall *fp;
-  void *new;
-  char output[CF_BUFSIZE];
+  void *new,*rval;
+  char rtype = CF_SCALAR,output[CF_BUFSIZE];
+  char naked[CF_MAXVARSIZE];
   
 Debug("CopyRvalItem(%c)\n",type);
 
 if (item == NULL)
    {
-   return NULL;
+   switch (type)
+      {
+      case CF_SCALAR:
+          return strdup("");
+
+      case CF_LIST:
+          return NULL;
+      }
    }
+
+naked[0] = '\0';
 
 switch(type)
    {
@@ -172,7 +182,35 @@ switch(type)
        /* The rval is an embedded rlist (2d) */
        for (rp = (struct Rlist *)item; rp != NULL; rp=rp->next)
           {
-          AppendRlist(&start,rp->item,rp->type);
+          if (IsNakedVar(rp->item,'@'))
+             {
+             GetNaked(naked,rp->item);
+
+             if (GetVariable(CONTEXTID,naked,&rval,&rtype) != cf_notype)
+                {
+                switch (rtype)
+                   {
+                   case CF_LIST:
+                       for (srp = (struct Rlist *)rval; srp != NULL; srp=srp->next)
+                          {
+                          AppendRlist(&start,srp->item,srp->type);
+                          }
+                       break;
+                     
+                   default:
+                       AppendRlist(&start,rp->item,rp->type);
+                       break;
+                   }
+                }
+             else
+                {
+                AppendRlist(&start,rp->item,rp->type);
+                }
+             }
+          else
+             {             
+             AppendRlist(&start,rp->item,rp->type);
+             }
           }
        
        return start;
@@ -181,6 +219,75 @@ switch(type)
 snprintf(output,CF_BUFSIZE,"Unknown type %c in CopyRvalItem - should not happen",type);
 FatalError(output);
 return NULL;
+}
+
+/*******************************************************************/
+
+int CompareRval(void *rval1, char rtype1, void *rval2, char rtype2)
+
+{
+if (rtype1 != rtype2)
+   {
+   return false;
+   }
+
+switch (rtype1)
+   {
+   case CF_SCALAR:
+       if (IsCf3VarString((char *)rval1) || IsCf3VarString((char *)rval2))
+          {
+          return -1; // inconclusive
+          }
+
+       if (strcmp(rval1,rval2) != 0)
+          {
+          return false;
+          }
+       
+       break;
+       
+   case CF_LIST:
+       return CompareRlist(rval1,rval2);
+       
+   case CF_FNCALL:
+       return -1;       
+   }
+
+return true;
+}
+
+/*******************************************************************/
+
+int CompareRlist(struct Rlist *list1, struct Rlist *list2)
+
+{ struct Rlist *rp1,*rp2;
+
+for (rp1 = list1, rp2 = list2; rp1 != NULL && rp2!= NULL; rp1=rp1->next,rp2=rp2->next)
+   {
+   if (rp1->item && rp2->item)
+      {
+      if (rp1->type == CF_FNCALL || rp2->type == CF_FNCALL)
+         {
+         return -1; // inconclusive
+         }
+      
+      if (IsCf3VarString(rp1->item) || IsCf3VarString(rp2->item))
+         {
+         return -1; // inconclusive
+         }
+
+      if (strcmp(rp1->item,rp2->item) != 0)
+         {
+         return false;
+         }
+      }
+   else
+      {
+      return false;
+      }
+   }
+
+return true;
 }
 
 /*******************************************************************/
@@ -376,12 +483,7 @@ else
 rp->item = CopyRvalItem(item,type);
 rp->type = type;  /* scalar, builtin function */
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD 
-if (pthread_mutex_lock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"pthread_mutex_lock","pthread_mutex_lock failed");
-   }
-#endif
+ThreadLock(cft_lock);
 
 if (type == CF_LIST)
    {
@@ -394,12 +496,7 @@ else
 
 rp->next = NULL;
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
-if (pthread_mutex_unlock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   }
-#endif
+ThreadUnlock(cft_lock);
 
 return rp;
 }
@@ -454,12 +551,7 @@ rp->next = *start;
 rp->item = CopyRvalItem(item,type);
 rp->type = type;  /* scalar, builtin function */
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD 
-if (pthread_mutex_lock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"pthread_mutex_lock","pthread_mutex_lock failed");
-   }
-#endif
+ThreadLock(cft_lock);
 
 if (type == CF_LIST)
    {
@@ -472,13 +564,7 @@ else
 
 *start = rp;
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
-if (pthread_mutex_unlock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   }
-#endif
-
+ThreadUnlock(cft_lock);
 return rp;
 }
 
@@ -494,7 +580,7 @@ struct Rlist *OrthogAppendRlist(struct Rlist **start,void *item, char type)
   struct CfAssoc *cp;
 
 Debug("OrthogAppendRlist\n");
-
+ 
 switch(type)
    {
    case CF_LIST:
@@ -625,6 +711,7 @@ if (DEBUG)
    {
    ShowRval(stdout,rval,type);
    }
+
 Debug("\n");
 
 if (rval == NULL)
@@ -638,7 +725,7 @@ switch(type)
    case CF_SCALAR:
        free((char *)rval);
        break;
-       
+
    case CF_LIST:
        
        /* rval is now a list whose first item is list->item */
@@ -732,22 +819,11 @@ else
 rp->item = item;
 rp->type = CF_SCALAR;
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD 
-if (pthread_mutex_lock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"pthread_mutex_lock","pthread_mutex_lock failed");
-   }
-#endif
+ThreadLock(cft_lock);
 
 rp->next = NULL;
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
-if (pthread_mutex_unlock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   }
-#endif
-
+ThreadUnlock(cft_lock);
 return rp;
 }
 

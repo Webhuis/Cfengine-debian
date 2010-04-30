@@ -66,7 +66,9 @@ libpromises_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 am_libpromises_la_OBJECTS = libpromises_la-cf3parse.lo \
 	libpromises_la-cf3lex.lo libpromises_la-patches.lo \
 	libpromises_la-attributes.lo libpromises_la-install.lo \
-	libpromises_la-generic_agent.lo libpromises_la-dtypes.lo \
+	libpromises_la-generic_agent.lo libpromises_la-dbm_api.lo \
+	libpromises_la-dbm_berkeley.lo libpromises_la-dbm_quick.lo \
+	libpromises_la-dbm_tokyocab.lo libpromises_la-dtypes.lo \
 	libpromises_la-classes.lo libpromises_la-env_context.lo \
 	libpromises_la-files_interfaces.lo \
 	libpromises_la-files_properties.lo \
@@ -109,7 +111,8 @@ am_libpromises_la_OBJECTS = libpromises_la-cf3parse.lo \
 	libpromises_la-mod_report.lo libpromises_la-mod_storage.lo \
 	libpromises_la-mod_knowledge.lo \
 	libpromises_la-mod_measurement.lo \
-	libpromises_la-mod_databases.lo libpromises_la-mod_process.lo
+	libpromises_la-mod_databases.lo libpromises_la-mod_services.lo \
+	libpromises_la-mod_process.lo libpromises_la-unix.lo
 libpromises_la_OBJECTS = $(am_libpromises_la_OBJECTS)
 libpromises_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(libpromises_la_CFLAGS) \
@@ -120,53 +123,44 @@ am_cf_agent_OBJECTS = agent.$(OBJEXT) verify_files.$(OBJEXT) \
 	verify_storage.$(OBJEXT) verify_exec.$(OBJEXT) \
 	verify_methods.$(OBJEXT) verify_interfaces.$(OBJEXT) \
 	verify_packages.$(OBJEXT) verify_databases.$(OBJEXT) \
-	agentdiagnostic.$(OBJEXT)
+	verify_services.$(OBJEXT) agentdiagnostic.$(OBJEXT)
 cf_agent_OBJECTS = $(am_cf_agent_OBJECTS)
 cf_agent_LDADD = $(LDADD)
-cf_agent_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_agent_DEPENDENCIES = libpromises.la
 am_cf_execd_OBJECTS = exec.$(OBJEXT)
 cf_execd_OBJECTS = $(am_cf_execd_OBJECTS)
 cf_execd_LDADD = $(LDADD)
-cf_execd_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_execd_DEPENDENCIES = libpromises.la
 am_cf_key_OBJECTS = cfkey.$(OBJEXT)
 cf_key_OBJECTS = $(am_cf_key_OBJECTS)
 cf_key_LDADD = $(LDADD)
-cf_key_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_key_DEPENDENCIES = libpromises.la
 am_cf_know_OBJECTS = cfknow.$(OBJEXT) graph.$(OBJEXT) manual.$(OBJEXT) \
 	ontology.$(OBJEXT)
 cf_know_OBJECTS = $(am_cf_know_OBJECTS)
 cf_know_LDADD = $(LDADD)
-cf_know_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_know_DEPENDENCIES = libpromises.la
 am_cf_monitord_OBJECTS = verify_measurements.$(OBJEXT) \
 	env_monitor.$(OBJEXT) monitor.$(OBJEXT)
 cf_monitord_OBJECTS = $(am_cf_monitord_OBJECTS)
 cf_monitord_LDADD = $(LDADD)
-cf_monitord_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_monitord_DEPENDENCIES = libpromises.la
 am_cf_promises_OBJECTS = cfpromises.$(OBJEXT)
 cf_promises_OBJECTS = $(am_cf_promises_OBJECTS)
 cf_promises_LDADD = $(LDADD)
-cf_promises_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_promises_DEPENDENCIES = libpromises.la
 am_cf_report_OBJECTS = cfreport.$(OBJEXT)
 cf_report_OBJECTS = $(am_cf_report_OBJECTS)
 cf_report_LDADD = $(LDADD)
-cf_report_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_report_DEPENDENCIES = libpromises.la
 am_cf_runagent_OBJECTS = runagent.$(OBJEXT)
 cf_runagent_OBJECTS = $(am_cf_runagent_OBJECTS)
 cf_runagent_LDADD = $(LDADD)
-cf_runagent_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_runagent_DEPENDENCIES = libpromises.la
 am_cf_serverd_OBJECTS = server.$(OBJEXT) server_transform.$(OBJEXT)
 cf_serverd_OBJECTS = $(am_cf_serverd_OBJECTS)
 cf_serverd_LDADD = $(LDADD)
-cf_serverd_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) libpromises.la
+cf_serverd_DEPENDENCIES = libpromises.la
 DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -339,9 +333,9 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 workdir = @workdir@
-AM_CFLAGS = $(GCC_CFLAG) @CFLAGS@  
+AM_CFLAGS = $(GCC_CFLAG) @CFLAGS@
 AM_YFLAGS = -d
-LDADD = $(BERKELEY_DB_LDFLAGSD) $(BERKELEY_DB_LIB) $(OPENSSL_LIB_LDFLAGS) $(OPENSSL_LIB_LIB) libpromises.la 
+LDADD = libpromises.la # $(BERKELEY_DB_LDFLAGSD) $(BERKELEY_DB_LIB) $(OPENSSL_LIB_LDFLAGS) $(OPENSSL_LIB_LIB)
 INCLUDES = $(BERKELEY_DB_CFLAGS) $(OPENSSL_LIB_CPPFLAGS)
 AM_LDFLAGS = $(BERKELEY_DB_LDFLAGS) $(OPENSSL_LIB_LDFLAGS) @LDFLAGS@
 lib_LTLIBRARIES = libpromises.la
@@ -351,128 +345,135 @@ libpromises_la_CFLAGS = $(AM_CFLAGS)
 
 # Separate out a library
 libpromises_la_SOURCES = \
-	cf3parse.y							\
-	cf3lex.l							\
-	patches.c							\
-	attributes.c							\
-	install.c							\
-	generic_agent.c							\
-	dtypes.c							\
-	classes.c							\
-	env_context.c							\
-	files_interfaces.c						\
-	files_properties.c						\
-	files_select.c							\
-	files_operators.c						\
-	files_repository.c						\
-	files_copy.c							\
-	files_editline.c						\
-	files_edit.c							\
-	files_links.c							\
-	files_hashes.c							\
-	files_names.c							\
-	chflags.c 							\
-	modes.c 							\
-	exec_tools.c							\
-	nfs.c								\
-	item-lib.c							\
-	cf_sql.c							\
-	client_protocol.c						\
-	client_code.c							\
-	communication.c							\
-	net.c								\
-	sockaddr.c							\
-	recursion.c							\
-	processes_select.c						\
-	fncall.c							\
-	cf3globals.c							\
-	reporting.c							\
-	evalfunction.c							\
-	sysinfo.c							\
-	conversion.c							\
-	scope.c								\
-	assoc.c								\
-	comparray.c							\
-	vars.c								\
-	args.c								\
-	hashes.c							\
-	crypto.c							\
-	expand.c							\
-	matching.c							\
-	selfdiagnostic.c						\
-	instrumentation.c						\
-	granules.c 							\
-	timeout.c 							\
-	promises.c							\
-	constraints.c							\
-	iteration.c							\
-	rlist.c								\
-	syntax.c							\
-	logging.c							\
-	signals.c							\
-	transaction.c							\
-	cfstream.c							\
-	pipes.c								\
-	html.c								\
-	interfaces.c							\
-	storage_tools.c							\
-	verify_reports.c						\
-	verify_processes.c						\
-	enterprise_stubs.c						\
-	mod_common.c							\
-	mod_access.c							\
-	mod_exec.c							\
-	mod_methods.c							\
-	mod_interfaces.c						\
-	mod_packages.c							\
-	mod_files.c							\
-	mod_report.c							\
-	mod_storage.c							\
-	mod_knowledge.c							\
-	mod_measurement.c						\
-	mod_databases.c							\
-	mod_process.c
+        cf3parse.y                                                      \
+        cf3lex.l                                                        \
+        patches.c                                                       \
+        attributes.c                                                    \
+        install.c                                                       \
+        generic_agent.c                                                 \
+        dbm_api.c                                                       \
+        dbm_berkeley.c                                                  \
+        dbm_quick.c                                                     \
+        dbm_tokyocab.c                                                  \
+        dtypes.c                                                        \
+        classes.c                                                       \
+        env_context.c                                                   \
+        files_interfaces.c                                              \
+        files_properties.c                                              \
+        files_select.c                                                  \
+        files_operators.c                                               \
+        files_repository.c                                              \
+        files_copy.c                                                    \
+        files_editline.c                                                \
+        files_edit.c                                                    \
+        files_links.c                                                   \
+        files_hashes.c                                                  \
+        files_names.c                                                   \
+        chflags.c                                                       \
+        modes.c                                                         \
+        exec_tools.c                                                    \
+        nfs.c                                                           \
+        item-lib.c                                                      \
+        cf_sql.c                                                        \
+        client_protocol.c                                               \
+        client_code.c                                                   \
+        communication.c                                                 \
+        net.c                                                           \
+        sockaddr.c                                                      \
+        recursion.c                                                     \
+        processes_select.c                                              \
+        fncall.c                                                        \
+        cf3globals.c                                                    \
+        reporting.c                                                     \
+        evalfunction.c                                                  \
+        sysinfo.c                                                       \
+        conversion.c                                                    \
+        scope.c                                                         \
+        assoc.c                                                         \
+        comparray.c                                                     \
+        vars.c                                                          \
+        args.c                                                          \
+        hashes.c                                                        \
+        crypto.c                                                        \
+        expand.c                                                        \
+        matching.c                                                      \
+        selfdiagnostic.c                                                \
+        instrumentation.c                                               \
+        granules.c                                                      \
+        timeout.c                                                       \
+        promises.c                                                      \
+        constraints.c                                                   \
+        iteration.c                                                     \
+        rlist.c                                                         \
+        syntax.c                                                        \
+        logging.c                                                       \
+        signals.c                                                       \
+        transaction.c                                                   \
+        cfstream.c                                                      \
+        pipes.c                                                         \
+        html.c                                                          \
+        interfaces.c                                                    \
+        storage_tools.c                                                 \
+        verify_reports.c                                                \
+        verify_processes.c                                              \
+        enterprise_stubs.c                                              \
+        mod_common.c                                                    \
+        mod_access.c                                                    \
+        mod_exec.c                                                      \
+        mod_methods.c                                                   \
+        mod_interfaces.c                                                \
+        mod_packages.c                                                  \
+        mod_files.c                                                     \
+        mod_report.c                                                    \
+        mod_storage.c                                                   \
+        mod_knowledge.c                                                 \
+        mod_measurement.c                                               \
+        mod_databases.c                                                 \
+        mod_services.c                                                  \
+        mod_process.c   			                        \
+        unix.c
 
 cf_promises_SOURCES = \
-	cfpromises.c
+        cfpromises.c
 
 cf_key_SOURCES = \
-	cfkey.c
+        cfkey.c
 
 cf_report_SOURCES = \
-	cfreport.c
+        cfreport.c
 
 cf_agent_SOURCES = \
-	agent.c								\
-	verify_files.c							\
-	verify_storage.c						\
-	verify_exec.c							\
-	verify_methods.c						\
-	verify_interfaces.c						\
-	verify_packages.c						\
-	verify_databases.c						\
-	agentdiagnostic.c
+        agent.c                                                         \
+        verify_files.c                                                  \
+        verify_storage.c                                                \
+        verify_exec.c                                                   \
+        verify_methods.c                                                \
+        verify_interfaces.c                                             \
+        verify_packages.c                                               \
+        verify_databases.c                                              \
+	verify_services.c						\
+        agentdiagnostic.c
 
 cf_serverd_SOURCES = \
-	server.c							\
-	server_transform.c
+        server.c                                                        \
+        server_transform.c
 
 cf_monitord_SOURCES = \
-	verify_measurements.c						\
-	env_monitor.c							\
-	monitor.c
+        verify_measurements.c                                           \
+        env_monitor.c                                                   \
+        monitor.c
 
 cf_execd_SOURCES = \
-	exec.c
+        exec.c
 
 cf_runagent_SOURCES = \
-	runagent.c
+        runagent.c
 
 cf_know_SOURCES = \
-	cfknow.c							\
-	graph.c								\
-	manual.c							\
-	ontology.c
+        cfknow.c                                                        \
+        graph.c                                                         \
+        manual.c                                                        \
+        ontology.c
 
 EXTRA_DIST = cf3lex.c cf3parse.c
 
@@ -480,15 +481,15 @@ EXTRA_DIST = cf3lex.c cf3parse.c
 # Pickup header files here so Automake knows about them
 #
 noinst_HEADERS = \
-	cf.defs.h							\
-	prototypes.h							\
-	cf.extern.h							\
-	config.h							\
-	prototypes3.h							\
-	cf3.defs.h							\
-	cf3.server.h							\
-	cf3parse.h							\
-	cf3.extern.h
+        cf.defs.h                                                       \
+        prototypes.h                                                    \
+        cf.extern.h                                                     \
+        config.h                                                        \
+        prototypes3.h                                                   \
+        cf3.defs.h                                                      \
+        cf3.server.h                                                    \
+        cf3parse.h                                                      \
+        cf3.extern.h
 
 
 #
@@ -499,7 +500,7 @@ MOSTLYCLEANFILES = *~ *.orig *.rej
 #
 # Get everything removed down to where rebuilding requires:
 # "make; make install"
-# 
+#
 CLEANFILES = cf3lex.c cf3parse.c cf3parse.h
 
 #
@@ -689,6 +690,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-constraints.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-conversion.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-crypto.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-dbm_api.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-dbm_berkeley.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-dbm_quick.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-dbm_tokyocab.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-dtypes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-enterprise_stubs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-env_context.Plo@am__quote@
@@ -730,6 +735,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-mod_packages.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-mod_process.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-mod_report.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-mod_services.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-mod_storage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-modes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-net.Plo@am__quote@
@@ -750,6 +756,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-sysinfo.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-timeout.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-transaction.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-unix.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-vars.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-verify_processes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-verify_reports.Plo@am__quote@
@@ -766,6 +773,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_measurements.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_methods.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_packages.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_services.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verify_storage.Po@am__quote@
 
 .c.o:
@@ -830,6 +838,34 @@ libpromises_la-generic_agent.lo: generic_agent.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='generic_agent.c' object='libpromises_la-generic_agent.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-generic_agent.lo `test -f 'generic_agent.c' || echo '$(srcdir)/'`generic_agent.c
+
+libpromises_la-dbm_api.lo: dbm_api.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-dbm_api.lo -MD -MP -MF $(DEPDIR)/libpromises_la-dbm_api.Tpo -c -o libpromises_la-dbm_api.lo `test -f 'dbm_api.c' || echo '$(srcdir)/'`dbm_api.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/libpromises_la-dbm_api.Tpo $(DEPDIR)/libpromises_la-dbm_api.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='dbm_api.c' object='libpromises_la-dbm_api.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-dbm_api.lo `test -f 'dbm_api.c' || echo '$(srcdir)/'`dbm_api.c
+
+libpromises_la-dbm_berkeley.lo: dbm_berkeley.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-dbm_berkeley.lo -MD -MP -MF $(DEPDIR)/libpromises_la-dbm_berkeley.Tpo -c -o libpromises_la-dbm_berkeley.lo `test -f 'dbm_berkeley.c' || echo '$(srcdir)/'`dbm_berkeley.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/libpromises_la-dbm_berkeley.Tpo $(DEPDIR)/libpromises_la-dbm_berkeley.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='dbm_berkeley.c' object='libpromises_la-dbm_berkeley.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-dbm_berkeley.lo `test -f 'dbm_berkeley.c' || echo '$(srcdir)/'`dbm_berkeley.c
+
+libpromises_la-dbm_quick.lo: dbm_quick.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-dbm_quick.lo -MD -MP -MF $(DEPDIR)/libpromises_la-dbm_quick.Tpo -c -o libpromises_la-dbm_quick.lo `test -f 'dbm_quick.c' || echo '$(srcdir)/'`dbm_quick.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/libpromises_la-dbm_quick.Tpo $(DEPDIR)/libpromises_la-dbm_quick.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='dbm_quick.c' object='libpromises_la-dbm_quick.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-dbm_quick.lo `test -f 'dbm_quick.c' || echo '$(srcdir)/'`dbm_quick.c
+
+libpromises_la-dbm_tokyocab.lo: dbm_tokyocab.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-dbm_tokyocab.lo -MD -MP -MF $(DEPDIR)/libpromises_la-dbm_tokyocab.Tpo -c -o libpromises_la-dbm_tokyocab.lo `test -f 'dbm_tokyocab.c' || echo '$(srcdir)/'`dbm_tokyocab.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/libpromises_la-dbm_tokyocab.Tpo $(DEPDIR)/libpromises_la-dbm_tokyocab.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='dbm_tokyocab.c' object='libpromises_la-dbm_tokyocab.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-dbm_tokyocab.lo `test -f 'dbm_tokyocab.c' || echo '$(srcdir)/'`dbm_tokyocab.c
 
 libpromises_la-dtypes.lo: dtypes.c
 @am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-dtypes.lo -MD -MP -MF $(DEPDIR)/libpromises_la-dtypes.Tpo -c -o libpromises_la-dtypes.lo `test -f 'dtypes.c' || echo '$(srcdir)/'`dtypes.c
@@ -1349,12 +1385,26 @@ libpromises_la-mod_databases.lo: mod_databases.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-mod_databases.lo `test -f 'mod_databases.c' || echo '$(srcdir)/'`mod_databases.c
 
+libpromises_la-mod_services.lo: mod_services.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-mod_services.lo -MD -MP -MF $(DEPDIR)/libpromises_la-mod_services.Tpo -c -o libpromises_la-mod_services.lo `test -f 'mod_services.c' || echo '$(srcdir)/'`mod_services.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/libpromises_la-mod_services.Tpo $(DEPDIR)/libpromises_la-mod_services.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='mod_services.c' object='libpromises_la-mod_services.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-mod_services.lo `test -f 'mod_services.c' || echo '$(srcdir)/'`mod_services.c
+
 libpromises_la-mod_process.lo: mod_process.c
 @am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-mod_process.lo -MD -MP -MF $(DEPDIR)/libpromises_la-mod_process.Tpo -c -o libpromises_la-mod_process.lo `test -f 'mod_process.c' || echo '$(srcdir)/'`mod_process.c
 @am__fastdepCC_TRUE@	mv -f $(DEPDIR)/libpromises_la-mod_process.Tpo $(DEPDIR)/libpromises_la-mod_process.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='mod_process.c' object='libpromises_la-mod_process.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-mod_process.lo `test -f 'mod_process.c' || echo '$(srcdir)/'`mod_process.c
+
+libpromises_la-unix.lo: unix.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-unix.lo -MD -MP -MF $(DEPDIR)/libpromises_la-unix.Tpo -c -o libpromises_la-unix.lo `test -f 'unix.c' || echo '$(srcdir)/'`unix.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/libpromises_la-unix.Tpo $(DEPDIR)/libpromises_la-unix.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='unix.c' object='libpromises_la-unix.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-unix.lo `test -f 'unix.c' || echo '$(srcdir)/'`unix.c
 
 .l.c:
 	$(am__skiplex) $(SHELL) $(YLWRAP) $< $(LEX_OUTPUT_ROOT).c $@ -- $(LEXCOMPILE)

@@ -71,7 +71,7 @@ len2 = RlistLen(take);
 
 if (len1 != len2)
    {
-   CfOut(cf_error,"","Body template [+args] = %d, [-args] = %d",len1,len2);
+   CfOut(cf_error,""," !! Argument mismatch in body template give[+args] = %d, take[-args] = %d",len1,len2);
    return false;
    }
 
@@ -101,9 +101,6 @@ for (rpg = give, rpt = take; rpg != NULL && rpt != NULL; rpg=rpg->next,rpt=rpt->
           lval = (char *)rpt->item;
           rval = rpg->item;
 
-          Debug("MapBodyArgs(LIST,%s,\n",lval);
-          ShowRlist(stdout,rval);
-          Debug(")\n");
           AddVariableHash(scopeid,lval,rval,CF_LIST,dtg,NULL,0);
           
           break;
@@ -185,7 +182,8 @@ return newargs;
 
 void DeleteExpArgs(struct Rlist *args)
 
-{
+{ struct Rlist *rp;
+
 DeleteRvalItem(args,CF_LIST);
 }
 

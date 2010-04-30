@@ -1,36 +1,43 @@
 /* cfengine for GNU
- 
+
         Copyright (C) 1995
         Free Software Foundation, Inc.
- 
-   This file is part of GNU cfengine - written and maintained 
+
+   This file is part of GNU cfengine - written and maintained
    by Mark Burgess, Dept of Computing and Engineering, Oslo College,
    Dept. of Theoretical physics, University of Oslo
- 
+
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
    Free Software Foundation; either version 2, or (at your option) any
    later version.
- 
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
+
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
    Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
- 
+
 
 /*******************************************************************/
 /*                                                                 */
-/*  HEADER for cfengine                                            */
+/*  HEAER for cfengine                                            */
 /*                                                                 */
 /*******************************************************************/
 
 /* Hard link this file between cf2/cf3 for consistent update */
 
 #include "conf.h"
+
+#ifdef NT
+#  define MAX_FILENAME 227
+#  define WINVER 0x501
+#else
+#  define MAX_FILENAME 254
+#endif
 
 #include <stdio.h>
 #include <math.h>
@@ -64,6 +71,10 @@ struct utsname
 
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#ifdef HAVE_STDINT_H
+# include <stdint.h>
+#endif
 
 #ifdef HAVE_SYS_SYSTEMINFO_H
 # include <sys/systeminfo.h>
@@ -118,7 +129,21 @@ struct utsname
 
 #include <signal.h>
 
+#ifdef MINGW
+#define LOG_LOCAL0      (16<<3)
+#define LOG_LOCAL1      (17<<3)
+#define LOG_LOCAL2      (18<<3)
+#define LOG_LOCAL3      (19<<3)
+#define LOG_LOCAL4      (20<<3)
+#define LOG_LOCAL5      (21<<3)
+#define LOG_LOCAL6      (22<<3)
+#define LOG_LOCAL7      (23<<3)
+#define LOG_USER        (1<<3)
+#define LOG_DAEMON      (3<<3)
+#else
 #include <syslog.h>
+#endif
+
 extern int errno;
 
 /* Do this for ease of configuration from the Makefile */
@@ -208,27 +233,46 @@ extern int errno;
 # include <sys/time.h>
 #endif
 
+#ifndef MINGW
 #include <pwd.h>
 #include <grp.h>
-
-
+#endif
 
 #ifdef HAVE_SYS_SOCKIO_H
 # include <sys/sockio.h>
 #endif
 
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#ifndef AOS
-# include <arpa/inet.h>
-#endif
-#include <netdb.h>
-#if !defined LINUX && !defined NT
-#include <sys/protosw.h>
-#undef sgi
-#include <net/route.h>
+
+#ifdef MINGW
+# include <windows.h>
+# include <accctrl.h>
+# include <aclapi.h>
+# include <psapi.h>
+# include <wchar.h>
+# include <sddl.h>
+# include <tlhelp32.h>
+# include <iphlpapi.h>
+# include <ws2tcpip.h>
+# include <objbase.h>  // for disphelper
+# ifdef HAVE_WINSOCK2_H
+#  include <winsock2.h>
+# else
+#  include <winsock.h>
+# endif
+#else
+# include <sys/socket.h>
+# include <sys/ioctl.h>
+# include <net/if.h>
+# include <netinet/in.h>
+# ifndef AOS
+#  include <arpa/inet.h>
+# endif
+# include <netdb.h>
+# if !defined LINUX && !defined NT
+# include <sys/protosw.h>
+# undef sgi
+#  include <net/route.h>
+# endif
 #endif
 
 #ifdef LINUX
@@ -241,14 +285,12 @@ extern int errno;
 #endif
 #endif
 
-#ifdef HAVE_PCRE
+#ifdef HAVE_PCRE_H
 # include <pcreposix.h>
 #elif HAVE_RXPOSIX_H
 # include <rxposix.h>
 #elif  HAVE_REGEX_H
 # include <regex.h>
-#else
-# include "../pub/gnuregex.h"
 #endif
 
 #ifndef HAVE_SNPRINTF
@@ -277,7 +319,7 @@ typedef int clockid_t;
 #endif
 
 #ifdef WITH_SELINUX
-# include <selinux/selinux.h> 
+# include <selinux/selinux.h>
 #endif
 
 /*******************************************************************/
@@ -294,6 +336,7 @@ typedef int clockid_t;
 #define CF_BLOWFISHSIZE 16
 #define CF_SMALLBUF 128
 #define CF_MAXVARSIZE 1024
+#define CF_MAXSIDSIZE 2048  /* Windows only: Max size (bytes) of security identifers */
 #define CF_NONCELEN (CF_BUFSIZE/16)
 #define CF_MAXLINKSIZE 256
 #define CF_MAXLINKLEVEL 4
@@ -314,7 +357,7 @@ typedef int clockid_t;
 #define CF_INFINITY ((int)999999999)
 #define CF_TICKS_PER_DAY 86400 /* 60 * 60 *24 */
 #define CF_TICKS_PER_HOUR 3600 /* 60 * 60 */
-#define CF_HALF_HOUR 1800      /* 60 * 30 */ 
+#define CF_HALF_HOUR 1800      /* 60 * 30 */
 #define CF_NOT_CONNECTED -1
 #define CF_COULD_NOT_CONNECT -2
 #define CF_RECURSION_LIMIT 100
@@ -322,8 +365,10 @@ typedef int clockid_t;
 #define CF_NOVAL -0.7259285297502359
 #define CF_UNUSED_CHAR (char)127
 
-#define CF_MAXDIGESTNAMELEN 7
-#define CF_CHKSUMKEYOFFSET  CF_MAXDIGESTNAMELEN+1
+
+
+#define CF_INDEX_FIELD_LEN 7
+#define CF_INDEX_OFFSET  CF_INDEX_FIELD_LEN+1
 
 #define CF_IFREQ 2048    /* Reportedly the largest size that does not segfault 32/64 bit*/
 #define CF_ADDRSIZE 128
@@ -336,25 +381,129 @@ typedef int clockid_t;
 #define CF_EXEC_IFELAPSED 1
 #define CF_EXEC_EXPIREAFTER 1
 
-/* Need this to to avoid conflict with solaris 2.6 and db.h */
+#define MAXIP4CHARLEN 16
 
-#ifdef SOLARIS
-# ifndef u_int32_t
-#  define u_int32_t uint32_t
-#  define u_int16_t uint16_t
-#  define u_int8_t uint8_t
+/*******************************************************************/
+/*  DBM                                                            */
+/*******************************************************************/
+
+// maximum amount of simultanious open DBs
+#define MAX_OPENDB 30
+
+#ifdef TCDB
+# include <tcutil.h>
+# include <tchdb.h>
+
+typedef struct
+  {
+  TCHDB *hdb;
+  char *valmemp;  // allocated on demand, freed on db close
+  }
+CF_TCDB;
+
+typedef struct
+   {
+   char *curkey;
+   char *curval;
+   }
+CF_TCDBC;
+
+# define CF_DB CF_TCDB
+# define CF_DBC CF_TCDBC
+# define DB_FEXT "tcdb"
+
+#elif defined(QDB)
+
+# include <depot.h>
+
+typedef struct
+   {
+   DEPOT *depot;
+   char *valmemp;  // allocated on demand, freed on db close
+   }
+CF_QDB;
+
+typedef struct
+   {
+   char *curkey;
+   char *curval;
+   }
+CF_QDBC;
+
+# define CF_DB CF_QDB
+# define CF_DBC CF_QDBC
+# define DB_FEXT "qdbm"
+
+
+#else
+
+# ifdef SOLARIS
+#  ifndef u_int32_t
+#   define u_int32_t uint32_t
+#   define u_int16_t uint16_t
+#   define u_int8_t uint8_t
+#  endif
 # endif
+
+# include <db.h>
+# define CF_DB DB
+# define CF_DBC DBC
+# define DB_FEXT "db"
+# define BDB 1
 #endif
 
-#include <db.h>
 
+/*******************************************************************/
+/*  Windows                                                        */
+/*******************************************************************/
+
+#ifdef MINGW
+# define MAXHOSTNAMELEN 256  // always adequate: http://msdn.microsoft.com/en-us/library/ms738527(VS.85).aspx
+# define NULLFILE "nul"
+# define EXEC_SUFFIX ".exe"
+
+typedef u_long in_addr_t;  // as seen in in_addr struct in winsock.h
+#ifndef VER_SUITE_WH_SERVER  // shold be in winnt.h, but is not in current mingw-version
+# define VER_SUITE_WH_SERVER 0x00008000
+#endif
+
+/* Dummy signals, can be set to anything below 23 but
+ * 2, 4, 8, 11, 15, 21, 22 which are taken.
+ * Calling signal() with anything from below causes SIG_ERR
+ * to be returned.                                         */
+
+# define SIGALRM 1
+# define SIGHUP 3
+# define SIGTRAP 5
+# define SIGKILL 6
+# define SIGPIPE 7
+# define SIGCONT 9
+# define SIGSTOP 10
+# define SIGQUIT 12
+# define SIGCHLD 13
+# define SIGUSR1 14
+# define SIGUSR2 16
+# define SIGBUS 17
+
+# if !defined( _TIMESPEC_DEFINED) && !defined(HAVE_STRUCT_TIMESPEC)
+#  define HAVE_STRUCT_TIMESPEC 1
+   struct timespec {
+           long tv_sec;
+           long tv_nsec;
+   };
+# endif /* NOT _TIMESPEC_DEFINED */
+
+#else  /* NOT MINGW */
+# define NULLFILE "/dev/null"
+# define EXEC_SUFFIX ""
+#endif  /* NOT MINGW */
 
 /*******************************************************************/
 /* Class array limits                                              */
 /* This is the only place you ever need to edit anything           */
 /*******************************************************************/
 
-#define CF_CLASSATTR 36         /* increase this for each new class added */
+#define CF_CLASSATTR 38         /* increase this for each new class added */
                                 /* It defines the array size for class data */
 #define CF_ATTRDIM 3            /* Only used in CLASSATTRUBUTES[][] defn */
 
@@ -362,14 +511,21 @@ typedef int clockid_t;
 
 /*******************************************************************/
 
-#define CF_CLASSUSAGE     "cf_classes.db"
-#define CF_PERFORMANCE    "performance.db"
-#define CF_CHKDB          "checksum_digests.db"
-#define CF_AVDB_FILE      "cf_observations.db"
-#define CF_OLDAVDB_FILE   "cf_learning.db"
-#define CF_STATEDB_FILE   "cf_state.db"
-#define CF_LASTDB_FILE    "cf_LastSeen.db"
-#define CF_AUDITDB_FILE   "cf_Audit.db"
+/* database file names */
+
+#define CF_CLASSUSAGE     "cf_classes" "." DB_FEXT
+#define CF_PERFORMANCE    "performance" "." DB_FEXT
+#define CF_CHKDB          "checksum_digests" "." DB_FEXT
+#define CF_AVDB_FILE      "cf_observations" "." DB_FEXT
+#define CF_STATEDB_FILE   "cf_state" "." DB_FEXT
+#define CF_LASTDB_FILE    "cf_LastSeen" "." DB_FEXT
+#define CF_AUDITDB_FILE   "cf_Audit" "." DB_FEXT
+#define CF_LOCKDB_FILE    "cf_lock" "." DB_FEXT
+
+/* end database file names */
+
+#define CF_VALUE_LOG      "cf_value.log"
+
 
 #define CF_STATELOG_FILE "state_log"
 #define CF_ENVNEW_FILE   "env_data.new"
@@ -464,7 +620,6 @@ typedef int clockid_t;
 #define CFGRACEPERIOD 4.0     /* training period in units of counters (weeks,iterations)*/
 #define cf_noise_threshold 6  /* number that does not warrent large anomaly status */
 #define big_number 100000
-#define CF_PERSISTENCE 15
 #define LDT_BUFSIZE 10
 #define CF_GRAINS   64
 #define ATTR     11
@@ -504,7 +659,7 @@ struct OldAverages /* For conversion to new db */
    double expect_loadavg;
    double expect_incoming[ATTR];
    double expect_outgoing[ATTR];
-   double expect_pH[PH_LIMIT];      
+   double expect_pH[PH_LIMIT];
    double var_number_of_users;
    double var_rootprocs;
    double var_otherprocs;
@@ -536,7 +691,7 @@ struct LockData
 struct AuditLog        /* key includes operation and date */
    {
    char  operator[CF_AUDIT_COMMENT];
-   char  comment[CF_AUDIT_COMMENT];     
+   char  comment[CF_AUDIT_COMMENT];
    char  filename[CF_AUDIT_COMMENT];
    char  bundle[CF_AUDIT_VERSION]; /* not used in cf2 */
    char  version[CF_AUDIT_VERSION];
@@ -558,7 +713,7 @@ struct AuditLog        /* key includes operation and date */
 #define DEV_BSIZE 4096
 #endif /* !BSIZE */
 #endif /* !DEV_BSIZE */
- 
+
 /* Extract or fake data from a `struct stat'.
    ST_BLKSIZE: Optimal I/O blocksize for the file, in bytes.
    ST_NBLOCKS: Number of 512-byte blocks in the file
@@ -620,6 +775,8 @@ enum PROTOS
    cfd_sopendir,
    cfd_var,
    cfd_svar,
+   cfd_context,
+   cfd_scontext,
    cfd_bad
    };
 
@@ -742,6 +899,8 @@ enum classes
    ux4800,
    qnx,
    dragonfly,
+   mingw,
+   vmware,
    unused1,
    unused2,
    unused3
@@ -952,6 +1111,7 @@ struct cfagent_connection
    char localip[CF_MAX_IP_LEN];
    char remoteip[CF_MAX_IP_LEN];
    unsigned char *session_key;
+   char encryption_type;
    short error;
    };
 
@@ -1005,6 +1165,7 @@ struct Item
    char  *name;
    char  *classes;
    int    counter;
+   time_t time;
    struct Item *next;
    };
 
@@ -1025,8 +1186,11 @@ struct TwoDimList
 
 struct UidList
    {
+#ifdef MINGW  // TODO: remove uid for NT ?
+     char sid[CF_MAXSIDSIZE];  /* Invalid sid indicates unset */
+#endif  /* MINGW */
    uid_t uid;
-   char *uidname;				/* when uid is -2 */
+   char *uidname;                               /* when uid is -2 */
    struct UidList *next;
    };
 
@@ -1035,7 +1199,7 @@ struct UidList
 struct GidList
    {
    gid_t gid;
-   char *gidname;				/* when gid is -2 */
+   char *gidname;                               /* when gid is -2 */
    struct GidList *next;
    };
 
@@ -1072,8 +1236,10 @@ struct Auth
    {
    char *path;
    struct Item *accesslist;
-   struct Item *maproot;    /* which hosts should have root read access */
+   struct Item *maproot;     /* which hosts should have root read access */
    int encrypt;              /* which files HAVE to be transmitted securely */
+   int literal;
+   int classpattern;
    struct Auth *next;
    };
 
@@ -1156,12 +1322,12 @@ struct Checksum_Value
 #define S_IRUSR 00400
 #define S_IWUSR 00200
 #define S_IXUSR 00100
- 
+
 #define S_IRWXG 00070
 #define S_IRGRP 00040
 #define S_IWGRP 00020
 #define S_IXGRP 00010
- 
+
 #define S_IRWXO 00007
 #define S_IROTH 00004
 #define S_IWOTH 00002
@@ -1208,16 +1374,10 @@ struct Checksum_Value
 #endif
 
 /*******************************************************************/
-/* File path manipulation primitives				   */
+/* File path manipulation primitives                               */
 /*******************************************************************/
 
 /* Defined maximum length of a filename. */
-
-#ifdef NT
-#  define MAX_FILENAME 227
-#else
-#  define MAX_FILENAME 254
-#endif
 
 /* File node separator (cygwin can use \ or / but prefer \ for communicating
  * with native windows commands). */

@@ -37,10 +37,11 @@
 void LoadSystemConstants()
 
 {
- NewScalar("const","dollar","$",cf_str);
- NewScalar("const","n","\n",cf_str);
- NewScalar("const","r","\r",cf_str);
- NewScalar("const","endl","\n",cf_str);
+NewScalar("const","dollar","$",cf_str);
+NewScalar("const","n","\n",cf_str);
+NewScalar("const","r","\r",cf_str);
+NewScalar("const","t","\t",cf_str);
+NewScalar("const","endl","\n",cf_str);
 /* NewScalar("const","0","\0",cf_str);  - this cannot work */
 }
 
@@ -71,11 +72,17 @@ Debug("Setting local variable \"match.%s\" context; $(%s) = %s\n",lval,lval,rval
 void NewScalar(char *scope,char *lval,char *rval,enum cfdatatype dt)
 
 { char *sp1,*sp2;
- 
+  struct Rval rvald;
+   
 Debug("NewScalar(%s,%s,%s)\n",scope,lval,rval);
 
 //sp1 = strdup(lval);
 //sp2 = strdup((char *)rval);
+
+if (GetVariable(scope,lval,&rvald.item,&rvald.rtype) != cf_notype)
+   {
+   DeleteScalar(scope,lval);
+   }
 
 sp1 = lval;
 sp2 = rval;
@@ -92,7 +99,7 @@ void IdempNewScalar(char *scope,char *lval,char *rval,enum cfdatatype dt)
  
 Debug("IdempNewScalar(%s,%s,%s)\n",scope,lval,rval);
 
-if (GetVariable(scope,lval,&rvald.item,&rvald.rtype) == cf_notype)
+if (GetVariable(scope,lval,&rvald.item,&rvald.rtype) != cf_notype)
    {
    return;
    }
@@ -135,11 +142,14 @@ else
 void NewList(char *scope,char *lval,void *rval,enum cfdatatype dt)
 
 { char *sp1;
+  struct Rval rvald;
+
+if (GetVariable(scope,lval,&rvald.item,&rvald.rtype) != cf_notype)
+   {
+   DeleteVariable(scope,lval);
+   }
  
-Debug("NewList(%s,%s,%s)\n",scope,lval,rval);
-
 sp1 = strdup(lval);
-
 AddVariableHash(scope,sp1,rval,CF_LIST,dt,NULL,0);
 }
 
@@ -174,7 +184,7 @@ else
       }
    }
 
-if (strstr(sval,"."))
+if (IsQualifiedVariable(sval))
    {
    scopeid[0] = '\0';
    sscanf(sval,"%[^.].%s",scopeid,vlval);
@@ -400,6 +410,11 @@ int UnresolvedArgs(struct Rlist *args)
 
 for (rp = args; rp != NULL; rp = rp->next)
    {
+   if (rp->type != CF_SCALAR)
+      {
+      return true;
+      }
+   
    if (IsCf3Scalar(rp->item))
       {
       return true;
@@ -477,7 +492,12 @@ int IsCf3VarString(char *str)
   int bracks = 0, vars = 0;
 
 Debug1("IsCf3VarString(%s) - syntax verify\n",str);
-  
+
+if (str == NULL)
+   {
+   return false;
+   }
+
 for (sp = str; *sp != '\0' ; sp++)       /* check for varitems */
    {
    switch (*sp)
@@ -505,6 +525,18 @@ for (sp = str; *sp != '\0' ; sp++)       /* check for varitems */
              right = *sp;
              }
           break;
+      }
+
+   /* Some chars cannot be in variable ids, e.g.
+      $(/bin/cat file) is legal in bash */
+
+   if (bracks > 0)
+      {
+      switch (*sp)
+         {
+         case '/':
+             return false;
+         }
       }
    
    if (left == '(' && right == ')' && dollar && (bracks == 0))
@@ -543,6 +575,11 @@ int IsCf3Scalar(char *str)
   int bracks = 0, vars = 0;
 
 Debug1("IsCf3Scalar(%s) - syntax verify\n",str);
+
+if (str == NULL)
+   {
+   return false;
+   }
   
 for (sp = str; *sp != '\0' ; sp++)       /* check for varitems */
    {
@@ -572,6 +609,18 @@ for (sp = str; *sp != '\0' ; sp++)       /* check for varitems */
           break;
       }
    
+   /* Some chars cannot be in variable ids, e.g.
+      $(/bin/cat file) is legal in bash */
+
+   if (bracks > 0)
+      {
+      switch (*sp)
+         {
+         case '/':
+             return false;
+         }
+      }
+
    if (left == '(' && right == ')' && dollar && (bracks == 0))
       {
       vars++;
@@ -603,6 +652,11 @@ return vars;
 int DefinedVariable(char *name)
 
 { struct Rval rval;
+
+if (name == NULL)
+   {
+   return false;
+   }
  
 if (GetVariable("this",name,&rval.item,&rval.rtype) == cf_notype)
    {
@@ -618,6 +672,11 @@ int BooleanControl(char *scope,char *name)
 
 { char varbuf[CF_BUFSIZE], rtype;
 
+if (name == NULL)
+   {
+   return false;
+   }
+ 
 if (GetVariable(scope,name,(void *)varbuf,&rtype) != cf_notype)
    {
    return GetBoolean(varbuf);
@@ -756,3 +815,34 @@ if (bracks != 0)
 
 return str;
 }
+
+/*********************************************************************/
+
+int IsQualifiedVariable(char *var)
+
+{ int isarraykey = false;
+  char *sp;
+ 
+for (sp = var; *sp != '\0'; sp++)
+   {
+   if (*sp == '[')
+      {
+      isarraykey = true;
+      }
+   
+   if (isarraykey)
+      {
+      return false;
+      }
+   else
+      {
+      if (*sp == '.')
+         {
+         return true;
+         }      
+      }
+   }
+
+return false;
+}
+

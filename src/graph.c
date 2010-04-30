@@ -29,19 +29,12 @@
 /*                                                                           */
 /*****************************************************************************/
 
-#define CF_TRIBE_SIZE 30
-
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
-#ifdef HAVE_LIBGVC
-# ifdef HAVE_GRAPHVIZ_GVC_H
-#  include <graphviz/gvc.h>
-# endif
-
-/*****************************************************************************/
-
-extern char GRAPHDIR[CF_MAXVARSIZE];
+#ifndef HAVE_LIBCFNOVA
+#define CF_TRIBE_SIZE 30
+#endif
 
 /*****************************************************************************/
 
@@ -56,8 +49,13 @@ void VerifyGraph(struct Topic *map, struct Rlist *assoc_views,char *view)
   double **adj,*evc;
   char **n;
 
-CfOut(cf_verbose,""," -> Graph view %s\n",view);
-  
+if (view)
+   {
+   CfOut(cf_verbose,""," -> Graph view %s\n",view);
+   }
+
+/* Just count up the topics */
+
 for (tp = map; tp != NULL; tp=tp->next)
    {
    topic_count++;
@@ -67,6 +65,8 @@ for (tp = map; tp != NULL; tp=tp->next)
       assoc_count++;
       }
    }
+
+/* Allocate an array we can pass to a subroutine */
 
 adj = (double **)malloc(sizeof(double *)*topic_count);
 
@@ -82,6 +82,8 @@ for (i = 0; i < topic_count; i++)
       adj[i][j] = 0.0;
       }
    }
+
+/* And a vector to contain the names */
     
 n = (char **)malloc(sizeof(char *)*topic_count);
 
@@ -99,16 +101,20 @@ if (i != topic_count)
 
 i = j = 0;
 
+/* Construct the adjacency matrix for the map */
+
 for (tp = map; tp != NULL; tp=tp->next)
    {
    for (ta = tp->associations; ta != NULL; ta=ta->next)
       {
-      /* Restrict semantics of associativity */
+      /* Semantic projection if selected a view... */
       
       if (assoc_views && !KeyInRlist(assoc_views,ta->fwd_name))
          {
          continue;
          }
+
+      /* ...else all associations in play */
 
       for (rp = ta->associates; rp != NULL; rp=rp->next)
          {
@@ -122,7 +128,8 @@ for (tp = map; tp != NULL; tp=tp->next)
                   {
                   continue;
                   }
-
+               
+               
                adj[i][j] = adj[j][i] = 1.0;
                count++;
                }
@@ -169,30 +176,38 @@ for (i = max_k; i >= 0; i--)
 
 evc = (double *)malloc(sizeof(double)*topic_count);
 
-EigenvectorCentrality(adj,evc,topic_count);
+/*
+  EigenvectorCentrality(adj,evc,topic_count);
 
 CfOut(cf_verbose,"","EVC tops:\n");
 
 for (i = 0; i < topic_count; i++)
    {
-   if (Top(adj,evc,i,topic_count))
+   if (IsTop(adj,evc,i,topic_count))
       {
       CfOut(cf_verbose,"","  Topic %d - \"%s\" is an island\n",i,n[i]);      
       }
    }
-
-/* Look at centrality */
+*/
 
 for (i = 0; i < topic_count; i++)
    {
+#if defined HAVE_LIBCFNOVA && defined HAVE_LIBGD
+   Nova_PlotTopicCosmos(i,adj,n,topic_count,view);
+#else
    PlotTopicCosmos(i,adj,n,topic_count,view);
+#endif
    }
+
+// Nova_PlotTopicCosmos(2484,adj,n,topic_count,view);
+
 
 /* Clean up */
 
 for (i = 0; i < topic_count; i++)
    {
    free(n[i]);
+   free(adj[i]);
    }
 
 free(adj);
@@ -201,106 +216,16 @@ free(n);
 }
 
 /*************************************************************************/
-/* Level                                                                 */
-/*************************************************************************/
-
-int Degree(double *m,int dim)
-
-{ int i, k = 0;
-
-for (i = 0; i < dim; i++)
-   {
-   k += (int) m[i];
-   }
-
-return k;
-}
-
-/*************************************************************************/
-
-int Top(double **adj,double *evc,int topic,int dim)
-
-{ int i;
-
-for (i = 0; i < dim; i++)
-   {
-   if (adj[topic,i] && (evc[i] > evc[topic]))
-      {
-      return false;
-      }
-   }
-
-return true;
-}
-
-/*************************************************************************/
-
-void PrintNeighbours(double *m,int dim,char **names)
-
-{ int i;
-
-for (i = 0; i < dim; i++)
-   {
-   if (m[i])
-      {
-      CfOut(cf_verbose,""," - Sub: %s\n",names[i]);
-      }
-   }
-}
-
-/*************************************************************************/
-
-void EigenvectorCentrality(double **A,double *v,int dim)
-
-{ int i, n;
-
-for (i = 0; i < dim; i++)
-   {
-   v[i] = 1.0;
-   }
-
-for (n = 0; n < 10; n++)
-   {
-   MatrixOperation(A,v,dim);
-   }
-}
-
-/*************************************************************************/
-
-void MatrixOperation(double **A,double *v,int dim)
-
-{ int i,j;
-  double max = 0;
-  double *vp;
-  
-vp = (double *)malloc(sizeof(double)*dim);
-
-for (i = 0; i < dim; i++)
-   {
-   for (j = 0; j < dim; j++)
-      {
-      vp[i] += A[i][j] * v[j];
-      }
-
-   if (vp[i] > max)
-      {
-      max = vp[i];
-      }
-   }
-
-for (i = 0; i < dim; i++)
-   {
-   v[i] = vp[i] / max;
-   }
-
-free(vp);
-}
-
-/*************************************************************************/
 
 void PlotTopicCosmos(int topic,double **adj,char **names,int dim,char *view)
 
-{ char filename[CF_BUFSIZE];
+{
+#ifdef HAVE_LIBGVC
+# ifdef HAVE_GRAPHVIZ_GVC_H
+#  include <graphviz/gvc.h>
+# endif
+  
+  char filename[CF_BUFSIZE];
   struct Topic *tp;
   struct TopicAssociation *ta;
   struct Occurrence *op;
@@ -339,9 +264,9 @@ else
    strcpy(filename,filenode);
    }
 
-if (stat(filename,&sb) != -1)
+if (cfstat(filename,&sb) != -1)
    {
-   CfOut(cf_inform,"","Graph %s already exists, delete to refresh\n",filename);
+   CfOut(cf_inform,"","Graph \"%s\" already exists, delete to refresh\n",filename);
    return;
    }
 
@@ -467,6 +392,102 @@ agclose(g);
 gvFreeContext(gvc);
 CfOut(cf_inform,"","Generated topic locale %s\n",filename);
 DeleteRlist(nodelist);
+
+#endif
+}
+
+/*************************************************************************/
+
+int Degree(double *m,int dim)
+
+{ int i, k = 0;
+
+for (i = 0; i < dim; i++)
+   {
+   k += (int) m[i];
+   }
+
+return k;
+}
+
+/*************************************************************************/
+
+int IsTop(double **adj,double *evc,int topic,int dim)
+
+{ int i;
+
+for (i = 0; i < dim; i++)
+   {
+   if (adj[topic,i] && (evc[i] > evc[topic]))
+      {
+      return false;
+      }
+   }
+
+return true;
+}
+
+/*************************************************************************/
+
+void PrintNeighbours(double *m,int dim,char **names)
+
+{ int i;
+
+for (i = 0; i < dim; i++)
+   {
+   if (m[i])
+      {
+      CfOut(cf_verbose,""," - Sub: %s\n",names[i]);
+      }
+   }
+}
+
+/*************************************************************************/
+
+void EigenvectorCentrality(double **A,double *v,int dim)
+
+{ int i, n;
+
+for (i = 0; i < dim; i++)
+   {
+   v[i] = 1.0;
+   }
+
+for (n = 0; n < 10; n++)
+   {
+   MatrixOperation(A,v,dim);
+   }
+}
+
+/*************************************************************************/
+
+void MatrixOperation(double **A,double *v,int dim)
+
+{ int i,j;
+  double max = 0;
+  double *vp;
+  
+vp = (double *)malloc(sizeof(double)*dim);
+
+for (i = 0; i < dim; i++)
+   {
+   for (j = 0; j < dim; j++)
+      {
+      vp[i] += A[i][j] * v[j];
+      }
+
+   if (vp[i] > max)
+      {
+      max = vp[i];
+      }
+   }
+
+for (i = 0; i < dim; i++)
+   {
+   v[i] = vp[i] / max;
+   }
+
+free(vp);
 }
 
 /*************************************************************************/
@@ -605,9 +626,3 @@ for (i = 0; tribe[i] > 0; i++)
 return false;
 }
 
-/*************************************************************************/
-/* Level                                                                 */
-/*************************************************************************/
-
-
-#endif

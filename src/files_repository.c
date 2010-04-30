@@ -32,8 +32,6 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
-extern pthread_mutex_t MUTEX_GETADDR;
-
 /*********************************************************************/
 
 int ArchiveToRepository(char *file,struct Attributes attr,struct Promise *pp)
@@ -72,23 +70,9 @@ if (IsItemIn(VREPOSLIST,file))
    return true;
    }
 
-#ifdef HAVE_PTHREAD_H  
-if (pthread_mutex_lock(&MUTEX_GETADDR) != 0)
-   {
-   CfOut(cf_error,"lock","pthread_mutex_lock failed");
-   exit(1);
-   }
-#endif
-
+ThreadLock(cft_getaddr);
 PrependItemList(&VREPOSLIST,file);
-
-#ifdef HAVE_PTHREAD_H  
-if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   exit(1);
-   }
-#endif
+ThreadUnlock(cft_getaddr);
 
 Debug("Repository(%s)\n",file);
 
@@ -116,13 +100,13 @@ if (!MakeParentDirectory(destination,attr.move_obstructions))
    {
    }
 
-if (stat(file,&sb) == -1)
+if (cfstat(file,&sb) == -1)
    {
    Debug("File %s promised to archive to the repository but it disappeared!\n",file);
    return true;
    }
 
-stat(destination,&dsb);
+cfstat(destination,&dsb);
 
 attr.copy.servers = NULL;
 attr.copy.backup = cfa_repos_store; // cfa_nobackup;
@@ -130,7 +114,7 @@ attr.copy.stealth = false;
 attr.copy.verify = false;
 attr.copy.preserve = false;
 
-CheckForFileHoles(&sb,attr,pp);
+CheckForFileHoles(&sb,pp);
 
 if (CopyRegularFile(file,destination,sb,dsb,attr,pp))
    {

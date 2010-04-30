@@ -24,7 +24,7 @@ bundle agent bun
 {
 vars:
 
- "userset" slist => { "one-x", "two-x", "three-x" };
+ "userset" slist => { "one", "two", "three" };
 
 files:
 
@@ -38,11 +38,7 @@ files:
   "/home/mark/tmp/group"
 
        create    => "true",
-       edit_line => AppendUserParam("root","4","@(bun.userset)");
-
-commands:
-
-  "/bin/echo" args => "$(userset)";
+       edit_line => AppendUserParam("wheel","4","@(bun.userset)");
 
 }
 

@@ -43,8 +43,8 @@ int main (int argc,char *argv[]);
 /*******************************************************************/
 
  char *ID = "The promise agent is a validator and analysis tool for\n"
-            "confguration files belonging to any of the components\n"
-            "of cfengine. Configurations that make changes must be\n"
+            "configuration files belonging to any of the components\n"
+            "of Cfengine. Configurations that make changes must be\n"
             "approved by this validator before being executed.";
  
  struct option OPTIONS[14] =
@@ -92,14 +92,16 @@ int main(int argc,char *argv[])
 CheckOpts(argc,argv); 
 GenericInitialize(argc,argv,"common");
 ThisAgentInit();
+GenericDeInitialize();
 
 if (ERRORCOUNT > 0)
    {
+   CfOut(cf_verbose,""," !! Inputs are invalid\n");
    exit(1);
    }
 else
    {
-   CfOut(cf_verbose,"","Inputs are valid\n");
+   CfOut(cf_verbose,""," -> Inputs are valid\n");
    exit(0);
    }
 }
@@ -192,12 +194,17 @@ while ((c=getopt_long(argc,argv,"ad:vnIf:D:N:VSrxM",OPTIONS,&optindex)) != EOF)
           printf("Self-analysis is not yet implemented.");
           exit(0);
           break;
-          
+
       default:  Syntax("cf-promises - cfengine's promise analyzer",OPTIONS,HINTS,ID);
           exit(1);
           
       }
   }
+
+if (argv[optind] != NULL)
+   {
+   CfOut(cf_error,"","Unexpected argument with no preceding option: %s\n",argv[optind]);
+   }
 
 Debug("Set debugging\n");
 }

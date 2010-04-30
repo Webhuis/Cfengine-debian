@@ -66,6 +66,9 @@ int main(int argc,char *argv[])
 
 {
 CheckOpts(argc,argv);
+
+THIS_AGENT_TYPE = cf_keygen;
+
 GenericInitialize(argc,argv,"keygenerator");
 KeepPromises();
 return 0;
@@ -90,15 +93,15 @@ NewScope("common");
   
 cipher = EVP_des_ede3_cbc();
 
-if (stat(CFPRIVKEYFILE,&statbuf) != -1)
+if (cfstat(CFPUBKEYFILE,&statbuf) != -1)
    {
-   CfOut(cf_error,"","A key file already exists at %s.\n",CFPRIVKEYFILE);
+   CfOut(cf_cmdout,"","A key file already exists at %s\n",CFPUBKEYFILE);
    return;
    }
 
-if (stat(CFPUBKEYFILE,&statbuf) != -1)
+if (cfstat(CFPRIVKEYFILE,&statbuf) != -1)
    {
-   CfOut(cf_error,"","A key file already exists at %s.\n",CFPUBKEYFILE);
+   CfOut(cf_cmdout,"","A key file already exists at %s\n",CFPRIVKEYFILE);
    return;
    }
 
@@ -172,7 +175,7 @@ fclose(fp);
  
 snprintf(vbuff,CF_BUFSIZE,"%s/randseed",CFWORKDIR);
 RAND_write_file(vbuff);
-chmod(vbuff,0644); 
+cf_chmod(vbuff,0644); 
 }
 
 /*****************************************************************************/
@@ -216,6 +219,10 @@ while ((c=getopt_long(argc,argv,"d:vf:VM",OPTIONS,&optindex)) != EOF)
                     
       case 'V': Version("cf-key");
           exit(0);
+
+      case 'v':
+          VERBOSE = true;
+          break;
           
       case 'h': Syntax("cf-key - cfengine's key generator",OPTIONS,HINTS,ID);
           exit(0);

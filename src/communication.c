@@ -50,6 +50,7 @@ ap->trust = false;
 ap->localip[0] = '\0';
 ap->remoteip[0] = '\0';
 ap->session_key = NULL;
+ap->encryption_type = 'c';
 ap->error = false; 
 return ap;
 };
@@ -239,17 +240,17 @@ char *Hostname2IPString(char *hostname)
 
 #if defined(HAVE_GETADDRINFO)
 
- struct addrinfo query, *response, *ap;
+struct addrinfo query, *response, *ap;
 
- memset(&query,0,sizeof(struct addrinfo));   
- query.ai_family = AF_UNSPEC;
- query.ai_socktype = SOCK_STREAM;
+memset(&query,0,sizeof(struct addrinfo));   
+query.ai_family = AF_UNSPEC;
+query.ai_socktype = SOCK_STREAM;
 
- memset(ipbuffer,0,CF_SMALLBUF-1);
+memset(ipbuffer,0,CF_SMALLBUF-1);
  
 if ((err = getaddrinfo(hostname,NULL,&query,&response)) != 0)
    {
-   CfOut(cf_error,"","Unable to lookup hostname (%s) or cfengine service: %s",hostname,gai_strerror(err));
+   CfOut(cf_inform,"","Unable to lookup hostname (%s) or cfengine service: %s",hostname,gai_strerror(err));
    return hostname;
    }
  
@@ -262,15 +263,17 @@ for (ap = response; ap != NULL; ap = ap->ai_next)
       {
       snprintf(ipbuffer,CF_SMALLBUF-1,"Empty IP result for %s",hostname);
       }
+
    freeaddrinfo(response);   
    return ipbuffer;
    }
 #else
  struct hostent *hp;
  struct sockaddr_in cin;
- memset(&cin,0,sizeof(cin));
 
- memset(ipbuffer,0,CF_SMALLBUF-1);
+memset(&cin,0,sizeof(cin));
+
+memset(ipbuffer,0,CF_SMALLBUF-1);
 
 if ((hp = gethostbyname(hostname)) != NULL)
    {
@@ -307,7 +310,7 @@ memset(hostbuffer,0,MAXHOSTNAMELEN);
 if ((err = getaddrinfo(ipaddress,NULL,&query,&response)) != 0)
    {
    CfOut(cf_inform,"","Unable to lookup IP address (%s): %s",ipaddress,gai_strerror(err));
-   snprintf(hostbuffer,MAXHOSTNAMELEN-1,"(Non registered IP)"); 
+   snprintf(hostbuffer,MAXHOSTNAMELEN-1,ipaddress); 
    return hostbuffer;
    }
 
@@ -315,7 +318,7 @@ for (ap = response; ap != NULL; ap = ap->ai_next)
    {   
    if ((err = getnameinfo(ap->ai_addr,ap->ai_addrlen,hostbuffer,MAXHOSTNAMELEN,0,0,0)) != 0)
       {
-      snprintf(hostbuffer,MAXHOSTNAMELEN-1,"(Non registered IP)");
+      snprintf(hostbuffer,MAXHOSTNAMELEN-1,ipaddress);
       freeaddrinfo(response);
       return hostbuffer;
       }
@@ -325,7 +328,7 @@ for (ap = response; ap != NULL; ap = ap->ai_next)
    return hostbuffer;
    }
 
- snprintf(hostbuffer,MAXHOSTNAMELEN-1,"(Non registered IP)");
+ snprintf(hostbuffer,MAXHOSTNAMELEN-1,ipaddress);
  
 #else
 
@@ -341,7 +344,7 @@ if ((iaddr.s_addr = inet_addr(ipaddress)) != -1)
   
    if ((hp == NULL) || (hp->h_name == NULL))
       {
-      strcpy(hostbuffer,"(Non registered IP)");
+      strcpy(hostbuffer,ipaddress);
       return hostbuffer;
       }
 
@@ -379,4 +382,33 @@ for (sp = hostbuffer; *sp != '\0'; sp++)
 
 return hostbuffer;
 }
- 
+
+/*****************************************************************************/
+
+int GetMyHostInfo(char nameBuf[MAXHOSTNAMELEN], char ipBuf[MAXIP4CHARLEN])
+{
+  char *ip;
+  struct hostent *hostinfo;
+
+  if(gethostname(nameBuf, MAXHOSTNAMELEN) == 0)
+    {
+      if((hostinfo = gethostbyname(nameBuf)) != NULL)
+	{
+	  ip = inet_ntoa(*(struct in_addr *)*hostinfo->h_addr_list);
+	  strncpy(ipBuf, ip, MAXIP4CHARLEN - 1);
+	  ipBuf[MAXIP4CHARLEN - 1] = '\0';
+	  return true;
+	}
+      else
+	{
+	  CfOut(cf_error, "gethostbyname", "!! Could not get host entry for local host");
+	}
+    }
+  else
+    {
+      CfOut(cf_error, "gethostname", "!! Could not get host name");
+    }
+
+  return false;
+}
+

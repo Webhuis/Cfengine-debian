@@ -34,12 +34,6 @@
 
 extern char *DAY_TEXT[];
 
-struct CfState
-   {
-   unsigned int expires;
-   enum statepolicy policy;
-   };
-
 /*****************************************************************************/
 
 void KeepClassContextPromise(struct Promise *pp)
@@ -47,6 +41,13 @@ void KeepClassContextPromise(struct Promise *pp)
 { struct Attributes a;
 
 a = GetClassContextAttributes(pp);
+
+if (!FullTextMatch("[a-zA-Z0-9_]+",pp->promiser))
+   {
+   CfOut(cf_error,""," !! Class identifier contains illegal characters");
+   PromiseRef(cf_error,pp);
+   return;
+   }
 
 if (a.context.broken)
    {
@@ -114,7 +115,9 @@ void DeletePrivateClassContext()
 
 {
 DeleteItemList(VADDCLASSES);
+DeleteItemList(VDELCLASSES);
 VADDCLASSES = NULL;
+VDELCLASSES = NULL;
 }
 
 /*****************************************************************************/
@@ -141,78 +144,42 @@ PopStack(&PRIVCLASSHEAP,(void *)&VADDCLASSES,sizeof(VADDCLASSES));
 void NewPersistentContext(char *name,unsigned int ttl_minutes,enum statepolicy policy)
 
 { int errno;
-  DBT key,value;
-  DB *dbp;
+  CF_DB *dbp;
   struct CfState state;
   time_t now = time(NULL);
   char filename[CF_BUFSIZE];
 
 snprintf(filename,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_STATEDB_FILE);
+MapName(filename);
 
 if (!OpenDB(filename,&dbp))
    {
    return;
    }
 
-chmod(filename,0644);  
-memset(&key,0,sizeof(key));       
-memset(&value,0,sizeof(value));
+cf_chmod(filename,0644);  
       
-key.data = name;
-key.size = strlen(name)+1;
-
-if ((errno = dbp->get(dbp,NULL,&key,&value,0)) != 0)
+if (ReadDB(dbp,name,&state,sizeof(state)))
    {
-   if (errno != DB_NOTFOUND)
-      {
-      dbp->err(dbp,errno,NULL);
-      dbp->close(dbp,0);
-      return;
-      }
-   }
- 
-if (value.data != NULL)
-   {
-   memcpy((void *)&state,value.data,sizeof(state));
-   
    if (state.policy == cfpreserve)
       {
       if (now < state.expires)
          {
-         CfOut(cf_verbose,"","Persisent state %s is already in a preserved state --  %d minutes to go\n",name,(state.expires-now)/60);
-         dbp->close(dbp,0);
+         CfOut(cf_verbose,""," -> Persisent state %s is already in a preserved state --  %d minutes to go\n",name,(state.expires-now)/60);
+ CloseDB(dbp);
          return;
          }
       }
    }
 else
    {
-   CfOut(cf_verbose,"","New persistent state %s\n",key.data);
+   CfOut(cf_verbose,""," -> New persistent state %s\n",name);
+   state.expires = now + ttl_minutes * 60;
+   state.policy = policy;
    }
  
- 
-memset(&key,0,sizeof(key));       
-memset(&value,0,sizeof(value));
-      
-key.data = name;
-key.size = strlen(name)+1;
- 
-state.expires = now + ttl_minutes * 60;
-state.policy = policy; 
- 
-value.data = &state;
-value.size = sizeof(state);
- 
-if ((errno = dbp->put(dbp,NULL,&key,&value,0)) != 0)
-   {
-   CfOut(cf_error,"db->put","Database put failed in peristent class");
-   }
-else
-   {
-   CfOut(cf_verbose,"","Re-set persistent state %s for %d minutes\n",name,ttl_minutes);
-   }
-
-dbp->close(dbp,0);
+WriteDB(dbp,name,&state,sizeof(state));
+CloseDB(dbp);
 }
 
 /*****************************************************************************/
@@ -220,43 +187,32 @@ dbp->close(dbp,0);
 void DeletePersistentContext(char *name)
 
 { int errno;
-  DBT key,value;
-  DB *dbp;
+  CF_DB *dbp;
   char filename[CF_BUFSIZE];
 
 snprintf(filename,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_STATEDB_FILE);
+MapName(filename);
 
 if (!OpenDB(filename,&dbp))
    {
    return;
    }
 
-chmod(filename,0644); 
-
-memset(&key,0,sizeof(key));       
-memset(&value,0,sizeof(value));
-      
-key.data = name;
-key.size = strlen(name)+1;
-
-if ((errno = dbp->del(dbp,NULL,&key,0)) != 0)
-   {
-   CfOut(cf_error,"db_store","delete db failed");
-   }
- 
+cf_chmod(filename,0644); 
+DeleteDB(dbp,name);
 Debug("Deleted any persistent state %s\n",name); 
-dbp->close(dbp,0);
+CloseDB(dbp);
 }
 
 /*****************************************************************************/
 
 void LoadPersistentContext()
 
-{ DBT key,value;
-  DB *dbp;
-  DBC *dbcp;
-  DB_ENV *dbenv = NULL;
-  int ret;
+{ CF_DB *dbp;
+  CF_DBC *dbcp;
+  int ret,ksize,vsize;
+  char *key;
+  void *value;
   time_t now = time(NULL);
   struct CfState q;
   char filename[CF_BUFSIZE];
@@ -264,6 +220,7 @@ void LoadPersistentContext()
 Banner("Loading persistent classes");
   
 snprintf(filename,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_STATEDB_FILE);
+MapName(filename);
 
 if (!OpenDB(filename,&dbp))
    {
@@ -272,44 +229,33 @@ if (!OpenDB(filename,&dbp))
 
 /* Acquire a cursor for the database. */
 
-if ((ret = dbp->cursor(dbp, NULL, &dbcp, 0)) != 0)
+if (!NewDBCursor(dbp,&dbcp))
    {
-   CfOut(cf_error,"","Error reading from persistent state database");
-   dbp->err(dbp, ret, "DB->cursor");
+   CfOut(cf_inform,""," !! Unable to scan persistence cache");
    return;
    }
 
- /* Initialize the key/data return pair. */
-
-memset(&key, 0, sizeof(key));
-memset(&value, 0, sizeof(value));
- 
- /* Walk through the database and print out the key/data pairs. */
-
-while (dbcp->c_get(dbcp, &key, &value, DB_NEXT) == 0)
+while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
    {
-   memcpy((void *)&q,value.data,sizeof(struct CfState));
+   memcpy((void *)&q,value,sizeof(struct CfState));
 
-   Debug(" - Found key %s...\n",key.data);
+   Debug(" - Found key %s...\n",key);
 
    if (now > q.expires)
       {
-      CfOut(cf_verbose,""," Persistent class %s expired\n",key.data);
-      if ((errno = dbp->del(dbp,NULL,&key,0)) != 0)
-         {
-         CfOut(cf_error,"db_store","");
-         }
+      CfOut(cf_verbose,""," Persistent class %s expired\n",key);
+      DeleteDB(dbp,key);
       }
    else
       {
-      CfOut(cf_verbose,""," Persistent class %s for %d more minutes\n",key.data,(q.expires-now)/60);
-      CfOut(cf_verbose,""," Adding persistent class %s to heap\n",key.data);
-      NewClass(key.data);
+      CfOut(cf_verbose,""," Persistent class %s for %d more minutes\n",key,(q.expires-now)/60);
+      CfOut(cf_verbose,""," Adding persistent class %s to heap\n",key);
+      NewClass(key);
       }
    }
- 
-dbcp->c_close(dbcp);
-dbp->close(dbp,0);
+
+DeleteDBCursor(dbp,dbcp);
+CloseDB(dbp);
 
 Banner("Loaded persistent memory");
 }
@@ -430,9 +376,10 @@ for (sp = local; *sp != '\0'; sp++)
 int IsHardClass(char *sp)  /* true if string matches a hardwired class e.g. hpux */
 
 { int i;
-  static char *names[11] =
+  static char *names[] =
      {
      "any","agent","Morning","Afternoon","Evening","Night","Q1","Q2","Q3","Q4",
+     "SuSE","suse","fedora","Ubuntu","cfengine","ipv4","lsb_compliant","localhost",
      NULL
      };
  
@@ -462,7 +409,7 @@ for (i = 0; i < 12; i++)
 
 for (i = 0; names[i] != NULL; i++)
    {
-   if (strcmp(names[i],sp) == 0)
+   if (strncmp(names[i],sp,strlen(names[i])) == 0)
       {
       return true;
       }
@@ -520,7 +467,7 @@ return false;
 int VarClassExcluded(struct Promise *pp,char **classes)
 
 {
-*classes = (char *)GetConstraint("ifvarclass",pp->conlist,CF_SCALAR);
+*classes = (char *)GetConstraint("ifvarclass",pp,CF_SCALAR);
 
 if (*classes == NULL)
    {
@@ -597,6 +544,11 @@ int EvalClassExpression(struct Constraint *cp,struct Promise *pp)
 if (cp == NULL)
    {
    CfOut(cf_error,""," !! EvalClassExpression internal diagnostic discovered an ill-formed condition");
+   }
+
+if (!IsDefinedClass(pp->classes))
+   {
+   return false;
    }
 
 switch (cp->type) 
@@ -1048,7 +1000,7 @@ while(*sp != '\0')
 
    Debug("Checking OR atom (%s)?\n",atom);
 
-   if (IsItemIn(VNEGHEAP,atom))
+   if (IsItemIn(VNEGHEAP,atom)||IsItemIn(VDELCLASSES,atom))
       {
       if (negation)
          {

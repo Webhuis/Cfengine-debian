@@ -105,7 +105,7 @@ for (i = 0; i < CF3_MODULES; i++)
       {
       CfOut(cf_verbose,"","Dealing with chapter / bundle type %s\n",st->btype);
       fprintf(fout,"@c *****************************************************\n");
-      fprintf(fout,"@c * CHAPTER \n");
+     fprintf(fout,"@c * CHAPTER \n");
       fprintf(fout,"@c *****************************************************\n");
       
       if (strcmp(st->btype,"*") == 0)
@@ -139,6 +139,10 @@ fprintf(fout,"@c *****************************************************\n");
 
 fprintf(fout,"@node Special functions\n@chapter Special functions\n\n");
 
+fprintf(fout,"@node Introduction to functions\n@section Introduction to functions\n\n");
+
+IncludeManualFile(fout,"functions_intro.texinfo");
+
 for (i = 0; CF_FNCALL_TYPES[i].name != NULL; i++)
    {
    fprintf(fout,"@node Function %s\n@section Function %s \n\n",CF_FNCALL_TYPES[i].name,CF_FNCALL_TYPES[i].name);
@@ -156,9 +160,15 @@ fprintf(fout,"@node Special Variables\n@chapter Special Variables\n\n");
 
 // scopes const and sys
 
+NewScope("edit");
+NewScalar("edit","filename","x",cf_str);
+
 TexinfoVariables(fout,"const");
-TexinfoVariables(fout,"sys");
+TexinfoVariables(fout,"edit");
+TexinfoVariables(fout,"match");
 TexinfoVariables(fout,"mon");
+TexinfoVariables(fout,"sys");
+TexinfoVariables(fout,"this");
 
 // Log files
 
@@ -421,11 +431,11 @@ if (strcmp(scope,"mon") == 0)
       fprintf(fout,"\n@node Variable %s.%s\n@subsection Variable %s.%s \n\n",scope,varname,scope,varname);
       fprintf(fout,"Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%s}.",OBS[i][1]);
       
-      snprintf(varname,CF_MAXVARSIZE,"average_%s",OBS[i][0]);
+      snprintf(varname,CF_MAXVARSIZE,"av_%s",OBS[i][0]);
       fprintf(fout,"\n@node Variable %s.%s\n@subsection Variable %s.%s \n\n",scope,varname,scope,varname);
       fprintf(fout,"Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%s}.",OBS[i][1]);
       
-      snprintf(varname,CF_MAXVARSIZE,"stddev_%s",OBS[i][0]);
+      snprintf(varname,CF_MAXVARSIZE,"dev_%s",OBS[i][0]);
       fprintf(fout,"\n@node Variable %s.%s\n@subsection Variable %s.%s \n\n",scope,varname,scope,varname);
       fprintf(fout,"Observational measure collected every 2.5 minutes from cf-monitord, description: @var{%s}.",OBS[i][1]);
       }
@@ -523,7 +533,7 @@ snprintf(filename,CF_BUFSIZE-1,"%s%s",MANDIR,file);
 
 fprintf(fout,"@*\n");
 
-if (stat(filename,&sb) == -1)
+if (cfstat(filename,&sb) == -1)
    {
    if ((fp = fopen(filename,"w")) == NULL)
       {

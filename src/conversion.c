@@ -34,6 +34,25 @@
 
 /***************************************************************************/
 
+int SyslogPriority2Int(char *s)
+
+{ int i;
+  static char *types[] = { "emergency","alert","critical","error",
+                           "warning","notice","info","debug", NULL };
+    
+for (i = 0; types[i] != NULL; i++)
+   {
+   if (s && strcmp(s,types[i]) == 0)
+      {
+      return i;
+      }
+   }
+
+return 3;
+}
+
+/***************************************************************************/
+
 enum cfdbtype Str2dbType(char *s)
 
 { int i;
@@ -240,7 +259,7 @@ return cfa_symlink;
 enum cfcomparison String2Comparison(char *s)
 
 { int i;
-  static char *types[] = {"atime","mtime","ctime","digest","hash","binary",NULL};
+  static char *types[] = {"atime","mtime","ctime","digest","hash","binary","exists",NULL};
 
 for (i = 0; types[i] != NULL; i++)
    {
@@ -537,11 +556,9 @@ for (i = 0; i < month - 1; i++)
 
 cftime += (year - 1970) * 365 * 24 * 3600;
 
-
-Debug("Time CORRESPONDS %s\n",ctime(&cftime));
+Debug("Time %s CORRESPONDS %s\n",s,cf_ctime(&cftime));
 return (long) cftime;
 }
-
 
 /****************************************************************************/
 
@@ -710,6 +727,214 @@ if (lmin == CF_HIGHINIT || lmax == CF_LOWINIT)
 *max = lmax;
 }
 
+/*********************************************************************/
+
+enum cf_acl_method Str2AclMethod(char *string)
+
+{ static char *text[3] = { "append", "overwrite", NULL };
+  int i;
+ 
+for (i = 0; i < 2; i++)
+   {
+   if (string && (strcmp(text[i],string) == 0))
+      {
+      return i;
+      }
+   }
+
+return cfacl_nomethod;
+}
+
+/*********************************************************************/
+
+enum cf_acl_type Str2AclType(char *string)
+
+{ static char *text[4] = { "generic","posix", "ntfs", NULL };
+  int i;
+ 
+for (i = 0; i < 3; i++)
+   {
+   if (string && (strcmp(text[i],string) == 0))
+      {
+      return i;
+      }
+   }
+
+return cfacl_notype;
+}
+
+/*********************************************************************/
+
+enum cf_acl_inherit Str2AclInherit(char *string)
+
+{ static char *text[5] = { "nochange", "specify", "parent", "clear", NULL };
+  int i;
+ 
+for (i = 0; i < 4; i++)
+   {
+   if (string && (strcmp(text[i],string) == 0))
+      {
+      return i;
+      }
+   }
+
+return cfacl_noinherit;
+}
+
+/*********************************************************************/
+
+enum cf_acl_inherit Str2ServicePolicy(char *string)
+
+{ static char *text[4] = { "start", "stop", "disable", NULL };
+  int i;
+ 
+for (i = 0; i < 3; i++)
+   {
+   if (string && (strcmp(text[i],string) == 0))
+      {
+      return i;
+      }
+   }
+
+return cfsrv_nostatus;
+}
+
+
+/*********************************************************************/
+/* Level                                                             */
+/*********************************************************************/
+
+int Month2Int(char *string)
+
+{ int i;
+
+if (string == NULL)
+   {
+   return -1;
+   }
+ 
+for (i = 0; i < 12; i++)
+   {
+   if (strncmp(MONTH_TEXT[i],string,strlen(string))==0)
+      {
+      return i+1;
+      break;
+      }
+   }
+
+return -1;
+}
+
+/*************************************************************/
+
+char *GetArg0(char *execstr)
+
+{ char *sp;
+  static char arg[CF_BUFSIZE];
+  int i = 0;
+
+for (sp = execstr; *sp != ' ' && *sp != '\0'; sp++)
+   {
+   i++;
+
+   if (*sp == '\"')
+      {
+      DeEscapeQuotedString(sp,arg);
+      return arg;
+      }
+   }
+
+memset(arg,0,CF_MAXVARSIZE);
+strncpy(arg,execstr,i);
+arg[i] = '\0';
+return arg;
+}
+
+/*************************************************************/
+
+void CommPrefix(char *execstr,char *comm)
+
+{ char *sp;
+
+for (sp = execstr; *sp != ' ' && *sp != '\0'; sp++)
+   {
+   }
+
+if (sp - 10 >= execstr)
+   {
+   sp -= 10;   /* copy 15 most relevant characters of command */
+   }
+else
+   {
+   sp = execstr;
+   }
+
+memset(comm,0,20);
+strncpy(comm,sp,15);
+}
+
+/*************************************************************/
+
+int NonEmptyLine(char *line)
+
+{ char *sp;
+            
+for (sp = line; *sp != '\0'; sp++)
+   {
+   if (!isspace((int)*sp))
+      {
+      return true;
+      }
+   }
+
+return false;
+}
+
+/*************************************************************/
+
+char *Item2String(struct Item *ip)
+{
+  struct Item *currItem;
+  int stringSz = 0;
+  char *buf;
+  
+  // compute required buffer size
+  for(currItem = ip; currItem != NULL; currItem = currItem->next)
+    {
+      stringSz += strlen(currItem->name);
+      stringSz++; // newline space
+    }
+  
+  // we automatically get \0-termination because we are not appending a \n after the last item
+
+  buf = calloc(1, stringSz);
+
+  if(buf == NULL)
+    {
+      FatalError("Memory allocation in ItemToString()");
+    }
+  
+  // do the copy
+  for(currItem = ip; currItem != NULL; currItem = currItem->next)
+    {
+      strcat(buf, currItem->name);
+	  
+	  if(currItem->next != NULL)  // no newline after last item
+	  {
+        strcat(buf, "\n");
+	  }
+    }
+  
+  return buf;
+}
+
+
+/*******************************************************************/
+/* Unix-only functions                                             */
+/*******************************************************************/
+
+#ifndef MINGW
+
 /****************************************************************************/
 /* Rlist to Uid/Gid lists                                                   */
 /****************************************************************************/
@@ -762,62 +987,6 @@ return(gidlist);
 
 /*********************************************************************/
 
-enum cf_acl_method Str2AclMethod(char *string)
-
-{ static char *text[3] = { "append", "overwrite", NULL };
-  int i;
- 
-for (i = 0; i < 3; i++)
-   {
-   if (string && (strcmp(text[i],string) == 0))
-      {
-      return i;
-      }
-   }
-
-return cfacl_nomethod;
-}
-
-/*********************************************************************/
-
-enum cf_acl_type Str2AclType(char *string)
-
-{ static char *text[4] = { "generic","posix", "ntfs", NULL };
-  int i;
- 
-for (i = 0; i < 3; i++)
-   {
-   if (string && (strcmp(text[i],string) == 0))
-      {
-      return i;
-      }
-   }
-
-return cfacl_notype;
-}
-
-/*********************************************************************/
-
-enum cf_acl_inherit Str2AclInherit(char *string)
-
-{ static char *text[4] = { "specify", "parent", "none", NULL };
-  int i;
- 
-for (i = 0; i < 4; i++)
-   {
-   if (string && (strcmp(text[i],string) == 0))
-      {
-      return i;
-      }
-   }
-
-return cfacl_noinherit;
-}
-
-/*********************************************************************/
-/* Level                                                             */
-/*********************************************************************/
-
 uid_t Str2Uid(char *uidbuff,char *usercopy,struct Promise *pp)
 
 { struct Item *ip, *tmplist;
@@ -850,14 +1019,14 @@ if (uidbuff[0] == '+')        /* NIS group - have to do this in a roundabout    
       {
       if ((pw = getpwnam(ip->name)) == NULL)
          {
-         CfOut(cf_error,"","Unknown user \'%s\'\n",ip->name);
+         CfOut(cf_inform,"","Unknown user \'%s\'\n",ip->name);
 
          if (pp != NULL)
             {
-            PromiseRef(cf_error,pp);
+            PromiseRef(cf_inform,pp);
             }
 
-         uid = CF_UNKNOWN_OWNER; /* signal user not found */
+         uid = CF_SAME_OWNER; /* signal user not found */
          }
       else
          {
@@ -887,7 +1056,7 @@ else
       }
    else if ((pw = getpwnam(uidbuff)) == NULL)
       {
-      CfOut(cf_error,"","Unknown user %s\n",uidbuff);
+      CfOut(cf_inform,"","Unknown user %s\n",uidbuff);
       uid = CF_UNKNOWN_OWNER;  /* signal user not found */
 
       if (usercopy != NULL)
@@ -924,9 +1093,14 @@ else
       }
    else if ((gr = getgrnam(gidbuff)) == NULL)
       {
-      CfOut(cf_error,"","Unknown group \'%s\'\n",gidbuff);
-      PromiseRef(cf_error,pp);
-      gid = CF_UNKNOWN_GROUP;
+      CfOut(cf_inform,"","Unknown group \'%s\'\n",gidbuff);
+
+      if (pp)
+         {
+         PromiseRef(cf_inform,pp);
+         }
+
+      gid = CF_SAME_GROUP;
       }
    else
       {
@@ -937,89 +1111,5 @@ else
 
 return gid;
 }
-
-/****************************************************************************/
-
-int Month2Int(char *string)
-
-{ int i;
-
-if (string == NULL)
-   {
-   return -1;
-   }
- 
-for (i = 0; i < 12; i++)
-   {
-   if (strncmp(MONTH_TEXT[i],string,strlen(string))==0)
-      {
-      return i+1;
-      break;
-      }
-   }
-
-return -1;
-}
-
-
-/*************************************************************/
-
-char *GetArg0(char *execstr)
-
-{ char *sp;
-  static char arg[CF_BUFSIZE];
-  int i = 0;
-
-for (sp = execstr; *sp != ' ' && *sp != '\0'; sp++)
-   {
-   i++;
-   }
-
-memset(arg,0,CF_MAXVARSIZE);
-strncpy(arg,execstr,i);
-return arg;
-}
-
-/*************************************************************/
-
-void CommPrefix(char *execstr,char *comm)
-
-{ char *sp;
-
-for (sp = execstr; *sp != ' ' && *sp != '\0'; sp++)
-   {
-   }
-
-if (sp - 10 >= execstr)
-   {
-   sp -= 10;   /* copy 15 most relevant characters of command */
-   }
-else
-   {
-   sp = execstr;
-   }
-
-memset(comm,0,20);
-strncpy(comm,sp,15);
-}
-
-/*************************************************************/
-
-int NonEmptyLine(char *line)
-
-{ char *sp;
-            
-for (sp = line; *sp != '\0'; sp++)
-   {
-   if (!isspace((int)*sp))
-      {
-      return true;
-      }
-   }
-
-return false;
-}
-
-
-
+#endif  /* NOT MINGW */
 

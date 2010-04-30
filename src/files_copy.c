@@ -82,7 +82,7 @@ if (S_ISDIR(ssb.st_mode)) /* could be depth_search */
    SetSearchDevice(&ssb,pp);
    SourceSearchAndCopy(source,destination,attr.recursion.depth,attr,pp);
    
-   if (stat(destination,&dsb) != -1)
+   if (cfstat(destination,&dsb) != -1)
       {
       if (attr.copy.check_root)
          {
@@ -114,13 +114,13 @@ return NULL;
 /* Local low level                                                           */
 /*****************************************************************************/
 
-void CheckForFileHoles(struct stat *sstat,struct Attributes attr,struct Promise *pp)
+void CheckForFileHoles(struct stat *sstat,struct Promise *pp)
 
 /* Need a transparent way of getting this into CopyReg() */
 /* Use a public member in struct Image                   */
 
 {
-#ifndef IRIX
+#if !defined(IRIX) && !defined(MINGW)
 if (sstat->st_size > sstat->st_blocks * DEV_BSIZE)
 #else
 # ifdef HAVE_ST_BLOCKS
@@ -282,58 +282,60 @@ int FSWrite(char *new,int dd,char *buf,int towrite,int *last_write_made_hole,int
 { int *intp;
   char *cp;
  
- intp = 0;
+intp = 0;
  
- if (pp->makeholes)
-    {
-    buf[n_read] = 1;                    /* Sentinel to stop loop.  */
-    
-    /* Find first non-zero *word*, or the word with the sentinel.  */
-    intp = (int *) buf;
-    
-    while (*intp++ == 0)
-       {
-       }
-    
-    /* Find the first non-zero *byte*, or the sentinel.  */
-    
-    cp = (char *) (intp - 1);
-    
-    while (*cp++ == 0)
-       {
-       }
-    
-    /* If we found the sentinel, the whole input block was zero,
-       and we can make a hole.  */
-    
-    if (cp > buf + n_read)
-       {
-       /* Make a hole.  */
-       if (lseek (dd,(off_t)n_read,SEEK_CUR) < 0L)
-          {
-          CfOut(cf_error,"lseek","lseek in EmbeddedWrite, dest=%s\n", new);
-          return false;
-          }
-       *last_write_made_hole = 1;
-       }
-    else
-       {
-       /* Clear to indicate that a normal write is needed. */
-       intp = 0;
-       }
-    }
- 
- if (intp == 0)
-    {
-    if (cf_full_write(dd,buf,towrite) < 0)
-       {
-       CfOut(cf_error,"write","Local disk write(%.256s) failed\n",new);
-       pp->conn->error = true;
-       return false;
-       }
+if (pp->makeholes)
+   {
+   buf[n_read] = 1;                    /* Sentinel to stop loop.  */
+   
+   /* Find first non-zero *word*, or the word with the sentinel.  */
+   intp = (int *) buf;
+   
+   while (*intp++ == 0)
+      {
+      }
+   
+   /* Find the first non-zero *byte*, or the sentinel.  */
+   
+   cp = (char *) (intp - 1);
+   
+   while (*cp++ == 0)
+      {
+      }
+   
+   /* If we found the sentinel, the whole input block was zero,
+      and we can make a hole.  */
+   
+   if (cp > buf + n_read)
+      {
+      /* Make a hole.  */
 
-    *last_write_made_hole = 0;
-    }
+      if (lseek (dd,(off_t)n_read,SEEK_CUR) < 0L)
+         {
+         CfOut(cf_error,"lseek","lseek in EmbeddedWrite, dest=%s\n", new);
+         return false;
+         }
+
+      *last_write_made_hole = 1;
+      }
+   else
+      {
+      /* Clear to indicate that a normal write is needed. */
+      intp = 0;
+      }
+   }
+
+if (intp == 0)
+   {
+   if (cf_full_write(dd,buf,towrite) < 0)
+      {
+      CfOut(cf_error,"write","Local disk write(%.256s) failed\n",new);
+      pp->conn->error = true;
+      return false;
+      }
+   
+   *last_write_made_hole = 0;
+   }
 
 return true;
 }

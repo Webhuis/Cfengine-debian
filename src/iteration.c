@@ -71,10 +71,7 @@ for (rp = namelist; rp != NULL; rp = rp->next)
       {
       this = OrthogAppendRlist(&deref_listoflists,new,CF_LIST);
       rp->state_ptr = new->rval;
-      }
-   else
-      {
-      FatalError("Iteration context failed");
+      Debug("SETTING state to %s\n",rp->state_ptr->item);
       }
    }
 
@@ -116,7 +113,9 @@ if (iterator == NULL)
 cp = (struct CfAssoc *)iterator->item;
 state = iterator->state_ptr;
 
-Debug("Incrementing %s\n",cp->lval);
+/* Go ahead and increment */
+
+Debug(" -> Incrementing (%s) from \"%s\"\n",cp->lval,iterator->state_ptr->item);
 
 if (state->next == NULL)
    {
@@ -148,7 +147,7 @@ else
    {
    /* Update the current wheel */
    iterator->state_ptr = state->next;
-   Debug("Incrementing wheel %s\n",cp->lval);
+   Debug(" <- Incrementing wheel (%s) to \"%s\"\n",cp->lval,iterator->state_ptr->item);
    return true;
    }
 }

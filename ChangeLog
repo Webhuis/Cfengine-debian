@@ -1,6 +1,46 @@
+3.0.4
+	Class cancellation in promises to create better class feedback,
+	allows emulation of switch/case semantics etc
+	
+	Value of SA measurement promises
+
+	Special function getenv() which returns the contents of an
+	environment variable (on all platforms).
+	New function translatepath for generic Windows
+	New function escape() to escape literals as regular expressions (like SQL)
+        New function host2ip for caching IP address lookup
+	New function regextract for setting variables with backreferences
+	
+	New variables for the components $(sys.cf_agent), $(sys.cf_know) etc
+	pointing to the binaries.
+
+	More robust integrated database implementation; closing all
+	handles when receiving signals, self-healing on corruption.
+
+	Package installation on localhost without a manager like yum completed,
+	multiple repositories searched, and universal methods.
+	
+	Numerous bugfixes
+
+
+3.0.3
+	sha256 .. new hashes in openssl included in syntax tree.
+
+	End of line autocropping in readfile (hopefully intelligent)
+
+	hashmatch function incorrectly implemented - old debugging code left behind. Fix.
+
+	sys.crontab variable
+
+	Unknown user is now interpretated as "same user", so that we give cfengine a chance to
+	fix
+
+	Unregistered addresses no longer report "(Non registered IP)", but return as the address
+	itself when doing reverse lookups.
+	
 3.0.2
-	IMPORTANT: Change in normal ordering of editing. replace comes after insert lines
-	Much testing and minor bug fixing
+	IMPORTANT: Change in normal ordering of editing. replace comes
+	after insert lines Much testing and minor bug fixing
 
 	Memory leaks fixed
 	Many hooks added for Nova enterprise extensions.

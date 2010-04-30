@@ -1,0 +1,57 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle example in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'md5' (implicit) if context is any
+
+             string => 2036af0ee58d6d9dffcc6507af92664f       if body context any
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_hash.cf' near line 15
+
+
+      vars promise by 'sha256' (implicit) if context is any
+
+             string => e2fb1927976bfe1ea3987c1a731c75e8       if body context any
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_hash.cf' near line 16
+
+
+      vars promise by 'sha384' (implicit) if context is any
+
+             string => b348c0b83ccd9ee12673f5daaba3ee5f       if body context any
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_hash.cf' near line 17
+
+
+   TYPE: reports
+
+      reports promise by 'Hashed to: md5 $(md5)' (implicit) if context is cfengine_3
+
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_hash.cf' near line 23
+
+
+      reports promise by 'Hashed to: sha256 $(sha256)' (implicit) if context is cfengine_3
+
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_hash.cf' near line 24
+
+
+      reports promise by 'Hashed to: sha384 $(sha384)' (implicit) if context is cfengine_3
+
+            Promise (version not specified) belongs to bundle 'example' (type agent) in file '../tests/units/unit_hash.cf' near line 25
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'example'} if sub-body context any
+   }
+

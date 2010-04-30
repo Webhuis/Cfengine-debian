@@ -354,7 +354,7 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  8
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   82
+#define YYLAST   80
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  18
@@ -437,7 +437,7 @@ static const yytype_int8 yyrhs[] =
       -1,    56,    46,    47,    17,    -1,    48,    -1,    47,    14,
       48,    -1,    -1,    50,     9,    51,    -1,     5,    -1,     3,
       -1,     3,    -1,     4,    -1,    11,    -1,    52,    -1,    57,
-      -1,    15,    53,    16,    -1,    54,    -1,    53,    14,    54,
+      -1,    15,    53,    16,    -1,    54,    -1,    54,    14,    53,
       -1,    -1,     3,    -1,     4,    -1,    11,    -1,    57,    -1,
        3,    -1,     4,    -1,    55,    58,    -1,    -1,    12,    59,
       60,    13,    -1,    61,    -1,    60,    14,    61,    -1,    -1,
@@ -448,13 +448,13 @@ static const yytype_int8 yyrhs[] =
 static const yytype_uint16 yyrline[] =
 {
        0,    21,    21,    22,    26,    27,    31,    32,    33,    34,
-      38,    46,    54,    62,    69,    75,    76,    77,    81,    90,
-      89,   116,   117,   121,   122,   127,   126,   146,   147,   151,
-     152,   156,   157,   164,   161,   199,   200,   204,   205,   209,
-     210,   214,   232,   227,   257,   256,   284,   285,   286,   290,
-     309,   316,   325,   331,   337,   343,   348,   356,   362,   363,
-     364,   368,   374,   380,   386,   395,   402,   410,   418,   417,
-     443,   444,   445,   449,   456,   463,   470
+      38,    48,    56,    64,    71,    77,    78,    79,    83,    92,
+      91,   118,   119,   123,   124,   129,   128,   149,   150,   154,
+     155,   159,   160,   167,   164,   204,   205,   209,   210,   214,
+     215,   219,   237,   232,   262,   261,   289,   290,   291,   295,
+     314,   321,   330,   337,   344,   351,   357,   366,   372,   373,
+     374,   378,   384,   390,   396,   405,   412,   420,   428,   427,
+     453,   454,   455,   459,   466,   473,   480
 };
 #endif
 
@@ -525,7 +525,7 @@ static const yytype_uint8 yydefact[] =
        0,    16,    20,    22,    36,    40,     0,    48,    26,    28,
       32,     0,    52,    53,    54,    60,    42,    55,     0,    56,
        0,    46,     0,    33,    61,    62,    63,     0,    58,    64,
-      48,    68,    67,     0,    45,     0,     0,     0,    57,     0,
+      48,    68,    67,     0,    45,     0,     0,    57,    60,     0,
       72,    47,    49,    34,    59,    43,    73,    74,    75,    76,
        0,    70,    69,     0,    71
 };
@@ -545,26 +545,26 @@ static const yytype_int8 yydefgoto[] =
 #define YYPACT_NINF -66
 static const yytype_int8 yypact[] =
 {
-      35,   -66,   -66,     5,    35,   -66,    13,    13,   -66,   -66,
-     -66,    20,    20,   -66,     0,    18,    29,   -66,    24,   -66,
-     -66,    42,   -66,   -66,    36,    44,    41,   -66,    32,   -66,
-     -66,    29,   -66,   -66,   -66,     3,   -66,    47,   -66,    51,
-     -66,   -66,   -66,    46,   -66,     1,   -66,    56,   -66,   -66,
-      52,   -66,   -66,   -66,   -66,   -66,    25,    56,   -66,   -66,
-     -66,    25,    48,   -66,   -66,     7,   -66,   -66,    50,   -66,
-      17,   -66,    54,   -66,    48,   -66,   -66,    34,   -66,   -66,
-      56,   -66,   -66,    56,   -66,    25,    49,     7,   -66,    27,
-      10,   -66,   -66,   -66,   -66,   -66,    48,   -66,   -66,   -66,
-      40,   -66,   -66,    10,   -66
+      40,   -66,   -66,     5,    40,   -66,    13,    13,   -66,   -66,
+     -66,    29,    29,   -66,     0,    18,    32,   -66,    24,   -66,
+     -66,    30,   -66,   -66,    42,    39,    37,   -66,    41,   -66,
+     -66,    32,   -66,   -66,   -66,     3,   -66,    45,   -66,    50,
+     -66,   -66,   -66,    46,   -66,     1,   -66,    54,   -66,   -66,
+      49,   -66,   -66,   -66,   -66,   -66,     7,    54,   -66,   -66,
+     -66,     7,    47,   -66,   -66,    10,   -66,   -66,    48,   -66,
+      17,   -66,    52,   -66,    47,   -66,   -66,    51,    55,   -66,
+      54,   -66,   -66,    54,   -66,     7,    53,   -66,    10,    23,
+      25,   -66,   -66,   -66,   -66,   -66,    47,   -66,   -66,   -66,
+      38,   -66,   -66,    25,   -66
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -66,   -66,   -66,    60,   -66,   -66,    58,    55,    53,    38,
-     -66,    57,   -66,   -66,    37,    59,   -66,   -66,    26,   -66,
-      23,   -66,   -66,    39,   -66,   -66,    43,   -66,   -66,    -7,
-      -9,   -25,   -56,   -59,   -66,   -66,   -10,   -66,   -66,   -65,
+     -66,   -66,   -66,    58,   -66,   -66,    56,    59,    57,    33,
+     -66,    60,   -66,   -66,    31,    44,   -66,   -66,    28,   -66,
+      21,   -66,   -66,    43,   -66,   -66,    35,   -66,   -66,    -5,
+      -7,   -25,   -56,   -59,   -66,   -11,   -66,   -66,   -66,   -65,
      -66,   -66,   -66,   -24
 };
 
@@ -576,27 +576,27 @@ static const yytype_int8 yypgoto[] =
 static const yytype_int8 yytable[] =
 {
       79,    72,    73,    49,    44,     8,    33,    32,    33,    34,
-      74,    75,    16,    96,    97,    17,    10,    58,    76,    52,
-      49,    98,    79,    13,    72,    99,    92,    72,    62,    63,
-      16,    83,    23,    20,    84,    44,    64,    33,    99,    17,
-      65,    83,     1,     2,    95,    32,    33,    34,    87,    30,
-      88,    32,    33,   102,   103,    32,    56,    20,    31,    44,
-     -65,    61,    81,    85,     9,    12,    93,    15,    21,    51,
-      60,    59,    53,    89,    91,    27,    54,    94,     0,   104,
-      29,     0,    55
+      62,    63,    16,    74,    75,    17,    10,    58,    64,    52,
+      49,    76,    65,    79,    72,    99,    92,    72,    96,    97,
+      16,    83,    13,    20,    84,    23,    98,    83,    99,    17,
+      95,    32,    33,    34,    44,    20,    33,     1,     2,    32,
+      33,   102,   103,    31,    32,    30,    56,    44,    61,   -65,
+      81,    85,     9,    12,    51,    29,    53,    87,    60,    88,
+      93,    15,    21,    59,    55,    89,    91,    94,    27,   104,
+      54
 };
 
-static const yytype_int8 yycheck[] =
+static const yytype_uint8 yycheck[] =
 {
       65,    57,    61,    28,     3,     0,     5,     4,     5,     6,
        3,     4,    12,     3,     4,    15,     3,    16,    11,    16,
-      45,    11,    87,     3,    80,    90,    85,    83,     3,     4,
-      12,    14,     3,    15,    17,     3,    11,     5,   103,    15,
-      15,    14,     7,     8,    17,     4,     5,     6,    14,    13,
-      16,     4,     5,    13,    14,     4,    10,    15,    14,     3,
-      12,     9,    12,     9,     4,     7,    17,    12,    15,    31,
-      47,    45,    35,    80,    83,    18,    37,    87,    -1,   103,
-      21,    -1,    39
+      45,    11,    15,    88,    80,    90,    85,    83,     3,     4,
+      12,    14,     3,    15,    17,     3,    11,    14,   103,    15,
+      17,     4,     5,     6,     3,    15,     5,     7,     8,     4,
+       5,    13,    14,    14,     4,    13,    10,     3,     9,    12,
+      12,     9,     4,     7,    31,    21,    35,    16,    47,    14,
+      17,    12,    15,    45,    39,    80,    83,    88,    18,   103,
+      37
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
@@ -611,8 +611,8 @@ static const yytype_uint8 yystos[] =
       50,    27,    16,    32,    41,    44,    10,    46,    16,    36,
       38,     9,     3,     4,    11,    15,    51,    52,    55,    57,
       47,    48,    50,    51,     3,     4,    11,    53,    54,    57,
-      45,    12,    58,    14,    17,     9,    39,    14,    16,    47,
-      59,    48,    51,    17,    54,    17,     3,     4,    11,    57,
+      45,    12,    58,    14,    17,     9,    39,    16,    14,    47,
+      59,    48,    51,    17,    53,    17,     3,     4,    11,    57,
       60,    61,    13,    14,    61
 };
 
@@ -1437,11 +1437,13 @@ yyreduce:
     {
                           DebugBanner("Bundle");
                           P.block = "bundle";
+                          P.rval = NULL;
+                          P.currentRlist = NULL;
                           }
     break;
 
   case 11:
-#line 47 "cf3parse.y"
+#line 49 "cf3parse.y"
     {
                           DebugBanner("Body");
                           P.block = "body";
@@ -1449,7 +1451,7 @@ yyreduce:
     break;
 
   case 12:
-#line 54 "cf3parse.y"
+#line 56 "cf3parse.y"
     {
                           P.blocktype = P.currentid;;
                           Debug("Found block type %s for %s\n",P.blocktype,P.block);
@@ -1458,7 +1460,7 @@ yyreduce:
     break;
 
   case 13:
-#line 62 "cf3parse.y"
+#line 64 "cf3parse.y"
     {
                           P.blockid = P.currentid;
                           Debug("Found identifier %s for %s\n",P.currentid,P.block);
@@ -1466,7 +1468,7 @@ yyreduce:
     break;
 
   case 18:
-#line 82 "cf3parse.y"
+#line 84 "cf3parse.y"
     {
                           AppendRlist(&(P.useargs),P.currentid,CF_SCALAR);
                           free(P.currentid);
@@ -1474,7 +1476,7 @@ yyreduce:
     break;
 
   case 19:
-#line 90 "cf3parse.y"
+#line 92 "cf3parse.y"
     {
                        if (RelevantBundle(THIS_AGENT,P.blocktype))
                           {
@@ -1495,7 +1497,7 @@ yyreduce:
     break;
 
   case 20:
-#line 109 "cf3parse.y"
+#line 111 "cf3parse.y"
     {
                        INSTALL_SKIP = false;
                        Debug("End promise bundle\n\n");
@@ -1503,38 +1505,39 @@ yyreduce:
     break;
 
   case 25:
-#line 127 "cf3parse.y"
+#line 129 "cf3parse.y"
     {
                         P.currentbody = AppendBody(&BODIES,P.blockid,P.blocktype,P.useargs);
                           
                         P.useargs = NULL;
                         P.currenttype = NULL;
                         P.currentid = NULL;
+
                         /* The append functions gobble these strdups, so no memory leak */
                         Debug("Starting block\n");
                         }
     break;
 
   case 26:
-#line 140 "cf3parse.y"
+#line 143 "cf3parse.y"
     {
                         Debug("End promise body\n");
                         }
     break;
 
   case 33:
-#line 164 "cf3parse.y"
+#line 167 "cf3parse.y"
     { char *contextid = NULL;
  
                         CheckSelection(P.blocktype,P.blockid,P.lval,P.rval,P.rtype);
 
                         if (P.currentclasses == NULL)
                            {
-                           AppendConstraint(&((P.currentbody)->conlist),P.lval,P.rval,P.rtype,"any");
+                           AppendConstraint(&((P.currentbody)->conlist),P.lval,P.rval,P.rtype,"any",P.isbody);
                            }
                         else
                            {
-                           AppendConstraint(&((P.currentbody)->conlist),P.lval,P.rval,P.rtype,P.currentclasses);
+                           AppendConstraint(&((P.currentbody)->conlist),P.lval,P.rval,P.rtype,P.currentclasses,P.isbody);
                            }
 
                         if (strcmp(P.blockid,"control") == 0 && strcmp(P.blocktype,"common") == 0)
@@ -1554,11 +1557,13 @@ yyreduce:
                                  }
                               }
                            }
+
+                        P.rval = NULL;
                         }
     break;
 
   case 41:
-#line 215 "cf3parse.y"
+#line 220 "cf3parse.y"
     {
                          Debug("\n* Begin new promise type category %s in function \n\n",P.currenttype);
                                                  
@@ -1571,7 +1576,7 @@ yyreduce:
     break;
 
   case 42:
-#line 232 "cf3parse.y"
+#line 237 "cf3parse.y"
     {
                         if (P.currentclasses == NULL)
                            {
@@ -1585,7 +1590,7 @@ yyreduce:
     break;
 
   case 43:
-#line 244 "cf3parse.y"
+#line 249 "cf3parse.y"
     {
                         Debug("End implicit promise %s\n\n",P.promiser);
                         P.currentid = NULL;
@@ -1598,7 +1603,7 @@ yyreduce:
     break;
 
   case 44:
-#line 257 "cf3parse.y"
+#line 262 "cf3parse.y"
     {
                         if (P.currentclasses == NULL)
                            {
@@ -1612,7 +1617,7 @@ yyreduce:
     break;
 
   case 45:
-#line 269 "cf3parse.y"
+#line 274 "cf3parse.y"
     {
                         Debug("End full promise with promisee %s\n\n",P.promiser);
 
@@ -1627,7 +1632,7 @@ yyreduce:
     break;
 
   case 49:
-#line 293 "cf3parse.y"
+#line 298 "cf3parse.y"
     { struct SubTypeSyntax ss;
                           char *contextid = NULL;
 
@@ -1635,7 +1640,7 @@ yyreduce:
                            {
                            ss = CheckSubType(P.blocktype,P.currenttype);                           
                            CheckConstraint(P.currenttype,P.blockid,P.lval,P.rval,P.rtype,ss);                           
-                           AppendConstraint(&(P.currentpromise->conlist),P.lval,P.rval,P.rtype,"any");
+                           AppendConstraint(&(P.currentpromise->conlist),P.lval,P.rval,P.rtype,"any",P.isbody);
                            P.rval = NULL;
                            P.lval = NULL;
                            P.currentRlist = NULL;
@@ -1644,14 +1649,14 @@ yyreduce:
     break;
 
   case 50:
-#line 310 "cf3parse.y"
+#line 315 "cf3parse.y"
     {
                          Debug("  New class context \'%s\' :: \n\n",P.currentclasses);
                          }
     break;
 
   case 51:
-#line 317 "cf3parse.y"
+#line 322 "cf3parse.y"
     {
                          P.lval = P.currentid;
                          P.currentRlist = NULL;
@@ -1660,50 +1665,55 @@ yyreduce:
     break;
 
   case 52:
-#line 326 "cf3parse.y"
+#line 331 "cf3parse.y"
     {
                          P.rval = P.currentid;
                          P.rtype = CF_SCALAR;
+                         P.isbody = true;
                          Debug("Recorded IDRVAL %s\n",P.rval);
                          }
     break;
 
   case 53:
-#line 332 "cf3parse.y"
+#line 338 "cf3parse.y"
     {
                          P.rval = P.currentstring;
                          P.rtype = CF_SCALAR;
+                         P.isbody = false;
                          Debug("Recorded scalarRVAL %s\n",P.rval);
                          }
     break;
 
   case 54:
-#line 338 "cf3parse.y"
+#line 345 "cf3parse.y"
     {
                          P.rval = P.currentstring;
                          P.rtype = CF_SCALAR;
+                         P.isbody = false;
                          Debug("Recorded saclarvariableRVAL %s\n",P.rval);
                          }
     break;
 
   case 55:
-#line 344 "cf3parse.y"
+#line 352 "cf3parse.y"
     {
                          P.rval = P.currentRlist;
+                         P.isbody = false;
                          P.rtype = CF_LIST;
                          }
     break;
 
   case 56:
-#line 349 "cf3parse.y"
+#line 358 "cf3parse.y"
     {
+                         P.isbody = false;
                          P.rval = P.currentfncall[P.arg_nesting+1];
                          P.rtype = CF_FNCALL;
                          }
     break;
 
   case 61:
-#line 369 "cf3parse.y"
+#line 379 "cf3parse.y"
     {
                           AppendRlist((struct Rlist **)&P.currentRlist,P.currentid,CF_SCALAR);
                           free(P.currentid);
@@ -1711,7 +1721,7 @@ yyreduce:
     break;
 
   case 62:
-#line 375 "cf3parse.y"
+#line 385 "cf3parse.y"
     {
                           AppendRlist((struct Rlist **)&P.currentRlist,(void *)P.currentstring,CF_SCALAR);
                           free(P.currentstring);
@@ -1719,7 +1729,7 @@ yyreduce:
     break;
 
   case 63:
-#line 381 "cf3parse.y"
+#line 391 "cf3parse.y"
     {
                           AppendRlist((struct Rlist **)&P.currentRlist,(void *)P.currentstring,CF_SCALAR);
                           free(P.currentstring);
@@ -1727,7 +1737,7 @@ yyreduce:
     break;
 
   case 64:
-#line 387 "cf3parse.y"
+#line 397 "cf3parse.y"
     {
                           Debug("Install function call as list item from level %d\n",P.arg_nesting+1);
                           AppendRlist((struct Rlist **)&P.currentRlist,(void *)P.currentfncall[P.arg_nesting+1],CF_FNCALL);
@@ -1736,14 +1746,14 @@ yyreduce:
     break;
 
   case 65:
-#line 396 "cf3parse.y"
+#line 406 "cf3parse.y"
     {
                           Debug("Found function identifier %s\n",P.currentid);
                           }
     break;
 
   case 66:
-#line 403 "cf3parse.y"
+#line 413 "cf3parse.y"
     {
                           P.promiser = P.currentstring; //strdup(P.currentstring);
                           Debug("Promising object name \'%s\'\n",P.promiser);
@@ -1751,14 +1761,14 @@ yyreduce:
     break;
 
   case 67:
-#line 411 "cf3parse.y"
+#line 421 "cf3parse.y"
     {
                          Debug("Finished with function call, now at level %d\n\n",P.arg_nesting);
                          }
     break;
 
   case 68:
-#line 418 "cf3parse.y"
+#line 428 "cf3parse.y"
     {
                            if (++P.arg_nesting > CF_MAX_NESTING)
                               {
@@ -1770,7 +1780,7 @@ yyreduce:
     break;
 
   case 69:
-#line 429 "cf3parse.y"
+#line 439 "cf3parse.y"
     {
                            Debug("End args level %d\n",P.arg_nesting);
                            P.currentfncall[P.arg_nesting] = NewFnCall(P.currentfnid[P.arg_nesting],P.giveargs[P.arg_nesting]);
@@ -1784,7 +1794,7 @@ yyreduce:
     break;
 
   case 73:
-#line 450 "cf3parse.y"
+#line 460 "cf3parse.y"
     {
                           /* currently inside a use function */
                           AppendRlist(&P.giveargs[P.arg_nesting],P.currentid,CF_SCALAR);
@@ -1793,7 +1803,7 @@ yyreduce:
     break;
 
   case 74:
-#line 457 "cf3parse.y"
+#line 467 "cf3parse.y"
     {
                           /* currently inside a use function */
                           AppendRlist(&P.giveargs[P.arg_nesting],P.currentstring,CF_SCALAR);
@@ -1802,7 +1812,7 @@ yyreduce:
     break;
 
   case 75:
-#line 464 "cf3parse.y"
+#line 474 "cf3parse.y"
     {
                           /* currently inside a use function */
                           AppendRlist(&P.giveargs[P.arg_nesting],P.currentstring,CF_SCALAR);
@@ -1811,7 +1821,7 @@ yyreduce:
     break;
 
   case 76:
-#line 471 "cf3parse.y"
+#line 481 "cf3parse.y"
     {
                           /* Careful about recursion */
                           AppendRlist(&P.giveargs[P.arg_nesting],(void *)P.currentfncall[P.arg_nesting+1],CF_FNCALL);
@@ -1821,7 +1831,7 @@ yyreduce:
 
 
 /* Line 1267 of yacc.c.  */
-#line 1825 "y.tab.c"
+#line 1835 "y.tab.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -2035,7 +2045,7 @@ yyreturn:
 }
 
 
-#line 477 "cf3parse.y"
+#line 487 "cf3parse.y"
 
 
 /*****************************************************************/

@@ -1,175 +1,241 @@
 K 25
 svn:wc:ra_dav:version-url
 V 51
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units
+/projects/cfengine-3/!svn/ver/861/trunk/tests/units
 END
 unit_intarray.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_intarray.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_intarray.cf
 END
 unit_accessed_before.cf
 K 25
 svn:wc:ra_dav:version-url
 V 75
-/projects/cfengine-3/!svn/ver/462/trunk/tests/units/unit_accessed_before.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_accessed_before.cf
 END
 unit_controlclasses.cf
 K 25
 svn:wc:ra_dav:version-url
 V 74
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_controlclasses.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_controlclasses.cf
+END
+unit_iteration.cf
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_iteration.cf
+END
+unit_package_hash.cf
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_package_hash.cf
+END
+unit_varnet.cf
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/projects/cfengine-3/!svn/ver/727/trunk/tests/units/unit_varnet.cf
 END
 unit_edit_comment_lines.cf
 K 25
 svn:wc:ra_dav:version-url
 V 78
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_edit_comment_lines.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_comment_lines.cf
 END
 unit_hashcomment.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_hashcomment.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_hashcomment.cf
 END
 unit_createdb.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_createdb.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_createdb.cf
 END
 unit_edit_setvar.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_edit_setvar.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_setvar.cf
+END
+unit_hashuncomment.cf
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_hashuncomment.cf
 END
 unit_report_state.cf
 K 25
 svn:wc:ra_dav:version-url
 V 72
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_report_state.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_report_state.cf
 END
 unit_customize_by_named_list.cf
 K 25
 svn:wc:ra_dav:version-url
 V 83
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_customize_by_named_list.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_customize_by_named_list.cf
 END
 unit_regarray.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_regarray.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_regarray.cf
 END
 unit_multipassvars.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_multipassvars.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_multipassvars.cf
 END
 unit_cf2_integration.cf
 K 25
 svn:wc:ra_dav:version-url
 V 75
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_cf2_integration.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_cf2_integration.cf
+END
+unit_service_start.cf
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/projects/cfengine-3/!svn/ver/766/trunk/tests/units/unit_service_start.cf
+END
+unit_reporttofile.cf
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_reporttofile.cf
 END
 unit_userexists.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_userexists.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_userexists.cf
 END
-unit_ldap.cf.html
+unit_filesexist.cf
 K 25
 svn:wc:ra_dav:version-url
-V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_ldap.cf.html
+V 70
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_filesexist.cf
+END
+unit_user_edit_method.cf
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_user_edit_method.cf
 END
 unit_tidy_all_files.cf
 K 25
 svn:wc:ra_dav:version-url
 V 74
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_tidy_all_files.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_tidy_all_files.cf
 END
 unit_disable_and_rotate_files.cf
 K 25
 svn:wc:ra_dav:version-url
 V 84
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_disable_and_rotate_files.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_disable_and_rotate_files.cf
+END
+unit_registry_cache.cf
+K 25
+svn:wc:ra_dav:version-url
+V 74
+/projects/cfengine-3/!svn/ver/738/trunk/tests/units/unit_registry_cache.cf
 END
 unit_postfix.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_postfix.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_postfix.cf
 END
 unit_deletelines.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_deletelines.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_deletelines.cf
+END
+unit_switchcase.cf
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_switchcase.cf
 END
 unit_pathtype.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_pathtype.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_pathtype.cf
 END
 unit_setuidlog.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_setuidlog.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_setuidlog.cf
+END
+unit_escape.cf
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/projects/cfengine-3/!svn/ver/857/trunk/tests/units/unit_escape.cf
 END
 unit_returnszero.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_returnszero.cf
-END
-unit_sql.cf.html
-K 25
-svn:wc:ra_dav:version-url
-V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_sql.cf.html
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_returnszero.cf
 END
 unit_storage.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_storage.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_storage.cf
+END
+unit_report_custom.cf
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_report_custom.cf
 END
 unit_reglist.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_reglist.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_reglist.cf
 END
 unit_failsafe.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_failsafe.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_failsafe.cf
+END
+unit_occurrences.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_occurrences.cf
 END
 unit_change_detect.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/436/trunk/tests/units/unit_change_detect.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_change_detect.cf
 END
 unit_classes_global.cf
 K 25
 svn:wc:ra_dav:version-url
 V 74
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_classes_global.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_classes_global.cf
 END
 unit_getindices.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_getindices.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_getindices.cf
 END
 topic_map.ltm
 K 25
@@ -181,199 +247,277 @@ unit_ldap.cf
 K 25
 svn:wc:ra_dav:version-url
 V 64
-/projects/cfengine-3/!svn/ver/378/trunk/tests/units/unit_ldap.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_ldap.cf
 END
 unit_method.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_method.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_method.cf
 END
 unit_select_region.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_select_region.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_select_region.cf
 END
 unit_readtcp.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_readtcp.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_readtcp.cf
 END
 unit_badpromise.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_badpromise.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_badpromise.cf
 END
 unit_islink.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_islink.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_islink.cf
+END
+unit_acl_generic.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_acl_generic.cf
+END
+unit_diskfree.cf
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_diskfree.cf
+END
+unit_grep.cf
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_grep.cf
+END
+unit_package_msi_file.cf
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/projects/cfengine-3/!svn/ver/859/trunk/tests/units/unit_package_msi_file.cf
 END
 unit_pattern_and_edit.cf
 K 25
 svn:wc:ra_dav:version-url
 V 76
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_pattern_and_edit.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_pattern_and_edit.cf
+END
+unit_setvar.cf
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_setvar.cf
+END
+unit_acl_secret.cf
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/766/trunk/tests/units/unit_acl_secret.cf
+END
+unit_getfields.cf
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_getfields.cf
 END
 unit_strcmp.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_strcmp.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_strcmp.cf
 END
 unit_copy.cf
 K 25
 svn:wc:ra_dav:version-url
 V 64
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_copy.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_copy.cf
 END
 unit_copylinks.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_copylinks.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_copylinks.cf
 END
 unit_definitions.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_definitions.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_definitions.cf
 END
-unit_acl.cf.txt
+unit_server_flatcopy_localhost.cf
 K 25
 svn:wc:ra_dav:version-url
-V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_acl.cf.txt
+V 85
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_server_flatcopy_localhost.cf
 END
 unit_edit_sectioned_file.cf
 K 25
 svn:wc:ra_dav:version-url
 V 79
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_edit_sectioned_file.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_sectioned_file.cf
 END
 unit_getuid.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_getuid.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_getuid.cf
 END
 unit_literal_server.cf
 K 25
 svn:wc:ra_dav:version-url
 V 74
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_literal_server.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_literal_server.cf
 END
 unit_update.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/390/trunk/tests/units/unit_update.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_update.cf
+END
+unit_user_edit.cf
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_user_edit.cf
 END
 unit_hash.cf
 K 25
 svn:wc:ra_dav:version-url
 V 64
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_hash.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_hash.cf
 END
 unit_package_yum.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_package_yum.cf
-END
-unit_compare.cf
-K 25
-svn:wc:ra_dav:version-url
-V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_compare.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_package_yum.cf
 END
 unit_fileperms.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_fileperms.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_fileperms.cf
+END
+unit_compare.cf
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_compare.cf
 END
 unit_isnewerthan.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_isnewerthan.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_isnewerthan.cf
+END
+unit_copy_classes.cf
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/projects/cfengine-3/!svn/ver/756/trunk/tests/units/unit_copy_classes.cf
+END
+unit_env.cf
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/projects/cfengine-3/!svn/ver/703/trunk/tests/units/unit_env.cf
 END
 unit_badtype.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_badtype.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_badtype.cf
 END
 unit_selectservers.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_selectservers.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_selectservers.cf
 END
 unit_mount_fs.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_mount_fs.cf
-END
-unit_monitord.cf
-K 25
-svn:wc:ra_dav:version-url
-V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_monitord.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_mount_fs.cf
 END
 unit_linking.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_linking.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_linking.cf
+END
+unit_monitord.cf
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_monitord.cf
+END
+unit_countlinesmatching.cf
+K 25
+svn:wc:ra_dav:version-url
+V 78
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_countlinesmatching.cf
+END
+unit_package_apt.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_package_apt.cf
 END
 unit_null_config.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_null_config.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_null_config.cf
+END
+unit_hashmatch.cf
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_hashmatch.cf
 END
 unit_global_list_expansion_2.cf
 K 25
 svn:wc:ra_dav:version-url
 V 83
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_global_list_expansion_2.cf
-END
-unit_promises.cf
-K 25
-svn:wc:ra_dav:version-url
-V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_promises.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_global_list_expansion_2.cf
 END
 unit_arrays.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_arrays.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_arrays.cf
 END
-unit_filenames.cf
+unit_promises.cf
 K 25
 svn:wc:ra_dav:version-url
-V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_filenames.cf
+V 68
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_promises.cf
 END
 unit_getindixes.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_getindixes.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_getindixes.cf
+END
+unit_filenames.cf
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_filenames.cf
 END
 unit_irange.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_irange.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_irange.cf
 END
 README
 K 25
@@ -385,31 +529,25 @@ unit_package_rpm.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_package_rpm.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_package_rpm.cf
 END
 unit_isdir.cf
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_isdir.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_isdir.cf
 END
 unit_changedbefore.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/462/trunk/tests/units/unit_changedbefore.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_changedbefore.cf
 END
 unit_epimenides.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_epimenides.cf
-END
-unit_execresult.cf
-K 25
-svn:wc:ra_dav:version-url
-V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_execresult.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_epimenides.cf
 END
 Makefile.am
 K 25
@@ -417,95 +555,155 @@ svn:wc:ra_dav:version-url
 V 63
 /projects/cfengine-3/!svn/ver/410/trunk/tests/units/Makefile.am
 END
+unit_execresult.cf
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_execresult.cf
+END
 unit_backreferences_files.cf
 K 25
 svn:wc:ra_dav:version-url
 V 80
-/projects/cfengine-3/!svn/ver/306/trunk/tests/units/unit_backreferences_files.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_backreferences_files.cf
 END
 unit_insert_users.cf
 K 25
 svn:wc:ra_dav:version-url
 V 72
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_insert_users.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_insert_users.cf
+END
+unit_package_solaris.cf
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_package_solaris.cf
 END
 unit_method_validate.cf
 K 25
 svn:wc:ra_dav:version-url
 V 75
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_method_validate.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_method_validate.cf
 END
 unit_hostrange.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_hostrange.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_hostrange.cf
+END
+unit_classvar_convergence.cf
+K 25
+svn:wc:ra_dav:version-url
+V 80
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_classvar_convergence.cf
 END
 unit_groupexists.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_groupexists.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_groupexists.cf
 END
 Makefile.in
 K 25
 svn:wc:ra_dav:version-url
 V 63
-/projects/cfengine-3/!svn/ver/429/trunk/tests/units/Makefile.in
-END
-unit_ldap.cf.txt
-K 25
-svn:wc:ra_dav:version-url
-V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_ldap.cf.txt
+/projects/cfengine-3/!svn/ver/677/trunk/tests/units/Makefile.in
 END
 unit_acl.cf
 K 25
 svn:wc:ra_dav:version-url
 V 63
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_acl.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_acl.cf
 END
 unit_create_filedir.cf
 K 25
 svn:wc:ra_dav:version-url
 V 74
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_create_filedir.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_create_filedir.cf
 END
 unit_getgid.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_getgid.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_getgid.cf
 END
 unit_package_zypper.cf
 K 25
 svn:wc:ra_dav:version-url
 V 74
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_package_zypper.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_package_zypper.cf
 END
 unit_stringarray.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_stringarray.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_stringarray.cf
+END
+unit_edit_passwd_file.cf
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_passwd_file.cf
+END
+unit_package_msi_version.cf
+K 25
+svn:wc:ra_dav:version-url
+V 79
+/projects/cfengine-3/!svn/ver/859/trunk/tests/units/unit_package_msi_version.cf
 END
 unit_ordering.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/358/trunk/tests/units/unit_ordering.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_ordering.cf
 END
-unit_helloworld.cf
+unit_process_matching2.cf
 K 25
 svn:wc:ra_dav:version-url
-V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_helloworld.cf
+V 77
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_process_matching2.cf
+END
+unit_vars.cf
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_vars.cf
+END
+unit_template.cf
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_template.cf
+END
+unit_log_private.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_log_private.cf
 END
 unit_remove_deadlinks.cf
 K 25
 svn:wc:ra_dav:version-url
 V 76
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_remove_deadlinks.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_remove_deadlinks.cf
+END
+unit_helloworld.cf
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_helloworld.cf
+END
+unit_peers.cf
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_peers.cf
+END
+unit_countclassesmatching.cf
+K 25
+svn:wc:ra_dav:version-url
+V 80
+/projects/cfengine-3/!svn/ver/861/trunk/tests/units/unit_countclassesmatching.cf
 END
 topic_map.sql
 K 25
@@ -517,317 +715,449 @@ unit_process_signalling.cf
 K 25
 svn:wc:ra_dav:version-url
 V 78
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_process_signalling.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_process_signalling.cf
 END
 unit_locate_files_and_compress.cf
 K 25
 svn:wc:ra_dav:version-url
 V 85
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_locate_files_and_compress.cf
-END
-unit_select_mode.cf.html
-K 25
-svn:wc:ra_dav:version-url
-V 76
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_select_mode.cf.html
-END
-Makefile
-K 25
-svn:wc:ra_dav:version-url
-V 60
-/projects/cfengine-3/!svn/ver/468/trunk/tests/units/Makefile
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_locate_files_and_compress.cf
 END
 unit_process_matching.cf
 K 25
 svn:wc:ra_dav:version-url
 V 76
-/projects/cfengine-3/!svn/ver/308/trunk/tests/units/unit_process_matching.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_process_matching.cf
 END
-unit_module_exec.cf
+unit_getenv.cf
 K 25
 svn:wc:ra_dav:version-url
-V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_module_exec.cf
+V 66
+/projects/cfengine-3/!svn/ver/763/trunk/tests/units/unit_getenv.cf
 END
 unit_process_kill.cf
 K 25
 svn:wc:ra_dav:version-url
 V 72
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_process_kill.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_process_kill.cf
+END
+unit_module_exec.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_module_exec.cf
 END
 unit_id.cf
 K 25
 svn:wc:ra_dav:version-url
 V 62
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_id.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_id.cf
 END
 unit_isplain.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_isplain.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_isplain.cf
 END
-unit_select_mode.cf.txt
+unit_server_copy_purge.cf
 K 25
 svn:wc:ra_dav:version-url
-V 75
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_select_mode.cf.txt
+V 77
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_server_copy_purge.cf
 END
 unit_exec_in_sequence.cf
 K 25
 svn:wc:ra_dav:version-url
 V 76
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_exec_in_sequence.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_exec_in_sequence.cf
+END
+unit_syslog2.cf
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/projects/cfengine-3/!svn/ver/821/trunk/tests/units/unit_syslog2.cf
 END
 unit_edit_insert_lines.cf
 K 25
 svn:wc:ra_dav:version-url
 V 77
-/projects/cfengine-3/!svn/ver/436/trunk/tests/units/unit_edit_insert_lines.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_insert_lines.cf
 END
 unit_root_passwd.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_root_passwd.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_root_passwd.cf
 END
 unit_accumulated_time.cf
 K 25
 svn:wc:ra_dav:version-url
 V 76
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_accumulated_time.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_accumulated_time.cf
 END
 unit_ago.cf
 K 25
 svn:wc:ra_dav:version-url
 V 63
-/projects/cfengine-3/!svn/ver/410/trunk/tests/units/unit_ago.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_ago.cf
 END
-unit-env.cf
+unit_rename.cf
 K 25
 svn:wc:ra_dav:version-url
-V 63
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit-env.cf
+V 66
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_rename.cf
 END
 unit_readlist.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_readlist.cf
-END
-unit_measurements.cf
-K 25
-svn:wc:ra_dav:version-url
-V 72
-/projects/cfengine-3/!svn/ver/436/trunk/tests/units/unit_measurements.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_readlist.cf
 END
 unit_registry.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/308/trunk/tests/units/unit_registry.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_registry.cf
+END
+unit_measurements.cf
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_measurements.cf
+END
+unit_select_size.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_select_size.cf
 END
 unit_module_exec_2.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_module_exec_2.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_module_exec_2.cf
 END
-unit_sql.cf.txt
+unit_hostsseen.cf
 K 25
 svn:wc:ra_dav:version-url
-V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_sql.cf.txt
+V 69
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_hostsseen.cf
 END
 unit_dollar.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_dollar.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_dollar.cf
+END
+promise_knowledge.cf
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/promise_knowledge.cf
+END
+unit_edit_insert_lines_silly.cf
+K 25
+svn:wc:ra_dav:version-url
+V 83
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_insert_lines_silly.cf
 END
 unit_syslog.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_syslog.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_syslog.cf
+END
+cfengine_stdlib.cf
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/756/trunk/tests/units/cfengine_stdlib.cf
 END
 unit_file_change_detection.cf
 K 25
 svn:wc:ra_dav:version-url
 V 81
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_file_change_detection.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_file_change_detection.cf
 END
 unit_classmatch.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/462/trunk/tests/units/unit_classmatch.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_classmatch.cf
+END
+unit_service_disable.cf
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/projects/cfengine-3/!svn/ver/766/trunk/tests/units/unit_service_disable.cf
 END
 unit_edit_column_files.cf
 K 25
 svn:wc:ra_dav:version-url
 V 77
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_edit_column_files.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_column_files.cf
 END
 unit_resolveconf.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_resolveconf.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_resolveconf.cf
 END
-unit_acl.cf.html
+unit_bsdflags.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_acl.cf.html
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_bsdflags.cf
+END
+unit_knowledge_driver.cf
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_knowledge_driver.cf
+END
+unit_edit_triggerclass.cf
+K 25
+svn:wc:ra_dav:version-url
+V 77
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_triggerclass.cf
 END
 unit_webserver.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/332/trunk/tests/units/unit_webserver.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_webserver.cf
 END
 unit_edit_deletenotmatch.cf
 K 25
 svn:wc:ra_dav:version-url
 V 79
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_edit_deletenotmatch.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_deletenotmatch.cf
 END
 unit_edit_replace_string.cf
 K 25
 svn:wc:ra_dav:version-url
 V 79
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_edit_replace_string.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_edit_replace_string.cf
 END
 unit_reporting.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_reporting.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_reporting.cf
+END
+unit_lastnode.cf
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_lastnode.cf
+END
+unit_remoteclasses.cf
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/projects/cfengine-3/!svn/ver/756/trunk/tests/units/unit_remoteclasses.cf
+END
+unit_translatepath.cf
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/projects/cfengine-3/!svn/ver/787/trunk/tests/units/unit_translatepath.cf
+END
+unit_knowledge_txt.cf
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_knowledge_txt.cf
 END
 unit_global_list_expansion.cf
 K 25
 svn:wc:ra_dav:version-url
 V 81
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_global_list_expansion.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_global_list_expansion.cf
 END
 unit_fileexists.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_fileexists.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_fileexists.cf
 END
 unit_file_owner_list_template.cf
 K 25
 svn:wc:ra_dav:version-url
 V 84
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_file_owner_list_template.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_file_owner_list_template.cf
 END
 unit_splitstring.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_splitstring.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_splitstring.cf
+END
+unit_neighbourhood_watch.cf
+K 25
+svn:wc:ra_dav:version-url
+V 79
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_neighbourhood_watch.cf
 END
 unit_select_mode.cf
 K 25
 svn:wc:ra_dav:version-url
 V 71
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_select_mode.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_select_mode.cf
 END
 unit_iprange.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/332/trunk/tests/units/unit_iprange.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_iprange.cf
 END
 unit_chdir.cf
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_chdir.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_chdir.cf
 END
 unit_loops.cf
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/467/trunk/tests/units/unit_loops.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_loops.cf
 END
 unit_warnifline.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_warnifline.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_warnifline.cf
 END
 unit_sql.cf
 K 25
 svn:wc:ra_dav:version-url
 V 63
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_sql.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_sql.cf
+END
+unit_join.cf
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_join.cf
 END
 unit_parallel_exec.cf
 K 25
 svn:wc:ra_dav:version-url
 V 73
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_parallel_exec.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_parallel_exec.cf
 END
 unit_exec_args.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_exec_args.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_exec_args.cf
+END
+unit_filesexist2.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_filesexist2.cf
+END
+unit_measure_log.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/791/trunk/tests/units/unit_measure_log.cf
 END
 unit_server_copy_localhost.cf
 K 25
 svn:wc:ra_dav:version-url
 V 81
-/projects/cfengine-3/!svn/ver/332/trunk/tests/units/unit_server_copy_localhost.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_server_copy_localhost.cf
+END
+unit_getregistry.cf
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_getregistry.cf
+END
+unit_regextract.cf
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/projects/cfengine-3/!svn/ver/784/trunk/tests/units/unit_regextract.cf
 END
 unit_fix_names.cf
 K 25
 svn:wc:ra_dav:version-url
 V 69
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_fix_names.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_fix_names.cf
 END
 unit_server_copy_remote.cf
 K 25
 svn:wc:ra_dav:version-url
 V 78
-/projects/cfengine-3/!svn/ver/436/trunk/tests/units/unit_server_copy_remote.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_server_copy_remote.cf
+END
+unit_process_matching3.cf
+K 25
+svn:wc:ra_dav:version-url
+V 77
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_process_matching3.cf
 END
 unit_varclass.cf
 K 25
 svn:wc:ra_dav:version-url
 V 68
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_varclass.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_varclass.cf
 END
 unit_control_expand.cf
 K 25
 svn:wc:ra_dav:version-url
 V 74
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_control_expand.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_control_expand.cf
 END
 unit_expand.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_expand.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_expand.cf
+END
+unit_copy_edit.cf
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_copy_edit.cf
 END
 unit_isvariable.cf
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_isvariable.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_isvariable.cf
 END
 unit_regline.cf
 K 25
 svn:wc:ra_dav:version-url
 V 67
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_regline.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_regline.cf
+END
+unit_package_freebsd.cf
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_package_freebsd.cf
+END
+unit_report_diffs.cf
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_report_diffs.cf
+END
+unit_regex_win.cf
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/projects/cfengine-3/!svn/ver/820/trunk/tests/units/unit_regex_win.cf
 END
 unit_execd.cf
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/298/trunk/tests/units/unit_execd.cf
+/projects/cfengine-3/!svn/ver/849/trunk/tests/units/unit_execd.cf
 END

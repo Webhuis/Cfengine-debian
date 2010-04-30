@@ -34,8 +34,14 @@
 
 /*****************************************************************************/
 
-int VerifyLink(char *destination,char *source,struct Attributes attr,struct Promise *pp)
+char VerifyLink(char *destination,char *source,struct Attributes attr,struct Promise *pp)
 
+#ifdef MINGW
+{
+CfOut(cf_verbose, "", "Windows does not support symbolic links (at VerifyLink())");
+return CF_FAIL;
+}
+#else  /* NOT MINGW */
 { char to[CF_BUFSIZE],linkbuf[CF_BUFSIZE],saved[CF_BUFSIZE],absto[CF_BUFSIZE];
   int nofile = false;
   struct stat sb;
@@ -75,7 +81,7 @@ else
    strcpy(absto,to);
    }
 
-if (stat(absto,&sb) == -1)
+if (cfstat(absto,&sb) == -1)
    {
    Debug("No source file\n");
    nofile = true;
@@ -84,13 +90,13 @@ if (stat(absto,&sb) == -1)
 if (nofile && (attr.link.when_no_file != cfa_force) && (attr.link.when_no_file != cfa_delete))
    {
    CfOut(cf_inform,"","Source %s for linking is absent",absto);
-   return false;
+   return CF_WARN;
    }
 
 if (nofile && attr.link.when_no_file == cfa_delete)
    {
    KillGhostLink(destination,attr,pp);
-   return true;
+   return CF_CHG;
    }
     
 memset(linkbuf,0,CF_BUFSIZE);
@@ -99,22 +105,25 @@ if (readlink(destination,linkbuf,CF_BUFSIZE-1) == -1)
    {
    if (!MakeParentDirectory(destination,attr.move_obstructions))                  /* link doesn't exist */
       {
-      return true;
+      return CF_FAIL;
       }
    else
       {
       if (!MoveObstruction(destination,attr,pp))
          {
-         return false;
+         return CF_FAIL;
          }
 
-      return MakeLink(destination,to,attr,pp);
+      return MakeLink(destination,to,attr,pp)?CF_CHG:CF_FAIL;
       }
    }
 else
    { int off1 = 0, off2 = 0;  /* Link exists */
    
-   DeleteSlash(linkbuf);
+   if (*to && !IsFileSep(to[strlen(to)-1]))
+      {
+      DeleteSlash(linkbuf);
+      }
    
    if (strncmp(linkbuf,"./",2) == 0)   /* Ignore ./ at beginning */
       {
@@ -136,8 +145,8 @@ else
             
             if (unlink(destination) == -1)
                {
-               perror("unlink");
-               return true;
+               CfOut(cf_error,"unlink"," !! Error removing link %s",destination);
+               return CF_FAIL;
                }
             
             return MakeLink(destination,to,attr,pp);
@@ -145,26 +154,27 @@ else
          else
             {
             CfOut(cf_error,""," !! Must remove incorrect link %s\n",destination);
-            return false;
+            return CF_FAIL;
             }
          }
       else
          {
-         cfPS(cf_inform,CF_FAIL,"",pp,attr," !! Link %s points to %s not %s - not authorized to override",destination,linkbuf,to);
+         cfPS(cf_verbose,CF_FAIL,"",pp,attr," !! Link %s points to %s not %s - not authorized to override",destination,linkbuf,to);
          return true;
          }
       }
    else
       {
-      cfPS(cf_inform,CF_NOP,"",pp,attr," -> Link %s points to %s - promise kept",destination,to);
-      return true;
+      cfPS(cf_verbose,CF_NOP,"",pp,attr," -> Link %s points to %s - promise kept",destination,to);
+      return CF_NOP;
       }
    }
 }
+#endif  /* NOT MINGW */
 
 /*****************************************************************************/
 
-int VerifyAbsoluteLink(char *destination,char *source,struct Attributes attr,struct Promise *pp)
+char VerifyAbsoluteLink(char *destination,char *source,struct Attributes attr,struct Promise *pp)
 
 { char absto[CF_BUFSIZE];
   char expand[CF_BUFSIZE];
@@ -194,7 +204,7 @@ if (attr.link.when_no_file == cfa_force)
       {
       CfOut(cf_error,""," !! Failed to make absolute link in\n");
       PromiseRef(cf_error,pp);
-      return false;
+      return CF_FAIL;
       }
    else
       {
@@ -213,7 +223,7 @@ return VerifyLink(destination,linkto,attr,pp);
 
 /*****************************************************************************/
 
-int VerifyRelativeLink(char *destination,char *source,struct Attributes attr,struct Promise *pp)
+char VerifyRelativeLink(char *destination,char *source,struct Attributes attr,struct Promise *pp)
 
 { char *sp, *commonto, *commonfrom;
  char buff[CF_BUFSIZE],linkto[CF_BUFSIZE],add[CF_BUFSIZE];
@@ -229,7 +239,7 @@ if (*source == '.')
 if (!CompressPath(linkto,source))
    {
    cfPS(cf_error,CF_INTERPT,"",pp,attr," !! Failed to link %s to %s\n",destination,source);
-   return false;
+   return CF_FAIL;
    }
 
 commonto = linkto;
@@ -239,7 +249,7 @@ if (strcmp(commonto,commonfrom) == 0)
    {
    CfOut(cf_error,""," !! Can't link file %s to itself!\n",commonto);
    PromiseRef(cf_error,pp);
-   return false;
+   return CF_FAIL;
    }
 
 while (*commonto == *commonfrom)
@@ -275,13 +285,13 @@ while(--levels > 0)
    
    if (!JoinPath(buff,add))
       {
-      return false;
+      return CF_FAIL;
       }
    }
 
 if (!JoinPath(buff,commonto))
    {
-   return false;
+   return CF_FAIL;
    }
  
 return VerifyLink(destination,buff,attr,pp);
@@ -289,7 +299,7 @@ return VerifyLink(destination,buff,attr,pp);
 
 /*****************************************************************************/
 
-int VerifyHardLink(char *destination,char *source,struct Attributes attr,struct Promise *pp)
+char VerifyHardLink(char *destination,char *source,struct Attributes attr,struct Promise *pp)
 
 { char to[CF_BUFSIZE],linkbuf[CF_BUFSIZE],saved[CF_BUFSIZE],absto[CF_BUFSIZE];
  struct stat ssb,dsb;
@@ -316,24 +326,23 @@ else
    strcpy(absto,to);
    }
 
-if (stat(absto,&ssb) == -1)
+if (cfstat(absto,&ssb) == -1)
    {
    cfPS(cf_inform,CF_INTERPT,"",pp,attr," !! Source file %s doesn't exist\n",source);
-   return false;
+   return CF_WARN;
    }
 
 if (!S_ISREG(ssb.st_mode))
    {
    cfPS(cf_inform,CF_FAIL,"",pp,attr," !! Source file %s is not a regular file, not appropriate to hard-link\n",to);
-   return false;
+   return CF_WARN;
    }
 
 Debug2("Trying to (hard) link %s -> %s\n",destination,to);
 
-if (stat(destination,&dsb) == -1)
+if (cfstat(destination,&dsb) == -1)
    {
-   MakeHardLink(destination,to,attr,pp);
-   return true;
+   return MakeHardLink(destination,to,attr,pp)?CF_CHG:CF_FAIL;
    }
 
  /* both files exist, but are they the same file? POSIX says  */
@@ -348,25 +357,24 @@ if (dsb.st_ino != ssb.st_ino && dsb.st_dev != ssb.st_dev)
    if (dsb.st_mode == ssb.st_mode && dsb.st_size == ssb.st_size)
       {
       cfPS(cf_verbose,CF_NOP,"",pp,attr,"Hard link (%s->%s) on different device APPEARS okay\n",destination,to);
-      return true;
+      return CF_NOP;
       }
    }
 
 if (dsb.st_ino == ssb.st_ino && dsb.st_dev == ssb.st_dev)
    {
    cfPS(cf_verbose,CF_NOP,"",pp,attr," -> Hard link (%s->%s) exists and is okay\n",destination,to);
-   return true;
+   return CF_NOP;
    }
 
 CfOut(cf_inform,""," !! %s does not appear to be a hard link to %s\n",destination,to);
 
 if (!MoveObstruction(destination,attr,pp))
    {
-   return false;
+   return CF_FAIL;
    }
 
-MakeHardLink(destination,to,attr,pp);
-return true;
+return MakeHardLink(destination,to,attr,pp)?CF_CHG:CF_FAIL;
 }
 
 /*****************************************************************************/
@@ -375,6 +383,13 @@ return true;
 
 int KillGhostLink(char *name,struct Attributes attr,struct Promise *pp)
 
+#ifdef MINGW
+{
+CfOut(cf_verbose, "", "Windows does not support symbolic links (at KillGhostLink())");
+cfPS(cf_error,CF_FAIL,"",pp,attr," !! Windows does not support killing link \"%s\"", name);
+return false;
+}
+#else  /* NOT MINGW */
 { char linkbuf[CF_BUFSIZE],tmp[CF_BUFSIZE];
   char linkpath[CF_BUFSIZE],*sp;
   struct stat statbuf;
@@ -403,7 +418,7 @@ if (!IsAbsoluteFileName(linkbuf))
 strcat(linkpath,linkbuf);
 CompressPath(tmp,linkpath); 
  
-if (stat(tmp,&statbuf) == -1)               /* link points nowhere */
+if (cfstat(tmp,&statbuf) == -1)               /* link points nowhere */
    {
    if (attr.link.when_no_file == cfa_delete || attr.recursion.rmdeadlinks)
       {
@@ -420,13 +435,20 @@ if (stat(tmp,&statbuf) == -1)               /* link points nowhere */
 
 return false;
 }
+#endif  /* NOT MINGW */
 
 /*****************************************************************************/
 
 int MakeLink (char *from,char *to,struct Attributes attr,struct Promise *pp)
-
+#ifdef MINGW  // TODO: Remove? Should never get called.
 {
-if (DONTDO)
+CfOut(cf_verbose, "", "Windows does not support symbolic links");
+cfPS(cf_error,CF_FAIL,"symlink",pp,attr," !! Couldn't link %s to %s\n",to,from);
+return false;
+}
+#else  /* NOT MINGW */
+{
+if (DONTDO || attr.transaction.action == cfa_warn)
    {
    CfOut(cf_error,""," !! Need to link files %s -> %s\n",from,to);
    return false;
@@ -445,11 +467,18 @@ else
       }
    }
 }
+#endif  /* NOT MINGW */
 
 /*****************************************************************************/
 
 int MakeHardLink (char *from,char *to,struct Attributes attr,struct Promise *pp)
-
+#ifdef MINGW
+{  // TODO: Implement ?
+CfOut(cf_verbose, "", "Hard links are not yet supported on Windows");
+cfPS(cf_error,CF_FAIL,"link",pp,attr," !! Couldn't (hard) link %s to %s\n",to,from);
+return false;
+}
+#else  /* NOT MINGW */
 {
 if (DONTDO)
    {
@@ -470,6 +499,7 @@ else
       }
    }
 }
+#endif  /* NOT MINGW */
 
 /*********************************************************************/
 
@@ -477,7 +507,12 @@ int ExpandLinks(char *dest,char *from,int level)                            /* r
 
   /* Expand a path contaning symbolic links, up to 4 levels  */
   /* of symbolic links and then beam out in a hurry !        */
-
+#ifdef MINGW
+{
+CfOut(cf_error, "", "!! Windows does not support symbolic links (at ExpandLinks(%s,%s))", dest, from);
+return false;
+}
+#else  /* NOT MINGW */
 { char *sp, buff[CF_BUFSIZE];
   char node[CF_MAXLINKSIZE];
   struct stat statbuf;
@@ -592,6 +627,7 @@ for (sp = from; *sp != '\0'; sp++)
  
 return true;
 }
+#endif  /* NOT MINGW */
 
 /*********************************************************************/
 

@@ -37,12 +37,10 @@
 
 int IdentifyAgent(int sd,char *localip,int family)
 
-{ char sendbuff[CF_BUFSIZE],dnsname[CF_BUFSIZE];
+{ char uname[CF_BUFSIZE], sendbuff[CF_BUFSIZE],dnsname[CF_BUFSIZE];
   struct in_addr *iaddr;
   struct hostent *hp;
   int len,err;
-  struct passwd *user_ptr;
-  char *uname;
 #if defined(HAVE_GETADDRINFO)
   char myaddr[256]; /* Compilation trick for systems that don't know ipv6 */
 #else
@@ -132,8 +130,7 @@ else
       }
    }
 
-user_ptr = getpwuid(getuid());
-uname = user_ptr ? user_ptr->pw_name : "UNKNOWN";
+GetCurrentUserName(uname, sizeof(uname));
 
 /* Some resolvers will not return FQNAME and missing PTR will give numerical result */
 
@@ -168,18 +165,21 @@ return true;
 int AuthenticateAgent(struct cfagent_connection *conn,struct Attributes attr,struct Promise *pp)
 
 { char sendbuffer[CF_EXPANDSIZE],in[CF_BUFSIZE],*out,*decrypted_cchall;
- BIGNUM *nonce_challenge, *bn = NULL;
- unsigned long err;
- unsigned char digest[EVP_MAX_MD_SIZE];
- int encrypted_len,nonce_len = 0,len;
- char dont_implicitly_trust_server, keyname[CF_BUFSIZE];
- RSA *server_pubkey = NULL;
+  BIGNUM *nonce_challenge, *bn = NULL;
+  unsigned long err;
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  int encrypted_len,nonce_len = 0,len,session_size;;
+  char dont_implicitly_trust_server, keyname[CF_BUFSIZE], enterprise_field = 'c';
+  RSA *server_pubkey = NULL;
 
 if (PUBKEY == NULL || PRIVKEY == NULL) 
    {
    CfOut(cf_error,"","No public/private key pair found\n");
    return false;
    }
+
+enterprise_field = CfEnterpriseOptions();
+session_size = CfSessionKeySize(enterprise_field);
 
 /* Generate a random challenge to authenticate the server */
  
@@ -205,16 +205,15 @@ else
 if (server_pubkey = HavePublicKey(keyname))
    {
    dont_implicitly_trust_server = 'y';
-   /* encrypted_len = BN_num_bytes(server_pubkey->n);*/   
    encrypted_len = RSA_size(server_pubkey);
    }
 else 
    {
-   dont_implicitly_trust_server = 'n';                      /* have to trust server, since we can't verify id */
+   dont_implicitly_trust_server = 'n';        /* have to trust server, since we can't verify id */
    encrypted_len = nonce_len;
    }
 
-snprintf(sendbuffer,CF_BUFSIZE,"SAUTH %c %d %d",dont_implicitly_trust_server,encrypted_len,nonce_len);
+snprintf(sendbuffer,CF_BUFSIZE,"SAUTH %c %d %d %c",dont_implicitly_trust_server,encrypted_len,nonce_len,enterprise_field);
  
 if ((out = malloc(encrypted_len)) == NULL)
    {
@@ -307,11 +306,11 @@ else
       {
       if (attr.copy.trustkey)
          {
-         CfOut(cf_error,"","Trusting server identity, promise to accept key from %s=%s",pp->this_server,conn->remoteip);
+         CfOut(cf_cmdout,""," -> Trusting server identity, promise to accept key from %s=%s",pp->this_server,conn->remoteip);
          }
       else
          {
-         CfOut(cf_error,"","Not authorized to trust the server=%s's public key (trustkey=false)\n",pp->this_server);
+         CfOut(cf_error,""," !! Not authorized to trust the server=%s's public key (trustkey=false)\n",pp->this_server);
          PromiseRef(cf_verbose,pp);
          return false;
          }
@@ -326,7 +325,7 @@ Debug("Receive counter challenge from server\n");
 memset(in,0,CF_BUFSIZE);  
 encrypted_len = ReceiveTransaction(conn->sd,in,NULL);
 
-if (encrypted_len < 0)
+if (encrypted_len <= 0)
    {
    CfOut(cf_error,"","Protocol transaction sent illegal cipher length");
    return false;      
@@ -375,6 +374,7 @@ if (server_pubkey == NULL)
       }
 
    /* proposition S5 - conditional */  
+
    if ((len=ReceiveTransaction(conn->sd,in,NULL)) == 0)
       {
       cfPS(cf_inform,CF_INTERPT,"",pp,attr,"Protocol error in RSA authentation from IP %s\n",pp->this_server);
@@ -399,7 +399,7 @@ if (server_pubkey == NULL)
 
 SetSessionKey(conn);
 
-DebugBinOut(conn->session_key,CF_BLOWFISHSIZE);
+DebugBinOut(conn->session_key,session_size);
 
 if (conn->session_key == NULL)
    {
@@ -409,23 +409,23 @@ if (conn->session_key == NULL)
 else
    {
    Debug("Generated session key\n");
-   DebugBinOut(conn->session_key,CF_BLOWFISHSIZE);
+   DebugBinOut(conn->session_key,session_size);
    }
 
 /* blowfishmpisize = BN_bn2mpi((BIGNUM *)conn->session_key,in); */
 
-DebugBinOut(conn->session_key,CF_BLOWFISHSIZE);
+DebugBinOut(conn->session_key,session_size);
 
 encrypted_len = RSA_size(server_pubkey);
 
-Debug("Encrypt %d to %d\n",CF_BLOWFISHSIZE,encrypted_len);
+Debug("Encrypt %d to %d\n",session_size,encrypted_len);
 
 if ((out = malloc(encrypted_len)) == NULL)
    {
    FatalError("memory failure");
    }
 
-if (RSA_public_encrypt(CF_BLOWFISHSIZE,conn->session_key,out,server_pubkey,RSA_PKCS1_PADDING) <= 0)
+if (RSA_public_encrypt(session_size,conn->session_key,out,server_pubkey,RSA_PKCS1_PADDING) <= 0)
    {
    err = ERR_get_error();
    cfPS(cf_error,CF_INTERPT,"",pp,attr,"Public encryption failed = %s\n",ERR_reason_error_string(err));
@@ -490,12 +490,11 @@ else
 
 void SetSessionKey(struct cfagent_connection *conn)
 
-{ BIGNUM *bp; 
-
-/* Hardcode blowfish for now - it's fast */ 
+{ BIGNUM *bp;
+  int session_size = CfSessionKeySize(conn->encryption_type);
 
 bp = BN_new(); 
-BN_rand(bp,CF_BLOWFISHSIZE,0,0);
+BN_rand(bp,session_size,0,0);
 conn->session_key = (unsigned char *)bp;
 }
 

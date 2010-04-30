@@ -50,6 +50,9 @@ int PARSING = false;
 int CFPARANOID = false;
 int REQUIRE_COMMENTS = CF_UNDEFINED;
 int LOOKUP = false;
+int VIEWS = true;
+int IGNORE_MISSING_INPUTS = false;
+int IGNORE_MISSING_BUNDLES = false;
 
 struct utsname VSYSNAME;
 
@@ -63,13 +66,24 @@ int CFA_MAXTHREADS = 10;
 int CFA_BACKGROUND = 0;
 int CFA_BACKGROUND_LIMIT = 1;
 int AM_BACKGROUND_PROCESS = false;
+int CF_PERSISTENCE = 10;
 
 char *THIS_BUNDLE = NULL;
 char THIS_AGENT[CF_MAXVARSIZE];
 enum cfagenttype THIS_AGENT_TYPE;
-int INSTALL_SKIP = false;
+char SYSLOGHOST[CF_MAXVARSIZE];
+unsigned short SYSLOGPORT = 514;
 int FACILITY;
 time_t PROMISETIME;
+
+int LICENSES = 0;
+char EXPIRY[32];
+int INSTALL_SKIP = false;
+
+// These are used to measure graph complexity in know/agent
+
+int CF_NODES = 0; // objects
+int CF_EDGES = 0; // links or promises between them
 
 struct CfPackageManager *INSTALLED_PACKAGE_LISTS = NULL;
 struct CfPackageManager *PACKAGE_SCHEDULE = NULL;
@@ -83,7 +97,7 @@ struct Item *ABORTBUNDLEHEAP = NULL;
 struct Item *DONELIST = NULL;
 struct Rlist *CBUNDLESEQUENCE = NULL;
 
-
+int EDIT_MODEL = false;
 int CF_MOUNTALL = false;
 int CF_SAVEFSTAB = false;
 int FSTAB_EDITS;
@@ -125,7 +139,7 @@ struct Rlist *CF_STCK = NULL;
 
 int CF_STCKFRAME = 0;
 int LASTSEENEXPIREAFTER = CF_WEEK;
-int LASTSEEN = true;
+int LASTSEEN = false;
 
 struct Topic *TOPIC_MAP = NULL;
 
@@ -136,6 +150,15 @@ char BANNER[2*CF_BUFSIZE];
 char FOOTER[CF_BUFSIZE];
 char STYLESHEET[CF_BUFSIZE];
 char AGGREGATION[CF_BUFSIZE];
+
+/*****************************************************************************/
+/* Windows version constants                                                 */
+/*****************************************************************************/
+
+unsigned int WINVER_MAJOR = 0;
+unsigned int WINVER_MINOR = 0;
+unsigned int WINVER_BUILD = 0;
+
 
 /*****************************************************************************/
 /* Constants                                                                 */
@@ -271,13 +294,15 @@ pthread_attr_t PTHREADDEFAULTS;
 pthread_mutex_t MUTEX_SYSCALL = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 pthread_mutex_t MUTEX_LOCK = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 pthread_mutex_t MUTEX_COUNT = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-pthread_mutex_t MUTEX_HOSTNAME = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+pthread_mutex_t MUTEX_OUTPUT = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+pthread_mutex_t MUTEX_GETADDR = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 #else
 # if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
 pthread_mutex_t MUTEX_SYSCALL = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_LOCK = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_COUNT = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t MUTEX_HOSTNAME = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_OUTPUT = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_GETADDR = PTHREAD_MUTEX_INITIALIZER;
 # endif
 #endif
 
@@ -304,18 +329,25 @@ char *PROTOCOL[] =
    "SOPENDIR",
    "VAR",
    "SVAR",
+   "CONTEXT",
+   "SCONTEXT",
    NULL
    };
 
 struct Item *IPADDRESSES = NULL;
 struct Item *VHEAP = NULL;
 struct Item *VNEGHEAP = NULL;
+struct Item *VDELCLASSES = NULL;
 struct Item *VADDCLASSES=NULL;           /* Action sequence defs  */
 struct Rlist *PRIVCLASSHEAP = NULL;
 
 int PR_KEPT = 0;
 int PR_REPAIRED = 0;
 int PR_NOTKEPT = 0;
+
+double VAL_KEPT = 0;
+double VAL_REPAIRED = 0;
+double VAL_NOTKEPT = 0;
 
 char FILE_SEPARATOR;
 char FILE_SEPARATOR_STR[2];
@@ -362,8 +394,9 @@ int CF_DIGEST_SIZES[10] =
 struct Audit *AUDITPTR;
 struct Audit *VAUDIT = NULL; 
 FILE *VLOGFP = NULL; 
-DB  *AUDITDBP = NULL;
+CF_DB  *AUDITDBP = NULL;
 
+char GRAPHDIR[CF_BUFSIZE];
 char CFLOCK[CF_BUFSIZE];
 char SAVELOCK[CF_BUFSIZE]; 
 char CFLOG[CF_BUFSIZE];
@@ -546,7 +579,3 @@ char *OBS[CF_OBSERVABLES][2] =
 
 char *UNITS[CF_OBSERVABLES];
 time_t DATESTAMPS[CF_OBSERVABLES];
-
-
-
-

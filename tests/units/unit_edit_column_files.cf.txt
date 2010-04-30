@@ -1,0 +1,28 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle bun in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'userset' (implicit) if context is any
+
+            Promise (version 1.2.3) belongs to bundle 'bun' (type agent) in file './unit_edit_column_files.cf' near line 27
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   version => 1.2.3 if sub-body context any
+   bundlesequence =>  {'bun'} if sub-body context any
+   }
+

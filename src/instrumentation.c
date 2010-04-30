@@ -34,10 +34,6 @@
 
 #include <math.h>
 
-# if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-pthread_mutex_t MUTEX_GETADDR = PTHREAD_MUTEX_INITIALIZER;
-# endif
-
 /* Alter this code at your peril. Berkeley DB is very sensitive to errors. */
 
 /***************************************************************/
@@ -60,7 +56,7 @@ void EndMeasurePromise(struct timespec start,struct Promise *pp)
 
 { char id[CF_BUFSIZE], *mid = NULL;
 
-mid = GetConstraint("measurement_class",pp->conlist,CF_SCALAR);
+mid = GetConstraint("measurement_class",pp,CF_SCALAR);
 
 if (mid)
    {
@@ -96,7 +92,7 @@ if (measured_ok)
 
 void NotePerformance(char *eventname,time_t t,double value)
 
-{ DB *dbp;
+{ CF_DB *dbp;
   char name[CF_BUFSIZE];
   struct Event e,newe;
   double lastseen,delta2;
@@ -148,17 +144,18 @@ else
    WriteDB(dbp,eventname,&newe,sizeof(newe));
    }
 
-dbp->close(dbp,0);
+CloseDB(dbp);
 }
 
 /***************************************************************/
 
 void NoteClassUsage(struct Item *baselist)
 
-{ DB *dbp;
-  DBC *dbcp;
-  DBT key,stored;
-  char name[CF_BUFSIZE];
+{ CF_DB *dbp;
+  CF_DBC *dbcp;
+  void *stored;
+  char *key,name[CF_BUFSIZE];
+  int ksize,vsize;
   struct Event e,entry,newe;
   double lsea = CF_WEEK * 52; /* expire after a year */
   time_t now = time(NULL);
@@ -182,6 +179,7 @@ for (ip = baselist; ip != NULL; ip=ip->next)
    }
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_CLASSUSAGE);
+MapName(name);
 
 if (!OpenDB(name,&dbp))
    {
@@ -226,30 +224,26 @@ for (ip = list; ip != NULL; ip=ip->next)
 
 /* Acquire a cursor for the database. */
 
-if ((errno = dbp->cursor(dbp, NULL, &dbcp, 0)) != 0)
+if (!NewDBCursor(dbp,&dbcp))
    {
-   dbp->err(dbp, errno, "DB->cursor");
-   dbp->close(dbp,0);
+   CfOut(cf_inform,""," !! Unable to scan class db");
    return;
    }
 
- /* Initialize the key/data return pair. */
- 
-memset(&key, 0, sizeof(key));
-memset(&stored, 0, sizeof(stored));
 memset(&entry, 0, sizeof(entry)); 
 
-while (dbcp->c_get(dbcp, &key, &stored, DB_NEXT) == 0)
+while(NextDB(dbp,dbcp,&key,&ksize,&stored,&vsize))
    {
    double measure,av,var;
    time_t then;
    char tbuf[CF_BUFSIZE],eventname[CF_BUFSIZE];
 
-   strcpy(eventname,(char *)key.data);
+   memset(eventname,0,CF_BUFSIZE);
+   strncpy(eventname,(char *)key,ksize);
 
-   if (stored.data != NULL)
+   if (stored != NULL)
       {
-      memcpy(&entry,stored.data,sizeof(entry));
+      memcpy(&entry,stored,sizeof(entry));
       
       then    = entry.t;
       measure = entry.Q.q;
@@ -257,7 +251,7 @@ while (dbcp->c_get(dbcp, &key, &stored, DB_NEXT) == 0)
       var = entry.Q.var;
       lastseen = now - then;
             
-      snprintf(tbuf,CF_BUFSIZE-1,"%s",ctime(&then));
+      snprintf(tbuf,CF_BUFSIZE-1,"%s",cf_ctime(&then));
       tbuf[strlen(tbuf)-9] = '\0';                     /* Chop off second and year */
 
       if (lastseen > lsea)
@@ -278,7 +272,8 @@ while (dbcp->c_get(dbcp, &key, &stored, DB_NEXT) == 0)
       }
    }
 
-dbp->close(dbp,0);
+DeleteDBCursor(dbp,dbcp);
+CloseDB(dbp);
 DeleteItemList(list);
 }
 
@@ -286,8 +281,7 @@ DeleteItemList(list);
 
 void LastSaw(char *hostname,enum roles role)
 
-{ DB *dbp,*dbpent;
-  DB_ENV *dbenv = NULL, *dbenv2 = NULL;
+{ CF_DB *dbp,*dbpent;
   char name[CF_BUFSIZE],databuf[CF_BUFSIZE],varbuf[CF_BUFSIZE],rtype;
   time_t now = time(NULL);
   struct QPoint q,newq;
@@ -310,6 +304,7 @@ CfOut(cf_verbose,"","LastSaw host %s now\n",hostname);
 
 /* Tidy old versions - temporary */
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
+MapName(name);
 
 if (!OpenDB(name,&dbp))
    {
@@ -320,6 +315,7 @@ if (intermittency)
    {
    /* Open special file for peer entropy record - INRIA intermittency */
    snprintf(name,CF_BUFSIZE-1,"%s/lastseen/%s.%s",CFWORKDIR,CF_LASTDB_FILE,hostname);
+   MapName(name);
    
    if (!OpenDB(name,&dbpent))
       {
@@ -327,13 +323,7 @@ if (intermittency)
       }
    }
 
-#ifdef HAVE_PTHREAD_H  
-if (pthread_mutex_lock(&MUTEX_GETADDR) != 0)
-   {
-   CfOut(cf_error,"lock","pthread_mutex_lock failed");
-   exit(1);
-   }
-#endif
+ThreadLock(cft_getaddr);
 
 switch (role)
    {
@@ -345,13 +335,7 @@ switch (role)
        break;
    }
 
-#ifdef HAVE_PTHREAD_H  
-if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   exit(1);
-   }
-#endif
+ThreadUnlock(cft_getaddr);
    
 if (ReadDB(dbp,databuf,&q,sizeof(q)))
    {
@@ -369,13 +353,7 @@ else
    newq.var = 0.0;
    }
 
-#ifdef HAVE_PTHREAD_H  
-if (pthread_mutex_lock(&MUTEX_GETADDR) != 0)
-   {
-   CfOut(cf_error,"lock","pthread_mutex_lock failed");
-   exit(1);
-   }
-#endif
+ThreadLock(cft_getaddr);
 
 if (lastseen > (double)lsea)
    {
@@ -392,215 +370,14 @@ else
       }
    }
 
-#ifdef HAVE_PTHREAD_H  
-if (pthread_mutex_unlock(&MUTEX_GETADDR) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   exit(1);
-   }
-#endif
+ThreadUnlock(cft_getaddr);
 
 if (intermittency)
    {
-   dbpent->close(dbpent,0);
+   CloseDB(dbpent);
    }
 
-dbp->close(dbp,0);
-}
-
-/*****************************************************************************/
-/* level                                                                     */
-/*****************************************************************************/
-
-int OpenDB(char *filename,DB **dbp)
- 
-{ DB_ENV *dbenv = NULL;
-
-if ((errno = db_create(dbp,dbenv,0)) != 0)
-   {
-   CfOut(cf_error,"db_open","Couldn't get database environment for %s\n",filename);
-   return false;
-   }
-
-#ifdef CF_OLD_DB
-if ((errno = ((*dbp)->open)(*dbp,filename,NULL,DB_BTREE,DB_CREATE,0644)) != 0)
-#else
-if ((errno = ((*dbp)->open)(*dbp,NULL,filename,NULL,DB_BTREE,DB_CREATE,0644)) != 0)
-#endif
-   {
-   CfOut(cf_error,"db_open","Couldn't open database %s\n",filename);
-   return false;
-   }
-
-return true;
-}
-
-/*****************************************************************************/
-
-int ReadDB(DB *dbp,char *name,void *ptr,int size)
-
-{ DBT *key,value;
-
-if (dbp == NULL)
-   {
-   return false;
-   }
- 
-key = NewDBKey(name);
-memset(&value,0,sizeof(DBT));
-
-if ((errno = dbp->get(dbp,NULL,key,&value,0)) == 0)
-   {
-   memset(ptr,0,size);
-   
-   if (value.data)
-      {
-      memcpy(ptr,value.data,size);
-      }
-   else
-      {
-      DeleteDBKey(key);
-      return false;
-      }
-   
-   Debug("READ %s\n",name);
-   DeleteDBKey(key);
-   return true;
-   }
-else
-   {
-   Debug("Database read failed: %s",db_strerror(errno));
-   DeleteDBKey(key);
-   return false;
-   }
-}
-
-/*****************************************************************************/
-
-int WriteDB(DB *dbp,char *name,void *ptr,int size)
-
-{ DBT *key,*value;
-
-if (dbp == NULL)
-   {
-   return false;
-   }
- 
-key = NewDBKey(name); 
-value = NewDBValue(ptr,size);
-
-if ((errno = dbp->put(dbp,NULL,key,value,0)) != 0)
-   {
-   Debug("Database write failed: %s",db_strerror(errno));
-   DeleteDBKey(key);
-   DeleteDBValue(value);
-   return false;
-   }
-else
-   {
-   Debug("WriteDB => %s\n",name);
-
-   DeleteDBKey(key);
-   DeleteDBValue(value);
-   return true;
-   }
-}
-
-/*****************************************************************************/
-
-void DeleteDB(DB *dbp,char *name)
-
-{ DBT *key;
-
-if (dbp == NULL)
-   {
-   return;
-   }
- 
-key = NewDBKey(name);
-
-if ((errno = dbp->del(dbp,NULL,key,0)) != 0)
-   {
-   Debug("Database deletion failed: %s",db_strerror(errno));
-   }
-
-DeleteDBKey(key);
-Debug("DELETED DB %s\n",name);
-}
-
-/*****************************************************************************/
-/* Level 2                                                                   */
-/*****************************************************************************/
-
-DBT *NewDBKey(char *name)
-
-{ char *dbkey;
-  DBT *key;
-
-if ((dbkey = malloc(strlen(name)+1)) == NULL)
-   {
-   FatalError("NewChecksumKey malloc error");
-   }
-
-if ((key = (DBT *)malloc(sizeof(DBT))) == NULL)
-   {
-   FatalError("DBT  malloc error");
-   }
-
-memset(key,0,sizeof(DBT));
-memset(dbkey,0,strlen(name)+1);
-
-strncpy(dbkey,name,strlen(name));
-
-key->data = (void *)dbkey;
-key->size = strlen(name)+1;
-
-return key;
-}
-
-/*****************************************************************************/
-
-void DeleteDBKey(DBT *key)
-
-{
-free((char *)key->data);
-free((char *)key);
-}
-
-/*****************************************************************************/
-
-DBT *NewDBValue(void *ptr,int size)
-
-{ void *val;
-  DBT *value;
-
-if ((val = (void *)malloc(size)) == NULL)
-   {
-   FatalError("NewDBKey malloc error");
-   }
-
-if ((value = (DBT *) malloc(sizeof(DBT))) == NULL)
-   {
-   FatalError("DBT Value malloc error");
-   }
-
-memset(value,0,sizeof(DBT)); 
-memset(val,0,size);
-memcpy(val,ptr,size);
-
-value->data = val;
-value->size = size;
-
-return value;
-}
-
-/*****************************************************************************/
-
-void DeleteDBValue(DBT *value)
-
-{
-free((char *)value->data);
-free((char *)value);
+CloseDB(dbp);
 }
 
 /*****************************************************************************/

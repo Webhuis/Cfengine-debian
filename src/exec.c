@@ -55,6 +55,7 @@ int   MAXLINES = 30;
 int   SPLAYTIME = 0;
 const int INF_LINES = -2;
 int NOSPLAY = false;
+int NOWINSERVICE = false;
 
 extern struct BodySyntax CFEX_CONTROLBODY[];
 
@@ -80,7 +81,7 @@ void Apoptosis(void);
             "splay the start time of executions across the network\n"
             "and work as a class-based clock for scheduling.";
  
- struct option OPTIONS[18] =
+ struct option OPTIONS[15] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -94,11 +95,12 @@ void Apoptosis(void);
       { "inform",no_argument,0,'I'},
       { "diagnostic",no_argument,0,'x'},
       { "no-fork",no_argument,0,'F' },
+      { "no-winsrv",no_argument,0,'W' },
       { "ld-library-path",required_argument,0,'L'},
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[17] =
+ char *HINTS[15] =
       {
       "Print the help message",
       "Set debugging level 0,1,2,3",
@@ -112,6 +114,7 @@ void Apoptosis(void);
       "Print basic information about changes made to the system, i.e. promises repaired",
       "Activate internal diagnostics (developers only)",
       "Run as a foreground processes (do not fork)",
+      "Do not run as a service on windows - use this when running from a command shell (Cfengine Nova only)",
       "Set the internal value of LD_LIBRARY_PATH for child processes",
       NULL
       };
@@ -125,7 +128,22 @@ CheckOpts(argc,argv);
 GenericInitialize(argc,argv,"executor");
 ThisAgentInit();
 KeepPromises();
+
+#ifdef MINGW
+if(NOWINSERVICE)
+  {
+  StartServer(argc,argv);
+  }
+else
+  {
+  NovaWin_StartExecService();
+  }
+#else  /* NOT MINGW */
+
 StartServer(argc,argv);
+
+#endif  /* NOT MINGW */
+
 return 0;
 }
 
@@ -142,7 +160,7 @@ void CheckOpts(int argc,char **argv)
   int c;
   char ld_library_path[CF_BUFSIZE];
 
-while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gMW",OPTIONS,&optindex)) != EOF)
   {
   switch ((char) c)
       {
@@ -194,6 +212,7 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != 
           VERBOSE = true;
           NO_FORK = true;
           break;
+	  
           
       case 'n': DONTDO = true;
           IGNORELOCK = true;
@@ -208,9 +227,12 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != 
           if (putenv(strdup(ld_library_path)) != 0)
              {
              }
-          
           break;
-          
+
+      case 'W':
+    	  NOWINSERVICE = true;
+          break;
+		  
       case 'F':
           ONCE = true;
           NO_FORK = true;
@@ -232,6 +254,11 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gM",OPTIONS,&optindex)) != 
           exit(1);
           
       }
+   }
+
+if (argv[optind] != NULL)
+   {
+   CfOut(cf_error,"","Unexpected argument with no preceding option: %s\n",argv[optind]);
    }
 }
 
@@ -371,15 +398,25 @@ if (!ONCE)
 
    if (thislock.lock == NULL)
       {
+      DeletePromise(pp);
       return;
       }
    }
 
 Apoptosis();
 
+#ifdef MINGW
+
+if(!NO_FORK)
+  {
+  CfOut(cf_verbose, "", "Windows does not support starting processes in the background - starting in foreground");
+  }
+
+#else  /* NOT MINGW */
+
 if ((!NO_FORK) && (fork() != 0))
    {
-   CfOut(cf_inform,"","cf-execd starting %.24s\n",ctime(&now));
+   CfOut(cf_inform,"","cf-execd starting %.24s\n",cf_ctime(&now));
    exit(0);
    }
 
@@ -387,7 +424,10 @@ if (!NO_FORK)
    {
    ActAsDaemon(0);
    }
+   
+#endif  /* NOT MINGW */
 
+   
 if (!ONCE)
    {
    MYTWIN = StartTwin(argc,argv);
@@ -497,8 +537,8 @@ void Apoptosis()
 { struct Promise pp;
   struct Rlist *signals = NULL, *owners = NULL;
   char mypid[32],pidrange[32];
-  struct passwd *mpw = getpwuid(getuid());
   char *psopts = GetProcessOptions();
+  static char promiserBuf[CF_SMALLBUF];
 
 if (ONCE || VSYSTEMHARDCLASS == cfnt)
    {
@@ -507,8 +547,14 @@ if (ONCE || VSYSTEMHARDCLASS == cfnt)
    }
   
 CfOut(cf_verbose,""," !! Programmed pruning of the scheduler cluster");
-  
-pp.promiser = "/var/cfengine/.*/cf-execd";
+
+#ifdef MINGW
+snprintf(promiserBuf, sizeof(promiserBuf), "cf-execd");	  // using '\' causes regexp problems
+#else
+snprintf(promiserBuf, sizeof(promiserBuf), "%s/bin/cf-execd", CFWORKDIR);
+#endif
+
+pp.promiser = promiserBuf;
 pp.promisee = "cfengine";
 pp.classes = "any";
 pp.petype = CF_SCALAR;
@@ -528,18 +574,18 @@ pp.this_server = NULL;
 pp.donep = &(pp.done);
 pp.conn = NULL;
 
-snprintf(mypid,31,"%s",mpw->pw_name);
+GetCurrentUserName(mypid,31);
 
 PrependRlist(&signals,"term",CF_SCALAR);
 PrependRlist(&owners,mypid,CF_SCALAR);
 
-AppendConstraint(&(pp.conlist),"signals",signals,CF_LIST,"any");
-AppendConstraint(&(pp.conlist),"process_select",strdup("true"),CF_SCALAR,"any");
-AppendConstraint(&(pp.conlist),"process_owner",owners,CF_LIST,"any");
-AppendConstraint(&(pp.conlist),"ifelapsed",strdup("0"),CF_SCALAR,"any");
-AppendConstraint(&(pp.conlist),"process_count",strdup("true"),CF_SCALAR,"any");
-AppendConstraint(&(pp.conlist),"match_range",strdup("0,4"),CF_SCALAR,"any");
-AppendConstraint(&(pp.conlist),"process_result",strdup("process_owner.process_count"),CF_SCALAR,"any");
+AppendConstraint(&(pp.conlist),"signals",signals,CF_LIST,"any",false);
+AppendConstraint(&(pp.conlist),"process_select",strdup("true"),CF_SCALAR,"any",false);
+AppendConstraint(&(pp.conlist),"process_owner",owners,CF_LIST,"any",false);
+AppendConstraint(&(pp.conlist),"ifelapsed",strdup("0"),CF_SCALAR,"any",false);
+AppendConstraint(&(pp.conlist),"process_count",strdup("true"),CF_SCALAR,"any",false);
+AppendConstraint(&(pp.conlist),"match_range",strdup("0,4"),CF_SCALAR,"any",false);
+AppendConstraint(&(pp.conlist),"process_result",strdup("process_owner.process_count"),CF_SCALAR,"any",false);
 
 CfOut(cf_verbose,""," -> Looking for cf-execd processes owned by %s",mypid);
 
@@ -549,8 +595,12 @@ if (LoadProcessTable(&PROCESSTABLE,psopts))
    }
 
 DeleteItemList(PROCESSTABLE);
-DeleteRlist(signals);
-DeleteRlist(owners);
+
+if (pp.conlist)
+   {
+   DeleteConstraintList(pp.conlist);
+   }
+
 CfOut(cf_verbose,""," !! Pruning complete");
 }
 
@@ -566,17 +616,30 @@ CfOut(cf_verbose,"","Sleeping...\n");
 
 SignalTwin();
 
-sleep(60);                /* 1 Minute resolution is enough */ 
+sleep(CFPULSETIME);                /* 1 Minute resolution is enough */ 
 
 now = time(NULL);
 
-GetNameInfo3();
-GetInterfaceInfo3();
-FindV6InterfaceInfo();
+// recheck license (in case of license updates or expiry)
+
+if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR)) 
+  {
+  CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
+  exit(1);
+  }
+
+DeleteScope("this");
+DeleteScope("mon");
+DeleteScope("sys");
+NewScope("this");
+NewScope("mon");
+
+CfGetInterfaceInfo(cf_executor);
 Get3Environment();
 OSClasses();
+
 SetReferenceTime(true);
-snprintf(timekey,63,"%s",ctime(&now)); 
+snprintf(timekey,63,"%s",cf_ctime(&now)); 
 AddTimeClass(timekey); 
 
 for (ip = SCHEDULE; ip != NULL; ip = ip->next)
@@ -588,12 +651,16 @@ for (ip = SCHEDULE; ip != NULL; ip = ip->next)
       CfOut(cf_verbose,"","Waking up the agent at %s ~ %s \n",timekey,ip->name);
       DeleteItemList(VHEAP);
       VHEAP = NULL;
+      DeleteItemList(VADDCLASSES);
+      VADDCLASSES = NULL;
       return true;
       }
    }
 
 DeleteItemList(VHEAP);
-VHEAP = NULL; 
+VHEAP = NULL;
+DeleteItemList(VADDCLASSES);
+VADDCLASSES = NULL;
 return false;
 }
 
@@ -621,22 +688,25 @@ void *LocalExec(void *scheduled_run)
 { FILE *pp; 
   char line[CF_BUFSIZE],filename[CF_BUFSIZE],*sp;
   char cmd[CF_BUFSIZE],esc_command[CF_BUFSIZE];
-  int print,tid,count = 0;
+  int print,count = 0;
+  void *threadName;
   time_t starttime = time(NULL);
   FILE *fp;
 #ifdef HAVE_PTHREAD_SIGMASK
- sigset_t sigmask;
+  sigset_t sigmask;
 
 sigemptyset(&sigmask);
 pthread_sigmask(SIG_BLOCK,&sigmask,NULL); 
 #endif
 
 #ifdef HAVE_PTHREAD
-tid = (int) pthread_self();
+threadName = ThreadUniqueName(pthread_self());
+#else
+threadName = NULL;
 #endif
  
 CfOut(cf_verbose,"","------------------------------------------------------------------\n\n");
-CfOut(cf_verbose,"","  LocalExec(%sscheduled) at %s\n", scheduled_run ? "" : "not ", ctime(&starttime));
+CfOut(cf_verbose,"","  LocalExec(%sscheduled) at %s\n", scheduled_run ? "" : "not ", cf_ctime(&starttime));
 CfOut(cf_verbose,"","------------------------------------------------------------------\n"); 
 
 /* Need to make sure we have LD_LIBRARY_PATH here or children will die  */
@@ -644,26 +714,71 @@ CfOut(cf_verbose,"","-----------------------------------------------------------
 if (strlen(EXECCOMMAND) > 0)
    {
    strncpy(cmd,EXECCOMMAND,CF_BUFSIZE-1);
+
+   if (!strstr(EXECCOMMAND,"-Dfrom_cfexecd"))
+      {
+      strcat(EXECCOMMAND," -Dfrom_cfexecd");
+      }
    }
 else
    {
-   snprintf(cmd,CF_BUFSIZE-1,"%s/bin/cf-agent -f failsafe.cf && %s/bin/cf-agent%s -Dfrom_cfexecd%s",
-            CFWORKDIR,
-            CFWORKDIR,
-            NOSPLAY ? " -q" : "",
-            scheduled_run ? ":scheduled_run" : "");
+   // twin is bin-twin\cf-agent.exe on windows, bin/cf-twin on Unix
+   if (VSYSTEMHARDCLASS == mingw || VSYSTEMHARDCLASS == cfnt)
+      {
+      snprintf(cmd,CF_BUFSIZE-1,"%s/bin-twin/cf-agent.exe",CFWORKDIR);
+      MapName(cmd);
+      
+      if (IsExecutable(cmd))
+	 {
+         snprintf(cmd,CF_BUFSIZE-1,"\"%s/bin-twin/cf-agent.exe\" -f failsafe.cf && \"%s/bin/cf-agent.exe%s\" -Dfrom_cfexecd%s",
+                  CFWORKDIR,
+                  CFWORKDIR,
+                  NOSPLAY ? " -q" : "",
+                  scheduled_run ? ":scheduled_run" : "");      
+	 }
+      else
+	 {
+         snprintf(cmd,CF_BUFSIZE-1,"\"%s/bin/cf-agent.exe\" -f failsafe.cf && \"%s/bin/cf-agent.exe%s\" -Dfrom_cfexecd%s",
+                  CFWORKDIR,
+                  CFWORKDIR,
+                  NOSPLAY ? " -q" : "",
+                  scheduled_run ? ":scheduled_run" : "");      
+	 }
+      }
+   else
+      {
+      snprintf(cmd,CF_BUFSIZE-1,"%s/bin/cf-twin",CFWORKDIR);
+      
+      if (IsExecutable(cmd))
+	 {
+         snprintf(cmd,CF_BUFSIZE-1,"\"%s/bin/cf-twin\" -f failsafe.cf && \"%s/bin/cf-agent%s\" -Dfrom_cfexecd%s",
+                  CFWORKDIR,
+                  CFWORKDIR,
+                  NOSPLAY ? " -q" : "",
+                  scheduled_run ? ":scheduled_run" : "");      
+	 }
+      else
+	 {
+         snprintf(cmd,CF_BUFSIZE-1,"\"%s/bin/cf-agent\" -f failsafe.cf && \"%s/bin/cf-agent%s\" -Dfrom_cfexecd%s",
+                  CFWORKDIR,
+                  CFWORKDIR,
+                  NOSPLAY ? " -q" : "",
+                  scheduled_run ? ":scheduled_run" : "");      
+	 }
+      }   
    }
 
 strncpy(esc_command,MapName(cmd),CF_BUFSIZE-1);
    
-snprintf(line,CF_BUFSIZE-1,"_%d_%s",starttime,CanonifyName(ctime(&starttime)));
-snprintf(filename,CF_BUFSIZE-1,"%s/outputs/cf_%s_%s_%x",CFWORKDIR,CanonifyName(VFQNAME),line,(unsigned short)tid);
+snprintf(line,CF_BUFSIZE-1,"_%d_%s",starttime,CanonifyName(cf_ctime(&starttime)));
+snprintf(filename,CF_BUFSIZE-1,"%s/outputs/cf_%s_%s_%x",CFWORKDIR,CanonifyName(VFQNAME),line,threadName);
+MapName(filename);
 
 /* What if no more processes? Could sacrifice and exec() - but we need a sentinel */
 
 if ((fp = fopen(filename,"w")) == NULL)
    {
-   CfOut(cf_inform,"fopen","Couldn't open %s\n",filename);
+   CfOut(cf_error,"fopen","!! Couldn't open \"%s\" - aborting exec\n",filename);
    return NULL;
    }
 
@@ -671,7 +786,7 @@ CfOut(cf_verbose,""," -> Command => %s\n",cmd);
 
 if ((pp = cf_popen_sh(esc_command,"r")) == NULL)
    {
-   CfOut(cf_inform,"cf_popen","Couldn't open pipe to command %s\n",cmd);
+   CfOut(cf_error,"cf_popen","!! Couldn't open pipe to command \"%s\"\n",cmd);
    fclose(fp);
    return NULL;
    }
@@ -725,7 +840,7 @@ fclose(fp);
 
 if (ONCE)
    {
-   closelog();
+   Cf3CloseLog();
    }
 
 CfOut(cf_verbose,""," -> Command is complete\n",cmd);
@@ -835,30 +950,34 @@ else
    rtn = 1;
    }
 
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-if (pthread_mutex_lock(&MUTEX_COUNT) != 0)
+if (!ThreadLock(cft_count))
    {
-   CfOut(cf_error,"pthread_mutex_lock","pthread_mutex_lock failed");
    exit(1);
    }
-#endif
+
+/* replace old file with new*/   
 
 unlink(prev_file);
+
+#ifdef MINGW
+
+if (!CopyFile(filename, prev_file, TRUE))
+  {
+  CfOut(cf_inform,"CopyFile","Could copy %s to %s",filename,prev_file);
+  rtn = 1;
+  }
+
+#else  /* NOT MINGW */
 
 if (symlink(filename, prev_file) == -1)
    {
    CfOut(cf_inform,"symlink","Could not link %s and %s",filename,prev_file);
    rtn = 1;
    }
+   
+#endif  /* NOT MINGW */
 
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-if (pthread_mutex_unlock(&MUTEX_COUNT) != 0)
-   {
-   CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
-   exit(1);
-   }
-#endif
-
+ThreadUnlock(cft_count);
 return(rtn);
 }
 
@@ -883,12 +1002,13 @@ if ((strlen(VMAILSERVER) == 0) || (strlen(to) == 0))
 
 CfOut(cf_verbose,"","Mail result...\n");
 
-if (stat(file,&statbuf) == -1)
+if (cfstat(file,&statbuf) == -1)
    {
    return;
    }
 
 snprintf(prev_file,CF_BUFSIZE-1,"%s/outputs/previous",CFWORKDIR);
+MapName(prev_file);
 
 if (statbuf.st_size == 0)
    {
@@ -897,7 +1017,7 @@ if (statbuf.st_size == 0)
    return;
    }
 
-if ( CompareResult(file,prev_file) == 0 ) 
+if (CompareResult(file,prev_file) == 0) 
    {
    CfOut(cf_verbose,"","Previous output is the same as current so do not mail it\n");
    return;
@@ -980,7 +1100,7 @@ if (connect(sd,(void *) &raddr,sizeof(raddr)) == -1)
    {
    CfOut(cf_inform,"connect","Couldn't connect to host %s\n",VMAILSERVER);
    fclose(fp);
-   close(sd);
+   cf_closesocket(sd);
    return;
    }
 
@@ -1094,13 +1214,13 @@ if (!Dialogue(sd,".\r\n"))
 Dialogue(sd,"QUIT\r\n");
 Debug("Done sending mail\n");
 fclose(fp);
-close(sd);
+cf_closesocket(sd);
 return;
  
 mail_err: 
 
 fclose(fp);
-close(sd); 
+cf_closesocket(sd); 
 CfOut(cf_log,"","Cannot mail to %s.", to);
 }
 

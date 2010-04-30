@@ -117,9 +117,7 @@ for (cp = pcopy->conlist; cp != NULL; cp=cp->next)
    }
 
 PushThisScope();
-
 ExpandPromiseAndDo(agent,scopeid,pcopy,scalarvars,listvars,fnptr);
-
 PopThisScope();
 
 DeletePromise(pcopy);
@@ -366,7 +364,6 @@ switch (type)
        /* Note expand function does not mean evaluate function, must preserve type */
        fp = (struct FnCall *)rval;
        fpe = ExpandFnCall(scopeid,fp,true);
-
        returnval.item = fpe;
        returnval.rtype = CF_FNCALL;
        break;       
@@ -566,14 +563,13 @@ void ExpandPromiseAndDo(enum cfagenttype agent,char *scopeid,struct Promise *pp,
   struct Promise *pexp;
   struct Scope *ptr;
   int i = 1;
-  char *handle = GetConstraint("handle",pp->conlist,CF_SCALAR);
-  
+  char *handle = GetConstraint("handle",pp,CF_SCALAR);
+
 lol = NewIterationContext(scopeid,listvars);
 
 do
    {
    /* Set scope "this" first to ensure list expansion ! */
-
    SetScope("this");  
    DeRefListsInHashtable("this",listvars,lol);   
 
@@ -587,9 +583,9 @@ do
       {
       NewScalar("this","handle",PromiseID(pp),cf_str);
       }
-            
+   
    pexp = ExpandDeRefPromise("this",pp);
-
+     
    switch (agent)
       {
       case cf_common:
@@ -606,7 +602,7 @@ do
              }
           break;
       }
-
+      
    if (strcmp(pp->agentsubtype,"vars") == 0)
       {
       ConvergeVarHashPromise(pp->bundle,pexp,true);
@@ -641,7 +637,7 @@ if ((rtype == CF_SCALAR) && IsNakedVar(rval,'@')) /* Treat lists specially here 
    {
    GetNaked(naked,rval);
    
-   if (GetVariable(scopeid,naked,&(returnval.item),&(returnval.rtype)) == cf_notype)
+   if (GetVariable(scopeid,naked,&(returnval.item),&(returnval.rtype)) == cf_notype || returnval.rtype != CF_LIST)
       {
       returnval = ExpandPrivateRval("this",rval,rtype);
       }
@@ -827,9 +823,12 @@ switch (*(str+1))
           {
           return false;
           }
-       break;       
-   }
+       break;
 
+   default:
+       return false;
+       break;
+   }
 
 for (sp = str; *sp != '\0'; sp++)
    {
@@ -844,6 +843,13 @@ for (sp = str; *sp != '\0'; sp++)
       case '}':
       case ']':
           count--;
+
+          /* The last character must be the end of the variable */
+
+          if (count == 0 && strlen(sp) > 1)
+             {
+             return false;
+             }
           break;
       }
    }
@@ -852,7 +858,6 @@ if (count != 0)
    {
    return false;
    }
-
 
 Debug1("IsNakedVar(%s,%c)!!\n",str,vtype);
 return true;
@@ -883,11 +888,13 @@ strncpy(s2,s1+2,strlen(s1)-3);
 void ConvergeVarHashPromise(char *scope,struct Promise *pp,int allow_redefine)
 
 { struct Constraint *cp,*cp_save = NULL;
-  char *lval,rtype,retval[CF_MAXVARSIZE];
-  void *rval = NULL;
-  int i = 0,ok_redefine = false;
+  struct Attributes a;
+  char *lval,rtype;
+  void *rval = NULL,*retval;
+  int i = 0,ok_redefine = false,drop_undefined = false;;
   struct Rval returnval; /* Must expand naked functions here for consistency */
-
+  struct Rlist *rp,*last = NULL;
+  
 if (pp->done)
    {
    return;
@@ -904,10 +911,30 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
       {
       continue;
       }
-   
+
+   if (cp->rval == NULL)
+      {
+      continue;
+      }
+
+   if (strcmp(cp->lval,"ifvarclass") == 0)
+      {
+      if (IsExcluded(cp->rval))
+         {
+         return;
+         }
+      
+      continue;
+      }
+
    if (strcmp(cp->lval,"policy") == 0)
       {
-      if (strcmp(cp->rval,"constant") == 0)
+      if (strcmp(cp->rval,"ifdefined") == 0)
+         {
+         drop_undefined = true;
+         ok_redefine = false;
+         }
+      else if (strcmp(cp->rval,"constant") == 0)
          {
          ok_redefine = false;
          }
@@ -915,9 +942,10 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
          {
          ok_redefine = true;
          }
-      continue;
       }
-   else
+   else if (strcmp(cp->lval,"string") == 0 || strcmp(cp->lval,"slist") == 0 ||
+            strcmp(cp->lval,"int") == 0 || strcmp(cp->lval,"ilist") == 0 ||
+            strcmp(cp->lval,"real") == 0 || strcmp(cp->lval,"rlist") == 0)
       {
       i++;
       rval = cp->rval;
@@ -927,21 +955,23 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
 
 cp = cp_save;
 
-ok_redefine |= allow_redefine;
-
 if (cp == NULL)
    {
-   CfOut(cf_error,"","Variable body for %s is incomplete",pp->promiser);
+   CfOut(cf_error,"","Variable body for \"%s\" is incomplete",pp->promiser);
    PromiseRef(cf_error,pp);
    return;
    }
 
 if (i > 2)
    {
-   CfOut(cf_error,"","Variable-type body in %s breaks its own promise",pp->promiser);
+   CfOut(cf_error,"","Variable \"%s\" breaks its own promise with multiple values (code %d)",pp->promiser,i);
    PromiseRef(cf_error,pp);
    return;
    }
+
+// More consideration needs to be given to using these
+//a.transaction = GetTransactionConstraints(pp);
+//a.classes = GetClassDefinitionConstraints(pp);
 
 if (rval != NULL)
    {
@@ -959,8 +989,6 @@ if (rval != NULL)
          /* We do not assign variables to failed fn calls */
          return;
          }
-
-      /* *(pp->donep) = true; prevents proper variable expansion e.g randomint() */
       }
 
    if (Epimenides(pp->promiser,rval,cp->type,0))
@@ -977,14 +1005,54 @@ if (rval != NULL)
       cp->type = returnval.rtype;
       }
 
-   if (ok_redefine) /* only on second iteration, else we ignore broken promises */
+   if (GetVariable(scope,pp->promiser,(void *)&retval,&rtype) != cf_notype)
       {
-      if (GetVariable(scope,pp->promiser,(void *)&retval,&rtype) != cf_notype)
+      if (ok_redefine) /* only on second iteration, else we ignore broken promises */
          {
          DeleteVariable(scope,pp->promiser);
          }
+      else if ((THIS_AGENT_TYPE == cf_common) && (CompareRval(retval,rtype,rval,cp->type) == false))
+         {
+         CfOut(cf_error,""," !! Redefinition of a constant variable \"%s\"",pp->promiser);
+         PromiseRef(cf_error,pp);
+         }
       }
 
+   if (IsCf3VarString(pp->promiser))
+      {
+      // Unexpanded variables, we don't do anything with
+      return;
+      }
+   
+   if (!FullTextMatch("[a-zA-Z0-9_\200-\377.]+(\\[.+\\])*",pp->promiser))
+      {
+      CfOut(cf_error,""," !! Variable identifier contains illegal characters");
+      PromiseRef(cf_error,pp);
+      return;
+      }
+
+   if (drop_undefined && cp->type == CF_LIST)
+      {
+      for (rp = rval; rp != NULL; rp=rp->next)
+         {
+         if (IsNakedVar(rp->item,'@'))
+            {
+            if (rp == rval)
+               {
+               DeleteRvalItem(rp->item,rp->type);
+               rval = rp->next;
+               }
+            else if (last)
+               {
+               last->next = rp->next;
+               DeleteRvalItem(rp->item,rp->type);
+               }
+            }
+
+         last = rp;
+         }
+      }
+   
    if (!AddVariableHash(scope,pp->promiser,rval,cp->type,Typename2Datatype(cp->lval),cp->audit->filename,cp->lineno))
       {
       CfOut(cf_verbose,"","Unable to converge %s.%s value (possibly empty or infinite regression)\n",scope,pp->promiser);
@@ -996,6 +1064,7 @@ else
    CfOut(cf_error,"","Variable %s has no promised value\n",pp->promiser);
    CfOut(cf_error,"","Rule from %s at/before line %d\n",cp->audit->filename,cp->lineno);
    }     
+
 }
 
 /*********************************************************************/

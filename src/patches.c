@@ -52,12 +52,13 @@ else
 
 /*********************************************************/
 
+/* We assume that s is at least MAX_FILENAME large.
+ * MapName() is thread-safe, but the argument is modified. */
+
 char *MapName(char *s)
 
-{ static char buffer[CF_BUFSIZE];
+{ char buffer[CF_BUFSIZE];
   char *spf,*spto;
-  int rootlen;
-  struct stat sb;
 
 #ifdef NT
 memset(buffer,0,CF_BUFSIZE);
@@ -122,11 +123,32 @@ else
          }
       }
    }
-#else
-strncpy(buffer,s,CF_BUFSIZE-1);
-#endif
 
-return buffer;
+memset(s,0,MAX_FILENAME);
+strncpy(s,buffer,MAX_FILENAME-1);
+
+#endif  /* NT */
+
+return s;
+}
+
+/*********************************************************/
+
+char *MapNameForward(char *s)
+/* Like MapName(), but maps all slashes to forward */
+
+{ char *sp;
+ 
+for (sp = s; *sp != '\0'; sp++)
+   {
+   switch(*sp)
+      {
+      case '\\':
+	  *sp = '/';
+      }
+   }
+
+return s;
 }
 
 /*********************************************************/
@@ -134,7 +156,11 @@ return buffer;
 int UseUnixStandard(char *s)
 
 {
+#ifdef MINGW
+return false;
+#else
 return true;
+#endif
 }
 
 /*********************************************************/
@@ -282,6 +308,14 @@ void endnetgrent()
 
 int uname (struct utsname *sys)
 
+#ifdef MINGW
+
+{
+return NovaWin_uname(sys);
+}
+
+#else  /* NOT MINGW */
+
 { char buffer[CF_BUFSIZE], *sp;
 
 if (gethostname(buffer,CF_BUFSIZE) == -1)
@@ -320,7 +354,9 @@ for (sp = sys->sysname; *sp != '\0'; sp++)
 return (0);
 }
 
-#endif
+#endif  /* NOT MINGW */
+
+#endif  /* NOT HAVE_UNAME */
 
 /***********************************************************/
 /* strstr() missing on old BSD systems                     */
@@ -533,7 +569,7 @@ return -1;
 
 /*******************************************************************/
 
-#ifndef HAVE_DRAND48  
+#ifndef HAVE_DRAND48
 
 double drand48(void)
 
@@ -582,3 +618,145 @@ return 0;
 }
 
 #endif
+
+/*******************************************************************/
+
+char *cf_ctime(const time_t *timep)
+
+/* NT uses format "Wed Jan 02 02:03:55 1980", but should use
+ * "Wed Jan  2 02:03:55 1980" (no 0-padding for days)        */
+
+{
+char *times = ctime(timep);
+
+if (times == NULL)
+  {
+  CfOut(cf_error, "ctime", "!! Could not convert time to string");
+  return NULL;
+  }
+
+
+#ifdef MINGW
+
+if (times[8] == '0')
+  {
+  times[8] = ' ';
+  }
+
+#endif  /* MINGW */
+
+return times;
+}
+
+/*******************************************************************/
+
+int cf_closesocket(int sd)
+
+{
+#ifdef MINGW
+return closesocket(sd);
+#else
+return close(sd);
+#endif
+}
+
+/*******************************************************************/
+
+int cf_mkdir(const char *path, mode_t mode)
+
+{
+#ifdef MINGW
+return NovaWin_mkdir(path, mode);
+#else
+return mkdir(path,mode);
+#endif
+}
+
+/*******************************************************************/
+
+int cf_chmod(const char *path, mode_t mode)
+
+{
+#ifdef MINGW
+return NovaWin_chmod(path, mode);
+#else
+return chmod(path,mode);
+#endif
+}
+
+/*******************************************************************/
+
+int cf_rename(const char *oldpath, const char *newpath)
+
+{
+#ifdef MINGW
+return NovaWin_rename(oldpath, newpath);
+#else
+return rename(oldpath,newpath);
+#endif
+}
+
+/*******************************************************************/
+
+void *cf_malloc(size_t size, char *errLocation)
+/* Stops on memory allocation error */
+{
+ char buf[CF_SMALLBUF];
+ void *ptr = NULL;
+ 
+ ptr = malloc(size);
+
+ if(ptr == NULL)
+    {
+    CfOut(cf_error, "malloc", "!! Could not allocate memory in \"%s\"", errLocation);
+    FatalError("Memory allocation\n");
+    }
+ 
+ return ptr;
+}
+
+/*******************************************************************/
+
+void OpenNetwork()
+
+{
+#ifdef MINGW
+NovaWin_OpenNetwork();
+#else
+/* no network init on Unix */
+#endif
+}
+
+/*******************************************************************/
+
+void CloseNetwork()
+
+{
+#ifdef MINGW
+NovaWin_CloseNetwork();
+#else
+/* no network close on Unix */
+#endif
+}
+
+/*******************************************************************/
+
+void CloseWmi()
+
+{
+#ifdef MINGW
+NovaWin_WmiDeInitialize();
+#else
+/* no WMI on Unix */
+#endif
+}
+
+/*******************************************************************/
+
+#ifdef MINGW  // FIXME: Timeouts ignored on windows for now...
+unsigned int alarm(unsigned int seconds)
+
+{
+return 0;
+}
+#endif  /* MINGW */

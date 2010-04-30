@@ -157,7 +157,8 @@ CfOut(cf_verbose,"","\n");
 
 void KeepEditLinePromise(struct Promise *pp)
 
-{
+{ char *sp = NULL;
+ 
 if (!IsDefinedClass(pp->classes))
    {
    CfOut(cf_verbose,"","\n");
@@ -169,6 +170,15 @@ if (!IsDefinedClass(pp->classes))
 
 if (pp->done)
    {
+   return;
+   }
+
+if (VarClassExcluded(pp,&sp))
+   {
+   CfOut(cf_verbose,"","\n");
+   CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
+   CfOut(cf_verbose,"","Skipping whole next edit promise (%s), as var-context %s is not relevant\n",pp->promiser,sp);
+   CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
    return;
    }
 
@@ -679,7 +689,7 @@ else
 int DeletePromisedLinesMatching(struct Item **start,struct Item *begin,struct Item *end,struct Attributes a,struct Promise *pp)
 
 { struct Item *ip,*np,*lp;
-  int in_region = false, retval = false, match;
+ int in_region = false, retval = false, match, noedits = true;
 
 if (start == NULL)
    {
@@ -720,11 +730,13 @@ for (ip = *start; ip != NULL; ip = np)
          {
          cfPS(cf_error,CF_WARN,"",pp,a," -> Need to delete line \"%s\" from %s - but only a warning was promised",ip->name,pp->this_server);
          np = ip->next;
+         noedits = false;
          }
       else
          {
          cfPS(cf_verbose,CF_CHG,"",pp,a," -> Deleting the promised line \"%s\" from %s",ip->name,pp->this_server);
          retval = true;
+         noedits = false;
          
          if (ip->name != NULL)
             {
@@ -770,6 +782,11 @@ for (ip = *start; ip != NULL; ip = np)
       }
    }
 
+if (noedits)
+   {
+   cfPS(cf_verbose,CF_NOP,"",pp,a," -> No need to delete lines from %s, ok",pp->this_server);
+   }
+
 return retval;
 }
 
@@ -781,6 +798,7 @@ int ReplacePatterns(struct Item *file_start,struct Item *file_end,struct Attribu
   int match_len,start_off,end_off,once_only = false,retval = false;
   struct CfRegEx rex;
   struct Item *ip;
+  int notfound = true;
 
 if (a.replace.occurrences && (strcmp(a.replace.occurrences,"first") == 0))
    {
@@ -819,6 +837,8 @@ for (ip = file_start; ip != file_end; ip=ip->next)
 
       CfOut(cf_verbose,""," -> << \"%s\"\n",ip->name);
       CfOut(cf_verbose,""," -> >> \"%s\"\n",line_buff);
+
+      notfound = false;
       
       if (once_only)
          {
@@ -875,6 +895,11 @@ for (ip = file_start; ip != file_end; ip=ip->next)
       {
       break;
       }
+   }
+
+if (notfound)
+   {
+   cfPS(cf_verbose,CF_NOP,"",pp,a," -> No pattern \"%s\" in %s",pp->promiser,pp->this_server);
    }
 
 DeleteScope("match");
@@ -1159,7 +1184,7 @@ if (a.column.value_separator != '\0')
       {
       if (a.transaction.action == cfa_warn)
          {
-         cfPS(cf_error,CF_NOP,"",pp,a," -> Need to edit field in %s but only warning promised",pp->this_server);
+         cfPS(cf_error,CF_WARN,"",pp,a," -> Need to edit field in %s but only warning promised",pp->this_server);
          retval = false;
          }
       else
@@ -1171,6 +1196,10 @@ if (a.column.value_separator != '\0')
          sep[1] = '\0';
          rp->item = Rlist2String(this_column,sep);
          }
+      }
+   else
+      {
+      cfPS(cf_verbose,CF_NOP,"",pp,a," -> No need to edit field in %s",pp->this_server);
       }
    
    DeleteRlist(this_column);
@@ -1184,7 +1213,7 @@ else
       {
       if (a.transaction.action == cfa_warn)
          {
-         cfPS(cf_error,CF_NOP,"",pp,a," -> Need to delete field field value %s in %s but only a warning was promised",rp->item,pp->this_server);
+         cfPS(cf_error,CF_WARN,"",pp,a," -> Need to delete field field value %s in %s but only a warning was promised",rp->item,pp->this_server);
          return false;
          }
       else
@@ -1200,7 +1229,7 @@ else
       {
       if (a.transaction.action == cfa_warn)
          {
-         cfPS(cf_error,CF_NOP,"",pp,a," -> Need to set column field value %s to %s in %s but only a warning was promised",rp->item,a.column.column_value,pp->this_server);
+         cfPS(cf_error,CF_WARN,"",pp,a," -> Need to set column field value %s to %s in %s but only a warning was promised",rp->item,a.column.column_value,pp->this_server);
          return false;
          }
       else
@@ -1213,6 +1242,8 @@ else
          }
       }
    }
+
+cfPS(cf_verbose,CF_NOP,"",pp,a," -> No need to edit column field value %s in %s",a.column.column_value,pp->this_server);
 
 return false;
 }

@@ -40,14 +40,14 @@ void AgentDiagnostic()
 if (VERBOSE || DEBUG)
    {
    FREPORT_TXT = stdout;
-   FREPORT_HTML = fopen("/dev/null","w");
-   FKNOW = fopen("/dev/null","w");
+   FREPORT_HTML = fopen(NULLFILE,"w");
+   FKNOW = fopen(NULLFILE,"w");
    }
 else
    {
-   FREPORT_TXT= fopen("/dev/null","w");
-   FREPORT_HTML= fopen("/dev/null","w");
-   FKNOW = fopen("/dev/null","w");
+   FREPORT_TXT= fopen(NULLFILE,"w");
+   FREPORT_HTML= fopen(NULLFILE,"w");
+   FKNOW = fopen(NULLFILE,"w");
    }
 
 
@@ -94,7 +94,7 @@ pp.promiser = "/var/[c|l][A-Za-z0-9_ ]*";
 printf("\nTestSearchFilePromiser(%s)\n\n",pp.promiser);
 LocateFilePromiserGroup(pp.promiser,&pp,VerifyFilePromise);
 
-AppendConstraint(&(pp.conlist),"path","literal",CF_SCALAR,NULL);
+AppendConstraint(&(pp.conlist),"path","literal",CF_SCALAR,NULL,false);
 pp.promiser = "/var/[^/]*/[c|l].*";
 printf("\nTestSearchFilePromiser(%s)\n\n",pp.promiser);
 LocateFilePromiserGroup(pp.promiser,&pp,VerifyFilePromise);

@@ -42,14 +42,14 @@ void SelfDiagnostic()
 if (VERBOSE || DEBUG)
    {
    FREPORT_TXT = stdout;
-   FREPORT_HTML = fopen("/dev/null","w");
-   FKNOW = fopen("/dev/null","w");
+   FREPORT_HTML = fopen(NULLFILE,"w");
+   FKNOW = fopen(NULLFILE,"w");
    }
 else
    {
-   FREPORT_TXT= fopen("/dev/null","w");
-   FREPORT_HTML= fopen("/dev/null","w");
-   FKNOW = fopen("/dev/null","w");
+   FREPORT_TXT= fopen(NULLFILE,"w");
+   FREPORT_HTML= fopen(NULLFILE,"w");
+   FKNOW = fopen(NULLFILE,"w");
    }
        
 printf("----------------------------------------------------------\n");
@@ -140,8 +140,8 @@ pp.donep = &(pp.done);
 pp.conn = NULL;
 
 
-AppendConstraint(&(pp.conlist),"lval1",strdup("rval1"),CF_SCALAR,"lower classes1");
-AppendConstraint(&(pp.conlist),"lval2",strdup("rval2"),CF_SCALAR,"lower classes2");
+AppendConstraint(&(pp.conlist),"lval1",strdup("rval1"),CF_SCALAR,"lower classes1",false);
+AppendConstraint(&(pp.conlist),"lval2",strdup("rval2"),CF_SCALAR,"lower classes2",false);
 
 //getuid AppendConstraint(&(pp.conlist),"lval2",,CF_SCALAR,"lower classes2");
 
@@ -171,12 +171,26 @@ void TestExpandVariables()
   struct Constraint *cp;
   struct FnCall *fp;
 
-#ifndef NT
+#ifdef MINGW
+if(NovaWin_GetProgDir(CFWORKDIR, CF_BUFSIZE - sizeof("Cfengine")))
+  {
+  strcat(CFWORKDIR, "\\Cfengine");
+  }
+else
+  {
+  CfOut(cf_error, "", "!! Could not get CFWORKDIR from Windows environment variable, falling back to compile time dir (%s)", WORKDIR);
+  strcpy(CFWORKDIR,WORKDIR);
+  }
+Debug("Setting CFWORKDIR=%s\n", CFWORKDIR);
+#elif defined(CFCYG)
+strcpy(CFWORKDIR,WORKDIR);
+MapName(CFWORKDIR);
+#else
 if (getuid() > 0)
    {
    strncpy(CFWORKDIR,GetHome(getuid()),CF_BUFSIZE-10);
    strcat(CFWORKDIR,"/.cfagent");
-   
+
    if (strlen(CFWORKDIR) > CF_BUFSIZE/2)
       {
       FatalError("Suspicious looking home directory. The path is too long and will lead to problems.");
@@ -186,8 +200,6 @@ else
    {
    strcpy(CFWORKDIR,WORKDIR);
    }
-#else
-strcpy(CFWORKDIR,WORKDIR);
 #endif
   
 /* Still have diagnostic scope */
@@ -218,9 +230,9 @@ pp.conn = NULL;
 args = SplitStringAsRList("$(administrator)",',');
 fp = NewFnCall("getuid",args);
     
-AppendConstraint(&(pp.conlist),"lval1",strdup("@(one)"),CF_SCALAR,"lower classes1");
-AppendConstraint(&(pp.conlist),"lval2",strdup("$(four)"),CF_SCALAR,"upper classes1");
-AppendConstraint(&(pp.conlist),"lval3",fp,CF_FNCALL,"upper classes2");
+AppendConstraint(&(pp.conlist),"lval1",strdup("@(one)"),CF_SCALAR,"lower classes1",false);
+AppendConstraint(&(pp.conlist),"lval2",strdup("$(four)"),CF_SCALAR,"upper classes1",false);
+AppendConstraint(&(pp.conlist),"lval3",fp,CF_FNCALL,"upper classes2",false);
 
 /* Now copy promise and delete */
 
@@ -356,10 +368,11 @@ void TestAgentPromises()
 { struct Attributes a;
   struct Promise pp;
 
-pp.conlist = NULL;  
+pp.conlist = NULL;
+pp.audit = NULL;
 
 printf("%d. Testing promise attribute completeness\n",++NR);
- 
+
 a = GetFilesAttributes(&pp);
 a = GetReportsAttributes(&pp);
 a = GetExecAttributes(&pp);

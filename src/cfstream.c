@@ -57,7 +57,7 @@ AppendItem(&mess,buffer,NULL);
 
 if ((errstr == NULL) || (strlen(errstr) > 0))
    {
-   snprintf(output,CF_BUFSIZE-1," !!! System reports error for %s: \"%s\"",errstr,strerror(errno));
+   snprintf(output,CF_BUFSIZE-1," !!! System reports error for %s: \"%s\"",errstr,GetErrorStr());
    AppendItem(&mess,output,NULL);
    }
 
@@ -80,6 +80,8 @@ switch(level)
        break;
 
    case cf_error:
+   case cf_reporting:
+   case cf_cmdout:
 
        FileReport(mess,VERBOSE,filename);
        MakeLog(mess,level);
@@ -126,7 +128,7 @@ AppendItem(&mess,buffer,NULL);
 
 if ((errstr == NULL) || (strlen(errstr) > 0))
    {
-   snprintf(output,CF_BUFSIZE-1," !!! System error for %s: \"%s\"",errstr,strerror(errno));
+   snprintf(output,CF_BUFSIZE-1," !!! System error for %s: \"%s\"",errstr,GetErrorStr());
    AppendItem(&mess,output,NULL);
    }
 
@@ -149,10 +151,12 @@ switch(level)
        break;
 
    case cf_error:
+   case cf_reporting:
+   case cf_cmdout:
 
        MakeReport(mess,VERBOSE);
        MakeLog(mess,level);
-       break;
+       break; 
 
    case cf_log:
        
@@ -198,7 +202,7 @@ AppendItem(&mess,buffer,NULL);
 
 if ((errstr == NULL) || (strlen(errstr) > 0))
    {
-   snprintf(output,CF_BUFSIZE-1," !!! System reports error for %s: \"%s\"",errstr,strerror(errno));
+   snprintf(output,CF_BUFSIZE-1," !!! System reports error for %s: \"%s\"",errstr,GetErrorStr());
    AppendItem(&mess,output,NULL);
    }
 
@@ -213,7 +217,7 @@ if (level == cf_error)
       v = "not specified";
       }
    
-   if ((sp = GetConstraint("handle",pp->conlist,CF_SCALAR)) || (sp = PromiseID(pp)))
+   if ((sp = GetConstraint("handle",pp,CF_SCALAR)) || (sp = PromiseID(pp)))
       {
       strncpy(handle,sp,CF_MAXVARSIZE-1);
       }
@@ -239,7 +243,6 @@ if (level == cf_error)
 
    AppendItem(&mess,output,NULL);
 
-   
    switch (pp->petype)
       {
       case CF_SCALAR:
@@ -299,6 +302,8 @@ switch(level)
        break;
 
    case cf_error:
+   case cf_reporting:
+   case cf_cmdout:
 
        if (attr.report.to_file)
           {
@@ -309,12 +314,12 @@ switch(level)
           MakeReport(mess,verbose);
           }
        
-       if (attr.transaction.log_level == cf_error)
+       if (attr.transaction.log_level == level)
           {   
           MakeLog(mess,level);
           }
-       break;
-
+       break;   
+	   
    case cf_log:
        
        MakeLog(mess,level);
@@ -326,6 +331,9 @@ switch(level)
        break;       
    }
 
+#ifdef MINGW
+NovaWin_LogPromiseResult(pp->promiser, pp->petype, pp->promisee, status, mess);
+#endif
 
 /* Now complete the exits status classes and auditing */
 
@@ -339,8 +347,6 @@ if (pp != NULL)
 
 DeleteItemList(mess);
 }
-
-
 
 /*********************************************************************************/
 
@@ -359,75 +365,18 @@ va_start(ap,fmt);
 vsnprintf(buffer,CF_BUFSIZE-1,fmt,ap);
 va_end(ap);
 
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-if (pthread_mutex_lock(&MUTEX_SYSCALL) != 0)
+if (!ThreadLock(cft_output))
    {
    return;
    }
-#endif
 
 fprintf(fp,"%s %s",VPREFIX,buffer);
 
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-if (pthread_mutex_unlock(&MUTEX_SYSCALL) != 0)
-   {
-   /* CfLog(cferror,"pthread_mutex_unlock failed","lock");*/
-   }
-#endif 
+ThreadUnlock(cft_output);
 }
 
 /*********************************************************************************/
 /* Level                                                                         */
-/*********************************************************************************/
-
-void MakeLog(struct Item *mess,enum cfreport level)
-
-{ struct Item *ip;
-
-if (!IsPrivileged() || DONTDO)
-   {
-   return;
-   }
- 
-/* If we can't mutex it could be dangerous to proceed with threaded file descriptors */
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-if (pthread_mutex_lock(&MUTEX_SYSCALL) != 0)
-   {
-   return;
-   }
-#endif
- 
-for (ip = mess; ip != NULL; ip = ip->next)
-   {
-   switch (level)
-      {
-      case cf_inform:
-          syslog(LOG_NOTICE," %s",ip->name);
-          break;
-          
-      case cf_verbose:
-          syslog(LOG_INFO," %s",ip->name);
-          break;
-          
-      case cf_error:
-          syslog(LOG_ERR," %s",ip->name);
-          break;
-
-      default:
-          break;
-      }
-   }
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-if (pthread_mutex_unlock(&MUTEX_SYSCALL) != 0)
-   {
-   /* CfLog(cferror,"pthread_mutex_unlock failed","lock");*/
-   }
-#endif 
-
-}
-
 /*********************************************************************************/
 
 void MakeReport(struct Item *mess,int prefix)
@@ -436,12 +385,7 @@ void MakeReport(struct Item *mess,int prefix)
 
 for (ip = mess; ip != NULL; ip = ip->next)
    {
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-   if (pthread_mutex_lock(&MUTEX_SYSCALL) != 0)
-      {
-      return;
-      }
-#endif
+   ThreadLock(cft_output);
    
    if (prefix)
       {
@@ -452,12 +396,7 @@ for (ip = mess; ip != NULL; ip = ip->next)
       printf("%s\n",ip->name);
       }
 
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-   if (pthread_mutex_unlock(&MUTEX_SYSCALL) != 0)
-      {
-      /* CfLog(cferror,"pthread_mutex_unlock failed","lock");*/
-      }
-#endif    
+   ThreadUnlock(cft_output);
    }
 }
 
@@ -476,12 +415,7 @@ if ((fp = fopen(filename,"a")) == NULL)
   
 for (ip = mess; ip != NULL; ip = ip->next)
    {
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-   if (pthread_mutex_lock(&MUTEX_SYSCALL) != 0)
-      {
-      return;
-      }
-#endif
+   ThreadLock(cft_output);
    
    if (prefix)
       {
@@ -492,12 +426,7 @@ for (ip = mess; ip != NULL; ip = ip->next)
       fprintf(fp,"%s\n",ip->name);
       }
 
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-   if (pthread_mutex_unlock(&MUTEX_SYSCALL) != 0)
-      {
-      /* CfLog(cferror,"pthread_mutex_unlock failed","lock");*/
-      }
-#endif
+   ThreadUnlock(cft_output);
    }
 
 if (fp != stdout)
@@ -524,3 +453,74 @@ for (sp = buffer; *sp != '\0'; sp++)
       }
    }
 }
+
+/*********************************************************************************/
+
+char *GetErrorStr(void)
+{
+#ifdef MINGW
+return NovaWin_GetErrorStr();
+#else
+return Unix_GetErrorStr();
+#endif
+}
+
+/*********************************************************************************/
+
+void MakeLog(struct Item *mess,enum cfreport level)
+{
+#ifdef MINGW
+NovaWin_MakeLog(mess, level);
+#else
+Unix_MakeLog(mess, level);
+#endif
+}
+
+/*********************************************************************************/
+
+#ifndef MINGW
+
+void Unix_MakeLog(struct Item *mess,enum cfreport level)
+
+{ struct Item *ip;
+
+if (!IsPrivileged() || DONTDO)
+   {
+   return;
+   }
+ 
+/* If we can't mutex it could be dangerous to proceed with threaded file descriptors */
+
+if (!ThreadLock(cft_output))
+   {
+   return;
+   }
+ 
+for (ip = mess; ip != NULL; ip = ip->next)
+   {
+   switch (level)
+      {
+      case cf_inform:
+	  case cf_reporting:
+	  case cf_cmdout:
+          syslog(LOG_NOTICE," %s",ip->name);
+          break;
+          
+      case cf_verbose:
+          syslog(LOG_INFO," %s",ip->name);
+          break;
+          
+      case cf_error:
+          syslog(LOG_ERR," %s",ip->name);
+          break;
+
+      default:
+          break;
+      }
+   }
+
+ThreadUnlock(cft_output);
+}
+
+#endif  /* NOT MINGW */
+

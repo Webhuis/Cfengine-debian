@@ -37,16 +37,15 @@
 
 void BeginAudit()
 
-{ DB_ENV *dbenv = NULL;
-  char name[CF_BUFSIZE];
+{ char name[CF_BUFSIZE];
   struct Promise dummyp;
   struct Attributes dummyattr;
 
 memset(&dummyp,0,sizeof(dummyp));
 memset(&dummyattr,0,sizeof(dummyattr));
-dummyattr.transaction.audit = true;
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_AUDITDB_FILE);
+MapName(name);
 
 if (!OpenDB(name,&AUDITDBP))
    {
@@ -68,7 +67,29 @@ void EndAudit()
 
 memset(&dummyp,0,sizeof(dummyp));
 memset(&dummyattr,0,sizeof(dummyattr));
-dummyattr.transaction.audit = true;
+
+if (BooleanControl("control_agent",CFA_CONTROLBODY[cfa_track_value].lval))
+   {
+   FILE *fout;
+   char name[CF_MAXVARSIZE],datestr[CF_MAXVARSIZE];
+   time_t now = time(NULL);
+   
+   CfOut(cf_inform,""," -> Recording promise valuations");
+    
+   snprintf(name,CF_MAXVARSIZE,"%s/state/%s",CFWORKDIR,CF_VALUE_LOG);
+   snprintf(datestr,CF_MAXVARSIZE,"%s",cf_ctime(&now));
+   
+   if ((fout = fopen(name,"a")) == NULL)
+      {
+      CfOut(cf_inform,""," !! Unable to write to the value log %s\n",name);
+      return;
+      }
+
+   Chop(datestr);
+   fprintf(fout,"%s,%.4lf,%.4lf,%.4lf\n",datestr,VAL_KEPT,VAL_REPAIRED,VAL_NOTKEPT);
+   TrackValue(datestr,VAL_KEPT,VAL_REPAIRED,VAL_NOTKEPT);   
+   fclose(fout);
+   }
 
 total = (double)(PR_KEPT+PR_NOTKEPT+PR_REPAIRED)/100.0;
 
@@ -110,7 +131,7 @@ ClassAuditLog(&dummyp,dummyattr,"Cfagent closing",CF_NOP);
 
 if (AUDITDBP)
    {
-   AUDITDBP->close(AUDITDBP,0);
+   CloseDB(AUDITDBP);
    }
 }
 
@@ -131,66 +152,84 @@ Debug("ClassAuditLog(%s)\n",str);
 switch(status)
    {
    case CF_CHG:
-       PR_REPAIRED++;
+       
+       if (!EDIT_MODEL)
+          {
+          PR_REPAIRED++;       
+          VAL_REPAIRED += attr.transaction.value_repaired;
+          }
+
        AddAllClasses(attr.classes.change,attr.classes.persist,attr.classes.timer);
-       NotePromiseCompliance(pp,0.5);
+       DeleteAllClasses(attr.classes.del_change);
+       NotePromiseCompliance(pp,0.5,cfn_repaired);
        SummarizeTransaction(attr,pp,attr.transaction.log_repaired);
        break;
        
    case CF_WARN:
+
        PR_NOTKEPT++;
-       NotePromiseCompliance(pp,1.0);
+       VAL_NOTKEPT += attr.transaction.value_notkept;
+       NotePromiseCompliance(pp,1.0,cfn_notkept);
        break;
        
    case CF_TIMEX:
+
        PR_NOTKEPT++;
+       VAL_NOTKEPT += attr.transaction.value_notkept;
        AddAllClasses(attr.classes.timeout,attr.classes.persist,attr.classes.timer);
-       NotePromiseCompliance(pp,0.0);
+       DeleteAllClasses(attr.classes.del_notkept);
+       NotePromiseCompliance(pp,0.0,cfn_notkept);
        SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
 
    case CF_FAIL:
+
        PR_NOTKEPT++;
+       VAL_NOTKEPT += attr.transaction.value_notkept;
        AddAllClasses(attr.classes.failure,attr.classes.persist,attr.classes.timer);
-       NotePromiseCompliance(pp,0.0);
+       DeleteAllClasses(attr.classes.del_notkept);
+       NotePromiseCompliance(pp,0.0,cfn_notkept);
        SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
        
    case CF_DENIED:
+
        PR_NOTKEPT++;
+       VAL_NOTKEPT += attr.transaction.value_notkept;
        AddAllClasses(attr.classes.denied,attr.classes.persist,attr.classes.timer);
-       NotePromiseCompliance(pp,0.0);
+       DeleteAllClasses(attr.classes.del_notkept);
+       NotePromiseCompliance(pp,0.0,cfn_notkept);
        SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
        
    case CF_INTERPT:
+
        PR_NOTKEPT++;
+       VAL_NOTKEPT += attr.transaction.value_notkept;
        AddAllClasses(attr.classes.interrupt,attr.classes.persist,attr.classes.timer);
-       NotePromiseCompliance(pp,0.0);
+       DeleteAllClasses(attr.classes.del_notkept);
+       NotePromiseCompliance(pp,0.0,cfn_notkept);
        SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
 
-   case CF_REGULAR:
-       AddAllClasses(attr.classes.change,attr.classes.persist,attr.classes.timer);
-       NotePromiseCompliance(pp,0.5);
-       PR_REPAIRED++;
-       break;
-       
    case CF_UNKNOWN:
    case CF_NOP:
+
        AddAllClasses(attr.classes.kept,attr.classes.persist,attr.classes.timer);
-       NotePromiseCompliance(pp,1.0);
+       DeleteAllClasses(attr.classes.del_kept);
+       NotePromiseCompliance(pp,1.0,cfn_nop);
        SummarizeTransaction(attr,pp,attr.transaction.log_kept);              
        PR_KEPT++;
+       VAL_KEPT += attr.transaction.value_kept;
        break;
    }
 
-if (AUDITDBP == NULL)
+if (AUDITDBP == NULL || THIS_AGENT_TYPE != cf_agent)
    {
    return;
    }
 
-snprintf(date,CF_BUFSIZE,"%s",ctime(&now));
+snprintf(date,CF_BUFSIZE,"%s",cf_ctime(&now));
 Chop(date);
 
 ExtractOperationLock(lock);
@@ -203,8 +242,9 @@ if (clock_gettime(CLOCK_REALTIME,&t) == -1)
    return;
    }
 
+// Auditing key needs microsecond precision to separate entries
+
 keyval = (double)(t.tv_sec)+(double)(t.tv_nsec)/(double)CF_BILLION;
-      
 snprintf(key,CF_BUFSIZE-1,"%lf",keyval);
 
 if (DEBUG)
@@ -242,7 +282,7 @@ else
 
 newaudit.status = status;
 
-if (AUDITDBP && attr.transaction.audit)
+if (AUDITDBP && attr.transaction.audit || AUDITDBP && AUDIT)
    {
    WriteDB(AUDITDBP,key,&newaudit,sizeof(newaudit));
    }
@@ -265,23 +305,54 @@ for (rp = list; rp != NULL; rp=rp->next)
       {
       return;
       }
-   
+
    if (IsHardClass((char *)rp->item))
       {
-      CfOut(cf_error,"","You cannot use reserved hard classes as post-condition classes");
+      CfOut(cf_error,""," !! You cannot use reserved hard class \"%s\" as post-condition class", rp->item);
       }
 
    if (persist > 0)
       {
       CfOut(cf_verbose,""," ?> defining persistent promise result class %s\n",(char *)rp->item);
       NewPersistentContext(rp->item,persist,policy);
-      PrependItem(&VHEAP,CanonifyName((char *)rp->item),NULL);
+      IdempPrependItem(&VHEAP,CanonifyName((char *)rp->item),NULL);
       }
    else
       {
       CfOut(cf_verbose,""," ?> defining promise result class %s\n",(char *)rp->item);
-      PrependItem(&VHEAP,CanonifyName((char *)rp->item),NULL);
+      IdempPrependItem(&VHEAP,CanonifyName((char *)rp->item),NULL);
       }
+   }
+}
+
+/*****************************************************************************/
+
+void DeleteAllClasses(struct Rlist *list)
+
+{ struct Rlist *rp;
+
+if (list == NULL)
+   {
+   return;
+   }
+
+for (rp = list; rp != NULL; rp=rp->next)
+   {
+   if (!CheckParseClass("class cancellation",(char *)rp->item,CF_IDRANGE))
+      {
+      return;
+      }
+
+   if (IsHardClass((char *)rp->item))
+      {
+      CfOut(cf_error,""," !! You cannot cancel a reserved hard class \"%s\" in post-condition classes", rp->item);
+      }
+
+   CfOut(cf_verbose,""," -> Cancelling class %s\n",(char *)rp->item);
+   DeletePersistentContext(rp->item);
+   DeleteItemLiteral(&VHEAP,CanonifyName((char *)rp->item));
+   DeleteItemLiteral(&VADDCLASSES,CanonifyName((char *)rp->item));
+   AppendItem(&VDELCLASSES,CanonifyName((char *)rp->item),NULL);
    }
 }
 
@@ -361,9 +432,9 @@ if ((fout = fopen(filename,"a")) == NULL)
    return;
    }
 
-strcpy(start,ctime(&CFSTARTTIME));
+strcpy(start,cf_ctime(&CFSTARTTIME));
 Chop(start);
-strcpy(end,ctime(&now));
+strcpy(end,cf_ctime(&now));
 Chop(end);
 
 fprintf(fout,"%s -> %s: %s",start,end,s);
@@ -375,8 +446,11 @@ fclose(fout);
 void FatalError(char *s)
     
 { struct CfLock best_guess;
-      
-CfOut(cf_error,"","Fatal cfengine error: %s",s); 
+
+if (s)
+   {
+   CfOut(cf_error,"","Fatal cfengine error: %s",s); 
+   }
 
 if (strlen(CFLOCK) > 0)
    {
@@ -388,7 +462,7 @@ if (strlen(CFLOCK) > 0)
 
 unlink(PIDFILE);
 EndAudit();
-closelog();
+GenericDeInitialize();
 exit(1);
 }
 
@@ -423,10 +497,6 @@ switch (status) /* Reminder */
        fprintf(fp,"was interrupted\n");
        break;
 
-   case CF_REGULAR:
-       fprintf(fp,"was a regular (repeatable) maintenance task");
-       break;
-       
    case CF_NOP:
        fprintf(fp,"was applied but performed no required actions");
        break;

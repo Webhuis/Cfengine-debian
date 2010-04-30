@@ -41,7 +41,7 @@ void LocateFilePromiserGroup(char *wildpath,struct Promise *pp,void (*fnptr)(cha
   struct stat statbuf;
   int count = 0,lastnode = false, expandregex = false;
   uid_t agentuid = getuid();
-  int create = GetBooleanConstraint("create",pp->conlist);
+  int create = GetBooleanConstraint("create",pp);
 
 Debug("LocateFilePromiserGroup(%s)\n",wildpath);
 
@@ -59,7 +59,7 @@ else
    }
 
 pbuffer[0] = '\0';
-path = SplitString(wildpath,FILE_SEPARATOR);
+path = SplitString(wildpath,'/');  // require forward slash in regex on all platforms
 
 for (ip = path; ip != NULL; ip=ip->next)
    {
@@ -92,11 +92,11 @@ for (ip = path; ip != NULL; ip=ip->next)
       return;
       }
 
-   if (stat(pbuffer,&statbuf) != -1)
+   if (cfstat(pbuffer,&statbuf) != -1)
       {
       if (S_ISDIR(statbuf.st_mode) && statbuf.st_uid != agentuid && statbuf.st_uid != 0)
          {
-         CfOut(cf_inform,"","Directory %s in search path %s is controlled by another user - trusting its content is potentially risky (possible race)\n",pbuffer,wildpath);
+         CfOut(cf_inform,"","Directory %s in search path %s is controlled by another user (uid %d) - trusting its content is potentially risky (possible race)\n",pbuffer,wildpath,statbuf.st_uid);
          PromiseRef(cf_inform,pp);
          }
       }
@@ -104,7 +104,7 @@ for (ip = path; ip != NULL; ip=ip->next)
 
 if (expandregex) /* Expand one regex link and hand down */
    {
-   char nextbuffer[CF_BUFSIZE],regex[CF_BUFSIZE];
+   char nextbuffer[CF_BUFSIZE],nextbufferOrig[CF_BUFSIZE],regex[CF_BUFSIZE];
    struct dirent *dirp;
    DIR *dirh;
    struct Attributes dummyattr;
@@ -172,15 +172,19 @@ if (expandregex) /* Expand one regex link and hand down */
             CfOut(cf_verbose,""," -> Using expanded file base path %s\n",nextbuffer);
 
             /* Now need to recompute any back references to get the complete path */
-            
+
+	    snprintf(nextbufferOrig, sizeof(nextbufferOrig), "%s", nextbuffer);
+	    MapNameForward(nextbuffer);
+
             if (!FullTextMatch(pp->promiser,nextbuffer))
                {
                CfOut(cf_error,"","Error recomputing references");
                }
 
             /* If there were back references there could still be match.x vars to expand */
-            pcopy = DeRefCopyPromise(CONTEXTID,pp);
-            (*fnptr)(nextbuffer,pcopy);
+
+            pcopy = ExpandDeRefPromise(CONTEXTID,pp);            
+            (*fnptr)(nextbufferOrig,pcopy);
             DeletePromise(pcopy);
             }
          }
@@ -210,14 +214,17 @@ DeleteItemList(path);
 /*********************************************************************/
 
 int IsDir(char *path)
-{
 /*
 Checks if the object pointed to by path exists and is a directory.
 Returns true if so, false otherwise.
 */
+{
+#ifdef MINGW
+return NovaWin_IsDir(path);
+#else
 struct stat sb;
 
-if (stat(path, &sb) != -1)
+if (cfstat(path, &sb) != -1)
    {
    if (S_ISDIR(sb.st_mode))
       {
@@ -226,6 +233,7 @@ if (stat(path, &sb) != -1)
    }
 
 return false;
+#endif  /* NOT MINGW */
 }
 
 /*********************************************************************/
@@ -324,6 +332,16 @@ if (str == NULL)
    {
    return;
    }
+
+// add root slash on Unix systems
+if(strlen(str) == 0)
+  {
+  if((VSYSTEMHARDCLASS != mingw) && (VSYSTEMHARDCLASS != cfnt))
+    {
+    strcpy(str, "/");
+    }
+  return;
+  }
 
 /* Try to see what convention is being used for filenames
    in case this is a cross-system copy from Win/Unix */
@@ -472,6 +490,86 @@ else
    }
 }
 
+/*****************************************************************************/
+
+void DeEscapeFilename(char *in,char *out)
+
+{ char *sp_in,*sp_out = out;
+
+*sp_out = '\0';
+
+for (sp_in = in; *sp_in != '\0'; sp_in++)
+   {
+   if (*sp_in == '\\' && *(sp_in+1) == ' ')
+      {
+      sp_in++;
+      }
+
+   *sp_out++ = *sp_in;
+   }
+
+*sp_out = '\0';
+}
+
+/*****************************************************************************/
+
+int DeEscapeQuotedString(char *from,char *to)
+
+{ char *sp,*cp;
+  char start = *from;
+  int len = strlen(from);
+
+if (len == 0)
+   {
+   return 0;
+   }
+
+ for (sp=from+1,cp=to; (sp-from) < len; sp++,cp++)
+    {
+    if ((*sp == start))
+       {
+       *(cp) = '\0';
+
+       if (*(sp+1) != '\0')
+          {
+          return (2+(sp - from));
+          }
+
+       return 0;
+       }
+
+    if (*sp == '\n')
+       {
+       P.line_no++;
+       }
+
+    if (*sp == '\\')
+       {
+       switch (*(sp+1))
+          {
+          case '\n':
+              P.line_no++;
+              sp+=2;
+              break;
+
+          case ' ':
+              break;
+              
+          case '\\':
+          case '\"':
+          case '\'': sp++;
+              break;
+          }
+       }
+
+    *cp = *sp;    
+    }
+ 
+ yyerror("Runaway string");
+ *(cp) = '\0';
+ return 0;
+}
+
 /*********************************************************************/
 
 void Chop(char *str) /* remove trailing spaces */
@@ -610,7 +708,7 @@ int RootDirLength(char *f)
   /* Return length of Initial directory in path - */
 
 { int len;
- char *sp;
+  char *sp;
 
 #ifdef NT
 
@@ -643,9 +741,14 @@ if (IsFileSep(f[0]) && IsFileSep(f[1]))
    return len;
    }
 
-if (isalpha(f[0]) && f[1] == ':' && IsFileSep(f[2]) )
+if (isalpha(f[0]) && f[1] == ':')
    {
-   return 3;
+   if(IsFileSep(f[2]))
+     {
+     return 3;
+     }
+
+   return 2;  
    }
 #endif
 
@@ -664,18 +767,13 @@ return 0;
 char ToLower (char ch)
 
 {
-if (isdigit((int)ch) || ispunct((int)ch))
+if (isupper((int)ch))
    {
-   return(ch);
-   }
-
-if (islower((int)ch))
-   {
-   return(ch);
+   return(ch - 'A' + 'a');
    }
 else
    {
-   return(ch - 'A' + 'a');
+   return(ch);
    }
 }
 
@@ -727,7 +825,6 @@ buffer[i] = '\0';
 return buffer;
 }
 
-
 /*********************************************************************/
 
 char *ToLowerStr (char *str)
@@ -755,3 +852,17 @@ buffer[i] = '\0';
 return buffer;
 }
 
+/*********************************************************************/
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+void *ThreadUniqueName(pthread_t tid)
+/* pthread_t is an integer on Unix, but a structure on Windows
+ * Finds a unique name for a thread for both platforms. */
+{
+#ifdef MINGW
+return tid.p;  // pointer to thread structure
+#else
+return (void*)tid;  // index into thread array ?
+#endif  /* NOT MINGW */
+}
+#endif  /* HAVE PTHREAD */

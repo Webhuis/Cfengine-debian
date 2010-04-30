@@ -248,13 +248,20 @@ else
    return rval;
    }
 
+
+/* If the container classes seem not to be defined at this stage, then don't try to expand the function */
+
+if (!IsDefinedClass(pp->classes))
+   {
+   return rval;
+   }
+
 ClearFnCallStatus();
 
 expargs = NewExpArgs(fp,pp);
 
 if (UnresolvedArgs(expargs))
    {
-   CfOut(cf_verbose,""," !? Unresolved or non-existent variables in function call arguments, skipping");
    FNCALL_STATUS.status = FNCALL_FAILURE;
    rval.item = CopyFnCall(fp);
    rval.rtype = CF_FNCALL;
@@ -264,6 +271,21 @@ if (UnresolvedArgs(expargs))
 
 switch (this)
    {
+   case cfn_escape:
+       rval = FnCallEscape(fp,expargs);
+       break;
+   case cfn_countclassesmatching:
+       rval = FnCallCountClassesMatching(fp,expargs);
+       break;
+   case cfn_host2ip:
+       rval = FnCallHost2IP(fp,expargs);
+       break;
+   case cfn_join:
+       rval = FnCallJoin(fp,expargs);
+       break;
+   case cfn_grep:
+       rval = FnCallGrep(fp,expargs);
+       break;
    case cfn_registryvalue:
        rval = FnCallRegistryValue(fp,expargs);
        break;
@@ -287,6 +309,9 @@ switch (this)
        break;
    case cfn_randomint:
        rval = FnCallRandomInt(fp,expargs);
+       break;
+   case cfn_getenv:
+       rval = FnCallGetEnv(fp,expargs);
        break;
    case cfn_getuid:
        rval = FnCallGetUid(fp,expargs);
@@ -342,11 +367,17 @@ switch (this)
    case cfn_strcmp:
        rval = FnCallStrCmp(fp,expargs);
        break;
+   case cfn_translatepath:
+       rval = FnCallTranslatePath(fp,expargs);
+       break;
    case cfn_splitstring:
        rval = FnCallSplitString(fp,expargs);
        break;
    case cfn_regcmp:
        rval = FnCallRegCmp(fp,expargs);
+       break;
+   case cfn_regextract:
+       rval = FnCallRegExtract(fp,expargs);
        break;
    case cfn_regline:
        rval = FnCallRegLine(fp,expargs);
@@ -372,11 +403,20 @@ switch (this)
    case cfn_getindices:
        rval = FnCallGetIndices(fp,expargs);
        break;
+   case cfn_countlinesmatching:
+       rval = FnCallCountLinesMatching(fp,expargs);
+       break;
+   case cfn_getfields:
+       rval = FnCallGetFields(fp,expargs);
+       break;
    case cfn_isgreaterthan:
        rval = FnCallGreaterThan(fp,expargs,'+');
        break;
    case cfn_islessthan:
        rval = FnCallGreaterThan(fp,expargs,'-');
+       break;
+   case cfn_hostsseen:
+       rval = FnCallHostsSeen(fp,expargs);
        break;
    case cfn_userexists:
        rval = FnCallUserExists(fp,expargs);
@@ -414,6 +454,9 @@ switch (this)
    case cfn_remotescalar:
        rval = FnCallRemoteScalar(fp,expargs);
        break;
+   case cfn_remoteclassesmatching:
+       rval = FnCallRemoteClasses(fp,expargs);
+       break;
    case cfn_date:
        rval = FnCallOnDate(fp,expargs);
        break;
@@ -443,6 +486,9 @@ switch (this)
        break;
    case cfn_selectservers:
        rval = FnCallSelectServers(fp,expargs);
+       break;
+   case cfn_diskfree:
+       rval = FnCallDiskFree(fp,expargs);
        break;
        
    case cfn_unknown:

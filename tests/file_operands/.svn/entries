@@ -1,15 +1,15 @@
 9
 
 dir
-297
+872
 https://svn.iu.hio.no/projects/cfengine-3/trunk/tests/file_operands
 https://svn.iu.hio.no/projects/cfengine-3
 
 
 
-2009-04-15T06:22:53.164364Z
-297
-mark
+2009-12-10T09:58:35.198965Z
+677
+eystein
 
 
 svn:special svn:externals svn:needs-lock
@@ -24,7 +24,7 @@ svn:special svn:externals svn:needs-lock
 
 
 
-
+7349b196-e142-0410-bb44-5151fc12116d
 
 
 
@@ -35,15 +35,15 @@ svn:special svn:externals svn:needs-lock
 
 Makefile.in
 file
-429
 
 
 
-2009-08-23T09:08:16.000000Z
+
+2010-02-25T13:10:42.000000Z
 7b1fd4402923ee209ce2ee22a93f319e
-2009-07-23T12:27:16.378842Z
-429
-mark
+2009-12-10T09:58:35.198965Z
+677
+eystein
 
 
 
@@ -134,38 +134,4 @@ mark
 
 
 0
-
-Makefile
-file
-468
-
-
-
-2009-08-23T09:08:37.000000Z
-fe5a050fd4ee5fcdc52defc6695da025
-2009-08-23T09:27:43.040306Z
-468
-mark
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-11231
 
