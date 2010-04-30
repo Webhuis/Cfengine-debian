@@ -7,3 +7,4 @@ docs/*.8
 src/*o
 tests/file_operands/Makefile
 tests/units/Makefile
+debian/patches/debian-changes-*

@@ -1,5 +1,5 @@
 #!/usr/bin/make -f
-# vim:noet:ts=4:sw=4
+# vim:noet:ts=4:sw=4:
 # -*- makefile -*-
 # Sample debian/rules that uses debhelper.
 # This file was originally written by Joey Hess and Craig Small.
@@ -89,6 +89,7 @@ binary-arch: install
 	dh_testdir
 	dh_testroot
 	dh_installchangelogs
+	dh_lintian
 	dh_installdocs
 	dh_installexamples
 #	dh_install
