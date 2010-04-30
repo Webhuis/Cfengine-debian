@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+# vim:noet:ts=4:sw=4
 # -*- makefile -*-
 # Sample debian/rules that uses debhelper.
 # This file was originally written by Joey Hess and Craig Small.
@@ -20,12 +21,10 @@ else
 CROSS= --build $(DEB_BUILD_GNU_TYPE)
 endif
 
-include /usr/share/quilt/quilt.make
-
 config.status: configure
 configure: config-stamp
 
-config-stamp: $(QUILT_STAMPFN)
+config-stamp:
 	dh_testdir
 	# Add here commands to configure the package.
 ifneq "$(wildcard /usr/share/misc/config.sub)" ""
@@ -48,7 +47,7 @@ build-stamp:  config.status
 
 	touch $@
 
-clean: unpatch
+clean: 
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp 

@@ -2,8 +2,8 @@ Source: cfengine3
 Section: admin
 Priority: optional
 Maintainer: Antonio Radici <antonio@debian.org>
-Build-Depends: debhelper (>= 7), autotools-dev, quilt, libdb-dev, 
- libssl-dev, flex, bison, libpcre3-dev
+Build-Depends: debhelper (>= 7), autotools-dev, libdb-dev, libssl-dev,
+ flex, bison, libpcre3-dev
 Standards-Version: 3.8.4
 Homepage: http://www.cfengine.org/
 Vcs-Browser: http://git.debian.org/?p=collab-maint/cfengine3.git
