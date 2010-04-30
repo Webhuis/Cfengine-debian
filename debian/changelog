@@ -1,4 +1,5 @@
 cfengine3 (3.0.4+dfsg-1) unstable; urgency=low
+
    * debian/watch: modified to catch the newest versions
    * debian/control:
       + removed DMUA
@@ -7,7 +8,7 @@ cfengine3 (3.0.4+dfsg-1) unstable; urgency=low
       + all patches refreshed
       + rename-doesnt-fail: removed, it is incorporated upstream
 
- -- Antonio Radici <antonio@dyne.org>  Fri, 30 Apr 2010 08:11:20 +0100
+ -- Antonio Radici <antonio@debian.org>  Fri, 30 Apr 2010 08:11:20 +0100
 
 cfengine3 (3.0.2+dfsg-2) unstable; urgency=low
 
