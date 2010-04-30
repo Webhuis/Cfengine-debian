@@ -1,0 +1,15 @@
+
+body common control
+{
+bundlesequence => { "nonce" };
+ignore_interfaces => { "eth.*" };
+}
+
+bundle agent nonce
+{
+reports:
+
+  cfengine_3::
+
+    "Done";
+}

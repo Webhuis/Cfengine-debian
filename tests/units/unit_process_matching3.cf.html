@@ -1,0 +1,48 @@
+<html>  <head>    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />    <title>      Cfengine Site Policy Summary (version not specified)    </title>    <link rel="stylesheet" href="/cf_enterprise.css" type="text/css" media="screen" />  </head>  <body><h1>Cfengine Site Policy Summary (version not specified)</h1><p><a name="bundle_testbundle"></a><div id="bundle"><table class=border><tr><td><h2> Bundle <span class="bodytype">agent</span> <span class="bodyname">testbundle</span>
+ <tr><td> ARGS:</td></tr>
+
+<tr><td><table class="border"><tr><td><tr><td><a name="type_processes"></a>
+</td></tr><tr><td>
+<tr><td><table class="border"><tr><td>
+<a name="promise_unit_process_matching3_cf_22"></a>
+<div id="nav">
+<a href="/promises.cf.html#bundle_testbundle">[PARENT BUNDLE]</a>&nbsp;
+<a href="/reports/host_portal.html">[MACHINES]</a>
+</div>
+Promise type is <span class="subtype">processes</span>, <a href="#class_context">context</a> is <span class="class">any</span> <br><hr>
+
+Resource object <b>'.*'</b> make the promise to default promisee 'cf-agent' (about processes)...
+
+<br><span class="lval">........................process_select</span> =>  <span class="bodytype">process_select</span> <a href="#body_proc_finder"><span class="bodyname">proc_finder</span>(<span class="args">p</span>,
+)</a><br><span class="lval">.............................stime</span> => '<span class="rval">irange(ago(0,0,0,2,0,0,)now,)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................process_result</span> => '<span class="rval">stime'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">........................process_count</span> =>  <span class="bodytype">process_count</span> <a href="#body_up"><span class="bodyname">up</span>(<span class="args">s</span>,
+)</a><br><span class="lval">.............................match_range</span> => '<span class="rval">1,10'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................out_of_range_define</span> => '<span class="rval"> {'$(s)_out_of_control'}'</span> if sub-body context <span class="class">any</span>
+<p><small>Promise (version not specified) belongs to bundle <b>testbundle</b> (type agent) in '<i>./unit_process_matching3.cf</i>' near line 22</small></p>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></table></td></tr>
+</td></tr>
+</td></tr></h2></table></div>
+<h1>All Bodies</h1><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_control"></a> <span class="bodytype">common</span> <a href="#body_control"><span class="bodyname">control</span><span class="args">(no parameters)</span>
+</a><br><span class="lval">.............................bundlesequence</span> => '<span class="rval"> {'testbundle'}'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_up"></a> <span class="bodytype">process_count</span> <a href="#body_up"><span class="bodyname">up</span>(<span class="args">s</span>,
+)</a><br><span class="lval">.............................match_range</span> => '<span class="rval">1,10'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................out_of_range_define</span> => '<span class="rval"> {'$(s)_out_of_control'}'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p><tr><td><div id="block"><table class=border cellpadding=5 width=800>
+<tr><td><table class="border"><tr><td>
+<a name="body_proc_finder"></a> <span class="bodytype">process_select</span> <a href="#body_proc_finder"><span class="bodyname">proc_finder</span>(<span class="args">p</span>,
+)</a><br><span class="lval">.............................stime</span> => '<span class="rval">irange(ago(0,0,0,2,0,0,)now,)'</span> if sub-body context <span class="class">any</span>
+<br><span class="lval">.............................process_result</span> => '<span class="rval">stime'</span> if sub-body context <span class="class">any</span>
+</td></tr></table></td></tr>
+</table></div></td></tr> 
+ </p></div></body></html>

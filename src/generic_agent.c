@@ -1,18 +1,18 @@
-/* 
+/*
    Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
- 
+
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
    Free Software Foundation; version 3.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
-  You should have received a copy of the GNU General Public License  
+
+  You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
@@ -50,12 +50,14 @@ SetReferenceTime(true);
 SetStartTime(false);
 SetSignals();
 
-if (EnterpriseExpiry("3","July","21009"))
+// See cf3.defs.h for these settings
+
+if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR)) 
    {
-   CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise trial has expired.\n");
+   CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
    exit(1);
    }
-   
+
 if (!NOHARDCLASSES)
    {
    NewScope("const");
@@ -63,11 +65,10 @@ if (!NOHARDCLASSES)
    NewScope("mon");
    SetNewScope("sys");
    GetNameInfo3();
-   
+   CfGetInterfaceInfo(ag);
+      
    if (ag != cf_know)
       {
-      GetInterfaceInfo3();
-      FindV6InterfaceInfo();
       Get3Environment();
       OSClasses();
       }
@@ -75,8 +76,8 @@ if (!NOHARDCLASSES)
 
 LoadPersistentContext();
 LoadSystemConstants();
-   
-strcpy(THIS_AGENT,CF_AGENTTYPES[ag]); 
+
+strcpy(THIS_AGENT,CF_AGENTTYPES[ag]);
 NewClass(CanonifyName(THIS_AGENT));
 THIS_AGENT_TYPE = ag;
 
@@ -110,7 +111,22 @@ if (SHOWREPORTS || ERRORCOUNT)
    CompilationReport(VINPUTFILE);
    }
 
+CheckLicenses();
+
 XML = 0;
+}
+
+/*****************************************************************************/
+
+void GenericDeInitialize()
+
+{
+Debug("GenericDeInitialize()\n");
+
+CloseWmi();
+CloseNetwork();
+Cf3CloseLog();
+CloseAllDB();
 }
 
 /*****************************************************************************/
@@ -121,17 +137,19 @@ int CheckPromises(enum cfagenttype ag)
 
 { char cmd[CF_BUFSIZE],path[CF_BUFSIZE];
   struct stat sb;
- 
-if ((ag != cf_agent) && (ag != cf_executor))
+
+if ((ag != cf_agent) && (ag != cf_executor) && (ag != cf_server))
    {
    return true;
    }
 
-snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
+CfOut(cf_verbose,""," > Verifying the syntax of the inputs...\n");
 
-if (stat(cmd,&sb) == -1)
+snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX);
+
+if (cfstat(cmd,&sb) == -1)
    {
-   CfOut(cf_error,"","cf-promises needs to be installed in %s/bin for pre-validation of full configuration",CFWORKDIR);
+   CfOut(cf_error,"","cf-promises%s needs to be installed in %s%cbin for pre-validation of full configuration",EXEC_SUFFIX,CFWORKDIR,FILE_SEPARATOR);
    return false;
    }
 
@@ -139,15 +157,15 @@ if (stat(cmd,&sb) == -1)
 
 if ((*VINPUTFILE == '.') || IsAbsoluteFileName(VINPUTFILE))
    {
-   snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises -f %s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,VINPUTFILE);
+   snprintf(cmd,CF_BUFSIZE-1,"\"%s%cbin%ccf-promises%s\" -f \"%s\"",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX,VINPUTFILE);
    }
 else
    {
-   snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises -f %s%cinputs%c%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,VINPUTFILE);
+   snprintf(cmd,CF_BUFSIZE-1,"\"%s%cbin%ccf-promises%s\" -f \"%s%cinputs%c%s\"",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX,CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,VINPUTFILE);
    }
 
 /* Check if reloading policy will succeed */
- 
+
 if (ShellCommandReturnsZero(cmd,true))
    {
    return true;
@@ -166,7 +184,7 @@ void ReadPromises(enum cfagenttype ag,char *agents)
   void *retval;
   char vbuff[CF_BUFSIZE];
   struct Constraint *cp;
- 
+
 if (ag == cf_keygen)
    {
    return;
@@ -179,39 +197,7 @@ Cf3ParseFiles();
 /* Now import some web variables that are set in cf-know/control for the report options */
 
 strncpy(STYLESHEET,"/cf_enterprise.css",CF_BUFSIZE-1);
-
-for (cp = ControlBodyConstraints(cf_know); cp != NULL; cp=cp->next)
-   {
-   if (IsExcluded(cp->classes))
-      {
-      continue;
-      }
-   
-   if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_query_engine].lval) == 0)
-      {
-      strncpy(WEBDRIVER,cp->rval,CF_MAXVARSIZE);
-      continue;
-      }
-   
-   if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_htmlbanner].lval) == 0)
-      {
-      strncpy(BANNER,cp->rval,2*CF_BUFSIZE-1);
-      continue;
-      }
-
-   if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_htmlfooter].lval) == 0)
-      {
-      strncpy(FOOTER,cp->rval,CF_BUFSIZE-1);
-      continue;
-      }
-
-   if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_stylesheet].lval) == 0)
-      {
-      strncpy(STYLESHEET,cp->rval,CF_MAXVARSIZE);
-      continue;
-      }
-
-   }
+strncpy(WEBDRIVER,"",CF_MAXVARSIZE-1);
 
 /* Make the compilation reports*/
 
@@ -228,6 +214,10 @@ else
    v = "not specified";
    }
 
+if (strchr(retval,':'))
+   {
+   CfOut(cf_error,""," !! The version string may not contain the \":\" character");
+   }
 
 snprintf(vbuff,CF_BUFSIZE-1,"<h1>Expanded promises for %s</h1>",agents);
 CfHtmlHeader(FREPORT_HTML,vbuff,STYLESHEET,WEBDRIVER,BANNER);
@@ -256,7 +246,23 @@ CloseReports(agents);
 void Cf3OpenLog()
 
 {
+#ifdef MINGW
+NovaWin_OpenLog();
+#else
 openlog(VPREFIX,LOG_PID|LOG_NOWAIT|LOG_ODELAY,FACILITY);
+#endif
+}
+
+/*****************************************************************************/
+
+void Cf3CloseLog()
+
+{
+#ifdef MINGW
+NovaWin_CloseLog();
+#else
+closelog();
+#endif
 }
 
 /*****************************************************************************/
@@ -269,10 +275,10 @@ switch (ag)
    {
    case cf_common:
        break;
-       
+
    case cf_agent:
        break;
-       
+
    case cf_server:
        break;
 
@@ -294,7 +300,7 @@ void InitializeGA(int argc,char *argv[])
   char ebuff[CF_EXPANDSIZE];
 
 #ifdef NT
-if (stat("/cygdrive",&statbuf) == 0)
+if (cfstat("/cygdrive",&statbuf) == 0)
    {
    FILE_SEPARATOR = '/';
    strcpy(FILE_SEPARATOR_STR,"/");
@@ -310,6 +316,12 @@ strcpy(FILE_SEPARATOR_STR,"/");
 #endif
 
 NewClass("any");
+
+#ifdef HAVE_LIBCFNOVA
+NewClass("nova_edition");
+#else
+NewClass("community_edition");
+#endif
 
 strcpy(VPREFIX,GetConsolePrefix());
 
@@ -328,17 +340,31 @@ if (DEBUG)
    NewClass("debug_mode");
    }
 
-CfOut(cf_verbose,"","Cfengine - autonomous configuration engine - commence self-diagnostic prelude\n");  
+CfOut(cf_verbose,"","Cfengine - autonomous configuration engine - commence self-diagnostic prelude\n");
 CfOut(cf_verbose,"","------------------------------------------------------------------------\n");
 
 /* Define trusted directories */
 
-#ifndef NT
+#ifdef MINGW
+if(NovaWin_GetProgDir(CFWORKDIR, CF_BUFSIZE - sizeof("Cfengine")))
+  {
+  strcat(CFWORKDIR, "\\Cfengine");
+  }
+else
+  {
+  CfOut(cf_error, "", "!! Could not get CFWORKDIR from Windows environment variable, falling back to compile time dir (%s)", WORKDIR);
+  strcpy(CFWORKDIR,WORKDIR);
+  }
+Debug("Setting CFWORKDIR=%s\n", CFWORKDIR);
+#elif defined(CFCYG)
+strcpy(CFWORKDIR,WORKDIR);
+MapName(CFWORKDIR);
+#else
 if (getuid() > 0)
    {
    strncpy(CFWORKDIR,GetHome(getuid()),CF_BUFSIZE-10);
    strcat(CFWORKDIR,"/.cfagent");
-   
+
    if (strlen(CFWORKDIR) > CF_BUFSIZE/2)
       {
       FatalError("Suspicious looking home directory. The path is too long and will lead to problems.");
@@ -348,72 +374,87 @@ else
    {
    strcpy(CFWORKDIR,WORKDIR);
    }
-
-#else
-strcpy(CFWORKDIR,MapName(WORKDIR));
 #endif
+
+/* On windows, use 'binary mode' as default for files */
+
+#ifdef MINGW
+_fmode = _O_BINARY;
+#endif
+
+strcpy(SYSLOGHOST,"localhost");
+SYSLOGPORT = htons(514);
+
+Cf3OpenLog();
 
 if (!LOOKUP) /* cf-know should not do this in lookup mode */
    {
    CfOut(cf_verbose,"","Work directory is %s\n",CFWORKDIR);
 
-   snprintf(HASHDB,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_CHKDB);
+   snprintf(HASHDB,CF_BUFSIZE-1,"%s%c%s",CFWORKDIR,FILE_SEPARATOR,CF_CHKDB);
 
-   snprintf(vbuff,CF_BUFSIZE,"%s/inputs/update.conf",CFWORKDIR);
+   snprintf(vbuff,CF_BUFSIZE,"%s%cinputs%cupdate.conf",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(vbuff,force);
-   snprintf(vbuff,CF_BUFSIZE,"%s/bin/cf-agent -D from_cfexecd",CFWORKDIR);
+   snprintf(vbuff,CF_BUFSIZE,"%s%cbin%ccf-agent -D from_cfexecd",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(vbuff,force);
-   snprintf(vbuff,CF_BUFSIZE,"%s/outputs/spooled_reports",CFWORKDIR);
+   snprintf(vbuff,CF_BUFSIZE,"%s%coutputs%cspooled_reports",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(vbuff,force);
-   snprintf(vbuff,CF_BUFSIZE,"%s/lastseen/intermittencies",CFWORKDIR);
+   snprintf(vbuff,CF_BUFSIZE,"%s%clastseen%cintermittencies",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(vbuff,force);
-   snprintf(vbuff,CF_BUFSIZE,"%s/reports/various",CFWORKDIR);
+   snprintf(vbuff,CF_BUFSIZE,"%s%creports%cvarious",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(vbuff,force);
-   
-   snprintf(vbuff,CF_BUFSIZE,"%s/inputs",CFWORKDIR);
 
-   if (stat(vbuff,&sb) == -1)
+   snprintf(vbuff,CF_BUFSIZE,"%s%cinputs",CFWORKDIR,FILE_SEPARATOR);
+
+   if (cfstat(vbuff,&sb) == -1)
       {
       FatalError(" !!! No access to workspace");
       }
    else
       {
-      chmod(vbuff,sb.st_mode | 0700);
+      cf_chmod(vbuff,sb.st_mode | 0700);
       }
-   
-   snprintf(vbuff,CF_BUFSIZE,"%s/outputs",CFWORKDIR);
 
-   if (stat(vbuff,&sb) == -1)
+   snprintf(vbuff,CF_BUFSIZE,"%s%coutputs",CFWORKDIR,FILE_SEPARATOR);
+
+   if (cfstat(vbuff,&sb) == -1)
       {
       FatalError(" !!! No access to workspace");
       }
    else
       {
-      chmod(vbuff,sb.st_mode | 0700);
+      cf_chmod(vbuff,sb.st_mode | 0700);
       }
-   
-   sprintf(ebuff,"%s/state/cf_procs",CFWORKDIR);
+
+   sprintf(ebuff,"%s%cstate%ccf_procs",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(ebuff,force);
-   
-   if (stat(ebuff,&statbuf) == -1)
+
+   if (cfstat(ebuff,&statbuf) == -1)
       {
       CreateEmptyFile(ebuff);
       }
-   
-   sprintf(ebuff,"%s/state/cf_rootprocs",CFWORKDIR);
-   
-   if (stat(ebuff,&statbuf) == -1)
+
+   sprintf(ebuff,"%s%cstate%ccf_rootprocs",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
+
+   if (cfstat(ebuff,&statbuf) == -1)
       {
       CreateEmptyFile(ebuff);
       }
-   
-   sprintf(ebuff,"%s/state/cf_otherprocs",CFWORKDIR);
-   
-   if (stat(ebuff,&statbuf) == -1)
+
+   sprintf(ebuff,"%s%cstate%ccf_otherprocs",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
+
+   if (cfstat(ebuff,&statbuf) == -1)
       {
       CreateEmptyFile(ebuff);
       }
    }
+
+OpenNetwork();
+
+// cleanup db file from v. 3.0.2 (can be removed later)
+char oldLockDb[CF_BUFSIZE];
+snprintf(oldLockDb, sizeof(oldLockDb), "%s/cfengine_lock_db", CFWORKDIR);
+unlink(oldLockDb);
 
 /* Init crypto stuff */
 
@@ -426,7 +467,7 @@ RandomSeed();
 RAND_bytes(s,16);
 s[15] = '\0';
 seed = ElfHash(s);
-srand48((long)seed);  
+srand48((long)seed);
 
 LoadSecretKeys();
 
@@ -448,18 +489,18 @@ setlinebuf(stdout);
 
 if (BOOTSTRAP)
    {
-   snprintf(vbuff,CF_BUFSIZE,"%s/inputs/failsafe.cf",CFWORKDIR);
-   
-   if (!IsEnterprise() && stat(vbuff,&statbuf) == -1)
+   snprintf(vbuff,CF_BUFSIZE,"%s%cinputs%cfailsafe.cf",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
+
+   if (!IsEnterprise() && cfstat(vbuff,&statbuf) == -1)
       {
       CfOut(cf_inform,"","Didn't find established file %s, so looking for one in current directory\n",vbuff);
-      strncpy(VINPUTFILE,"./failsafe.cf",CF_BUFSIZE-1);
+          snprintf(VINPUTFILE,CF_BUFSIZE-1,".%cfailsafe.cf",FILE_SEPARATOR);
       }
    else
       {
       CfOut(cf_inform,"","Found an established failsafe file %s, so using it.\n",vbuff);
       strncpy(VINPUTFILE,vbuff,CF_BUFSIZE-1);
-      }   
+      }
    }
 
 }
@@ -482,6 +523,7 @@ Cf3ParseFile(VINPUTFILE);
 // Expand any lists in this list now
 
 HashVariables();
+HashControls();
 
 if (VINPUTLIST != NULL)
    {
@@ -489,7 +531,7 @@ if (VINPUTLIST != NULL)
       {
       if (rp->type != CF_SCALAR)
          {
-         CfOut(cf_error,"","Non file object %s in list\n",(char *)rp->item);
+         CfOut(cf_error,"","Non-file object in inputs list\n");
          }
       else
          {
@@ -500,7 +542,7 @@ if (VINPUTLIST != NULL)
             case CF_SCALAR:
                 Cf3ParseFile((char *)returnval.item);
                 break;
-                
+
             case CF_LIST:
                 for (sl = (struct Rlist *)returnval.item; sl != NULL; sl=sl->next)
                    {
@@ -524,7 +566,7 @@ int NewPromiseProposals()
   struct stat sb;
   int result = false;
 
-if (stat(InputLocation(VINPUTFILE),&sb) == -1)
+if (cfstat(InputLocation(VINPUTFILE),&sb) == -1)
    {
    CfOut(cf_error,"stat","There is no readable input file at %s",VINPUTFILE);
    return false;
@@ -534,7 +576,7 @@ if (sb.st_mtime > PROMISETIME)
    {
    return true;
    }
-          
+
 if (VINPUTLIST != NULL)
    {
    for (rp = VINPUTLIST; rp != NULL; rp=rp->next)
@@ -551,7 +593,7 @@ if (VINPUTLIST != NULL)
             {
             case CF_SCALAR:
 
-                if (stat(InputLocation((char *)returnval.item),&sb) == -1)
+                if (cfstat(InputLocation((char *)returnval.item),&sb) == -1)
                    {
                    CfOut(cf_error,"stat","There are no readable promise proposals at %s",(char *)returnval.item);
                    break;
@@ -559,16 +601,16 @@ if (VINPUTLIST != NULL)
 
                 if (sb.st_mtime > PROMISETIME)
                    {
-                   result = true;                   
+                   result = true;
                    }
-                
+
                 break;
-                
+
             case CF_LIST:
 
                 for (sl = (struct Rlist *)returnval.item; sl != NULL; sl=sl->next)
                    {
-                   if (stat(InputLocation((char *)sl->item),&sb) == -1)
+                   if (cfstat(InputLocation((char *)sl->item),&sb) == -1)
                       {
                       CfOut(cf_error,"stat","There are no readable promise proposals at %s",(char *)sl->item);
                       break;
@@ -580,10 +622,10 @@ if (VINPUTLIST != NULL)
                       break;
                       }
                    }
-                
+
                 break;
             }
-         
+
          DeleteRvalItem(returnval.item,returnval.rtype);
 
          if (result)
@@ -605,40 +647,40 @@ void OpenReports(char *agents)
 
 if (SHOWREPORTS)
    {
-   snprintf(name,CF_BUFSIZE,"%s/reports/promise_output_%s.txt",CFWORKDIR,agents);
+   snprintf(name,CF_BUFSIZE,"%s%creports%cpromise_output_%s.txt",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
 
    if ((FREPORT_TXT = fopen(name,"w")) == NULL)
       {
       CfOut(cf_error,"fopen","Cannot open output file %s",name);
-      FREPORT_TXT = fopen("/dev/null","w");
+      FREPORT_TXT = fopen(NULLFILE,"w");
       }
-   
-   snprintf(name,CF_BUFSIZE,"%s/reports/promise_output_%s.html",CFWORKDIR,agents);
+
+   snprintf(name,CF_BUFSIZE,"%s%creports%cpromise_output_%s.html",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
 
    if ((FREPORT_HTML = fopen(name,"w")) == NULL)
       {
       CfOut(cf_error,"fopen","Cannot open output file %s",name);
-      FREPORT_HTML = fopen("/dev/null","w");
+      FREPORT_HTML = fopen(NULLFILE,"w");
       }
 
-   snprintf(name,CF_BUFSIZE,"%s/promise_knowledge.cf",CFWORKDIR);
-   
+   snprintf(name,CF_BUFSIZE,"%s%cpromise_knowledge.cf",CFWORKDIR,FILE_SEPARATOR);
+
    if ((FKNOW = fopen(name,"w")) == NULL)
       {
       CfOut(cf_error,"fopen","Cannot open output file %s",name);
-      FKNOW = fopen("/dev/null","w");
+      FKNOW = fopen(NULLFILE,"w");
       }
    }
 else
    {
-   snprintf(name,CF_BUFSIZE,"/dev/null");
+   snprintf(name,CF_BUFSIZE,NULLFILE);
    if ((FREPORT_TXT = fopen(name,"w")) == NULL)
       {
       char vbuff[CF_BUFSIZE];
       snprintf(vbuff,CF_BUFSIZE,"Cannot open output file %s",name);
       FatalError(vbuff);
       }
-   
+
    if ((FREPORT_HTML = fopen(name,"w")) == NULL)
       {
       char vbuff[CF_BUFSIZE];
@@ -656,11 +698,12 @@ else
 
 if (!(FKNOW && FREPORT_HTML && FREPORT_TXT))
    {
-   FatalError("Unable to continue as /dev/null is unwritable");
+   FatalError("Unable to continue as the null-file is unwritable");
    }
 
-fprintf(FKNOW,"bundle knowledge CfengineSiteConfiguration\n{\n");
+fprintf(FKNOW,"bundle knowledge CfengineEnterpriseFundamentals\n{\n");
 ShowTopicRepresentation(FKNOW);
+fprintf(FKNOW,"}\n\nbundle knowledge CfengineSiteConfiguration\n{\n");
 }
 
 /*******************************************************************/
@@ -668,16 +711,16 @@ ShowTopicRepresentation(FKNOW);
 void CloseReports(char *agents)
 
 { char name[CF_BUFSIZE];
- 
+
 if (SHOWREPORTS)
    {
-   CfOut(cf_error,"","Wrote compilation report %s/reports/promise_output_%s.txt",CFWORKDIR,agents);
-   CfOut(cf_error,"","Wrote compilation report %s/reports/promise_output_%s.html",CFWORKDIR,agents);
-   CfOut(cf_error,"","Wrote knowledge map %s/promise_knowledge.cf",CFWORKDIR,agents);
+   CfOut(cf_cmdout,"","Wrote compilation report %s%creports%cpromise_output_%s.txt",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
+   CfOut(cf_cmdout,"","Wrote compilation report %s%creports%cpromise_output_%s.html",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
+   CfOut(cf_cmdout,"","Wrote knowledge map %s%cpromise_knowledge.cf",CFWORKDIR,FILE_SEPARATOR,agents);
    }
 
 fprintf(FKNOW,"}\n");
-fclose(FKNOW); 
+fclose(FKNOW);
 fclose(FREPORT_HTML);
 fclose(FREPORT_TXT);
 }
@@ -697,32 +740,37 @@ void Cf3ParseFile(char *filename)
 
 strncpy(wfilename,InputLocation(filename),CF_BUFSIZE);
 
-if (stat(wfilename,&statbuf) == -1)
+if (cfstat(wfilename,&statbuf) == -1)
    {
+   if (IGNORE_MISSING_INPUTS)
+      {
+      return;
+      }
+
    CfOut(cf_error,"stat","Can't stat file \"%s\" for parsing\n",wfilename);
    exit(1);
    }
 
+#ifndef NT
 if (statbuf.st_mode & (S_IWGRP | S_IWOTH))
    {
-#ifndef NT
    CfOut(cf_error,"","File %s (owner %d) is writable by others (security exception)",wfilename,statbuf.st_uid);
    exit(1);
-#endif
    }
+#endif
 
 Debug("+++++++++++++++++++++++++++++++++++++++++++++++\n");
 CfOut(cf_verbose,"","  > Parsing file %s\n",wfilename);
 Debug("+++++++++++++++++++++++++++++++++++++++++++++++\n");
 
 PrependAuditFile(wfilename);
- 
+
 if ((yyin = fopen(wfilename,"r")) == NULL)      /* Open root file */
    {
    printf("Can't open file %s for parsing\n",wfilename);
    exit (1);
    }
- 
+
 P.line_no = 1;
 P.line_pos = 1;
 P.list_nesting = 0;
@@ -732,7 +780,7 @@ P.filename = strdup(wfilename);
 P.currentid = NULL;
 P.currentstring = NULL;
 P.currenttype = NULL;
-P.currentclasses = NULL;   
+P.currentclasses = NULL;
 P.currentRlist = NULL;
 P.currentpromise = NULL;
 P.promiser = NULL;
@@ -740,7 +788,7 @@ P.promiser = NULL;
 while (!feof(yyin))
    {
    yyparse();
-   
+
    if (ferror(yyin))  /* abortable */
       {
       perror("cfengine");
@@ -813,13 +861,13 @@ else if (strcmp(retval,"LOG_LOCAL5") == 0)
 else if (strcmp(retval,"LOG_LOCAL6") == 0)
    {
    FACILITY = LOG_LOCAL6;
-   }   
+   }
 else if (strcmp(retval,"LOG_LOCAL7") == 0)
    {
    FACILITY = LOG_LOCAL7;
    }
 
-closelog();
+Cf3CloseLog();
 Cf3OpenLog();
 }
 
@@ -828,7 +876,7 @@ Cf3OpenLog();
 struct Bundle *GetBundle(char *name,char *agent)
 
 { struct Bundle *bp;
- 
+
 for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
    {
    if (strcmp(bp->name,name) == 0)
@@ -864,7 +912,7 @@ if (bp == NULL)
    {
    return NULL;
    }
- 
+
 for (sp = bp->subtypes; sp != NULL; sp=sp->next)
    {
    if (strcmp(type,sp->name)== 0)
@@ -937,7 +985,7 @@ void PromiseBanner(struct Promise *pp)
 
 { char *sp,handle[CF_MAXVARSIZE];
 
-if ((sp = GetConstraint("handle",pp->conlist,CF_SCALAR)) || (sp = PromiseID(pp)))
+if ((sp = GetConstraint("handle",pp,CF_SCALAR)) || (sp = PromiseID(pp)))
    {
    strncpy(handle,sp,CF_MAXVARSIZE-1);
    }
@@ -945,7 +993,7 @@ else
    {
    strcpy(handle,"(enterprise only)");
    }
- 
+
 CfOut(cf_verbose,"","\n");
 CfOut(cf_verbose,"","    .........................................................\n");
 
@@ -974,7 +1022,7 @@ if (pp->ref)
    CfOut(cf_verbose,"","\n");
    CfOut(cf_verbose,"","    Comment:  %s\n",pp->ref);
    }
-   
+
 CfOut(cf_verbose,"","    .........................................................\n");
 CfOut(cf_verbose,"","\n");
 }
@@ -983,6 +1031,8 @@ CfOut(cf_verbose,"","\n");
 /*********************************************************************/
 
 void CheckWorkingDirectories()
+    
+/* NOTE: We do not care about permissions (ACLs) in windows */
 
 { struct stat statbuf;
   int result;
@@ -996,148 +1046,103 @@ if (uname(&VSYSNAME) == -1)
    perror("uname ");
    FatalError("Uname couldn't get kernel name info!!\n");
    }
- 
-snprintf(LOGFILE,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
-VSETUIDLOG = strdup(LOGFILE); 
- 
-snprintf(vbuff,CF_BUFSIZE,"%s/.",CFWORKDIR);
+
+snprintf(LOGFILE,CF_BUFSIZE,"%s%ccfagent.%s.log",CFWORKDIR,FILE_SEPARATOR,VSYSNAME.nodename);
+VSETUIDLOG = strdup(LOGFILE);
+
+snprintf(vbuff,CF_BUFSIZE,"%s%c.",CFWORKDIR,FILE_SEPARATOR);
 MakeParentDirectory(vbuff,false);
 
-CfOut(cf_verbose,"","Making sure that locks are private...\n"); 
+CfOut(cf_verbose,"","Making sure that locks are private...\n");
 
 if (chown(CFWORKDIR,getuid(),getgid()) == -1)
    {
    CfOut(cf_error,"chown","Unable to set owner on %s to %d.%d",CFWORKDIR,getuid(),getgid());
    }
- 
-if (stat(CFWORKDIR,&statbuf) != -1)
+
+if (cfstat(CFWORKDIR,&statbuf) != -1)
    {
    /* change permissions go-w */
-   chmod(CFWORKDIR,(mode_t)(statbuf.st_mode & ~022));
+   cf_chmod(CFWORKDIR,(mode_t)(statbuf.st_mode & ~022));
    }
 
-snprintf(vbuff,CF_BUFSIZE,"%s/state/.",CFWORKDIR);
+snprintf(vbuff,CF_BUFSIZE,"%s%cstate%c.",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
 MakeParentDirectory(vbuff,false);
 
-snprintf(CFPRIVKEYFILE,CF_BUFSIZE,"%s/ppkeys/localhost.priv",CFWORKDIR);
-snprintf(CFPUBKEYFILE,CF_BUFSIZE,"%s/ppkeys/localhost.pub",CFWORKDIR);
+snprintf(CFPRIVKEYFILE,CF_BUFSIZE,"%s%cppkeys%clocalhost.priv",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
+snprintf(CFPUBKEYFILE,CF_BUFSIZE,"%s%cppkeys%clocalhost.pub",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
 
 CfOut(cf_verbose,"","Checking integrity of the state database\n");
-snprintf(vbuff,CF_BUFSIZE,"%s/state",CFWORKDIR);
+snprintf(vbuff,CF_BUFSIZE,"%s%cstate",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
 
-if (stat(vbuff,&statbuf) == -1)
+if (cfstat(vbuff,&statbuf) == -1)
    {
-   snprintf(vbuff,CF_BUFSIZE,"%s/state/.",CFWORKDIR);
+   snprintf(vbuff,CF_BUFSIZE,"%s%cstate%c.",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(vbuff,false);
-   
+
    if (chown(vbuff,getuid(),getgid()) == -1)
       {
       CfOut(cf_error,"chown","Unable to set owner on %s to %d.%d",vbuff,getuid(),getgid());
       }
 
-   chmod(vbuff,(mode_t)0755);
+   cf_chmod(vbuff,(mode_t)0755);
    }
-else 
+else
    {
+#ifndef MINGW
    if (statbuf.st_mode & 022)
       {
       CfOut(cf_error,"","UNTRUSTED: State directory %s (mode %o) was not private!\n",CFWORKDIR,statbuf.st_mode & 0777);
       }
+#endif  /* NOT MINGW */
    }
 
-CfOut(cf_verbose,"","Checking integrity of the module directory\n"); 
+CfOut(cf_verbose,"","Checking integrity of the module directory\n");
 
-snprintf(vbuff,CF_BUFSIZE,"%s/modules",CFWORKDIR);
+snprintf(vbuff,CF_BUFSIZE,"%s%cmodules",CFWORKDIR,FILE_SEPARATOR);
 
-if (stat(vbuff,&statbuf) == -1)
+if (cfstat(vbuff,&statbuf) == -1)
    {
-   snprintf(vbuff,CF_BUFSIZE,"%s/modules/.",CFWORKDIR);
+   snprintf(vbuff,CF_BUFSIZE,"%s%cmodules%c.",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(vbuff,false);
-   
+
    if (chown(vbuff,getuid(),getgid()) == -1)
       {
       CfOut(cf_error,"chown","Unable to set owner on %s to %d.%d",vbuff,getuid(),getgid());
       }
 
-   chmod(vbuff,(mode_t)0700);
+   cf_chmod(vbuff,(mode_t)0700);
    }
-else 
+else
    {
+#ifndef MINGW
    if (statbuf.st_mode & 022)
       {
-      CfOut(cf_error,"","UNTRUSTED: Module directory %s (mode %o) was not private!\n",CFWORKDIR,statbuf.st_mode & 0777);
+      CfOut(cf_error,"","UNTRUSTED: Module directory %s (mode %o) was not private!\n",vbuff,statbuf.st_mode & 0777);
       }
+#endif  /* NOT MINGW */
    }
 
-CfOut(cf_verbose,"","Checking integrity of the input data for RPC\n"); 
-
-snprintf(vbuff,CF_BUFSIZE,"%s/rpc_in",CFWORKDIR);
-
-if (stat(vbuff,&statbuf) == -1)
-   {
-   snprintf(vbuff,CF_BUFSIZE,"%s/rpc_in/.",CFWORKDIR);
-   MakeParentDirectory(vbuff,false);
-   
-   if (chown(vbuff,getuid(),getgid()) == -1)
-      {
-      CfOut(cf_error,"chown","Unable to set owner on %s to %d.%d",vbuff,getuid(),getgid());
-      }
-
-   chmod(vbuff,(mode_t)0700);
-   }
-else 
-   {
-   if (statbuf.st_mode & 077)
-      {
-      snprintf(output,CF_BUFSIZE-1,"UNTRUSTED: RPC input directory %s was not private! (%o)\n",vbuff,statbuf.st_mode & 0777);
-      FatalError(output);
-      }
-   }
-
-CfOut(cf_verbose,"","Checking integrity of the output data for RPC\n"); 
-
-snprintf(vbuff,CF_BUFSIZE,"%s/rpc_out",CFWORKDIR);
-
-if (stat(vbuff,&statbuf) == -1)
-   {
-   snprintf(vbuff,CF_BUFSIZE,"%s/rpc_out/.",CFWORKDIR);
-   MakeParentDirectory(vbuff,false);
-
-   if (chown(vbuff,getuid(),getgid()) == -1)
-      {
-      CfOut(cf_error,"chown","Unable to set owner on %s to %d.%d",vbuff,getuid(),getgid());
-      }
-
-   chmod(vbuff,(mode_t)0700);   
-   }
-else
-   {
-   if (statbuf.st_mode & 077)
-      {
-      
-      snprintf(output,CF_BUFSIZE-1,"UNTRUSTED: RPC output directory %s was not private! (%o)\n",vbuff,statbuf.st_mode & 0777);
-      FatalError(output);
-      }
-   }
- 
 CfOut(cf_verbose,"","Checking integrity of the PKI directory\n");
 
-snprintf(vbuff,CF_BUFSIZE,"%s/ppkeys",CFWORKDIR);
-    
-if (stat(vbuff,&statbuf) == -1)
+snprintf(vbuff,CF_BUFSIZE,"%s%cppkeys",CFWORKDIR,FILE_SEPARATOR);
+
+if (cfstat(vbuff,&statbuf) == -1)
    {
-   snprintf(vbuff,CF_BUFSIZE,"%s/ppkeys/.",CFWORKDIR);
+   snprintf(vbuff,CF_BUFSIZE,"%s%cppkeys%c.",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
    MakeParentDirectory(vbuff,false);
 
-   chmod(vbuff,(mode_t)0700); /* Keys must be immutable to others */
+   cf_chmod(vbuff,(mode_t)0700); /* Keys must be immutable to others */
    }
 else
    {
+#ifndef MINGW
    if (statbuf.st_mode & 077)
       {
-      snprintf(output,CF_BUFSIZE-1,"UNTRUSTED: Private key directory %s/ppkeys (mode %o) was not private!\n",CFWORKDIR,statbuf.st_mode & 0777);
+      snprintf(output,CF_BUFSIZE-1,"UNTRUSTED: Private key directory %s%cppkeys (mode %o) was not private!\n",CFWORKDIR,FILE_SEPARATOR,statbuf.st_mode & 0777);
       FatalError(output);
       }
+#endif  /* NOT MINGW */
    }
 }
 
@@ -1154,7 +1159,7 @@ if (MINUSF && (filename != VINPUTFILE) && (*VINPUTFILE == '.' || IsAbsoluteFileN
    /* If -f assume included relative files are in same directory */
    strncpy(path,VINPUTFILE,CF_BUFSIZE-1);
    ChopLastNode(path);
-   snprintf(wfilename,CF_BUFSIZE-1,"%s/%s",path,filename);
+   snprintf(wfilename,CF_BUFSIZE-1,"%s%c%s",path,FILE_SEPARATOR,filename);
    }
 else if ((*filename == '.') || IsAbsoluteFileName(filename))
    {
@@ -1162,7 +1167,7 @@ else if ((*filename == '.') || IsAbsoluteFileName(filename))
    }
 else
    {
-   snprintf(wfilename,CF_BUFSIZE-1,"%s/inputs/%s",CFWORKDIR,filename);
+   snprintf(wfilename,CF_BUFSIZE-1,"%s%cinputs%c%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,filename);
    }
 
 return MapName(wfilename);
@@ -1192,9 +1197,9 @@ if ((FREPORT_HTML = fopen(filename,"w")) == NULL)
    FatalError(output);
    }
 
-if ((FKNOW = fopen("/dev/null","w")) == NULL)
+if ((FKNOW = fopen(NULLFILE,"w")) == NULL)
    {
-   FatalError("/dev/null failed");
+   FatalError("Null-file failed");
    }
 
 ShowPromises(BUNDLES,BODIES);
@@ -1226,7 +1231,7 @@ if (REQUIRE_COMMENTS == CF_UNDEFINED)
       {
       if ((strcmp(bdp->name,"control") == 0) && (strcmp(bdp->type,"common") == 0))
          {
-         REQUIRE_COMMENTS = GetBooleanConstraint("require_comments",bdp->conlist);
+         REQUIRE_COMMENTS = GetRawBooleanConstraint("require_comments",bdp->conlist);
          break;
          }
       }
@@ -1327,17 +1332,17 @@ if ((AUDITPTR = (struct Audit *)malloc(sizeof(struct Audit))) == NULL)
    FatalError("Memory allocation failure in PrependAuditFile");
    }
 
-if (stat(file,&statbuf) == -1)
+if (cfstat(file,&statbuf) == -1)
    {
    /* shouldn't happen */
    return;
    }
 
-HashFile(file,AUDITPTR->digest,cf_md5);   
+HashFile(file,AUDITPTR->digest,cf_md5);
 
 AUDITPTR->next = VAUDIT;
 AUDITPTR->filename = strdup(file);
-AUDITPTR->date = strdup(ctime(&statbuf.st_mtime));
+AUDITPTR->date = strdup(cf_ctime(&statbuf.st_mtime));
 Chop(AUDITPTR->date);
 AUDITPTR->version = NULL;
 VAUDIT = AUDITPTR;
@@ -1354,7 +1359,7 @@ void CheckVariablePromises(char *scope,struct Promise *varlist)
   int allow_redefine = false;
 
 Debug("CheckVariablePromises()\n");
-  
+
 for (pp = varlist; pp != NULL; pp=pp->next)
    {
    ConvergeVarHashPromise(scope,pp,allow_redefine);
@@ -1382,11 +1387,11 @@ void CheckBundleParameters(char *scope,struct Rlist *args)
 { struct Rlist *rp;
   struct Rval retval;
   char *lval,rettype;;
- 
+
 for (rp = args; rp != NULL; rp = rp->next)
    {
    lval = (char *)rp->item;
-   
+
    if (GetVariable(scope,lval,(void *)&retval,&rettype) != cf_notype)
       {
       CfOut(cf_error,"","Variable and bundle parameter %s collide",lval);
@@ -1403,11 +1408,10 @@ void CheckControlPromises(char *scope,char *agent,struct Constraint *controllist
   struct SubTypeSyntax *sp;
   struct BodySyntax *bp = NULL;
   char *lval;
-  void *rval = NULL;
+  void *rval = NULL,*retval;
   int i = 0,override = true;
   struct Rval returnval;
-  char rettype;
-  void *retval;
+  char rettype,rtype;
 
 Debug("CheckControlPromises(%s)\n",agent);
 
@@ -1432,7 +1436,7 @@ for (cp = controllist; cp != NULL; cp=cp->next)
       {
       continue;
       }
-   
+
    if (strcmp(cp->lval,CFG_CONTROLBODY[cfg_bundlesequence].lval) == 0)
       {
       returnval = ExpandPrivateRval(CONTEXTID,cp->rval,cp->type);
@@ -1442,6 +1446,8 @@ for (cp = controllist; cp != NULL; cp=cp->next)
       returnval = EvaluateFinalRval(CONTEXTID,cp->rval,cp->type,true,NULL);
       }
 
+   DeleteVariable(scope,cp->lval);
+   
    if (!AddVariableHash(scope,cp->lval,returnval.item,returnval.rtype,GetControlDatatype(cp->lval,bp),cp->audit->filename,cp->lineno))
       {
       CfOut(cf_error,"","Rule from %s at/before line %d\n",cp->audit->filename,cp->lineno);
@@ -1463,7 +1469,18 @@ for (cp = controllist; cp != NULL; cp=cp->next)
       NewScalar("sys","domain",VDOMAIN,cf_str);
       DeleteClass("undefined_domain");
       NewClass(CanonifyName(VDOMAIN));
-      continue;
+      }
+
+   if (strcmp(cp->lval,CFG_CONTROLBODY[cfg_ignore_missing_inputs].lval) == 0)
+      {
+      CfOut(cf_verbose,"","SET ignore_missing_inputs %s\n",cp->rval);
+      IGNORE_MISSING_INPUTS = GetBoolean(cp->rval);
+      }
+
+   if (strcmp(cp->lval,CFG_CONTROLBODY[cfg_ignore_missing_bundles].lval) == 0)
+      {
+      CfOut(cf_verbose,"","SET ignore_missing_bundles %s\n",cp->rval);
+      IGNORE_MISSING_BUNDLES = GetBoolean(cp->rval);
       }
 
    DeleteRvalItem(returnval.item,returnval.rtype);
@@ -1478,7 +1495,7 @@ void SetAuditVersion()
   char rtype = 'x';
 
   /* In addition, each bundle can have its own version */
- 
+
 switch (GetVariable("control_common","cfinputs_version",&rval,&rtype))
    {
    case cf_str:
@@ -1501,7 +1518,7 @@ void Syntax(char *component,struct option options[],char *hints[],char *id)
 
 { int i;
 
-printf("\n\n%s\n\n",component); 
+printf("\n\n%s\n\n",component);
 
 printf("SYNOPSIS:\n\n   program [options]\n\nDESCRIPTION:\n\n%s\n",id);
 printf("Command line options:\n\n");
@@ -1588,7 +1605,7 @@ void WritePID(char *filename)
 
 { FILE *fp;
 
-snprintf(PIDFILE,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,filename);
+snprintf(PIDFILE,CF_BUFSIZE-1,"%s%c%s",CFWORKDIR,FILE_SEPARATOR,filename);
 
 if ((fp = fopen(PIDFILE,"w")) == NULL)
    {
@@ -1610,21 +1627,21 @@ void HashVariables()
   struct Scope *ptr;
 
 CfOut(cf_verbose,"","Initiate variable convergence...\n");
-  
+
 for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
    {
    SetNewScope(bp->name);
    THIS_BUNDLE = bp->name;
 
    for (sp = bp->subtypes; sp != NULL; sp = sp->next) /* get schedule */
-      {      
+      {
       if (strcmp(sp->name,"vars") == 0)
          {
          CheckVariablePromises(bp->name,sp->promiselist);
          }
 
       // We must also set global classes here?
-      
+
       if (strcmp(bp->type,"common") == 0&&  strcmp(sp->name,"classes") == 0)
          {
          CheckCommonClassPromises(sp->promiselist);
@@ -1645,7 +1662,7 @@ void HashControls()
 /* Only control bodies need to be hashed like variables */
 
 CfOut(cf_verbose,"","Initiate control variable convergence...\n");
-  
+
 for (bdp = BODIES; bdp != NULL; bdp = bdp->next) /* get schedule */
    {
    if (strcmp(bdp->name,"control") == 0)
@@ -1675,7 +1692,7 @@ int BadBundleSequence(enum cfagenttype agent)
 
 { struct Rlist *rp,*params;
   char rettype,*name;
-  void *retval;
+  void *retval = NULL;
   int ok = true;
   struct FnCall *fp;
 
@@ -1724,7 +1741,7 @@ if (agent == cf_agent || agent == cf_common)
              name = (char *)fp->name;
              params = (struct Rlist *)fp->args;
              break;
-             
+
          default:
              name = NULL;
              params = NULL;
@@ -1734,14 +1751,14 @@ if (agent == cf_agent || agent == cf_common)
              ok = false;
              break;
          }
-      
-      if (!GetBundle(name,NULL))
+
+      if (!IGNORE_MISSING_BUNDLES && !GetBundle(name,NULL))
          {
-         CfOut(cf_error,"","Bundle %s listed in the bundlesequence is not a defined bundle\n",name);
+         CfOut(cf_error,"","Bundle \"%s\" listed in the bundlesequence is not a defined bundle\n",name);
          ok = false;
          }
       }
-   
+
    if (!ok)
       {
       return true;

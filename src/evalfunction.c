@@ -44,6 +44,179 @@
      
   */
 
+/*******************************************************************/
+/* FnCall API - OS function mapping                                */
+/*******************************************************************/
+
+struct Rval FnCallUserExists(struct FnCall *fp,struct Rlist *finalargs)
+
+{
+#ifdef MINGW
+return NovaWin_FnCallUserExists(fp, finalargs);
+#else
+return Unix_FnCallUserExists(fp, finalargs);
+#endif
+}
+
+/*********************************************************************/
+
+struct Rval FnCallGroupExists(struct FnCall *fp,struct Rlist *finalargs)
+
+{
+#ifdef MINGW
+return NovaWin_FnCallGroupExists(fp, finalargs);
+#else
+return Unix_FnCallGroupExists(fp, finalargs);
+#endif
+}
+
+/*******************************************************************/
+/* End FnCall API                                                  */
+/*******************************************************************/
+
+struct Rval FnCallHostsSeen(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_INTRANGE,
+     "lastseen,notseen",
+     "name,address",
+     NULL
+     };
+ 
+  static enum cfdatatype argtypes[] =
+      {
+      cf_int,
+      cf_opts,
+      cf_opts,
+      cf_notype
+      };
+
+  struct Rval rval;
+  struct Rlist *rp,*returnlist = NULL;
+  char *key,*policy,*format,buffer[CF_BUFSIZE];
+  int ksize,vsize,tmp,range,result,from=-1,to=-1;
+  void *value;
+  CF_DB *dbp;
+  CF_DBC *dbcp;
+  time_t tid = time(NULL);
+  double now = (double)tid,average = 0, var = 0;
+  double ticksperhr = (double)CF_TICKS_PER_HOUR;
+  char name[CF_BUFSIZE],hostname[CF_BUFSIZE];
+  struct QPoint entry;
+  int horizon;
+  
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+horizon = Str2Int((char *)(finalargs->item)) * 3600;
+policy = (char *)(finalargs->next->item);
+format = (char *)(finalargs->next->next->item);
+
+if (from == CF_NOINT || to == CF_NOINT)
+   {
+   SetFnCallReturnStatus("hostsseen",FNCALL_FAILURE,"unrecognized integer",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_LIST;
+   return rval;
+   }
+
+snprintf(name,CF_BUFSIZE-1,"%s%c%s",CFWORKDIR,FILE_SEPARATOR,CF_LASTDB_FILE);
+
+if (!OpenDB(name,&dbp))
+   {
+   SetFnCallReturnStatus("hostseen",FNCALL_FAILURE,NULL,NULL);
+   rval.item = NULL;
+   rval.rtype = CF_LIST;
+   return rval;
+   }
+
+/* Acquire a cursor for the database. */
+
+if (!NewDBCursor(dbp,&dbcp))
+   {
+   SetFnCallReturnStatus("hostseen",FNCALL_FAILURE,NULL,NULL);
+   CfOut(cf_error,""," !! Error reading from last-seen database: ");
+   rval.item = NULL;
+   rval.rtype = CF_LIST;
+   return rval;
+   }
+
+memset(&entry,0,sizeof(entry)); 
+ 
+ /* Walk through the database and print out the key/data pairs. */
+
+while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
+   {
+   double then;
+   time_t fthen;
+   char tbuf[CF_BUFSIZE],addr[CF_BUFSIZE];
+
+   memcpy(&then,value,sizeof(then));
+   strcpy(hostname,(char *)(key+1));
+
+   if (value != NULL)
+      {
+      memcpy(&entry,value,sizeof(entry));
+      then = entry.q;
+      average = (double)entry.expect;
+      var = (double)entry.var;
+      }
+   else
+      {
+      continue;
+      }
+
+   if (strcmp(policy,"lastseen") == 0)
+      {
+      if (now - then > horizon)
+         {
+         continue;
+         }
+      }
+   else
+      {
+      if (now - then <= horizon)
+         {
+         continue;
+         }      
+      }
+
+   if (strcmp(format,"address") == 0)
+      {
+      IdempPrependRScalar(&returnlist,hostname,CF_SCALAR);
+      }
+   else
+      {
+      strncpy(name,IPString2Hostname(hostname),CF_MAXVARSIZE);
+      IdempPrependRScalar(&returnlist,name,CF_SCALAR);
+      }
+   }
+
+DeleteDBCursor(dbp,dbcp);
+CloseDB(dbp);
+
+/* end fn specific content */
+
+if (returnlist == NULL)
+   {
+   SetFnCallReturnStatus("hostseen",FNCALL_FAILURE,NULL,NULL);
+   rval.item = NULL;
+   rval.rtype = CF_LIST;
+   return rval;
+   }
+else
+   {
+   SetFnCallReturnStatus("hostsseen",FNCALL_SUCCESS,NULL,NULL);
+   rval.item = returnlist;
+   rval.rtype = CF_LIST;
+   return rval;
+   }
+}
+
+
 /*********************************************************************/
 
 struct Rval FnCallRandomInt(struct FnCall *fp,struct Rlist *finalargs)
@@ -108,8 +281,152 @@ return rval;
 
 /*********************************************************************/
 
+struct Rval FnCallGetEnv(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_IDRANGE,
+     CF_VALRANGE,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_int,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  struct passwd *pw;
+  char buffer[CF_BUFSIZE],ctrlstr[CF_SMALLBUF];
+  char *name;
+  int limit;
+  
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+name = finalargs->item;
+limit = Str2Int(finalargs->next->item);
+buffer[0] = '\0';
+
+snprintf(ctrlstr,CF_SMALLBUF,"%%.%ds",limit); // -> %45s
+
+if (getenv(name))
+   {
+   snprintf(buffer,CF_BUFSIZE-1,ctrlstr,getenv(name));
+   }
+else
+   {
+   snprintf(buffer,CF_BUFSIZE-1,"");
+   }
+
+if ((rval.item = strdup(buffer)) == NULL)
+   {
+   FatalError("Memory allocation in FnCallGetUid");
+   }
+
+SetFnCallReturnStatus("getenv",FNCALL_SUCCESS,NULL,NULL);
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval FnCallEscape(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  struct passwd *pw;
+  char buffer[CF_BUFSIZE],ctrlstr[CF_SMALLBUF];
+  char *name;
+  int limit;
+  
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+name = finalargs->item;
+
+EscapeSpecialChars(name,buffer,CF_BUFSIZE-1,"");
+
+if ((rval.item = strdup(buffer)) == NULL)
+   {
+   FatalError("Memory allocation in FnCallEscape");
+   }
+
+SetFnCallReturnStatus("escape",FNCALL_SUCCESS,NULL,NULL);
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval FnCallHost2IP(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  struct passwd *pw;
+  char buffer[CF_BUFSIZE],ctrlstr[CF_SMALLBUF];
+  char *name;
+  int limit;
+  
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+name = finalargs->item;
+
+if ((rval.item = strdup(Hostname2IPString(name))) == NULL)
+   {
+   FatalError("Memory allocation in FnCallHost2IP");
+   }
+
+SetFnCallReturnStatus("host2ip",FNCALL_SUCCESS,NULL,NULL);
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
 struct Rval FnCallGetUid(struct FnCall *fp,struct Rlist *finalargs)
 
+#ifndef MINGW
 { static char *argtemplate[] =
      {
      CF_ANYSTRING,
@@ -155,11 +472,21 @@ if ((rval.item = strdup(buffer)) == NULL)
 rval.rtype = CF_SCALAR;
 return rval;
 }
+#else  /* MINGW */
+{
+struct Rval rval;
+SetFnCallReturnStatus("getuid",FNCALL_FAILURE,"Windows does not have user ids",NULL);
+rval.item = strdup("\0");
+rval.rtype = CF_SCALAR;
+return rval;
+}
+#endif  /* MINGW */
 
 /*********************************************************************/
 
 struct Rval FnCallGetGid(struct FnCall *fp,struct Rlist *finalargs)
 
+#ifndef MINGW
 { static char *argtemplate[] =
      {
      CF_ANYSTRING,
@@ -205,6 +532,15 @@ if ((rval.item = strdup(buffer)) == NULL)
 rval.rtype = CF_SCALAR;
 return rval;
 }
+#else  /* MINGW */
+{
+struct Rval rval;
+SetFnCallReturnStatus("getgid",FNCALL_FAILURE,"Windows does not have group ids",NULL);
+rval.item = strdup("\0");
+rval.rtype = CF_SCALAR;
+return rval;
+}
+#endif  /* MINGW */
 
 /*********************************************************************/
 
@@ -215,7 +551,7 @@ struct Rval FnCallHash(struct FnCall *fp,struct Rlist *finalargs)
 { static char *argtemplate[] =
      {
      CF_ANYSTRING,
-     "md5,sha1,crypt",
+     "md5,sha1,sha256,sha512,sha384,crypt",
      NULL
      };
   static enum cfdatatype argtypes[] =
@@ -266,7 +602,7 @@ struct Rval FnCallHashMatch(struct FnCall *fp,struct Rlist *finalargs)
 { static char *argtemplate[] =
      {
      CF_PATHRANGE,
-     "md5,sha1,crypt",
+     "md5,sha1,crypt,cf_sha224,cf_sha256,cf_sha384,cf_sha512",
      CF_IDRANGE,
      NULL
      };
@@ -294,9 +630,9 @@ typestring = finalargs->next->item;
 compare = finalargs->next->next->item;
 
 type = String2HashType(typestring);
-HashString(string,strlen(string),digest,type);
+HashFile(string,digest,type);
 snprintf(buffer,CF_BUFSIZE-1,"%s",HashPrint(type,digest));
-CfOut(cf_verbose,""," -> File %s hashes to %s, compare to %s\n",string,buffer,compare);
+CfOut(cf_verbose,""," -> File \"%s\" hashes to \"%s\", compare to \"%s\"\n",string,buffer,compare);
 
 if (strcmp(buffer+4,compare) == 0)
    {
@@ -367,6 +703,62 @@ for (ip = VADDCLASSES; ip != NULL; ip=ip->next)
 There is no case in which the function can "fail" to find an answer
 SetFnCallReturnStatus("classmatch",FNCALL_FAILURE,strerror(errno),NULL);
 */
+
+if ((rval.item = strdup(buffer)) == NULL)
+   {
+   FatalError("Memory allocation in FnClassMatch");
+   }
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval FnCallCountClassesMatching(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  char buffer[CF_BUFSIZE];
+  struct Item *ip;
+  int count = 0;
+  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+for (ip = VHEAP; ip != NULL; ip=ip->next)
+   {
+   if (FullTextMatch((char *)finalargs->item,ip->name))
+      {
+      count++;
+      }
+   }
+
+for (ip = VADDCLASSES; ip != NULL; ip=ip->next)
+   {
+   if (FullTextMatch((char *)finalargs->item,ip->name))
+      {
+      count++;
+      }
+   }
+
+SetFnCallReturnStatus("countclassesmatching",FNCALL_SUCCESS,NULL,NULL);
+
+snprintf(buffer,CF_MAXVARSIZE,"%d",count);
 
 if ((rval.item = strdup(buffer)) == NULL)
    {
@@ -566,7 +958,7 @@ else
    snprintf(comm,CF_BUFSIZE,"%s",finalargs->item);
    }
 
-if (stat(GetArg0(finalargs->item),&statbuf) == -1)
+if (cfstat(GetArg0(finalargs->item),&statbuf) == -1)
    {
    SetFnCallReturnStatus("returnszero",FNCALL_FAILURE,strerror(errno),NULL);   
    strcpy(buffer,"!any");   
@@ -622,22 +1014,31 @@ ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
 
 /* begin fn specific content */
 
-if (strcmp(finalargs->next->item,"useshell") == 0)
-   {
-   ret = GetExecOutput(finalargs->item,buffer,true);
-   }
-else
-   {
-   ret = GetExecOutput(finalargs->item,buffer,false);
-   }
 
-if (ret)
+if (!IsExecutable(GetArg0(finalargs->item)))
    {
-   SetFnCallReturnStatus("execresult",FNCALL_SUCCESS,NULL,NULL);
+   CfOut(cf_error,"","ExecResult \"%s\" is assumed to be executable but isn't\n",finalargs->next->item);
+   SetFnCallReturnStatus("execresult",FNCALL_FAILURE,strerror(errno),NULL);
    }
 else
    {
-   SetFnCallReturnStatus("execresult",FNCALL_FAILURE,strerror(errno),NULL);
+   if (strcmp(finalargs->next->item,"useshell") == 0)
+      {
+      ret = GetExecOutput(finalargs->item,buffer,true);
+      }
+   else
+      {
+      ret = GetExecOutput(finalargs->item,buffer,false);
+      }
+   
+   if (ret)
+      {
+      SetFnCallReturnStatus("execresult",FNCALL_SUCCESS,NULL,NULL);
+      }
+   else
+      {
+      SetFnCallReturnStatus("execresult",FNCALL_FAILURE,strerror(errno),NULL);
+      }
    }
 
 if ((rval.item = strdup(buffer)) == NULL)
@@ -685,9 +1086,9 @@ ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
 
 command = finalargs->item;
 args = finalargs->next->item;
-snprintf(modulecmd,CF_BUFSIZE,"%s/modules/%s",CFWORKDIR,command);
+snprintf(modulecmd,CF_BUFSIZE,"%s%cmodules%c%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,command);
  
-if (stat(GetArg0(modulecmd),&statbuf) == -1)
+if (cfstat(GetArg0(modulecmd),&statbuf) == -1)
    {
    CfOut(cf_error,"","(Plug-in module %s not found)",modulecmd);
    SetFnCallReturnStatus("usemodule",FNCALL_FAILURE,strerror(errno),NULL);
@@ -709,7 +1110,7 @@ else
       }
    else
       {
-      snprintf(modulecmd,CF_BUFSIZE,"%s/modules/%s %s",CFWORKDIR,command,args);
+      snprintf(modulecmd,CF_BUFSIZE,"%s%cmodules%c%s %s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,command,args);
       CfOut(cf_verbose,"","Executing and using module [%s]\n",modulecmd); 
 
       if (ExecModule(modulecmd))
@@ -795,13 +1196,9 @@ if (hours == 0)
    {
    strcpy(hrs,"any");
    }
-else if (hours > 0 && hours < 10)
-   {
-   snprintf(hrs,CF_MAXVARSIZE-1,"Hr0%d",hours);
-   }
 else
    {
-   snprintf(hrs,CF_MAXVARSIZE-1,"Hr%d",hours);
+   snprintf(hrs,CF_MAXVARSIZE-1,"Hr%02d",hours);
    }
 
 switch ((minblocks))
@@ -939,7 +1336,7 @@ if (strlen(sendstring) > 0)
    {
    if (SendSocketStream(conn->sd,sendstring,strlen(sendstring),0) == -1)
       {
-      close(conn->sd);
+      cf_closesocket(conn->sd);
       DeleteAgentConn(conn);
       SetFnCallReturnStatus("readtcp",FNCALL_FAILURE,strerror(errno),NULL);
       rval.item = NULL;
@@ -959,7 +1356,7 @@ if (strlen(sendstring) > 0)
 
    if (n_read == -1)
       {
-      close(conn->sd);
+      cf_closesocket(conn->sd);
       DeleteAgentConn(conn);
       SetFnCallReturnStatus("readtcp",FNCALL_FAILURE,strerror(errno),NULL);
       rval.item = NULL;
@@ -968,7 +1365,7 @@ if (strlen(sendstring) > 0)
       }
    }
 
-close(conn->sd);
+cf_closesocket(conn->sd);
 DeleteAgentConn(conn);
 
 if ((rval.item = strdup(buffer)) == NULL)
@@ -1192,7 +1589,7 @@ arrayname = finalargs->item;
 if (strstr(arrayname,"."))
    {
    scopeid[0] = '\0';
-   sscanf(arrayname,"%[^127.].%127s",scopeid,lval);
+   sscanf(arrayname,"%127[^.].%127s",scopeid,lval);
    }
 else
    {
@@ -1202,7 +1599,7 @@ else
 
 if ((ptr = GetScope(scopeid)) == NULL)
    {
-   CfOut(cf_error,"","Function getindices was promised an array in scope \"%s\" but this was not found\n",scopeid);
+   CfOut(cf_error,"","Function getindices was promised an array called \"%s\" in scope \"%s\" but this was not found\n",lval,scopeid);
    SetFnCallReturnStatus("getindices",FNCALL_FAILURE,"Array not found in scope",NULL);
    rval.item = NULL;
    rval.rtype = CF_LIST;
@@ -1252,6 +1649,368 @@ rval.item = returnlist;
 /* end fn specific content */
 
 rval.rtype = CF_LIST;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval FnCallGrep(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     CF_IDRANGE,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_str,
+      cf_notype
+      };
+
+  char lval[CF_MAXVARSIZE];
+  char *name,*regex,index[CF_MAXVARSIZE],scopeid[CF_MAXVARSIZE],match[CF_MAXVARSIZE];
+  struct Rval rval,rval2;
+  struct Rlist *rp,*returnlist = NULL;
+  struct Scope *ptr;
+  int i;
+
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+regex = finalargs->item;
+name = finalargs->next->item;
+
+/* Locate the array */
+
+if (strstr(name,"."))
+   {
+   scopeid[0] = '\0';
+   sscanf(name,"%[^127.].%127s",scopeid,lval);
+   }
+else
+   {
+   strcpy(lval,name);
+   strcpy(scopeid,CONTEXTID);
+   }
+
+if ((ptr = GetScope(scopeid)) == NULL)
+   {
+   CfOut(cf_error,"","Function \"grep\" was promised an array in scope \"%s\" but this was not found\n",scopeid);
+   SetFnCallReturnStatus("getindices",FNCALL_FAILURE,"Array not found in scope",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_LIST;
+   return rval;            
+   }
+
+if (GetVariable(scopeid,lval,&rval2.item,&rval2.rtype) == cf_notype)
+   {
+   CfOut(cf_error,"","Function \"grep\" was promised a list called \"%s\" but this was not found\n",name);
+   SetFnCallReturnStatus("getindices",FNCALL_FAILURE,"Array not found in scope",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_LIST;
+   return rval;
+   }
+
+if (rval2.rtype != CF_LIST)
+   {
+   CfOut(cf_error,"","Function grep was promised a list called \"%s\" but this was not found\n",name);
+   SetFnCallReturnStatus("getindices",FNCALL_FAILURE,"Array not found in scope",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_LIST;
+   return rval;
+   }
+
+for (rp = (struct Rlist *)rval2.item; rp != NULL; rp=rp->next)
+   {
+   if (FullTextMatch(regex,rp->item))
+      {
+      AppendRScalar(&returnlist,rp->item,CF_SCALAR);
+      }
+   }
+
+SetFnCallReturnStatus("grep",FNCALL_SUCCESS,NULL,NULL);
+rval.item = returnlist;
+
+/* end fn specific content */
+
+rval.rtype = CF_LIST;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval FnCallJoin(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     CF_IDRANGE,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_str,
+      cf_notype
+      };
+
+  char lval[CF_MAXVARSIZE],*joined;
+  char *name,*join,index[CF_MAXVARSIZE],scopeid[CF_MAXVARSIZE],match[CF_MAXVARSIZE];
+  struct Rval rval,rval2;
+  struct Rlist *rp;
+  struct Scope *ptr;
+  int i,size = 0;
+
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+join = finalargs->item;
+name = finalargs->next->item;
+
+/* Locate the array */
+
+if (strstr(name,"."))
+   {
+   scopeid[0] = '\0';
+   sscanf(name,"%[^127.].%127s",scopeid,lval);
+   }
+else
+   {
+   strcpy(lval,name);
+   strcpy(scopeid,CONTEXTID);
+   }
+
+if ((ptr = GetScope(scopeid)) == NULL)
+   {
+   CfOut(cf_error,"","Function \"join\" was promised an array in scope \"%s\" but this was not found\n",scopeid);
+   SetFnCallReturnStatus("join",FNCALL_FAILURE,"Array not found in scope",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_SCALAR;
+   return rval;            
+   }
+
+if (GetVariable(scopeid,lval,&rval2.item,&rval2.rtype) == cf_notype)
+   {
+   CfOut(cf_error,"","Function \"join\" was promised a list called \"%s\" but this was not found\n",name);
+   SetFnCallReturnStatus("join",FNCALL_FAILURE,"Array not found in scope",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_SCALAR;
+   return rval;
+   }
+
+if (rval2.rtype != CF_LIST)
+   {
+   CfOut(cf_error,"","Function \"join\" was promised a list called \"%s\" but this was not found\n",name);
+   SetFnCallReturnStatus("join",FNCALL_FAILURE,"Array not found in scope",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_SCALAR;
+   return rval;
+   }
+
+for (rp = (struct Rlist *)rval2.item; rp != NULL; rp=rp->next)
+   {
+   size += strlen(rp->item) + strlen(join);
+   }
+
+if ((joined = malloc(size)) == NULL)
+   {
+   CfOut(cf_error,"malloc","Function \"join\" was not able to allocate memory\n",name);
+   SetFnCallReturnStatus("join",FNCALL_FAILURE,"Memory error",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_SCALAR;
+   return rval;
+   }
+
+size = 0;
+
+for (rp = (struct Rlist *)rval2.item; rp != NULL; rp=rp->next)
+   {
+   strcpy(joined+size,rp->item);
+
+   if (rp->next != NULL)
+      {
+      strcpy(joined+size+strlen(rp->item),join);
+      size += strlen(rp->item) + strlen(join);
+      }
+   }
+
+SetFnCallReturnStatus("grep",FNCALL_SUCCESS,NULL,NULL);
+rval.item = joined;
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval FnCallGetFields(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     CF_PATHRANGE,
+     CF_ANYSTRING,
+     CF_ANYSTRING,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_str,
+      cf_str,
+      cf_str,
+      cf_notype
+      };
+
+  struct Rval rval;
+  struct Rlist *rp,*newlist;
+  char *filename,*regex,*array_lval,*split;
+  char name[CF_MAXVARSIZE],line[CF_BUFSIZE],retval[CF_SMALLBUF];
+  int lcount = 0,vcount = 0,nopurge = true;
+  FILE *fin;
+  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+regex = finalargs->item;
+filename = finalargs->next->item;
+split = finalargs->next->next->item;
+array_lval = finalargs->next->next->next->item;
+
+if ((fin = fopen(filename,"r")) == NULL)
+   {
+   CfOut(cf_error,"fopen"," !! File \"%s\" could not be read in getfields()",filename);
+   SetFnCallReturnStatus("getfields",FNCALL_FAILURE,"File unreadable",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_SCALAR;
+   return rval;               
+   }
+
+while (!feof(fin))
+   {
+   line[0] = '\0';
+   fgets(line,CF_BUFSIZE-1,fin);
+   Chop(line);
+   
+   if (feof(fin))
+      {
+      break;
+      }
+
+   if (!FullTextMatch(regex,line))
+      {
+      continue;
+      }
+
+   if (lcount == 0)
+      {
+      newlist = SplitRegexAsRList(line,split,31,nopurge);
+      
+      vcount = 1;
+      
+      for (rp = newlist; rp != NULL; rp=rp->next)
+         {
+         snprintf(name,CF_MAXVARSIZE-1,"%s[%d]",array_lval,vcount);
+         NewScalar(THIS_BUNDLE,name,rp->item,cf_str);
+         CfOut(cf_verbose,""," -> getfields: defining %s = %s\n",name,rp->item);
+         vcount++;
+         }
+      }
+   
+   lcount++;
+   }
+
+fclose(fin);
+
+snprintf(retval,CF_SMALLBUF-1,"%d",lcount);
+
+SetFnCallReturnStatus("getfields",FNCALL_SUCCESS,NULL,NULL);
+rval.item = strdup(retval);
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval FnCallCountLinesMatching(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     CF_PATHRANGE,
+     CF_ANYSTRING,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_str,
+      cf_str,
+      cf_notype
+      };
+
+  struct Rval rval;
+  struct Rlist *rp,*newlist;
+  char *filename,*regex,*array_lval,*split;
+  char name[CF_MAXVARSIZE],line[CF_BUFSIZE],retval[CF_SMALLBUF];
+  int lcount = 0,vcount = 0,nopurge = false;
+  FILE *fin;
+  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+regex = finalargs->item;
+filename = finalargs->next->item;
+
+if ((fin = fopen(filename,"r")) == NULL)
+   {
+   CfOut(cf_error,"fopen"," !! File \"%s\" could not be read in countlinesmatching()",filename);
+   SetFnCallReturnStatus("countlinesmatching",FNCALL_FAILURE,"File unreadable",NULL);
+   rval.item = NULL;
+   rval.rtype = CF_SCALAR;
+   return rval;               
+   }
+
+while (!feof(fin))
+   {
+   line[0] = '\0';
+   fgets(line,CF_BUFSIZE-1,fin);
+   Chop(line);
+
+   if (feof(fin))
+      {
+      break;
+      }
+
+   if (FullTextMatch(regex,line))
+      {
+      lcount++;
+      CfOut(cf_verbose,""," -> countlinesmatching: matched \"%s\"",line);
+      continue;
+      }
+   }
+
+fclose(fin);
+
+snprintf(retval,CF_SMALLBUF-1,"%d",lcount);
+
+SetFnCallReturnStatus("countlinesmatching",FNCALL_SUCCESS,NULL,NULL);
+rval.item = strdup(retval);
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
 return rval;
 }
 
@@ -1392,7 +2151,7 @@ for (rp = hostnameip; rp != NULL; rp=rp->next)
       {
       if (SendSocketStream(conn->sd,sendstring,strlen(sendstring),0) == -1)
          {
-         close(conn->sd);
+         cf_closesocket(conn->sd);
          DeleteAgentConn(conn);
          continue;
          }
@@ -1409,7 +2168,7 @@ for (rp = hostnameip; rp != NULL; rp=rp->next)
       
       if (n_read == -1)
          {
-         close(conn->sd);
+         cf_closesocket(conn->sd);
          DeleteAgentConn(conn);
          continue;
          }
@@ -1437,7 +2196,7 @@ for (rp = hostnameip; rp != NULL; rp=rp->next)
       count++;
       }
    
-   close(conn->sd);
+   cf_closesocket(conn->sd);
    DeleteAgentConn(conn);
    }
 
@@ -1485,12 +2244,12 @@ ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
 
 /* begin fn specific content */
 
-if (stat(finalargs->item,&frombuf) == -1)
+if (cfstat(finalargs->item,&frombuf) == -1)
    {
    SetFnCallReturnStatus("isnewerthan",FNCALL_FAILURE,strerror(errno),NULL);   
    strcpy(buffer,"!any");
    }
-else if (stat(finalargs->next->item,&tobuf) == -1)
+else if (cfstat(finalargs->next->item,&tobuf) == -1)
    {
    SetFnCallReturnStatus("isnewerthan",FNCALL_FAILURE,strerror(errno),NULL);   
    strcpy(buffer,"!any");
@@ -1508,7 +2267,7 @@ else
 
 if ((rval.item = strdup(buffer)) == NULL)
    {
-   FatalError("Memory allocation in FnCallReturnsZero");
+   FatalError("Memory allocation in FnCallNewerThan");
    }
 
 /* end fn specific content */
@@ -1544,12 +2303,12 @@ ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
 
 /* begin fn specific content */
 
-if (stat(finalargs->item,&frombuf) == -1)
+if (cfstat(finalargs->item,&frombuf) == -1)
    {
    SetFnCallReturnStatus("isaccessedbefore",FNCALL_FAILURE,strerror(errno),NULL);   
    strcpy(buffer,"!any");
    }
-else if (stat(finalargs->next->item,&tobuf) == -1)
+else if (cfstat(finalargs->next->item,&tobuf) == -1)
    {
    SetFnCallReturnStatus("isaccessedbefore",FNCALL_FAILURE,strerror(errno),NULL);   
    strcpy(buffer,"!any");
@@ -1603,12 +2362,12 @@ ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
 
 /* begin fn specific content */
 
-if (stat(finalargs->item,&frombuf) == -1)
+if (cfstat(finalargs->item,&frombuf) == -1)
    {
    SetFnCallReturnStatus("ischangedbefore",FNCALL_FAILURE,strerror(errno),NULL);   
    strcpy(buffer,"!any");
    }
-else if (stat(finalargs->next->item,&tobuf) == -1)
+else if (cfstat(finalargs->next->item,&tobuf) == -1)
    {
    SetFnCallReturnStatus("ischangedbefore",FNCALL_FAILURE,strerror(errno),NULL);   
    strcpy(buffer,"!any");
@@ -1992,6 +2751,48 @@ rval.rtype = CF_SCALAR;
 return rval;
 }
 
+
+/*********************************************************************/
+
+struct Rval FnCallTranslatePath(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_PATHRANGE,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  char buffer[MAX_FILENAME];
+  
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+snprintf(buffer, sizeof(buffer), "%s", finalargs->item);
+MapName(buffer);
+
+
+if ((rval.item = strdup(buffer)) == NULL)
+   {
+   FatalError("Memory allocation in FnCallChangedBefore");
+   }
+
+SetFnCallReturnStatus("translatepath",FNCALL_SUCCESS,NULL,NULL);   
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
 /*********************************************************************/
 
 struct Rval FnCallRegistryValue(struct FnCall *fp,struct Rlist *finalargs)
@@ -2088,7 +2889,7 @@ if (THIS_AGENT_TYPE == cf_common)
    }
 else
    {
-   strncpy(buffer,GetRemoteScalar(handle,server,encrypted),CF_BUFSIZE-1);
+   GetRemoteScalar("VAR",handle,server,encrypted,buffer);
    
    if (strncmp(buffer,"BAD:",4) == 0)
       {
@@ -2110,6 +2911,98 @@ else
    if ((rval.item = strdup(buffer)) == NULL)
       {
       FatalError("Memory allocation in FnCallRemoteSCalar");
+      }
+   }
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval FnCallRemoteClasses(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     CF_ANYSTRING,
+     CF_BOOL,
+     CF_IDRANGE,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_str,
+      cf_opts,
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp,*classlist;
+  struct Rval rval;  
+  char buffer[CF_BUFSIZE],class[CF_MAXVARSIZE];
+  char *server,*regex,*prefix;
+  int encrypted;
+  
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+regex = finalargs->item;
+server = finalargs->next->item;
+encrypted = GetBoolean(finalargs->next->next->item);
+prefix = finalargs->next->next->next->item;
+    
+if (strcmp(server,"localhost") == 0)
+   {
+   /* The only reason for this is testing...*/
+   server = "127.0.0.1";
+   }
+
+if (THIS_AGENT_TYPE == cf_common)
+   {
+   if ((rval.item = strdup("<remote classes>")) == NULL)
+      {
+      FatalError("Memory allocation in FnCallRemoteSCalar");
+      }
+   }
+else
+   {
+   GetRemoteScalar("CONTEXT",regex,server,encrypted,buffer);
+   
+   if (strncmp(buffer,"BAD:",4) == 0)
+      {
+      SetFnCallReturnStatus("remoteclassesmatching",FNCALL_FAILURE,NULL,NULL);
+
+      if ((rval.item = strdup("!any")) == NULL)
+         {
+         FatalError("Memory allocation in FnCallRemoteClasses");
+         }
+      rval.rtype = CF_SCALAR;
+      return rval;
+      }
+   else
+      {
+      SetFnCallReturnStatus("remoteclassesmatching",FNCALL_SUCCESS,NULL,NULL);
+
+      if ((rval.item = strdup("any")) == NULL)
+         {
+         FatalError("Memory allocation in FnCallRemoteClasses");
+         }
+      }
+
+   if (classlist = SplitStringAsRList(buffer,','))
+      {
+      for (rp = classlist; rp != NULL; rp=rp->next)
+         {
+         snprintf(class,CF_MAXVARSIZE-1,"%s_%s",prefix,rp->item);
+         NewBundleClass(class,THIS_BUNDLE);
+         }
+      DeleteRlist(classlist);
       }
    }
 
@@ -2520,6 +3413,96 @@ return rval;
 
 /*********************************************************************/
 
+struct Rval FnCallRegExtract(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     CF_ANYSTRING,
+     CF_IDRANGE,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_str,
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  char buffer[CF_BUFSIZE];
+  struct Item *list = NULL, *ret; 
+  char *regex,*data,*arrayname;
+  struct Scope *ptr;
+
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+strcpy(buffer,CF_ANYCLASS);
+regex = finalargs->item;
+data = finalargs->next->item;
+arrayname = finalargs->next->next->item;
+
+if (FullTextMatch(regex,data))
+   {
+   strcpy(buffer,"any");   
+   }
+else
+   {
+   strcpy(buffer,"!any");
+   }
+
+ptr = GetScope("match");
+
+if (ptr && ptr->hashtable)
+   {
+   int i;
+   
+   for (i = 0; i < CF_HASHTABLESIZE; i++)
+      {
+      char var[CF_MAXVARSIZE];
+      
+      if (ptr->hashtable[i] != NULL)
+         {
+         if (ptr->hashtable[i]->rtype != CF_SCALAR)
+            {
+            CfOut(cf_error,""," !! Software error: pattern match was non-scalar in regextract (shouldn't happen)");
+            strcpy(buffer,"!any");
+            SetFnCallReturnStatus("regextract",FNCALL_FAILURE,NULL,NULL);
+            break;
+            }
+         else
+            {
+            snprintf(var,CF_MAXVARSIZE-1,"%s[%s]",arrayname,ptr->hashtable[i]->lval);
+            NewScalar(THIS_BUNDLE,var,ptr->hashtable[i]->rval,cf_str);
+            }
+         }
+      }   
+   }
+else
+   {
+   strcpy(buffer,"!any");
+   }
+
+SetFnCallReturnStatus("regextract",FNCALL_SUCCESS,NULL,NULL);   
+
+if ((rval.item = strdup(buffer)) == NULL)
+   {
+   FatalError("Memory allocation in FnCallRegCmp");
+   }
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
 struct Rval FnCallRegLine(struct FnCall *fp,struct Rlist *finalargs)
 
 { static char *argtemplate[] =
@@ -2696,132 +3679,6 @@ else
 if ((rval.item = strdup(buffer)) == NULL)
    {
    FatalError("Memory allocation in FnCallChangedBefore");
-   }
-
-/* end fn specific content */
-
-rval.rtype = CF_SCALAR;
-return rval;
-}
-
-/*********************************************************************/
-
-struct Rval FnCallUserExists(struct FnCall *fp,struct Rlist *finalargs)
-
-{ static char *argtemplate[] =
-     {
-     CF_ANYSTRING,
-     NULL
-     };
-  static enum cfdatatype argtypes[] =
-      {
-      cf_str,
-      cf_notype
-      };
-  
-  struct Rlist *rp;
-  struct Rval rval;
-  char buffer[CF_BUFSIZE];
-  struct passwd *pw;
-  uid_t uid = -1;
-  char *arg = finalargs->item;
- 
-buffer[0] = '\0';  
-ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
-
-/* begin fn specific content */
-
-strcpy(buffer,CF_ANYCLASS);
-
-if (isdigit((int)*arg))
-   {
-   uid = Str2Uid(arg,NULL,NULL);
-   
-   if (uid < 0)
-      {
-      SetFnCallReturnStatus("userexists",FNCALL_FAILURE,"Illegal user id",NULL);   
-      }
-   else
-      {
-      SetFnCallReturnStatus("userexists",FNCALL_SUCCESS,NULL,NULL);   
-      }
-
-   if ((pw = getpwuid(uid)) == NULL)
-      {
-      strcpy(buffer,"!any");
-      }
-   }
-else if ((pw = getpwnam(arg)) == NULL)
-   {
-   strcpy(buffer,"!any");
-   }
-
-if ((rval.item = strdup(buffer)) == NULL)
-   {
-   FatalError("Memory allocation in FnCallUserExists");
-   }
-
-/* end fn specific content */
-
-rval.rtype = CF_SCALAR;
-return rval;
-}
-
-/*********************************************************************/
-
-struct Rval FnCallGroupExists(struct FnCall *fp,struct Rlist *finalargs)
-
-{ static char *argtemplate[] =
-     {
-     CF_ANYSTRING,
-     NULL
-     };
-  static enum cfdatatype argtypes[] =
-      {
-      cf_str,
-      cf_notype
-      };
-  
-  struct Rlist *rp;
-  struct Rval rval;
-  char buffer[CF_BUFSIZE];
-  struct group *gr;
-  gid_t gid = -1;
-  char *arg = finalargs->item;
- 
-buffer[0] = '\0';  
-ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
-
-/* begin fn specific content */
-
-strcpy(buffer,CF_ANYCLASS);
-
-if (isdigit((int)*arg))
-   {
-   gid = Str2Gid(arg,NULL,NULL);
-   
-   if (gid < 0)
-      {
-      SetFnCallReturnStatus("groupexists",FNCALL_FAILURE,"Illegal group id",NULL);   
-      }
-   else
-      {
-      SetFnCallReturnStatus("groupexists",FNCALL_SUCCESS,NULL,NULL);   
-      }
-
-   if ((gr = getgrgid(gid)) == NULL)
-      {
-      strcpy(buffer,"!any");
-      }
-   }
-else if ((gr = getgrnam(arg)) == NULL)
-   {
-   strcpy(buffer,"!any");
-   }
-
-if ((rval.item = strdup(buffer)) == NULL)
-   {
-   FatalError("Memory allocation in FnCallUserExists");
    }
 
 /* end fn specific content */
@@ -3039,7 +3896,7 @@ if ((cftime=mktime(&tmv))== -1)
    CfOut(cf_inform,"","Illegal time value");
    }
 
-Debug("Time computed from input was: %s\n",ctime(&cftime));
+Debug("Time computed from input was: %s\n",cf_ctime(&cftime));
 
 snprintf(buffer,CF_BUFSIZE-1,"%ld",cftime);
 
@@ -3063,11 +3920,11 @@ struct Rval FnCallAgoDate(struct FnCall *fp,struct Rlist *finalargs)
 { static char *argtemplate[] =
      {
      "0,50",       /* year*/
-     "0,11",       /* month */
-     "0,31",       /* day */
-     "0,23",       /* hour */
-     "0,59",       /* min */
-     "0,59",       /* sec */
+     "0,100",      /* month */
+     "0,1000",     /* day */
+     "0,100",      /* hour */
+     "0,1000",     /* min */
+     "0,3600",     /* sec */
      NULL
      };
   static enum cfdatatype argtypes[] =
@@ -3094,7 +3951,6 @@ ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
 
 /* begin fn specific content */
 
-
 rp = finalargs;
 
 for (i = 0; i < 6; i++)
@@ -3117,7 +3973,7 @@ cftime -= Months2Seconds(d[cfa_month]);
 cftime -= d[cfa_year] * 365 * 24 * 3600;
 
 Debug("Total negative offset = %.1f minutes\n",(double)(CFSTARTTIME-cftime)/60.0);
-Debug("Time computed from input was: %s\n",ctime(&cftime));
+Debug("Time computed from input was: %s\n",cf_ctime(&cftime));
 
 snprintf(buffer,CF_BUFSIZE-1,"%ld",cftime);
 
@@ -3240,7 +4096,7 @@ ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
 
 cftime = CFSTARTTIME;
 
-Debug("Time computed from input was: %s\n",ctime(&cftime));
+Debug("Time computed from input was: %s\n",cf_ctime(&cftime));
 
 snprintf(buffer,CF_BUFSIZE-1,"%d",time);
 
@@ -3640,7 +4496,7 @@ strcpy(buffer,"any");
 
 for (rp = files; rp != NULL; rp=rp->next)
    {
-   if (stat(rp->item,&sb) == -1)
+   if (cfstat(rp->item,&sb) == -1)
       {
       strcpy(buffer,"!any");
       break;
@@ -3898,6 +4754,180 @@ rval.rtype = CF_SCALAR;
 return rval;
 }
 
+/*********************************************************************/
+
+struct Rval FnCallDiskFree(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_PATHRANGE,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  char buffer[CF_BUFSIZE];
+  u_long df;
+  
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+df = GetDiskUsage((char *)finalargs->item, cfabs);
+
+if (df == CF_INFINITY)
+   {
+   df = 0;
+   }
+
+snprintf(buffer,CF_BUFSIZE-1,"%d", df);
+
+if ((rval.item = strdup(buffer)) == NULL)
+   {
+   FatalError("Memory allocation in FnCallGetGid");
+   }
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+#ifndef MINGW
+
+/*******************************************************************/
+/* Unix implementations                                            */
+/*******************************************************************/
+
+struct Rval Unix_FnCallUserExists(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  char buffer[CF_BUFSIZE];
+  struct passwd *pw;
+  uid_t uid = -1;
+  char *arg = finalargs->item;
+ 
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+strcpy(buffer,CF_ANYCLASS);
+
+if (isdigit((int)*arg))
+   {
+   uid = Str2Uid(arg,NULL,NULL);
+   
+   if (uid < 0)
+      {
+      SetFnCallReturnStatus("userexists",FNCALL_FAILURE,"Illegal user id",NULL);   
+      }
+   else
+      {
+      SetFnCallReturnStatus("userexists",FNCALL_SUCCESS,NULL,NULL);   
+      }
+
+   if ((pw = getpwuid(uid)) == NULL)
+      {
+      strcpy(buffer,"!any");
+      }
+   }
+else if ((pw = getpwnam(arg)) == NULL)
+   {
+   strcpy(buffer,"!any");
+   }
+
+if ((rval.item = strdup(buffer)) == NULL)
+   {
+   FatalError("Memory allocation in FnCallUserExists");
+   }
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+
+/*********************************************************************/
+
+struct Rval Unix_FnCallGroupExists(struct FnCall *fp,struct Rlist *finalargs)
+
+{ static char *argtemplate[] =
+     {
+     CF_ANYSTRING,
+     NULL
+     };
+  static enum cfdatatype argtypes[] =
+      {
+      cf_str,
+      cf_notype
+      };
+  
+  struct Rlist *rp;
+  struct Rval rval;
+  char buffer[CF_BUFSIZE];
+  struct group *gr;
+  gid_t gid = -1;
+  char *arg = finalargs->item;
+ 
+buffer[0] = '\0';  
+ArgTemplate(fp,argtemplate,argtypes,finalargs); /* Arg validation */
+
+/* begin fn specific content */
+
+strcpy(buffer,CF_ANYCLASS);
+
+if (isdigit((int)*arg))
+   {
+   gid = Str2Gid(arg,NULL,NULL);
+   
+   if (gid < 0)
+      {
+      SetFnCallReturnStatus("groupexists",FNCALL_FAILURE,"Illegal group id",NULL);   
+      }
+   else
+      {
+      SetFnCallReturnStatus("groupexists",FNCALL_SUCCESS,NULL,NULL);   
+      }
+
+   if ((gr = getgrgid(gid)) == NULL)
+      {
+      strcpy(buffer,"!any");
+      }
+   }
+else if ((gr = getgrnam(arg)) == NULL)
+   {
+   strcpy(buffer,"!any");
+   }
+
+if ((rval.item = strdup(buffer)) == NULL)
+   {
+   FatalError("Memory allocation in FnCallGroupExists");
+   }
+
+/* end fn specific content */
+
+rval.rtype = CF_SCALAR;
+return rval;
+}
+#endif  /* NOT MINGW */
+
 
 /*********************************************************************/
 /* Level                                                             */
@@ -3909,8 +4939,9 @@ void *CfReadFile(char *filename,int maxsize)
   char *result = NULL;
   FILE *fp;
   size_t size;
+  int i,newlines = 0;
 
-if (stat(filename,&sb) == -1)
+if (cfstat(filename,&sb) == -1)
    {
    if (THIS_AGENT_TYPE == cf_common)
       {
@@ -3963,6 +4994,19 @@ if (fread(result,size,1,fp) != 1)
 
 result[size] = '\0';
 
+for (i = 0; i < size-1; i++)
+   {
+   if (result[i] == '\n' || result[i] == '\r')
+      {
+      newlines++;
+      }
+   }
+
+if (newlines == 0 && (result[size-1] == '\n' || result[size-1] == '\r'))
+   {
+   result[size-1] = '\0';
+   }
+
 fclose(fp);
 return (void *)result;
 }
@@ -4007,7 +5051,7 @@ int BuildLineArray(char *array_lval,char *file_buffer,char *split,int maxent,enu
 
 { char *sp,linebuf[CF_BUFSIZE],name[CF_MAXVARSIZE];
   struct Rlist *rp,*newlist = NULL;
-  int nopurge = false, vcount,hcount;
+  int allowblanks = true, vcount,hcount;
 
 memset(linebuf,0,CF_BUFSIZE);
 hcount = 0;
@@ -4022,7 +5066,7 @@ for (sp = file_buffer; hcount < maxent && *sp != '\0'; sp++)
       continue;
       }
 
-   newlist = SplitRegexAsRList(linebuf,split,maxent,nopurge);
+   newlist = SplitRegexAsRList(linebuf,split,maxent,allowblanks);
    
    vcount = 0;
    
@@ -4104,7 +5148,10 @@ void ModuleProtocol(char *command,char *line,int print)
 { char name[CF_BUFSIZE],content[CF_BUFSIZE],context[CF_BUFSIZE];
   char *sp;
 
-for (sp = command+strlen(command)-1; sp >= command && *sp != FILE_SEPARATOR; sp--)
+memset(content,0,CF_BUFSIZE);  
+strncpy(content,GetArg0(command),CF_BUFSIZE-1);
+
+for (sp = content+strlen(content)-1; sp >= content && *sp != FILE_SEPARATOR; sp--)
    {
    strncpy(context,sp,CF_MAXVARSIZE);
    }

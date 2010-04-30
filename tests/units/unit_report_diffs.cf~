@@ -1,0 +1,34 @@
+########################################################
+#
+# Change detect with diff reporting
+#
+########################################################
+
+body common control
+
+{
+bundlesequence  => { "testbundle"  };
+}
+
+########################################################
+
+bundle agent testbundle
+
+{
+files:
+
+  "/tmp/testfile" -> "me"
+
+       changes      => report;
+}
+
+
+#########################################################
+
+body changes report
+
+{
+report_changes => "all";  
+report_diffs => "true";
+update_hashes  => "true";
+}

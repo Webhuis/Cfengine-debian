@@ -44,11 +44,11 @@ void RandomSeed()
 
 Debug("RandomSeed() work directory is %s\n",CFWORKDIR);
 
-snprintf(vbuff,CF_BUFSIZE,"%s/randseed",CFWORKDIR); 
+snprintf(vbuff,CF_BUFSIZE,"%s%crandseed",CFWORKDIR,FILE_SEPARATOR);
 
- if (stat(vbuff,&statbuf) == -1)
+ if (cfstat(vbuff,&statbuf) == -1)
     {
-    snprintf(AVDB,CF_MAXVARSIZE-1,"%s/state/%s",CFWORKDIR,CF_AVDB_FILE);
+    snprintf(AVDB,CF_MAXVARSIZE-1,"%s%cstate%c%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,CF_AVDB_FILE);
     }
  else
     {
@@ -147,8 +147,10 @@ else
    {
    snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,name);
    }
+   
+MapName(filename);
  
-if (stat(filename,&statbuf) == -1)
+if (cfstat(filename,&statbuf) == -1)
    {
    Debug("Did not have key %s\n",name);
    return NULL;
@@ -193,8 +195,9 @@ void SavePublicKey(char *name,RSA *key)
 Debug("SavePublicKey %s\n",name); 
 
 snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,name);
+MapName(filename);
 
-if (stat(filename,&statbuf) != -1)
+if (cfstat(filename,&statbuf) != -1)
    {
    return;
    }
@@ -279,15 +282,15 @@ EVP_DigestFinal(&context,digest,&md_len);
 
 /*********************************************************************/
 
-int EncryptString(char *in,char *out,unsigned char *key,int plainlen)
+int EncryptString(char type,char *in,char *out,unsigned char *key,int plainlen)
 
-{ int cipherlen, tmplen;
- unsigned char iv[8] = {1,2,3,4,5,6,7,8};
- EVP_CIPHER_CTX ctx;
+{ int cipherlen = 0, tmplen;
+  unsigned char iv[32] = {1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8};
+  EVP_CIPHER_CTX ctx;
  
 EVP_CIPHER_CTX_init(&ctx);
-EVP_EncryptInit(&ctx,EVP_bf_cbc(),key,iv);
- 
+EVP_EncryptInit(&ctx,CfengineCipher(type),key,iv);
+
 if (!EVP_EncryptUpdate(&ctx,out,&cipherlen,in,plainlen))
    {
    return -1;
@@ -305,14 +308,14 @@ return cipherlen;
 
 /*********************************************************************/
 
-int DecryptString(char *in,char *out,unsigned char *key,int cipherlen)
+int DecryptString(char type,char *in,char *out,unsigned char *key,int cipherlen)
 
-{ int plainlen, tmplen;
-  unsigned char iv[8] = {1,2,3,4,5,6,7,8};
+{ int plainlen = 0, tmplen;
+  unsigned char iv[32] = {1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8};
   EVP_CIPHER_CTX ctx;
- 
+
 EVP_CIPHER_CTX_init(&ctx);
-EVP_DecryptInit(&ctx,EVP_bf_cbc(),key,iv);
+EVP_DecryptInit(&ctx,CfengineCipher(type),key,iv);
 
 if (!EVP_DecryptUpdate(&ctx,out,&plainlen,in,cipherlen))
    {
@@ -325,7 +328,7 @@ if (!EVP_DecryptFinal(&ctx,out+plainlen,&tmplen))
    }
  
 plainlen += tmplen;
- 
+
 EVP_CIPHER_CTX_cleanup(&ctx);
 return plainlen; 
 }

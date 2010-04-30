@@ -49,7 +49,7 @@ if (!attr.havedepthsearch)  /* if the search is trivial, make sure that we are i
    char basedir[CF_BUFSIZE];
 
    Debug(" -> Direct file reference %s, no search implied\n",name);
-   strcpy(basedir,name);
+   snprintf(basedir, sizeof(basedir), "%s", name);
    ChopLastNode(basedir);
    chdir(basedir);
    return VerifyFileLeaf(name,sb,attr,pp);
@@ -60,7 +60,13 @@ if (rlevel > CF_RECURSION_LIMIT)
    CfOut(cf_error,"","WARNING: Very deep nesting of directories (>%d deep): %s (Aborting files)",rlevel,name);
    return false;
    }
- 
+
+if (rlevel > CF_RECURSION_LIMIT)
+   {
+   CfOut(cf_error,"","WARNING: Very deep nesting of directories (>%d deep): %s (Aborting files)",rlevel,name);
+   return false;
+   }
+
 memset(path,0,CF_BUFSIZE); 
 
 Debug("To iterate is Human, to recurse is Divine...(%s)\n",name);
@@ -122,7 +128,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
 
       /* if so, hide the difference by replacing with actual object */
       
-      if (stat(dirp->d_name,&lsb) == -1)
+      if (cfstat(dirp->d_name,&lsb) == -1)
          {
          CfOut(cf_error,"stat","Recurse was working on %s when this failed:\n",path);
          continue;
@@ -142,9 +148,9 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
          continue;
          }
       
-      if (attr.recursion.depth > 1)
+      if (attr.recursion.depth > 1 && rlevel <= attr.recursion.depth)
          {
-         CfOut(cf_verbose,""," ->>  Entering %s\n",path);
+         CfOut(cf_verbose,""," ->>  Entering %s (%d)\n",path,rlevel);
          goback = DepthSearch(path,&lsb,rlevel+1,attr,pp);
          PopDirState(goback,name,sb,attr.recursion);
          VerifyFileLeaf(path,&lsb,attr,pp);
@@ -217,17 +223,23 @@ int SkipDirLinks(char *path,char *lastnode,struct Recursion r)
 {
 Debug("SkipDirLinks(%s,%s)\n",path,lastnode);
 
-if ((r.include_dirs != NULL) && !(MatchRlistItem(r.include_dirs,path) || MatchRlistItem(r.include_dirs,lastnode)))
+if (r.exclude_dirs)
    {
-   CfOut(cf_verbose,"","Skipping matched non-included directory %s\n",path);
-   return true;
+   if (MatchRlistItem(r.exclude_dirs,path) || MatchRlistItem(r.exclude_dirs,lastnode))
+      {
+      CfOut(cf_verbose,"","Skipping matched excluded directory %s\n",path);
+      return true;
+      }
    }
 
-if (MatchRlistItem(r.exclude_dirs,path) || MatchRlistItem(r.exclude_dirs,lastnode))
+if (r.include_dirs)
    {
-   CfOut(cf_verbose,"","Skipping matched excluded directory %s\n",path);
-   return true;
-   }       
+   if (!(MatchRlistItem(r.include_dirs,path) || MatchRlistItem(r.include_dirs,lastnode)))
+      {
+      CfOut(cf_verbose,"","Skipping matched non-included directory %s\n",path);
+      return true;
+      }
+   }
 
 return false;
 }
@@ -241,7 +253,7 @@ void CheckLinkSecurity(struct stat *sb,char *name)
 
 Debug("Checking the inode and device to make sure we are where we think we are...\n"); 
 
-if (stat(".",&security) == -1)
+if (cfstat(".",&security) == -1)
    {
    CfOut(cf_error,"stat","Could not stat directory %s after entering!",name);
    return;

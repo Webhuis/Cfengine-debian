@@ -67,7 +67,7 @@ if (a.restart_class)
    {
    if (IsStringIn(a.signals,"term") || IsStringIn(a.signals,"kill"))
       {
-      CfOut(cf_inform,"","Promise %s kills then restarts - i.e. never converges",pp->promiser);
+      CfOut(cf_inform,""," -> (warning) Promise %s kills then restarts - never strictly converges",pp->promiser);
       PromiseRef(cf_inform,pp);
       }   
    }
@@ -77,6 +77,13 @@ if (promised_zero && a.restart_class)
    CfOut(cf_error,"","Promise constraint conflicts - %s processes cannot have zero count if restarted",pp->promiser);
    PromiseRef(cf_error,pp);
    ret = false;
+   }
+
+if (a.haveselect && !a.process_select.process_result)
+   {
+   CfOut(cf_error,""," !! Process select constraint body promised no result (check body definition)");
+   PromiseRef(cf_error,pp);
+   return false;   
    }
 
 return ret;
@@ -118,57 +125,12 @@ YieldCurrentLock(thislock);
 
 int LoadProcessTable(struct Item **procdata,char *psopts)
 
-{ FILE *prp;
-  char pscomm[CF_MAXLINKSIZE], vbuff[CF_BUFSIZE];
-  struct Item *rootprocs = NULL;
-  struct Item *otherprocs = NULL;
-
-snprintf(pscomm,CF_MAXLINKSIZE,"%s %s",VPSCOMM[VSYSTEMHARDCLASS],psopts);
-
-CfOut(cf_verbose,"","Observe process table with %s\n",pscomm); 
-  
-if ((prp = cf_popen(pscomm,"r")) == NULL)
-   {
-   CfOut(cf_error,"popen","Couldn't open the process list with command %s\n",pscomm);
-   return false;
-   }
-
-while (!feof(prp))
-   {
-   memset(vbuff,0,CF_BUFSIZE);
-   CfReadLine(vbuff,CF_BUFSIZE,prp);
-   AppendItem(procdata,vbuff,"");
-   }
-
-cf_pclose(prp);
-
-/* Now save the data */
-
-snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_procs",CFWORKDIR);
-RawSaveItemList(*procdata,vbuff);
-
-CopyList(&rootprocs,*procdata);
-CopyList(&otherprocs,*procdata);
-
-while (DeleteItemNotContaining(&rootprocs,"root"))
-   {
-   }
-
-while (DeleteItemContaining(&otherprocs,"root"))
-   {
-   }
-
-PrependItem(&rootprocs,otherprocs->name,NULL);
-
-snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_rootprocs",CFWORKDIR);
-RawSaveItemList(rootprocs,vbuff);
-DeleteItemList(rootprocs);
-    
-snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_otherprocs",CFWORKDIR);
-RawSaveItemList(otherprocs,vbuff);
-DeleteItemList(otherprocs);
-
-return true;
+{ 
+#ifdef MINGW
+return NovaWin_LoadProcessTable(procdata);
+#else
+return Unix_LoadProcessTable(procdata,psopts);
+#endif
 }
 
 /*******************************************************************/
@@ -292,6 +254,8 @@ GetProcessColumnNames(procdata->name,(char **)names,start,end);
 
 for (ip = procdata->next; ip != NULL; ip=ip->next)
    {
+   CF_NODES++;
+   
    if (BlockTextMatch(pp->promiser,ip->name,&s,&e))
       {
       if (!SelectProcess(ip->name,names,start,end,a,pp))
@@ -365,58 +329,12 @@ return matches;
 
 int DoAllSignals(struct Item *siglist,struct Attributes a,struct Promise *pp)
 
-{ struct Item *ip;
-  struct Rlist *rp;
-  pid_t pid;
-  int killed = false;
-
-Debug("DoSignals(%s)\n",pp->promiser);
-  
-if (siglist == NULL)
-   {
-   return 0;
-   }
-
-if (a.signals == NULL)
-   {
-   CfOut(cf_inform,""," -> No signals to send for %s\n",pp->promiser);
-   return 0;
-   }
-
-for (ip = siglist; ip != NULL; ip=ip->next)
-   {
-   pid = ip->counter;
-   
-   for (rp = a.signals; rp != NULL; rp=rp->next)
-      {
-      int signal = Signal2Int(rp->item);
-      
-      if (!DONTDO)
-         {         
-         if (signal == SIGKILL || signal == SIGTERM)
-            {
-            killed = true;
-            }
-         
-         if (kill((pid_t)pid,signal) < 0)
-            {
-            cfPS(cf_verbose,CF_FAIL,"kill",pp,a," !! Couldn't send promised signal \'%s\' (%d) to pid %d\n",rp->item,signal,pid);
-            continue;
-            }
-         else
-            {
-            cfPS(cf_inform,CF_CHG,"",pp,a," -> Signalled \'%s\' (%d) to observed process match \'%s\'\n",rp->item,signal,ip->name);
-            break;
-            }
-         }
-      else
-         {
-         CfOut(cf_error,""," -> Need to keep signal promise \'%s\' in process entry %s",rp->item,ip->name);
-         }
-      }
-   }
-
-return killed;
+{
+#ifdef MINGW
+return NovaWin_DoAllSignals(siglist,a,pp);
+#else
+return Unix_DoAllSignals(siglist,a,pp);
+#endif
 }
 
 /**********************************************************************************/
@@ -506,3 +424,16 @@ if (end[col] == -1)
    end[col] = offset;
    }
 }
+
+/**********************************************************************************/
+
+int GracefulTerminate(pid_t pid)
+
+{
+#ifdef MINGW
+return NovaWin_GracefulTerminate(pid);
+#else
+return Unix_GracefulTerminate(pid);
+#endif
+}
+

@@ -1,0 +1,42 @@
+
+body common control
+{
+bundlesequence => { "test" };
+}
+
+bundle agent test
+{
+methods:
+
+ "any" usebundle => get_template("/tmp/sudoers");
+ 
+}
+
+#############################################################
+
+bundle agent get_template(final_destination)
+{
+vars:
+
+ "masterfiles"   string => "/home/mark/tmp";
+ "this_template" string => lastnode("$(final_destination)","/");
+
+files:
+
+  "$(final_destination).staging"
+
+      comment => "Get template and expand variables for this host",
+#    copy_from => remote_cp("$(masterfiles)/templates/$(this_template)","$(policy_server)"),
+    copy_from => local_cp("$(masterfiles)/templates/$(this_template)"),
+        action => ifelapsed("60");
+
+  "$(final_destination)"
+
+       comment => "Expand the template",
+        create => "true",
+     edit_line => expand_template("$(final_destination).staging"),
+ edit_defaults => empty,
+         perms => mo("600","root"),
+        action => ifelapsed("60");
+
+}

@@ -92,9 +92,7 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
       }
 
    strncpy(newfrom,from,CF_BUFSIZE-2);                             /* Assemble pathname */
-   AddSlash(newfrom);
    strncpy(newto,to,CF_BUFSIZE-2);
-   AddSlash(newto);
 
    if (!JoinPath(newfrom,dirp->d_name))
       {
@@ -164,15 +162,15 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
 
       /* Only copy dirs if we are tracking subdirs */
 
-      if (!attr.copy.collapse && (stat(newto,&dsb) == -1))
+      if (!attr.copy.collapse && (cfstat(newto,&dsb) == -1))
          {
-         if (mkdir(newto,0700) == -1)
+         if (cf_mkdir(newto,0700) == -1)
             {
-            cfPS(cf_error,CF_INTERPT,"mkdir",pp,attr," !! Can't make directory %s\n",newto);
+            cfPS(cf_error,CF_INTERPT,"cf_mkdir",pp,attr," !! Can't make directory %s\n",newto);
             continue;
             }
          
-         if (stat(newto,&dsb) == -1)
+         if (cfstat(newto,&dsb) == -1)
             {
             cfPS(cf_error,CF_INTERPT,"stat",pp,attr," !! Can't stat local copy %s - failed to establish directory\n",newto);
             continue;
@@ -228,12 +226,22 @@ if (!FileSanityChecks(path,a,pp))
    return;
    }
 
+thislock = AcquireLock(path,VUQNAME,CFSTARTTIME,a,pp);
+
+if (thislock.lock == NULL)
+   {
+   return;
+   }
+
+CF_NODES++;
+
 if (lstat(path,&oslb) == -1)  /* Careful if the object is a link */
    {
    if (a.create||a.touch)
       {
-      if (!CreateFile(path,pp,a))
+      if (!CfCreateFile(path,pp,a))
          {
+         YieldCurrentLock(thislock);
          return;
          }
       else
@@ -248,25 +256,42 @@ else
    {
    if (a.create||a.touch)
       {
-      cfPS(cf_verbose,CF_NOP,"",pp,a," -> File %s exists as promised",path);
+      cfPS(cf_verbose,CF_NOP,"",pp,a," -> File \"%s\" exists as promised",path);
       }
    exists = true;
+   }
+
+if (a.havedelete && !exists)
+   {
+   cfPS(cf_verbose,CF_NOP,"",pp,a," -> File \"%s\" does not exist as promised",path);
+   }
+
+if (!a.havedepthsearch)  /* if the search is trivial, make sure that we are in the parent dir of the leaf */
+   {
+   char basedir[CF_BUFSIZE];
+
+   Debug(" -> Direct file reference %s, no search implied\n",path);
+   snprintf(basedir, sizeof(basedir), "%s", path);
+   ChopLastNode(basedir);
+   chdir(basedir);
    }
 
 if (exists && !VerifyFileLeaf(path,&oslb,a,pp))
    {
    if (!S_ISDIR(oslb.st_mode))
       {
+      YieldCurrentLock(thislock);
       return;
       }
    }
 
-if (stat(path,&osb) == -1)
+if (cfstat(path,&osb) == -1)
    {
    if (a.create||a.touch)
       {
-      if (!CreateFile(path,pp,a))
+      if (!CfCreateFile(path,pp,a))
          {
+         YieldCurrentLock(thislock);
          return;
          }
       else
@@ -286,6 +311,7 @@ else
       if (a.havedepthsearch)
          {
          CfOut(cf_error,"","Warning: depth_search (recursion) is promised for a base object %s that is not a directory",path);
+         YieldCurrentLock(thislock);
          return;
          }
       }
@@ -295,28 +321,23 @@ else
 
 if (a.link.link_children)
    {
-   if (stat(a.link.source,&dsb) != -1)
+   if (cfstat(a.link.source,&dsb) != -1)
       {
       if (!S_ISDIR(dsb.st_mode))
          {
          CfOut(cf_error,"","Cannot promise to link the children of %s as it is not a directory!",a.link.source);
+         YieldCurrentLock(thislock);
          return;
          }
       }
    }
 
-thislock = AcquireLock(path,VUQNAME,CFSTARTTIME,a,pp);
-
-if (thislock.lock == NULL)
-   {
-   return;
-   }
-
 snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
+MapName(filename);
 
 if (!LoadFileAsItemList(&VSETUIDLIST,filename,a,pp))
    {
-   CfOut(cf_inform,"","Did not find a previous setuid log %s",filename);
+   CfOut(cf_verbose,"","Did not find any previous setuid log %s, creating a new one",filename);
    save = false;
    }
 
@@ -441,7 +462,7 @@ if (S_ISDIR(ssb.st_mode))
    
    /* Now check any overrides */
    
-   if (stat(destdir,&dsb) == -1)
+   if (cfstat(destdir,&dsb) == -1)
       {
       CfOut(cf_error,"stat","Can't stat directory %s\n",destdir);
       }
@@ -490,7 +511,7 @@ if (S_ISDIR(ssb.st_mode))
             }
          }
       
-      CopyFile(sourcefile,destfile,ssb,attr,pp);
+      CfCopyFile(sourcefile,destfile,ssb,attr,pp);
       }
    
    cf_closedir(dirh);
@@ -501,7 +522,7 @@ if (S_ISDIR(ssb.st_mode))
 strcpy(sourcefile,source);
 strcpy(destfile,destination);
 
-CopyFile(sourcefile,destfile,ssb,attr,pp);
+CfCopyFile(sourcefile,destfile,ssb,attr,pp);
 DeleteClientCache(attr,pp);
 }
 
@@ -523,6 +544,12 @@ if (strlen(localdir) < 2)
    }
 
  /* If we purge with no authentication we wipe out EVERYTHING ! */ 
+
+if (pp->conn == NULL)
+   {
+   CfOut(cf_verbose,""," !! Not purge local files %s - no contact with a source\n",localdir);
+   return;
+   }
 
 if (pp->conn && !pp->conn->authenticated)
    {
@@ -616,7 +643,7 @@ closedir(dirh);
 
 /*********************************************************************/
 
-void CopyFile(char *sourcefile,char *destfile,struct stat ssb,struct Attributes attr, struct Promise *pp)
+void CfCopyFile(char *sourcefile,char *destfile,struct stat ssb,struct Attributes attr, struct Promise *pp)
 
 { char *lastnode,*server;
   struct stat dsb;
@@ -625,6 +652,13 @@ void CopyFile(char *sourcefile,char *destfile,struct stat ssb,struct Attributes 
   mode_t srcmode = ssb.st_mode;
 
 Debug2("CopyFile(%s,%s)\n",sourcefile,destfile);
+
+#ifdef MINGW
+if(attr.copy.copy_links != NULL)
+   {
+   CfOut(cf_verbose, "", "copy_from.copylink_patterns is ignored on Windows (source files cannot be symbolic links)");
+   }
+#endif  /* MINGW */
 
 if (attr.copy.servers)
    {
@@ -635,7 +669,7 @@ else
    server = NULL;
    }
 
-if ((strcmp(sourcefile,destfile) == 0) && (strcmp(server,"localhost") == 0))
+if ((strcmp(sourcefile,destfile) == 0) && server && (strcmp(server,"localhost") == 0))
    {
    CfOut(cf_inform,""," !! File copy promise loop: file/dir %s is its own source",sourcefile);
    return;
@@ -647,7 +681,7 @@ if (!SelectLeaf(sourcefile,&ssb,attr,pp))
    return;
    }
 
-if (IsStringIn(SINGLE_COPY_CACHE,destfile))
+if (IsInListOfRegex(SINGLE_COPY_CACHE,destfile))
    {
    CfOut(cf_inform,""," -> Skipping single-copied file %s\n",destfile);
    return;
@@ -666,13 +700,17 @@ if (attr.copy.link_type != cfa_notlinked)
          }
       else
          {
-         CfOut(cf_verbose,"","cfengine: copy item %s marked for linking instead\n",sourcefile);
+         CfOut(cf_verbose,"","Copy item %s marked for linking\n",sourcefile);
+#ifdef MINGW
+         CfOut(cf_verbose,"","Links are not yet supported on Windows - copying instead\n",sourcefile);
+#else		 
          LinkCopy(sourcefile,destfile,&ssb,attr,pp);
          return;
+#endif
          }
       }
    }
-   
+
 found = lstat(destfile,&dsb);
 
 if (found != -1)
@@ -708,11 +746,11 @@ else
    MakeParentDirectory(destfile,true);
    }
 
-if (attr.copy.min_size == 0 && attr.copy.max_size == 0)
+if (attr.copy.min_size != CF_NOINT)
    {
    if (ssb.st_size < attr.copy.min_size || ssb.st_size > attr.copy.max_size)
       {
-      cfPS(cf_verbose,CF_FAIL,"",pp,attr," -> Source file %s size is not in the permitted safety range\n",sourcefile);
+      cfPS(cf_verbose,CF_NOP,"",pp,attr," -> Source file %s size is not in the permitted safety range\n",sourcefile);
       return;
       }
    }
@@ -721,7 +759,7 @@ if (found == -1)
    {
    if (attr.transaction.action == cfa_warn)
       {
-      cfPS(cf_error,CF_NOP,"",pp,attr," !! Image file %s is non-existent and should be a copy of %s\n",destfile,sourcefile);
+      cfPS(cf_error,CF_WARN,"",pp,attr," !! Image file \"%s\" is non-existent and should be a copy of %s\n",destfile,sourcefile);
       return;
       }
    
@@ -735,6 +773,7 @@ if (found == -1)
       else
          {
          CfOut(cf_verbose,""," -> %s wasn't at destination (copying)",destfile);
+
          if (server)
             {
             CfOut(cf_inform,""," -> Copying from %s:%s\n",server,sourcefile);
@@ -752,7 +791,7 @@ if (found == -1)
          }
       else if (CopyRegularFile(sourcefile,destfile,ssb,dsb,attr,pp))
          {
-         if (stat(destfile,&dsb) == -1)
+         if (cfstat(destfile,&dsb) == -1)
             {
             CfOut(cf_error,"stat","Can't stat destination file %s\n",destfile);
             }
@@ -813,6 +852,7 @@ if (found == -1)
       }
    else
       {
+#ifndef MINGW  // only regular files on windows
       if (S_ISBLK (srcmode) || S_ISCHR (srcmode) || S_ISSOCK (srcmode))
          {
          if (DONTDO)
@@ -827,6 +867,7 @@ if (found == -1)
 
          cfPS(cf_error,CF_CHG,"mknod",pp,attr," -> Created special file/device `%s'",destfile);
          }
+#endif  /* NOT MINGW */		 
       }
    
    if (S_ISLNK(srcmode) && attr.copy.link_type != cfa_notlinked)
@@ -838,13 +879,23 @@ else
    {
    int ok_to_copy = false;
    
-   CfOut(cf_verbose,""," -> Destination file %s already exists\n",destfile);
-   
+   CfOut(cf_verbose,""," -> Destination file \"%s\" already exists\n",destfile);
+
+   if (attr.copy.compare == cfa_exists)
+      {
+      CfOut(cf_verbose,""," -> Existence only is promised, no copying required\n",destfile);
+      return;
+      }
+
    if (!attr.copy.force_update)
       {
       ok_to_copy = CompareForFileCopy(sourcefile,destfile,&ssb,&dsb,attr,pp);
       }
-   
+   else
+      {
+      ok_to_copy = true;
+      }
+
    if (attr.copy.type_check && attr.copy.link_type != cfa_notlinked)
       {
       if ((S_ISDIR(dsb.st_mode)  && ! S_ISDIR(ssb.st_mode))  ||
@@ -860,7 +911,14 @@ else
          return;
          }
       }
-   
+
+   if (ok_to_copy && (attr.transaction.action == cfa_warn))
+      {
+      cfPS(cf_error,CF_WARN,"",pp,attr," !! Image file \"%s\" exists but is not up to date wrt %s\n",destfile,sourcefile);
+      cfPS(cf_error,CF_WARN,"",pp,attr," !! Only a warning has been promised\n");
+      return;
+      }
+
    if (attr.copy.force_update || ok_to_copy || S_ISLNK(ssb.st_mode))  /* Always check links */
       {
       if (S_ISREG(srcmode) || attr.copy.link_type == cfa_notlinked)
@@ -889,7 +947,7 @@ else
          
          if (CopyRegularFile(sourcefile,destfile,ssb,dsb,attr,pp))
             {
-            if (stat(destfile,&dsb) == -1)
+            if (cfstat(destfile,&dsb) == -1)
                {
                cfPS(cf_error,CF_INTERPT,"stat",pp,attr,"Can't stat destination %s\n",destfile);
                }
@@ -898,7 +956,7 @@ else
                VerifyCopiedFileAttributes(destfile,&dsb,&ssb,attr,pp);
                }
             
-            if (IsRegexIn(SINGLE_COPY_LIST,destfile))
+            if (IsInListOfRegex(SINGLE_COPY_LIST,destfile))
                {
                IdempPrependRScalar(&SINGLE_COPY_CACHE,destfile,CF_SCALAR);
                }
@@ -924,7 +982,7 @@ else
          otherwise we can get oscillations between multipe versions if type
          is based on a checksum */
 
-      if (IsRegexIn(SINGLE_COPY_LIST,destfile))
+      if (IsInListOfRegex(SINGLE_COPY_LIST,destfile))
          {
          IdempPrependRScalar(&SINGLE_COPY_CACHE,destfile,CF_SCALAR);
          }
@@ -936,14 +994,25 @@ else
 
 /*********************************************************************/
 
+int cfstat(const char *path, struct stat *buf)
+{
+#ifdef MINGW
+return NovaWin_stat(path, buf);
+#else
+return stat(path, buf);
+#endif
+}
+
+/*********************************************************************/
+
 int cf_stat(char *file,struct stat *buf,struct Attributes attr,struct Promise *pp)
 
 { int res;
 
 if (attr.copy.servers == NULL || strcmp(attr.copy.servers->item,"localhost") == 0)
    {
-   res = stat(file,buf);
-   CheckForFileHoles(buf,attr,pp);
+   res = cfstat(file,buf);
+   CheckForFileHoles(buf,pp);
    return res;
    }
 else
@@ -961,7 +1030,7 @@ int cf_lstat(char *file,struct stat *buf,struct Attributes attr,struct Promise *
 if (attr.copy.servers == NULL || strcmp(attr.copy.servers->item,"localhost") == 0)
    {
    res = lstat(file,buf);
-   CheckForFileHoles(buf,attr,pp);
+   CheckForFileHoles(buf,pp);
    return res;
    }
 else
@@ -971,6 +1040,8 @@ else
 }
 
 /*********************************************************************/
+
+#ifndef MINGW
 
 int cf_readlink(char *sourcefile,char *linkbuf,int buffsize,struct Attributes attr,struct Promise *pp)
 
@@ -1009,6 +1080,8 @@ for (sp = pp->cache; sp != NULL; sp=sp->next)
 
 return -1;
 }
+
+#endif  /* NOT MINGW */
 
 /*********************************************************************/
 
@@ -1137,7 +1210,6 @@ else
             break;
             }
          }
-
       }
    }
  
@@ -1191,6 +1263,13 @@ if (a.havedelete && a.havedepthsearch && !a.haveselect)
    return false;
    }
 
+if (a.haveselect && !a.select.result)
+   {
+   CfOut(cf_error,""," !! File select constraint body promised no result (check body definition)");
+   PromiseRef(cf_error,pp);
+   return false;   
+   }
+
 if (a.havedelete && a.haverename)
    {
    CfOut(cf_error,""," !! File %s cannot promise both deletion and renaming",path);
@@ -1225,6 +1304,13 @@ if (a.haveselect && a.select.result == NULL)
    return false;
    }
 
+if (a.havedepthsearch && a.change.report_diffs)
+   {
+   CfOut(cf_error,""," !! Difference reporting is not allowed during a depth_search",pp->promiser);
+   PromiseRef(cf_error,pp);
+   return false;   
+   }
+
 return true;
 }
 
@@ -1240,21 +1326,20 @@ switch (attr.copy.compare)
    {
    case cfa_checksum:
    case cfa_hash:
-       
+
        if (S_ISREG(dsb->st_mode) && S_ISREG(ssb->st_mode))
           {
           ok_to_copy = CompareFileHashes(sourcefile,destfile,ssb,dsb,attr,pp);
           }      
        else
           {
-          CfOut(cf_inform,"","Checksum comparison replaced by ctime: files not regular\n");
-          PromiseRef(cf_inform,pp);
+          CfOut(cf_verbose,"","Checksum comparison replaced by ctime: files not regular\n");
           ok_to_copy = (dsb->st_ctime < ssb->st_ctime)||(dsb->st_mtime < ssb->st_mtime);
           }
        
-       if (ok_to_copy && (attr.transaction.action != cfa_warn))
+       if (ok_to_copy)
           { 
-          CfOut(cf_inform,""," !! Image file %s has a wrong MD5 checksum (should be copy of %s)\n",destfile,sourcefile);
+          CfOut(cf_verbose,""," !! Image file %s has a wrong MD5 checksum (should be copy of %s)\n",destfile,sourcefile);
           return ok_to_copy;
           }
        break;
@@ -1267,14 +1352,13 @@ switch (attr.copy.compare)
           }      
        else
           {
-          CfOut(cf_inform,"","Byte comparison replaced by ctime: files not regular\n");
-          PromiseRef(cf_inform,pp);
+          CfOut(cf_verbose,"","Byte comparison replaced by ctime: files not regular\n");
           ok_to_copy = (dsb->st_ctime < ssb->st_ctime)||(dsb->st_mtime < ssb->st_mtime);
           }
        
-       if (ok_to_copy && (attr.transaction.action != cfa_warn))
+       if (ok_to_copy)
           { 
-          CfOut(cf_inform,""," !! Image file %s has a wrong binary checksum (should be copy of %s)\n",destfile,sourcefile);
+          CfOut(cf_verbose,""," !! Image file %s has a wrong binary checksum (should be copy of %s)\n",destfile,sourcefile);
           return ok_to_copy;
           }
        break;
@@ -1283,9 +1367,9 @@ switch (attr.copy.compare)
        
        ok_to_copy = (dsb->st_mtime < ssb->st_mtime);
        
-       if (ok_to_copy && (attr.transaction.action != cfa_warn))
+       if (ok_to_copy)
           { 
-          CfOut(cf_inform,""," !! Image file %s out of date (should be copy of %s)\n",destfile,sourcefile);
+          CfOut(cf_verbose,""," !! Image file %s out of date (should be copy of %s)\n",destfile,sourcefile);
           return ok_to_copy;
           }
        break;
@@ -1296,9 +1380,9 @@ switch (attr.copy.compare)
            (dsb->st_mtime < ssb->st_mtime)||
            CompareBinaryFiles(sourcefile,destfile,ssb,dsb,attr,pp);
        
-       if (ok_to_copy && (attr.transaction.action != cfa_warn))
+       if (ok_to_copy)
           { 
-          CfOut(cf_inform,""," !! Image file %s seems out of date (should be copy of %s)\n",destfile,sourcefile);
+          CfOut(cf_verbose,""," !! Image file %s seems out of date (should be copy of %s)\n",destfile,sourcefile);
           return ok_to_copy;
           }
        break;
@@ -1306,9 +1390,9 @@ switch (attr.copy.compare)
    default:
        ok_to_copy = (dsb->st_ctime < ssb->st_ctime)||(dsb->st_mtime < ssb->st_mtime);
        
-       if (ok_to_copy && (attr.transaction.action != cfa_warn))
+       if (ok_to_copy)
           { 
-          CfOut(cf_inform,""," !! Image file %s out of date (should be copy of %s)\n",destfile,sourcefile);
+          CfOut(cf_verbose,""," !! Image file %s out of date (should be copy of %s)\n",destfile,sourcefile);
           return ok_to_copy;
           }
        break;
@@ -1321,11 +1405,17 @@ return false;
       
 void LinkCopy(char *sourcefile,char *destfile,struct stat *sb,struct Attributes attr, struct Promise *pp)
 
-{ char linkbuf[CF_BUFSIZE],*lastnode;
-  int succeed = false;
-  struct stat dsb;
-
 /* Link the file to the source, instead of copying */
+
+#ifdef MINGW
+{
+CfOut(cf_verbose, "", "Windows does not support symbolic links");
+cfPS(cf_error,CF_FAIL,"",pp,attr,"Windows can't link \"%s\" to \"%s\"",sourcefile, destfile);
+}
+#else  /* NOT MINGW */
+{ char linkbuf[CF_BUFSIZE],*lastnode;
+  int status = CF_UNKNOWN;
+  struct stat dsb;
 
 linkbuf[0] = '\0';
   
@@ -1359,8 +1449,8 @@ if (MatchRlistItem(attr.copy.copy_links,lastnode))
    {
    struct stat ssb;
    CfOut(cf_verbose,"","cfengine: link item in copy %s marked for copying from %s instead\n",sourcefile,linkbuf);
-   stat(linkbuf,&ssb);
-   CopyFile(linkbuf,destfile,ssb,attr,pp);
+   cfstat(linkbuf,&ssb);
+   CfCopyFile(linkbuf,destfile,ssb,attr,pp);
    return;
    }
 
@@ -1370,20 +1460,20 @@ switch (attr.copy.link_type)
        
        if (*linkbuf == '.')
           {
-          succeed = VerifyRelativeLink(destfile,linkbuf,attr,pp);
+          status = VerifyRelativeLink(destfile,linkbuf,attr,pp);
           }
        else
           {
-          succeed = VerifyLink(destfile,linkbuf,attr,pp);
+          status = VerifyLink(destfile,linkbuf,attr,pp);
           }
        break;
        
    case cfa_relative:
-       succeed = VerifyRelativeLink(destfile,linkbuf,attr,pp);
+       status = VerifyRelativeLink(destfile,linkbuf,attr,pp);
        break;
        
    case cfa_absolute:
-       succeed = VerifyAbsoluteLink(destfile,linkbuf,attr,pp);
+       status = VerifyAbsoluteLink(destfile,linkbuf,attr,pp);
        break;
        
    default:
@@ -1391,7 +1481,7 @@ switch (attr.copy.link_type)
        return;
    }
 
-if (succeed)
+if (status == CF_CHG || status == CF_NOP)
    {
    if (lstat(destfile,&dsb) == -1)
       {
@@ -1402,9 +1492,15 @@ if (succeed)
       VerifyCopiedFileAttributes(destfile,&dsb,sb,attr,pp);
       }
    
-   cfPS(cf_inform,CF_CHG,"",pp,attr," -> Created link %s", destfile);
+   if (status == CF_CHG)
+      cfPS(cf_inform,status,"",pp,attr," -> Created link %s", destfile);
+   else if (status == CF_NOP)
+      ; /*cfPS(cf_inform,status,"",pp,attr," -> Link %s as promised", destfile);*/
+   else
+      cfPS(cf_inform,status,"",pp,attr," -> Unable to create link %s", destfile);
    }
 }
+#endif  /* NOT MINGW */
 
 /*************************************************************************************/
 
@@ -1456,7 +1552,7 @@ if (DONTDO)
 #ifdef WITH_SELINUX
 if (selinux_enabled)
    {
-   dest_exists = stat(dest,&cur_dest);
+   dest_exists = cfstat(dest,&cur_dest);
    
    if(dest_exists == 0)
       {
@@ -1530,10 +1626,20 @@ if (remote)
       {
       return false;
       }
-   
-   if (!CopyRegularFileNet(source,new,sstat.st_size,attr,pp))
+
+   if (attr.copy.encrypt)
       {
-      return false;
+      if (!EncryptCopyRegularFileNet(source,new,sstat.st_size,attr,pp))
+         {
+         return false;
+         }
+      }
+   else
+      {
+      if (!CopyRegularFileNet(source,new,sstat.st_size,attr,pp))
+         {
+         return false;
+         }
       }
    }
 else
@@ -1569,7 +1675,7 @@ if (!discardbackup)
    if (attr.copy.backup == cfa_timestamp)
       {
       stampnow = time((time_t *)NULL);   
-      snprintf(stamp,CF_BUFSIZE-1,"_%d_%s", CFSTARTTIME, CanonifyName(ctime(&stampnow)));
+      snprintf(stamp,CF_BUFSIZE-1,"_%d_%s", CFSTARTTIME, CanonifyName(cf_ctime(&stampnow)));
 
       if (!JoinSuffix(backup,stamp))
          {
@@ -1598,18 +1704,18 @@ if (!discardbackup)
       unlink(backup);
       }
    
-   if (rename(dest,backup) == -1)
+   if (cf_rename(dest,backup) == -1)
       {
       /* ignore */
       }
    
-   backupok = (lstat(backup,&s) != -1); /* Did the rename() succeed? NFS-safe */
+   backupok = (lstat(backup,&s) != -1); /* Did the cf_rename() succeed? NFS-safe */
    }
 else
    {
    /* Mainly important if there is a dir in the way */
    
-   if (stat(dest,&s) != -1)
+   if (cfstat(dest,&s) != -1)
       {
       if (S_ISDIR(s.st_mode))
          {
@@ -1621,16 +1727,16 @@ else
 
 if (lstat(new,&dstat) == -1)
    {
-   CfOut(cf_error,"stat","Can't stat new file %s\n",new);
+   CfOut(cf_inform,"stat","Can't stat new file %s - another agent has picked it up?\n",new);
    return false;
    }
 
 if (dstat.st_size != sstat.st_size)
    {
-   CfOut(cf_error,""," !! New file %s seems to have been corrupted in transit (sizes %d and %d), aborting!\n",new, (int) dstat.st_size, (int) sstat.st_size);
+   CfOut(cf_error,""," !! New file %s seems to have been corrupted in transit (dest %d and src %d), aborting!\n",new, (int) dstat.st_size, (int) sstat.st_size);
    if (backupok)
       {
-      rename(backup,dest); /* ignore failure */
+      cf_rename(backup,dest); /* ignore failure */
       }
    return false;
    }
@@ -1644,7 +1750,7 @@ if (attr.copy.verify)
       CfOut(cf_verbose,""," !! New file %s seems to have been corrupted in transit, aborting!\n",new);
       if (backupok)
          {
-         rename(backup,dest); /* ignore failure */
+         cf_rename(backup,dest); /* ignore failure */
          }
       return false;
       }
@@ -1733,13 +1839,13 @@ else
    {
 #endif   
    
-   if (rename(new,dest) == -1)
+   if (cf_rename(new,dest) == -1)
       {
-      CfOut(cf_error,"rename"," !! Could not install copy file as %s, directory in the way?\n",dest);
+      CfOut(cf_error,"cf_rename"," !! Could not install copy file as %s, directory in the way?\n",dest);
 
       if (backupok)
          {
-         rename(backup,dest); /* ignore failure */
+         cf_rename(backup,dest); /* ignore failure */
          }
       
       return false;
@@ -1758,7 +1864,7 @@ else if (!discardbackup && ArchiveToRepository(backup,attr,pp))
    unlink(backup);
    }
 
-if (attr.copy.preserve)
+if (attr.copy.stealth)
    {
 #ifdef HAVE_UTIME_H
    timebuf.actime = sstat.st_atime;

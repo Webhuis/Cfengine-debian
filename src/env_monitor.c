@@ -1,26 +1,26 @@
 /* 
 
-   Copyright (C) Cfengine AS
+Copyright (C) Cfengine AS
 
-   This file is part of Cfengine 3 - written and maintained by Cfengine AS.
+This file is part of Cfengine 3 - written and maintained by Cfengine AS.
  
-   This program is free software; you can redistribute it and/or modify it
-   under the terms of the GNU General Public License as published by the
-   Free Software Foundation; version 3.
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; version 3.
    
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
  
-  You should have received a copy of the GNU General Public License  
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+You should have received a copy of the GNU General Public License  
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
-  To the extent this program is licensed as part of the Enterprise
-  versions of Cfengine, the applicable Commerical Open Source License
-  (COSL) may apply to this file if you as a licensee so wish it. See
-  included file COSL.txt.
+To the extent this program is licensed as part of the Enterprise
+versions of Cfengine, the applicable Commerical Open Source License
+(COSL) may apply to this file if you as a licensee so wish it. See
+included file COSL.txt.
 */
 
 
@@ -51,7 +51,7 @@ int HISTO = true;
 
 /* persistent observations */
 
-double THIS[CF_OBSERVABLES]; /* New from 2.1.21 replacing above - current observation */
+double CF_THIS[CF_OBSERVABLES]; /* New from 2.1.21 replacing above - current observation */
 
 /* Work */
 
@@ -123,12 +123,14 @@ void Sniff(void);
 
 void GatherProcessData (void);
 void GatherCPUData (void);
+void Unix_GatherCPUData(void);
 void GatherDiskData (void);
 void GatherLoadData (void);
 void GatherSocketData (void);
 void GatherSensorData(void);
 void GatherPromisedMeasures(void);
 
+int GatherProcessUsers(struct Item **userList, int *userListSz, int *numRootProcs, int *numOtherProcs);
 void LeapDetection (void);
 struct Averages *GetCurrentAverages (char *timekey);
 void UpdateAverages (char *timekey, struct Averages newvals);
@@ -149,94 +151,110 @@ int GetAcpi(void);
 int GetLMSensors(void);
 void KeepMonitorPromise(struct Promise *pp);
 
+#ifndef MINGW
+int Unix_GatherProcessUsers(struct Item **userList, int *userListSz, int *numRootProcs, int *numOtherProcs);
+void Unix_GatherProcessData (void);
+#endif /* NOT MINGW */
+
 /****************************************************************/
 
 void MonInitialize()
    
 { int i,j,k;
-  struct stat statbuf;
-  char vbuff[CF_BUFSIZE];
+ struct stat statbuf;
+ char vbuff[CF_BUFSIZE];
   
-for (i = 0; i < ATTR; i++)
-   {
-   sprintf(vbuff,"%s/state/cf_incoming.%s",CFWORKDIR,ECGSOCKS[i].name);
-   CreateEmptyFile(vbuff);
-   sprintf(vbuff,"%s/state/cf_outgoing.%s",CFWORKDIR,ECGSOCKS[i].name);
-   CreateEmptyFile(vbuff);
-   }
-
-for (i = 0; i < CF_NETATTR; i++)
-   {
-   NETIN_DIST[i] = NULL;
-   NETOUT_DIST[i] = NULL;
-   }
- 
-sprintf(vbuff,"%s/state/cf_users",CFWORKDIR);
-CreateEmptyFile(vbuff);
- 
-snprintf(AVDB,CF_MAXVARSIZE,"%s/state/%s",CFWORKDIR,CF_AVDB_FILE);
-snprintf(STATELOG,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_STATELOG_FILE);
-snprintf(ENVFILE_NEW,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_ENVNEW_FILE);
-snprintf(ENVFILE,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_ENV_FILE);
-
-if (!BATCH_MODE)
-   {
-   GetDatabaseAge();
-
-   for (i = 0; i < CF_OBSERVABLES; i++)
-      {
-      LOCALAV.Q[i].expect = 0.0;
-      LOCALAV.Q[i].var = 0.0;
-      LOCALAV.Q[i].q = 0.0;
-      }
-   }
-
-for (i = 0; i < 7; i++)
-   {
-   for (j = 0; j < CF_OBSERVABLES; j++)
-      {
-      for (k = 0; k < CF_GRAINS; k++)
-         {
-         HISTOGRAM[i][j][k] = 0;
-         }
-      }
-   }
-
-for (i = 0; i < CF_OBSERVABLES; i++)
-   {
-   CHI[i] = 0;
-   CHI_LIMIT[i] = 0.1;
-   LDT_AVG[i] = 0;
-   LDT_SUM[i] = 0;
-   LASTQ[i] = 0;
+ for (i = 0; i < ATTR; i++)
+    {
+    sprintf(vbuff,"%s/state/cf_incoming.%s",CFWORKDIR,ECGSOCKS[i].name);
+    MapName(vbuff);
+    CreateEmptyFile(vbuff);
    
-   for (j = 0; j < LDT_BUFSIZE; j++)
-      {
-      LDT_BUF[i][j];
-      }
-   }
+    sprintf(vbuff,"%s/state/cf_outgoing.%s",CFWORKDIR,ECGSOCKS[i].name);
+    MapName(vbuff);
+    CreateEmptyFile(vbuff);
+    }
 
-srand((unsigned int)time(NULL)); 
-LoadHistogram();
+ for (i = 0; i < CF_NETATTR; i++)
+    {
+    NETIN_DIST[i] = NULL;
+    NETOUT_DIST[i] = NULL;
+    }
+ 
+ sprintf(vbuff,"%s/state/cf_users",CFWORKDIR);
+ MapName(vbuff);
+ CreateEmptyFile(vbuff);
+ 
+ snprintf(AVDB,CF_MAXVARSIZE,"%s/state/%s",CFWORKDIR,CF_AVDB_FILE);
+ MapName(AVDB);
+
+ snprintf(STATELOG,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_STATELOG_FILE);
+ MapName(STATELOG);
+
+ snprintf(ENVFILE_NEW,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_ENVNEW_FILE);
+ MapName(ENVFILE_NEW);
+
+ snprintf(ENVFILE,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_ENV_FILE);
+ MapName(ENVFILE);
+
+ if (!BATCH_MODE)
+    {
+    GetDatabaseAge();
+
+    for (i = 0; i < CF_OBSERVABLES; i++)
+       {
+       LOCALAV.Q[i].expect = 0.0;
+       LOCALAV.Q[i].var = 0.0;
+       LOCALAV.Q[i].q = 0.0;
+       }
+    }
+
+ for (i = 0; i < 7; i++)
+    {
+    for (j = 0; j < CF_OBSERVABLES; j++)
+       {
+       for (k = 0; k < CF_GRAINS; k++)
+          {
+          HISTOGRAM[i][j][k] = 0;
+          }
+       }
+    }
+
+ for (i = 0; i < CF_OBSERVABLES; i++)
+    {
+    CHI[i] = 0;
+    CHI_LIMIT[i] = 0.1;
+    LDT_AVG[i] = 0;
+    LDT_SUM[i] = 0;
+    LASTQ[i] = 0;
+   
+    for (j = 0; j < LDT_BUFSIZE; j++)
+       {
+       LDT_BUF[i][j];
+       }
+    }
+
+ srand((unsigned int)time(NULL)); 
+ LoadHistogram();
 
 /* Look for local sensors - this is unfortunately linux-centric */
 
-if (stat("/proc/acpi/thermal_zone",&statbuf) != -1)
-   {
-   Debug("Found an acpi service\n");
-   ACPI = true;
-   }
+ if (cfstat("/proc/acpi/thermal_zone",&statbuf) != -1)
+    {
+    Debug("Found an acpi service\n");
+    ACPI = true;
+    }
 
-if (stat("/usr/bin/sensors",&statbuf) != -1)
-   {
-   if (statbuf.st_mode & 0111)
-      {
-      Debug("Found an lmsensor system\n");
-      LMSENSORS = true;
-      }
-   }
+ if (cfstat("/usr/bin/sensors",&statbuf) != -1)
+    {
+    if (statbuf.st_mode & 0111)
+       {
+       Debug("Found an lmsensor system\n");
+       LMSENSORS = true;
+       }
+    }
 
-Debug("Finished with initialization.\n");
+ Debug("Finished with initialization.\n");
 }
 
 /*********************************************************************/
@@ -246,28 +264,27 @@ Debug("Finished with initialization.\n");
 void GetDatabaseAge()
 
 { int err_no;
-  DBT key,value;
-  DB *dbp;
+ CF_DB *dbp;
 
-if (!OpenDB(AVDB,&dbp))
-   {
-   return;
-   }
+ if (!OpenDB(AVDB,&dbp))
+    {
+    return;
+    }
  
-chmod(AVDB,0644); 
+ cf_chmod(AVDB,0644); 
 
-if (ReadDB(dbp,"DATABASE_AGE",&AGE,sizeof(double)))
-   {
-   WAGE = AGE / CF_WEEK * CF_MEASURE_INTERVAL;
-   Debug("\n\nPrevious DATABASE_AGE %f\n\n",AGE);
-   }
-else
-   {
-   Debug("No previous AGE\n");
-   AGE = 0.0;
-   }
+ if (ReadDB(dbp,"DATABASE_AGE",&AGE,sizeof(double)))
+    {
+    WAGE = AGE / CF_WEEK * CF_MEASURE_INTERVAL;
+    Debug("\n\nPrevious DATABASE_AGE %f\n\n",AGE);
+    }
+ else
+    {
+    Debug("No previous AGE\n");
+    AGE = 0.0;
+    }
 
-dbp->close(dbp,0);
+ CloseDB(dbp);
 }
 
 /*********************************************************************/
@@ -275,35 +292,35 @@ dbp->close(dbp,0);
 void LoadHistogram()
 
 { FILE *fp;
-  int position,i,day; 
+ int position,i,day; 
 
-if (HISTO)
-   {
-   char filename[CF_BUFSIZE];
+ if (HISTO)
+    {
+    char filename[CF_BUFSIZE];
    
-   snprintf(filename,CF_BUFSIZE,"%s/state/histograms",CFWORKDIR);
+    snprintf(filename,CF_BUFSIZE,"%s/state/histograms",CFWORKDIR);
    
-   if ((fp = fopen(filename,"r")) == NULL)
-      {
-      CfOut(cf_verbose,"fopen","Unable to load histogram data");
-      return;
-      }
+    if ((fp = fopen(filename,"r")) == NULL)
+       {
+       CfOut(cf_verbose,"fopen","Unable to load histogram data");
+       return;
+       }
 
-   for (position = 0; position < CF_GRAINS; position++)
-      {
-      fscanf(fp,"%d ",&position);
+    for (position = 0; position < CF_GRAINS; position++)
+       {
+       fscanf(fp,"%d ",&position);
       
-      for (i = 0; i < CF_OBSERVABLES; i++)
-         {
-         for (day = 0; day < 7; day++)
-            {
-            fscanf(fp,"%d ",&(HISTOGRAM[i][day][position]));
-            }
-         }
-      }
+       for (i = 0; i < CF_OBSERVABLES; i++)
+          {
+          for (day = 0; day < 7; day++)
+             {
+             fscanf(fp,"%d ",&(HISTOGRAM[i][day][position]));
+             }
+          }
+       }
    
-   fclose(fp);
-   }
+    fclose(fp);
+    }
 } 
 
 /*********************************************************************/
@@ -311,59 +328,70 @@ if (HISTO)
 void StartServer(int argc,char **argv)
 
 { char *timekey;
-  struct Averages averages;
-  int i;
-  struct Promise *pp = NewPromise("monitor_cfengine","the monitor daemon");
-  struct Attributes dummyattr;
-  struct CfLock thislock;
+ struct Averages averages;
+ int i;
+ struct Promise *pp = NewPromise("monitor_cfengine","the monitor daemon");
+ struct Attributes dummyattr;
+ struct CfLock thislock;
 
-if ((!NO_FORK) && (fork() != 0))
-   {
-   CfOut(cf_inform,"","cf-monitord: starting\n");
-   exit(0);
-   }
+#ifdef MINGW
 
-if (!NO_FORK)
-   {
-   ActAsDaemon(0);
-   }
+ if(!NO_FORK)
+    {
+    CfOut(cf_verbose, "", "Windows does not support starting processes in the background - starting in foreground");
+    }
+
+#else  /* NOT MINGW */  
   
-memset(&dummyattr,0,sizeof(dummyattr));
-dummyattr.transaction.ifelapsed = 0;
-dummyattr.transaction.expireafter = 0;
+ if ((!NO_FORK) && (fork() != 0))
+    {
+    CfOut(cf_inform,"","cf-monitord: starting\n");
+    exit(0);
+    }
 
-thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
+ if (!NO_FORK)
+    {
+    ActAsDaemon(0);
+    }
 
-if (thislock.lock == NULL)
-   {
-   return;
-   }
+#endif  /* NOT MINGW */   
+   
+ memset(&dummyattr,0,sizeof(dummyattr));
+ dummyattr.transaction.ifelapsed = 0;
+ dummyattr.transaction.expireafter = 0;
 
-WritePID("cf-monitor.pid");
+ thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
 
-OpenSniffer();
+ if (thislock.lock == NULL)
+    {
+    return;
+    }
+
+ WritePID("cf-monitor.pid");
+
+ OpenSniffer();
  
  while (true)
-   {
-   GetQ();
-   timekey = GetTimeKey();
-   averages = EvalAvQ(timekey);
-   LeapDetection();
-   ArmClasses(averages,timekey);
+    {
+    GetQ();
+    timekey = GetTimeKey();
+    averages = EvalAvQ(timekey);
+    LeapDetection();
+    ArmClasses(averages,timekey);
 
-   ZeroArrivals();
+    ZeroArrivals();
 
-   if (TCPDUMP)
-      {
-      Sniff();
-      }
-   else
-      {
-      sleep(SLEEPTIME);
-      }
+    if (TCPDUMP)
+       {
+       Sniff();
+       }
+    else
+       {
+       sleep(SLEEPTIME);
+       }
    
-   ITER++;
-   }
+    ITER++;
+    }
 }
 
 /*********************************************************************/
@@ -384,27 +412,27 @@ void OpenSniffer()
 
 { char tcpbuffer[CF_BUFSIZE];
 
-if (TCPDUMP)
-   {
-   struct stat statbuf;
-   char buffer[CF_MAXVARSIZE];
-   sscanf(CF_TCPDUMP_COMM,"%s",buffer);
+ if (TCPDUMP)
+    {
+    struct stat statbuf;
+    char buffer[CF_MAXVARSIZE];
+    sscanf(CF_TCPDUMP_COMM,"%s",buffer);
    
-   if (stat(buffer,&statbuf) != -1)
-      {
-      if ((TCPPIPE = cf_popen(CF_TCPDUMP_COMM,"r")) == NULL)
-         {
-         TCPDUMP = false;
-         }
+    if (cfstat(buffer,&statbuf) != -1)
+       {
+       if ((TCPPIPE = cf_popen(CF_TCPDUMP_COMM,"r")) == NULL)
+          {
+          TCPDUMP = false;
+          }
 
-      /* Skip first banner */
-      fgets(tcpbuffer,CF_BUFSIZE-1,TCPPIPE);
-      }
-   else
-      {
-      TCPDUMP = false;
-      }
-   }
+       /* Skip first banner */
+       fgets(tcpbuffer,CF_BUFSIZE-1,TCPPIPE);
+       }
+    else
+       {
+       TCPDUMP = false;
+       }
+    }
 
 }
 
@@ -413,7 +441,7 @@ if (TCPDUMP)
 void Sniff()
 
 { int i;
-  char tcpbuffer[CF_BUFSIZE];
+ char tcpbuffer[CF_BUFSIZE];
  
 CfOut(cf_verbose,"","Reading from tcpdump...\n");
 memset(tcpbuffer,0,CF_BUFSIZE);      
@@ -431,9 +459,9 @@ while (!feof(TCPPIPE))
    fgets(tcpbuffer,CF_BUFSIZE-1,TCPPIPE);
    
    if (TCPPAUSE)
-      {
-      break;
-      }
+       {
+       break;
+       }
    
    if (strstr(tcpbuffer,"tcpdump:")) /* Error message protect sleeptime */
       {
@@ -463,15 +491,17 @@ ENTROPIES = NULL;
 
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
-   THIS[i] = 0.0;
+   CF_THIS[i] = 0.0;
    }
 
 GatherProcessData();
 GatherCPUData();
+#ifndef MINGW
 GatherLoadData(); 
 GatherDiskData();
 GatherSocketData();
 GatherSensorData();
+#endif  /* NOT MINGW */
 GatherPromisedMeasures();
 }
 
@@ -487,7 +517,7 @@ if ((now = time((time_t *)NULL)) == -1)
    exit(1);
    }
 
-sprintf(str,"%s",ctime(&now));
+sprintf(str,"%s",cf_ctime(&now));
 
 return ConvTimeKey(str); 
 }
@@ -517,13 +547,10 @@ for (i = 0; i < CF_OBSERVABLES; i++)
    double delta2;
    
    name[0] = '\0';
-   GetClassName(i,name);
-
-   newvals.Q[i].q = THIS[i];
-   LOCALAV.Q[i].q = THIS[i];
-
+   CfGetClassName(i,name);
+   
    /* Overflow protection */
-
+   
    if (currentvals->Q[i].expect < 0)
       {
       currentvals->Q[i].expect = 0;
@@ -533,25 +560,28 @@ for (i = 0; i < CF_OBSERVABLES; i++)
       {
       currentvals->Q[i].q = 0;
       }
-
+   
    if (currentvals->Q[i].var < 0)
       {
       currentvals->Q[i].var = 0;
       }
+   
+   This[i] = RejectAnomaly(CF_THIS[i],currentvals->Q[i].expect,currentvals->Q[i].var,LOCALAV.Q[i].expect,LOCALAV.Q[i].var);
 
-   This[i] = RejectAnomaly(THIS[i],currentvals->Q[i].expect,currentvals->Q[i].var,LOCALAV.Q[i].expect,LOCALAV.Q[i].var);
-
+   newvals.Q[i].q = This[i];
+   LOCALAV.Q[i].q = This[i];
+   
    Debug("Current %s.q %lf\n",name,currentvals->Q[i].q);
    Debug("Current %s.var %lf\n",name,currentvals->Q[i].var);
    Debug("Current %s.ex %lf\n",name,currentvals->Q[i].expect);
-   Debug("THIS[%s] = %lf\n",name,THIS[i]);
+   Debug("CF_THIS[%s] = %lf\n",name,CF_THIS[i]);
    Debug("This[%s] = %lf\n",name,This[i]);
-
+   
    newvals.Q[i].expect = WAverage(This[i],currentvals->Q[i].expect,WAGE);
    LOCALAV.Q[i].expect = WAverage(newvals.Q[i].expect,LOCALAV.Q[i].expect,ITER);
    
    delta2 = (This[i] - currentvals->Q[i].expect)*(This[i] - currentvals->Q[i].expect);
-
+   
    if (currentvals->Q[i].var > delta2*2.0)
       {
       /* Clean up past anomalies */
@@ -563,22 +593,22 @@ for (i = 0; i < CF_OBSERVABLES; i++)
       newvals.Q[i].var = WAverage(delta2,currentvals->Q[i].var,WAGE);
       LOCALAV.Q[i].var = WAverage(newvals.Q[i].var,LOCALAV.Q[i].var,ITER);
       }
-
+   
    CfOut(cf_verbose,"","New[%d] %s.q %lf\n",i,name,newvals.Q[i].q);
    CfOut(cf_verbose,"","New[%d] %s.var %lf\n",i,name,newvals.Q[i].var);
    CfOut(cf_verbose,"","New[%d] %s.ex %lf\n",i,name,newvals.Q[i].expect);
-
+   
    CfOut(cf_verbose,"","%s = %lf -> (%lf#%lf) local [%lf#%lf]\n",name,This[i],newvals.Q[i].expect,sqrt(newvals.Q[i].var),LOCALAV.Q[i].expect,sqrt(LOCALAV.Q[i].var));
-
+   
    if (This[i] > 0)
       {
       CfOut(cf_verbose,"","Storing %.2lf in %s\n",This[i],name);
       }
    }
-   
+
 UpdateAverages(t,newvals);
 UpdateDistributions(t,currentvals);  /* Distribution about mean */
- 
+
 return newvals;
 }
 
@@ -586,7 +616,7 @@ return newvals;
 
 void LeapDetection()
 
-{ int i,j;
+{ int i,j,last_pos = LDT_POS;;
   double n1,n2,d;
   double padding = 0.2;
 
@@ -603,12 +633,19 @@ if (++LDT_POS >= LDT_BUFSIZE)
 
 for (i = 0; i < CF_OBSERVABLES; i++)
    {
-   /* Note AVG should contain n+1 but not SUM, hence funny increments */
+   // First do some anomaly rejection. Sudden jumps must be numerical errors.
    
-   LDT_AVG[i] = LDT_AVG[i] + THIS[i]/((double)LDT_BUFSIZE + 1.0);
+   if (LDT_BUF[i][last_pos] > 0 && CF_THIS[i]/LDT_BUF[i][last_pos] > 1000)
+      {
+      CF_THIS[i] = LDT_BUF[i][last_pos];
+      }
 
+   /* Note AVG should contain n+1 but not SUM, hence funny increments */
+
+   LDT_AVG[i] = LDT_AVG[i] + CF_THIS[i]/((double)LDT_BUFSIZE + 1.0);
+   
    d = (double)(LDT_BUFSIZE * (LDT_BUFSIZE + 1)) * LDT_AVG[i];
-
+   
    if (LDT_FULL && (LDT_POS == 0))
       {
       n2 = (LDT_SUM[i] - (double)LDT_BUFSIZE * LDT_MAX[i]);
@@ -624,14 +661,14 @@ for (i = 0; i < CF_OBSERVABLES; i++)
       
       LDT_MAX[i] = 0.0;
       }
-
-   if (THIS[i] > LDT_MAX[i])
+   
+   if (CF_THIS[i] > LDT_MAX[i])
       {
-      LDT_MAX[i] = THIS[i];
+      LDT_MAX[i] = CF_THIS[i];
       }
    
-   n1 = (LDT_SUM[i] - (double)LDT_BUFSIZE * THIS[i]);
-
+   n1 = (LDT_SUM[i] - (double)LDT_BUFSIZE * CF_THIS[i]);
+   
    if (d < 0.001)
       {
       CHI[i] = 0.0;
@@ -640,10 +677,10 @@ for (i = 0; i < CF_OBSERVABLES; i++)
       {
       CHI[i] = sqrt(n1*n1/d);
       }
-
+   
    LDT_AVG[i] = LDT_AVG[i] - LDT_BUF[i][LDT_POS]/((double)LDT_BUFSIZE + 1.0);
-   LDT_BUF[i][LDT_POS] = THIS[i];
-   LDT_SUM[i] = LDT_SUM[i] - LDT_BUF[i][LDT_POS] + THIS[i];
+   LDT_BUF[i][LDT_POS] = CF_THIS[i];
+   LDT_SUM[i] = LDT_SUM[i] - LDT_BUF[i][LDT_POS] + CF_THIS[i];
    }
 }
 
@@ -652,115 +689,115 @@ for (i = 0; i < CF_OBSERVABLES; i++)
 void ArmClasses(struct Averages av,char *timekey)
 
 { double sigma;
-  struct Item *classlist = NULL, *ip;
-  int i,j,k,pos;
-  FILE *fp;
-  char buff[CF_BUFSIZE],ldt_buff[CF_BUFSIZE],name[CF_MAXVARSIZE];
-  static int anomaly[CF_OBSERVABLES][LDT_BUFSIZE];
-  static double anomaly_chi[CF_OBSERVABLES];
-  static double anomaly_chi_limit[CF_OBSERVABLES];
+ struct Item *classlist = NULL, *ip;
+ int i,j,k,pos;
+ FILE *fp;
+ char buff[CF_BUFSIZE],ldt_buff[CF_BUFSIZE],name[CF_MAXVARSIZE];
+ static int anomaly[CF_OBSERVABLES][LDT_BUFSIZE];
+ static double anomaly_chi[CF_OBSERVABLES];
+ static double anomaly_chi_limit[CF_OBSERVABLES];
 
-Debug("Arm classes for %s\n",timekey);
+ Debug("Arm classes for %s\n",timekey);
  
-for (i = 0; i < CF_OBSERVABLES; i++)
-   {
-   GetClassName(i,name);
-   sigma = SetClasses(name,THIS[i],av.Q[i].expect,av.Q[i].var,LOCALAV.Q[i].expect,LOCALAV.Q[i].var,&classlist,timekey);
-   SetVariable(name,THIS[i],av.Q[i].expect,sigma,&classlist);
+ for (i = 0; i < CF_OBSERVABLES; i++)
+    {
+    CfGetClassName(i,name);
+    sigma = SetClasses(name,CF_THIS[i],av.Q[i].expect,av.Q[i].var,LOCALAV.Q[i].expect,LOCALAV.Q[i].var,&classlist,timekey);
+    SetVariable(name,CF_THIS[i],av.Q[i].expect,sigma,&classlist);
 
-   /* LDT */
+    /* LDT */
 
-   ldt_buff[0] = '\0';
+    ldt_buff[0] = '\0';
 
-   anomaly[i][LDT_POS] = false;
+    anomaly[i][LDT_POS] = false;
 
-   if (!LDT_FULL)
-      {
-      anomaly[i][LDT_POS] = false;
-      anomaly_chi[i] = 0.0;
-      anomaly_chi_limit[i] = 0.0;
-      }
+    if (!LDT_FULL)
+       {
+       anomaly[i][LDT_POS] = false;
+       anomaly_chi[i] = 0.0;
+       anomaly_chi_limit[i] = 0.0;
+       }
    
-   if (LDT_FULL && (CHI[i] > CHI_LIMIT[i]))
-      {
-      anomaly[i][LDT_POS] = true;                   /* Remember the last anomaly value */
-      anomaly_chi[i] = CHI[i];
-      anomaly_chi_limit[i] = CHI_LIMIT[i];
+    if (LDT_FULL && (CHI[i] > CHI_LIMIT[i]))
+       {
+       anomaly[i][LDT_POS] = true;                   /* Remember the last anomaly value */
+       anomaly_chi[i] = CHI[i];
+       anomaly_chi_limit[i] = CHI_LIMIT[i];
       
-      CfOut(cf_verbose,"","LDT(%d) in %s chi = %.2f thresh %.2f \n",LDT_POS,name,CHI[i],CHI_LIMIT[i]);
+       CfOut(cf_verbose,"","LDT(%d) in %s chi = %.2f thresh %.2f \n",LDT_POS,name,CHI[i],CHI_LIMIT[i]);
 
-      /* Last printed element is now */
+       /* Last printed element is now */
       
-      for (j = LDT_POS+1, k = 0; k < LDT_BUFSIZE; j++,k++)
-         {
-         if (j == LDT_BUFSIZE) /* Wrap */
-            {
-            j = 0;
-            }
+       for (j = LDT_POS+1, k = 0; k < LDT_BUFSIZE; j++,k++)
+          {
+          if (j == LDT_BUFSIZE) /* Wrap */
+             {
+             j = 0;
+             }
          
-         if (anomaly[i][j])
-            {
-            snprintf(buff,CF_BUFSIZE," *%.2f*",LDT_BUF[i][j]);
-            }
-         else
-            {
-            snprintf(buff,CF_BUFSIZE," %.2f",LDT_BUF[i][j]);
-            }
+          if (anomaly[i][j])
+             {
+             snprintf(buff,CF_BUFSIZE," *%.2f*",LDT_BUF[i][j]);
+             }
+          else
+             {
+             snprintf(buff,CF_BUFSIZE," %.2f",LDT_BUF[i][j]);
+             }
 
-         strcat(ldt_buff,buff);
-         }
+          strcat(ldt_buff,buff);
+          }
 
-      if (THIS[i] > av.Q[i].expect)
-         {
-         snprintf(buff,CF_BUFSIZE,"%s_high_ldt",name);
-         }
-      else
-         {
-         snprintf(buff,CF_BUFSIZE,"%s_high_ldt",name);
-         }
+       if (CF_THIS[i] > av.Q[i].expect)
+          {
+          snprintf(buff,CF_BUFSIZE,"%s_high_ldt",name);
+          }
+       else
+          {
+          snprintf(buff,CF_BUFSIZE,"%s_high_ldt",name);
+          }
 
-      AppendItem(&classlist,buff,"2");
-      NewPersistentContext(buff,CF_PERSISTENCE,cfpreserve); 
-      }
-   else
-      {
-      for (j = LDT_POS+1, k = 0; k < LDT_BUFSIZE; j++,k++)
-         {
-         if (j == LDT_BUFSIZE) /* Wrap */
-            {
-            j = 0;
-            }
+       AppendItem(&classlist,buff,"2");
+       NewPersistentContext(buff,CF_PERSISTENCE,cfpreserve); 
+       }
+    else
+       {
+       for (j = LDT_POS+1, k = 0; k < LDT_BUFSIZE; j++,k++)
+          {
+          if (j == LDT_BUFSIZE) /* Wrap */
+             {
+             j = 0;
+             }
 
-         if (anomaly[i][j])
-            {
-            snprintf(buff,CF_BUFSIZE," *%.2f*",LDT_BUF[i][j]);
-            }
-         else
-            {
-            snprintf(buff,CF_BUFSIZE," %.2f",LDT_BUF[i][j]);
-            }
-         strcat(ldt_buff,buff);
-         }
-      }
+          if (anomaly[i][j])
+             {
+             snprintf(buff,CF_BUFSIZE," *%.2f*",LDT_BUF[i][j]);
+             }
+          else
+             {
+             snprintf(buff,CF_BUFSIZE," %.2f",LDT_BUF[i][j]);
+             }
+          strcat(ldt_buff,buff);
+          }
+       }
 
-   /* Not using these for now
-   snprintf(buff,CF_MAXVARSIZE,"ldtbuf_%s=%s",name,ldt_buff);
-   AppendItem(&classlist,buff,"");
+    /* Not using these for now
+       snprintf(buff,CF_MAXVARSIZE,"ldtbuf_%s=%s",name,ldt_buff);
+       AppendItem(&classlist,buff,"");
 
-   snprintf(buff,CF_MAXVARSIZE,"ldtchi_%s=%.2f",name,anomaly_chi[i]);
-   AppendItem(&classlist,buff,"");
+       snprintf(buff,CF_MAXVARSIZE,"ldtchi_%s=%.2f",name,anomaly_chi[i]);
+       AppendItem(&classlist,buff,"");
    
-   snprintf(buff,CF_MAXVARSIZE,"ldtlimit_%s=%.2f",name,anomaly_chi_limit[i]);
-   AppendItem(&classlist,buff,"");
-   */
-   }
+       snprintf(buff,CF_MAXVARSIZE,"ldtlimit_%s=%.2f",name,anomaly_chi_limit[i]);
+       AppendItem(&classlist,buff,"");
+    */
+    }
 
 SetMeasurementPromises(&classlist);
 
 /* Publish class list */
 
 unlink(ENVFILE_NEW);
- 
+
 if ((fp = fopen(ENVFILE_NEW,"a")) == NULL)
    {
    DeleteItemList(PREVIOUS_STATE);
@@ -772,7 +809,7 @@ for (ip = classlist; ip != NULL; ip=ip->next)
    {
    fprintf(fp,"%s\n",ip->name);
    }
- 
+
 DeleteItemList(PREVIOUS_STATE);
 PREVIOUS_STATE = classlist;
 
@@ -784,7 +821,7 @@ for (ip = ENTROPIES; ip != NULL; ip=ip->next)
 DeleteItemList(ENTROPIES); 
 fclose(fp);
 
-rename(ENVFILE_NEW,ENVFILE);
+cf_rename(ENVFILE_NEW,ENVFILE);
 }
 
 /*********************************************************************/
@@ -794,16 +831,16 @@ void AnalyzeArrival(char *arrival)
 /* This coarsely classifies TCP dump data */
     
 { char src[CF_BUFSIZE],dest[CF_BUFSIZE], flag = '.', *arr;
-  int isme_dest, isme_src;
+ int isme_dest, isme_src;
 
-src[0] = dest[0] = '\0';
+ src[0] = dest[0] = '\0';
  
-if (strstr(arrival,"listening"))
-   {
-   return;
-   }
+ if (strstr(arrival,"listening"))
+    {
+    return;
+    }
  
-Chop(arrival);      
+ Chop(arrival);      
 
  /* Most hosts have only a few dominant services, so anomalies will
     show up even in the traffic without looking too closely. This
@@ -813,45 +850,45 @@ Chop(arrival);
     
     IP (tos 0x10, ttl 64, id 14587, offset 0, flags [DF], proto TCP (6), length 692) 128.39.89.232.22 > 84.215.40.125.48022: P 1546432:1547072(640) ack 1969 win 1593 <nop,nop,timestamp 25662737 1631360>
     IP (tos 0x0, ttl 251, id 14109, offset 0, flags [DF], proto UDP (17), length 115) 84.208.20.110.53 > 192.168.1.103.32769: 45266 NXDomain 0/1/0 (87)
-arp who-has 192.168.1.1 tell 192.168.1.103
-arp reply 192.168.1.1 is-at 00:1d:7e:28:22:c6
-IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto ICMP (1), length 84) 192.168.1.103 > 128.39.89.10: ICMP echo request, id 48474, seq 1, length 64
-IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto ICMP (1), length 84) 192.168.1.103 > 128.39.89.10: ICMP echo request, id 48474, seq 2, length 64
+    arp who-has 192.168.1.1 tell 192.168.1.103
+    arp reply 192.168.1.1 is-at 00:1d:7e:28:22:c6
+    IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto ICMP (1), length 84) 192.168.1.103 > 128.39.89.10: ICMP echo request, id 48474, seq 1, length 64
+    IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto ICMP (1), length 84) 192.168.1.103 > 128.39.89.10: ICMP echo request, id 48474, seq 2, length 64
 
  */
 
-for (arr = strstr(arrival,"length"); arr != NULL && *arr != ')'; arr++)
-   {
-   }
+ for (arr = strstr(arrival,"length"); arr != NULL && *arr != ')'; arr++)
+    {
+    }
 
-if (arr == NULL)
-   {
-   arr = arrival;
-   }
-else
-   {
-   arr++;
-   }
+ if (arr == NULL)
+    {
+    arr = arrival;
+    }
+ else
+    {
+    arr++;
+    }
 
-if (strstr(arrival,"proto TCP") || strstr(arrival,"ack"))
-   {              
-   sscanf(arr,"%s %*c %s %c ",src,dest,&flag);
-   DePort(src);
-   DePort(dest);
-   isme_dest = IsInterfaceAddress(dest);
-   isme_src = IsInterfaceAddress(src);
+ if (strstr(arrival,"proto TCP") || strstr(arrival,"ack"))
+    {              
+    sscanf(arr,"%s %*c %s %c ",src,dest,&flag);
+    DePort(src);
+    DePort(dest);
+    isme_dest = IsInterfaceAddress(dest);
+    isme_src = IsInterfaceAddress(src);
    
     switch (flag)
        {
        case 'S': Debug("%1.1lf: TCP new connection from %s to %s - i am %s\n",ITER,src,dest,VIPADDRESS);
            if (isme_dest)
               {
-              THIS[ob_tcpsyn_in]++;
+              CF_THIS[ob_tcpsyn_in]++;
               IncrementCounter(&(NETIN_DIST[tcpsyn]),src);
               }
            else if (isme_src)
               {
-              THIS[ob_tcpsyn_out]++;
+              CF_THIS[ob_tcpsyn_out]++;
               IncrementCounter(&(NETOUT_DIST[tcpsyn]),dest);
               }       
            break;
@@ -859,12 +896,12 @@ if (strstr(arrival,"proto TCP") || strstr(arrival,"ack"))
        case 'F': Debug("%1.1lf: TCP end connection from %s to %s\n",ITER,src,dest);
            if (isme_dest)
               {
-              THIS[ob_tcpfin_in]++;
+              CF_THIS[ob_tcpfin_in]++;
               IncrementCounter(&(NETIN_DIST[tcpfin]),src);
               }
            else if (isme_src)
               {
-              THIS[ob_tcpfin_out]++;
+              CF_THIS[ob_tcpfin_out]++;
               IncrementCounter(&(NETOUT_DIST[tcpfin]),dest);
               }       
            break;
@@ -873,112 +910,112 @@ if (strstr(arrival,"proto TCP") || strstr(arrival,"ack"))
            
            if (isme_dest)
               {
-              THIS[ob_tcpack_in]++;
+              CF_THIS[ob_tcpack_in]++;
               IncrementCounter(&(NETIN_DIST[tcpack]),src);
               }
            else if (isme_src)
               {
-              THIS[ob_tcpack_out]++;
+              CF_THIS[ob_tcpack_out]++;
               IncrementCounter(&(NETOUT_DIST[tcpack]),dest);
               }       
            break;
        }
     
-   }
-else if (strstr(arrival,".53"))
-   {
-   sscanf(arr,"%s %*c %s %c ",src,dest,&flag);
-   DePort(src);
-   DePort(dest);
-   isme_dest = IsInterfaceAddress(dest);
-   isme_src = IsInterfaceAddress(src);
+    }
+ else if (strstr(arrival,".53"))
+    {
+    sscanf(arr,"%s %*c %s %c ",src,dest,&flag);
+    DePort(src);
+    DePort(dest);
+    isme_dest = IsInterfaceAddress(dest);
+    isme_src = IsInterfaceAddress(src);
    
-   Debug("%1.1lf: DNS packet from %s to %s\n",ITER,src,dest);
-   if (isme_dest)
-      {
-      THIS[ob_dns_in]++;
-      IncrementCounter(&(NETIN_DIST[dns]),src);
-      }
-   else if (isme_src)
-      {
-      THIS[ob_dns_out]++;
-      IncrementCounter(&(NETOUT_DIST[tcpack]),dest);
-      }       
-   }
-else if (strstr(arrival,"proto UDP"))
-   {
-   sscanf(arr,"%s %*c %s %c ",src,dest,&flag);
-   DePort(src);
-   DePort(dest);
-   isme_dest = IsInterfaceAddress(dest);
-   isme_src = IsInterfaceAddress(src);
+    Debug("%1.1lf: DNS packet from %s to %s\n",ITER,src,dest);
+    if (isme_dest)
+       {
+       CF_THIS[ob_dns_in]++;
+       IncrementCounter(&(NETIN_DIST[dns]),src);
+       }
+    else if (isme_src)
+       {
+       CF_THIS[ob_dns_out]++;
+       IncrementCounter(&(NETOUT_DIST[tcpack]),dest);
+       }       
+    }
+ else if (strstr(arrival,"proto UDP"))
+    {
+    sscanf(arr,"%s %*c %s %c ",src,dest,&flag);
+    DePort(src);
+    DePort(dest);
+    isme_dest = IsInterfaceAddress(dest);
+    isme_src = IsInterfaceAddress(src);
    
-   Debug("%1.1lf: UDP packet from %s to %s\n",ITER,src,dest);
-   if (isme_dest)
-      {
-      THIS[ob_udp_in]++;
-      IncrementCounter(&(NETIN_DIST[udp]),src);
-      }
-   else if (isme_src)
-      {
-      THIS[ob_udp_out]++;
-      IncrementCounter(&(NETOUT_DIST[udp]),dest);
-      }       
-   }
-else if (strstr(arrival,"proto ICMP"))
-   {
-   sscanf(arr,"%s %*c %s %c ",src,dest,&flag);
-   DePort(src);
-   DePort(dest);
-   isme_dest = IsInterfaceAddress(dest);
-   isme_src = IsInterfaceAddress(src);
+    Debug("%1.1lf: UDP packet from %s to %s\n",ITER,src,dest);
+    if (isme_dest)
+       {
+       CF_THIS[ob_udp_in]++;
+       IncrementCounter(&(NETIN_DIST[udp]),src);
+       }
+    else if (isme_src)
+       {
+       CF_THIS[ob_udp_out]++;
+       IncrementCounter(&(NETOUT_DIST[udp]),dest);
+       }       
+    }
+ else if (strstr(arrival,"proto ICMP"))
+    {
+    sscanf(arr,"%s %*c %s %c ",src,dest,&flag);
+    DePort(src);
+    DePort(dest);
+    isme_dest = IsInterfaceAddress(dest);
+    isme_src = IsInterfaceAddress(src);
    
-   Debug("%1.1lf: ICMP packet from %s to %s\n",ITER,src,dest);
+    Debug("%1.1lf: ICMP packet from %s to %s\n",ITER,src,dest);
    
-   if (isme_dest)
-      {
-      THIS[ob_icmp_in]++;
-      IncrementCounter(&(NETIN_DIST[icmp]),src);
-      }
-   else if (isme_src)
-      {
-      THIS[ob_icmp_out]++;
-      IncrementCounter(&(NETOUT_DIST[icmp]),src);
-      }       
-   }
-else
-   {
-   Debug("%1.1lf: Miscellaneous undirected packet (%.100s)\n",ITER,arrival);
+    if (isme_dest)
+       {
+       CF_THIS[ob_icmp_in]++;
+       IncrementCounter(&(NETIN_DIST[icmp]),src);
+       }
+    else if (isme_src)
+       {
+       CF_THIS[ob_icmp_out]++;
+       IncrementCounter(&(NETOUT_DIST[icmp]),src);
+       }       
+    }
+ else
+    {
+    Debug("%1.1lf: Miscellaneous undirected packet (%.100s)\n",ITER,arrival);
    
-   THIS[ob_tcpmisc_in]++;
+    CF_THIS[ob_tcpmisc_in]++;
    
-   /* Here we don't know what source will be, but .... */
+    /* Here we don't know what source will be, but .... */
    
-   sscanf(arrival,"%s",src);
+    sscanf(arrival,"%s",src);
    
-   if (!isdigit((int)*src))
-      {
-      Debug("Assuming continuation line...\n");
-      return;
-      }
+    if (!isdigit((int)*src))
+       {
+       Debug("Assuming continuation line...\n");
+       return;
+       }
    
-   DePort(src);
+    DePort(src);
    
-   if (strstr(arrival,".138"))
-      {
-      snprintf(dest,CF_BUFSIZE-1,"%s NETBIOS",src);
-      }
-   else if (strstr(arrival,".2049"))
-      {
-      snprintf(dest,CF_BUFSIZE-1,"%s NFS",src);
-      }
-   else
-      {
-      strncpy(dest,src,60);
-      }
+    if (strstr(arrival,".138"))
+       {
+       snprintf(dest,CF_BUFSIZE-1,"%s NETBIOS",src);
+       }
+    else if (strstr(arrival,".2049"))
+       {
+       snprintf(dest,CF_BUFSIZE-1,"%s NFS",src);
+       }
+    else
+       {
+       strncpy(dest,src,60);
+       }
    
-   IncrementCounter(&(NETIN_DIST[tcpmisc]),dest);
-   }
+    IncrementCounter(&(NETIN_DIST[tcpmisc]),dest);
+    }
 }
 
 /*********************************************************************/
@@ -987,124 +1024,50 @@ else
 
 void GatherProcessData()
 
-{ FILE *pp;
-  char pscomm[CF_BUFSIZE];
-  char user[CF_MAXVARSIZE];
-  struct Item *list = NULL;
+{ struct Item *userList = NULL;
   char vbuff[CF_BUFSIZE];
-  
-snprintf(pscomm,CF_BUFSIZE,"%s %s",VPSCOMM[VSYSTEMHARDCLASS],VPSOPTS[VSYSTEMHARDCLASS]);
+  int numProcUsers = 0;
+  int numRootProcs = 0;
+  int numOtherProcs = 0;
 
-if ((pp = cf_popen(pscomm,"r")) == NULL)
+if(!GatherProcessUsers(&userList, &numProcUsers, &numRootProcs, &numOtherProcs))
    {
    return;
    }
 
-CfReadLine(vbuff,CF_BUFSIZE,pp); 
-
-while (!feof(pp))
-   {
-   CfReadLine(vbuff,CF_BUFSIZE,pp);
-   sscanf(vbuff,"%s",user);
-   
-   if (!IsItemIn(list,user))
-      {
-      PrependItem(&list,user,NULL);
-      THIS[ob_users]++;
-      }
-
-   if (strcmp(user,"root") == 0)
-      {
-      THIS[ob_rootprocs]++;
-      }
-   else
-      {
-      THIS[ob_otherprocs]++;
-      }
-   }
-
-cf_pclose(pp);
+CF_THIS[ob_users] += numProcUsers;
+CF_THIS[ob_rootprocs] += numRootProcs;
+CF_THIS[ob_otherprocs] += numOtherProcs;
 
 snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_users",CFWORKDIR);
-RawSaveItemList(list,vbuff);
-DeleteItemList(list);
-CfOut(cf_verbose,"","(Users,root,other) = (%d,%d,%d)\n",THIS[ob_users],THIS[ob_rootprocs],THIS[ob_otherprocs]);
+MapName(vbuff);
+RawSaveItemList(userList,vbuff);
+
+DeleteItemList(userList);
+
+CfOut(cf_verbose,"","(Users,root,other) = (%d,%d,%d)\n",CF_THIS[ob_users],CF_THIS[ob_rootprocs],CF_THIS[ob_otherprocs]);
+}
+
+/*****************************************************************************/
+
+int GatherProcessUsers(struct Item **userList, int *userListSz, int *numRootProcs, int *numOtherProcs)
+{
+#ifdef MINGW
+ return NovaWin_GatherProcessUsers(userList, userListSz, numRootProcs, numOtherProcs);
+#else
+ return Unix_GatherProcessUsers(userList, userListSz, numRootProcs, numOtherProcs);
+#endif
 }
 
 /*****************************************************************************/
 
 void GatherCPUData()
-
-{ double q,dq;
-  char name[CF_MAXVARSIZE],cpuname[CF_MAXVARSIZE],buf[CF_BUFSIZE];
-  int count,userticks=0,niceticks=0,systemticks=0,idle=0,iowait=0,irq=0,softirq=0;
-  int total_time = 1;
-  FILE *fp;
-  enum observables index = ob_spare;
-  
-if ((fp=fopen("/proc/stat","r")) == NULL)
-   {
-   CfOut(cf_verbose,"","Didn't find proc data\n");
-   return;
-   }
-
-CfOut(cf_verbose,"","Reading /proc/stat utilization data -------\n");
-
-count = 0;
-
-while (!feof(fp))
-   {
-   fgets(buf,CF_BUFSIZE,fp);
-
-   sscanf(buf,"%s%d%d%d%d%d%d%d",&cpuname,&userticks,&niceticks,&systemticks,&idle,&iowait,&irq,&softirq);
-   snprintf(name,16,"cpu%d",count);
-   
-   total_time = (userticks+niceticks+systemticks+idle); 
-
-   q = 100.0 * (double)(total_time - idle);
-
-   if (strncmp(cpuname,name,strlen(name)) == 0)
-      {
-      CfOut(cf_verbose,"","Found CPU %d\n",count);
-
-      switch (count++)
-         {
-         case 0: index = ob_cpu0;
-             break;
-         case 1: index = ob_cpu1;
-             break;
-         case 2: index = ob_cpu2;
-             break;
-         case 3: index = ob_cpu3;
-             break;
-         default:
-             index = ob_spare;
-             CfOut(cf_verbose,"","Error reading proc/stat\n");
-             continue;
-         }
-      }
-   else if (strncmp(cpuname,"cpu",3) == 0)
-      {
-      CfOut(cf_verbose,"","Found aggregate CPU\n",count);
-      index = ob_cpuall;
-      }
-   else 
-      {
-      CfOut(cf_verbose,"","Found nothing (%s)\n",cpuname);
-      index = ob_spare;
-      fclose(fp);
-      return;
-      }
-
-   dq = (q - LASTQ[index])/(double)total_time; /* % Utilization */
-   
-   THIS[index] = dq;
-   LASTQ[index] = q;
-
-   CfOut(cf_verbose,"","Set %s=%d to %.1lf after %d 100ths of a second \n",OBS[index][1],index,THIS[index],total_time);         
-   }
-
-fclose(fp);
+{
+#ifdef MINGW
+NovaWin_GatherCPUData(CF_THIS);
+#else
+Unix_GatherCPUData();
+#endif
 }
 
 /*****************************************************************************/
@@ -1117,15 +1080,15 @@ void GatherDiskData()
   char messages[CF_BUFSIZE];
  
 CfOut(cf_verbose,"","Gathering disk data\n");
-THIS[ob_diskfree] = GetDiskUsage("/",cfpercent);
-CfOut(cf_verbose,"","Disk free = %d %%\n",THIS[ob_diskfree]);
+CF_THIS[ob_diskfree] = GetDiskUsage("/",cfpercent);
+CfOut(cf_verbose,"","Disk free = %d %%\n",CF_THIS[ob_diskfree]);
 
 /* Here would should have some detection based on OS type VSYSTEMHARDCLASS */
 
 switch(VSYSTEMHARDCLASS)
    {
    linuxx:
-
+   
    default:
        strcpy(accesslog,"/var/log/apache2/access_log");
        strcpy(errorlog,"/var/log/apache2/error_log");
@@ -1133,14 +1096,14 @@ switch(VSYSTEMHARDCLASS)
        strcpy(messages,"/var/log/messages");
    }
 
-THIS[ob_webaccess] = GetFileGrowth(accesslog,ob_webaccess);
-CfOut(cf_verbose,"","Webaccess = %d %%\n",THIS[ob_webaccess]);
-THIS[ob_weberrors] = GetFileGrowth(errorlog,ob_weberrors);
-CfOut(cf_verbose,"","Web error = %d %%\n",THIS[ob_weberrors]);
-THIS[ob_syslog] = GetFileGrowth(syslog,ob_syslog);
-CfOut(cf_verbose,"","Syslog = %d %%\n",THIS[ob_syslog]);
-THIS[ob_messages] = GetFileGrowth(messages,ob_messages);
-CfOut(cf_verbose,"","Messages = %d %%\n",THIS[ob_messages]);
+CF_THIS[ob_webaccess] = GetFileGrowth(accesslog,ob_webaccess);
+CfOut(cf_verbose,"","Webaccess = %d %%\n",CF_THIS[ob_webaccess]);
+CF_THIS[ob_weberrors] = GetFileGrowth(errorlog,ob_weberrors);
+CfOut(cf_verbose,"","Web error = %d %%\n",CF_THIS[ob_weberrors]);
+CF_THIS[ob_syslog] = GetFileGrowth(syslog,ob_syslog);
+CfOut(cf_verbose,"","Syslog = %d %%\n",CF_THIS[ob_syslog]);
+CF_THIS[ob_messages] = GetFileGrowth(messages,ob_messages);
+CfOut(cf_verbose,"","Messages = %d %%\n",CF_THIS[ob_messages]);
 }
 
 /*****************************************************************************/
@@ -1148,14 +1111,14 @@ CfOut(cf_verbose,"","Messages = %d %%\n",THIS[ob_messages]);
 void GatherLoadData()
 
 { double load[4] = {0,0,0,0}, sum = 0.0; 
- int i,n = 1;
+  int i,n = 1;
 
 Debug("GatherLoadData\n\n");
 
 #ifdef HAVE_GETLOADAVG 
 if ((n = getloadavg(load,LOADAVG_5MIN)) == -1)
    {
-   THIS[ob_loadavg] = 0.0;
+   CF_THIS[ob_loadavg] = 0.0;
    }
 else
    {
@@ -1168,15 +1131,15 @@ else
 #endif
 
 /* Scale load average by 100 to make it visible */
- 
-THIS[ob_loadavg] = (int) (100.0 * sum);
-CfOut(cf_verbose,"","100 x Load Average = %d\n",THIS[ob_loadavg]);
+
+CF_THIS[ob_loadavg] = (int) (100.0 * sum);
+CfOut(cf_verbose,"","100 x Load Average = %d\n",CF_THIS[ob_loadavg]);
 }
 
 /*****************************************************************************/
 
 void GatherSocketData()
-
+    
 { FILE *pp;
   char local[CF_BUFSIZE],remote[CF_BUFSIZE],comm[CF_BUFSIZE];
   struct Item *in[ATTR],*out[ATTR];
@@ -1202,11 +1165,11 @@ if (ALL_OUTGOING != NULL)
    DeleteItemList(ALL_OUTGOING);
    ALL_OUTGOING = NULL;
    } 
- 
+
 sscanf(VNETSTAT[VSYSTEMHARDCLASS],"%s",comm);
 
 strcat(comm," -n"); 
- 
+
 if ((pp = cf_popen(comm,"r")) == NULL)
    {
    return;
@@ -1218,19 +1181,19 @@ while (!feof(pp))
    memset(remote,0,CF_BUFSIZE);
    
    CfReadLine(vbuff,CF_BUFSIZE,pp);
-
+   
    if (strstr(vbuff,"UNIX"))
       {
       break;
       }
-
+   
    if (!strstr(vbuff,"."))
       {
       continue;
       }
-
+   
    /* Different formats here ... ugh.. */
-
+   
    if (strncmp(vbuff,"tcp",3) == 0)
       {
       sscanf(vbuff,"%*s %*s %*s %s %s",local,remote); /* linux-like */
@@ -1239,7 +1202,7 @@ while (!feof(pp))
       {
       sscanf(vbuff,"%s %s",local,remote);             /* solaris-like */
       } 
-
+   
    if (strlen(local) == 0)
       {
       continue;
@@ -1248,7 +1211,7 @@ while (!feof(pp))
    for (sp = local+strlen(local); (*sp != '.') && (sp > local); sp--)
       {
       }
-
+   
    sp++;
    
    if ((strlen(sp) < 5) &&!IsItemIn(ALL_INCOMING,sp))
@@ -1259,14 +1222,14 @@ while (!feof(pp))
    for (sp = remote+strlen(remote); (sp >= remote) && !isdigit((int)*sp); sp--)
       {
       }
-
+   
    sp++;
-
+   
    if ((strlen(sp) < 5) && !IsItemIn(ALL_OUTGOING,sp))
       {
       PrependItem(&ALL_OUTGOING,sp,NULL);
       }
-
+   
    for (i = 0; i < ATTR; i++)
       {
       char *spend;
@@ -1279,7 +1242,7 @@ while (!feof(pp))
       
       if (strcmp(spend,ECGSOCKS[i].portnr) == 0)
          {
-         THIS[ECGSOCKS[i].in]++;
+         CF_THIS[ECGSOCKS[i].in]++;
          AppendItem(&in[i],vbuff,"");
          }
       
@@ -1291,117 +1254,116 @@ while (!feof(pp))
       
       if (strcmp(spend,ECGSOCKS[i].portnr) == 0)
          {
-         THIS[ECGSOCKS[i].out]++;
+         CF_THIS[ECGSOCKS[i].out]++;
          AppendItem(&out[i],vbuff,"");
          }
       }
    }
- 
+
 cf_pclose(pp);
- 
+
 /* Now save the state for ShowState() cf2 version alert function IFF
    the state is not smaller than the last or at least 40 minutes
    older. This mirrors the persistence of the maxima classes */
 
  
- for (i = 0; i < ATTR; i++)
-    {
-    struct stat statbuf;
-    time_t now = time(NULL);
-    
-    Debug("save incoming %s\n",ECGSOCKS[i].name);
-    snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_incoming.%s",CFWORKDIR,ECGSOCKS[i].name);
-    if (stat(vbuff,&statbuf) != -1)
-       {
-       if ((ByteSizeList(in[i]) < statbuf.st_size) && (now < statbuf.st_mtime+40*60))
-          {
-          CfOut(cf_verbose,"","New state %s is smaller, retaining old for 40 mins longer\n",ECGSOCKS[i].name);
-          DeleteItemList(in[i]);
-          continue;
-          }
-       }
-    
-    SetEntropyClasses(ECGSOCKS[i].name,in[i],"in");
-    RawSaveItemList(in[i],vbuff);
-    DeleteItemList(in[i]);
-    Debug("Saved in netstat data in %s\n",vbuff); 
-    }
- 
- for (i = 0; i < ATTR; i++)
-    {
-    struct stat statbuf;
-    time_t now = time(NULL); 
+for (i = 0; i < ATTR; i++)
+   {
+   struct stat statbuf;
+   time_t now = time(NULL);
+   
+   Debug("save incoming %s\n",ECGSOCKS[i].name);
+   snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_incoming.%s",CFWORKDIR,ECGSOCKS[i].name);
+   if (cfstat(vbuff,&statbuf) != -1)
+      {
+      if ((ByteSizeList(in[i]) < statbuf.st_size) && (now < statbuf.st_mtime+40*60))
+         {
+         CfOut(cf_verbose,"","New state %s is smaller, retaining old for 40 mins longer\n",ECGSOCKS[i].name);
+         DeleteItemList(in[i]);
+         continue;
+         }
+      }
+   
+   SetEntropyClasses(ECGSOCKS[i].name,in[i],"in");
+   RawSaveItemList(in[i],vbuff);
+   DeleteItemList(in[i]);
+   Debug("Saved in netstat data in %s\n",vbuff); 
+   }
 
-    Debug("save outgoing %s\n",ECGSOCKS[i].name);
-    snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_outgoing.%s",CFWORKDIR,ECGSOCKS[i].name);
+for (i = 0; i < ATTR; i++)
+   {
+   struct stat statbuf;
+   time_t now = time(NULL); 
+   
+   Debug("save outgoing %s\n",ECGSOCKS[i].name);
+   snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_outgoing.%s",CFWORKDIR,ECGSOCKS[i].name);
+   
+   if (cfstat(vbuff,&statbuf) != -1)
+      {       
+      if ((ByteSizeList(out[i]) < statbuf.st_size) && (now < statbuf.st_mtime+40*60))
+         {
+         CfOut(cf_verbose,"","New state %s is smaller, retaining old for 40 mins longer\n",ECGSOCKS[i].name);
+         DeleteItemList(out[i]);
+         continue;
+         }
+      }
+   
+   SetEntropyClasses(ECGSOCKS[i].name,out[i],"out");
+   RawSaveItemList(out[i],vbuff);
+   Debug("Saved out netstat data in %s\n",vbuff); 
+   DeleteItemList(out[i]);
+   }
 
-    if (stat(vbuff,&statbuf) != -1)
-       {       
-       if ((ByteSizeList(out[i]) < statbuf.st_size) && (now < statbuf.st_mtime+40*60))
-          {
-          CfOut(cf_verbose,"","New state %s is smaller, retaining old for 40 mins longer\n",ECGSOCKS[i].name);
-          DeleteItemList(out[i]);
-          continue;
-          }
-       }
-    
-    SetEntropyClasses(ECGSOCKS[i].name,out[i],"out");
-    RawSaveItemList(out[i],vbuff);
-    Debug("Saved out netstat data in %s\n",vbuff); 
-    DeleteItemList(out[i]);
-    }
-  
- for (i = 0; i < CF_NETATTR; i++)
-    {
-    struct stat statbuf;
-    time_t now = time(NULL); 
-    
-    Debug("save incoming %s\n",TCPNAMES[i]);
-    snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_incoming.%s",CFWORKDIR,TCPNAMES[i]);
-    
-    if (stat(vbuff,&statbuf) != -1)
-       {       
-       if ((ByteSizeList(NETIN_DIST[i]) < statbuf.st_size) && (now < statbuf.st_mtime+40*60))
-          {
-          CfOut(cf_verbose,"","New state %s is smaller, retaining old for 40 mins longer\n",TCPNAMES[i]);
-          DeleteItemList(NETIN_DIST[i]);
-          NETIN_DIST[i] = NULL;
-          continue;
-          }
-       }
-    
-    SaveTCPEntropyData(NETIN_DIST[i],i,"in");
-    SetEntropyClasses(TCPNAMES[i],NETIN_DIST[i],"in");
-    DeleteItemList(NETIN_DIST[i]);
-    NETIN_DIST[i] = NULL;
-    }
+for (i = 0; i < CF_NETATTR; i++)
+   {
+   struct stat statbuf;
+   time_t now = time(NULL); 
+   
+   Debug("save incoming %s\n",TCPNAMES[i]);
+   snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_incoming.%s",CFWORKDIR,TCPNAMES[i]);
+   
+   if (cfstat(vbuff,&statbuf) != -1)
+      {       
+      if ((ByteSizeList(NETIN_DIST[i]) < statbuf.st_size) && (now < statbuf.st_mtime+40*60))
+         {
+         CfOut(cf_verbose,"","New state %s is smaller, retaining old for 40 mins longer\n",TCPNAMES[i]);
+         DeleteItemList(NETIN_DIST[i]);
+         NETIN_DIST[i] = NULL;
+         continue;
+         }
+      }
+   
+   SaveTCPEntropyData(NETIN_DIST[i],i,"in");
+   SetEntropyClasses(TCPNAMES[i],NETIN_DIST[i],"in");
+   DeleteItemList(NETIN_DIST[i]);
+   NETIN_DIST[i] = NULL;
+   }
 
 
- for (i = 0; i < CF_NETATTR; i++)
-    {
-    struct stat statbuf;
-    time_t now = time(NULL); 
- 
-    Debug("save outgoing %s\n",TCPNAMES[i]);
-    snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_outgoing.%s",CFWORKDIR,TCPNAMES[i]);
-    
-    if (stat(vbuff,&statbuf) != -1)
-       {       
-       if ((ByteSizeList(NETOUT_DIST[i]) < statbuf.st_size) && (now < statbuf.st_mtime+40*60))
-          {
-          CfOut(cf_verbose,"","New state %s is smaller, retaining old for 40 mins longer\n",TCPNAMES[i]);
-          DeleteItemList(NETOUT_DIST[i]);
-          NETOUT_DIST[i] = NULL;   
-          continue;
-          }
-       }
-    
-    SaveTCPEntropyData(NETOUT_DIST[i],i,"out");
-    SetEntropyClasses(TCPNAMES[i],NETOUT_DIST[i],"out");
-    DeleteItemList(NETOUT_DIST[i]);
-    NETOUT_DIST[i] = NULL;
-    }
-
+for (i = 0; i < CF_NETATTR; i++)
+   {
+   struct stat statbuf;
+   time_t now = time(NULL); 
+   
+   Debug("save outgoing %s\n",TCPNAMES[i]);
+   snprintf(vbuff,CF_MAXVARSIZE,"%s/state/cf_outgoing.%s",CFWORKDIR,TCPNAMES[i]);
+   
+   if (cfstat(vbuff,&statbuf) != -1)
+      {       
+      if ((ByteSizeList(NETOUT_DIST[i]) < statbuf.st_size) && (now < statbuf.st_mtime+40*60))
+         {
+         CfOut(cf_verbose,"","New state %s is smaller, retaining old for 40 mins longer\n",TCPNAMES[i]);
+         DeleteItemList(NETOUT_DIST[i]);
+         NETOUT_DIST[i] = NULL;   
+         continue;
+         }
+      }
+   
+   SaveTCPEntropyData(NETOUT_DIST[i],i,"out");
+   SetEntropyClasses(TCPNAMES[i],NETOUT_DIST[i],"out");
+   DeleteItemList(NETOUT_DIST[i]);
+   NETOUT_DIST[i] = NULL;
+   }
 }
 
 /*****************************************************************************/
@@ -1409,8 +1371,7 @@ cf_pclose(pp);
 struct Averages *GetCurrentAverages(char *timekey)
 
 { int err_no;
-  DBT key,value;
-  DB *dbp;
+  CF_DB *dbp;
   static struct Averages entry;
 
 if (!OpenDB(AVDB,&dbp))
@@ -1436,7 +1397,7 @@ else
    Debug("No previous value for time index %s\n",timekey);
    }
 
-dbp->close(dbp,0);
+CloseDB(dbp);
 return &entry;
 }
 
@@ -1445,8 +1406,7 @@ return &entry;
 void UpdateAverages(char *timekey,struct Averages newvals)
 
 { int err_no;
-  DBT key,value;
-  DB *dbp;
+  CF_DB *dbp;
 
 if (!OpenDB(AVDB,&dbp))
    {
@@ -1460,7 +1420,7 @@ CfOut(cf_inform,"","Updated averages at %s\n",timekey);
 WriteDB(dbp,timekey,&newvals,sizeof(struct Averages));
 WriteDB(dbp,"DATABASE_AGE",&AGE,sizeof(double)); 
 
-dbp->close(dbp,0);
+CloseDB(dbp);
 HistoryUpdate(newvals);
 }
 
@@ -1469,71 +1429,90 @@ HistoryUpdate(newvals);
 void UpdateDistributions(char *timekey,struct Averages *av)
 
 { int position; 
-  int day,i,time_to_update = true;
-  FILE *fp;
-  char filename[CF_BUFSIZE];
+ int day,i,time_to_update = true;
+ FILE *fp;
+ char filename[CF_BUFSIZE];
  
 /* Take an interval of 4 standard deviations from -2 to +2, divided into CF_GRAINS
    parts. Centre each measurement on CF_GRAINS/2 and scale each measurement by the
    std-deviation for the current time.
- */
-if (HISTO && IsDefinedClass("Min40_45"))
-   {
-   day = Day2Number(timekey);
+*/
+ if (HISTO && IsDefinedClass("Min40_45"))
+    {
+    day = Day2Number(timekey);
    
-   for (i = 0; i < CF_OBSERVABLES; i++)
-      {
-      position = CF_GRAINS/2 + (int)(0.5+(THIS[i] - av->Q[i].expect)*CF_GRAINS/(4*sqrt((av->Q[i].var))));
+    for (i = 0; i < CF_OBSERVABLES; i++)
+       {
+       position = CF_GRAINS/2 + (int)(0.5+(CF_THIS[i] - av->Q[i].expect)*CF_GRAINS/(4*sqrt((av->Q[i].var))));
 
-      if (0 <= position && position < CF_GRAINS)
-         {
-         HISTOGRAM[i][day][position]++;
-         }
-      }
+       if (0 <= position && position < CF_GRAINS)
+          {
+          HISTOGRAM[i][day][position]++;
+          }
+       }
    
       
-   snprintf(filename,CF_BUFSIZE,"%s/state/histograms",CFWORKDIR);
+    snprintf(filename,CF_BUFSIZE,"%s/state/histograms",CFWORKDIR);
    
-   if ((fp = fopen(filename,"w")) == NULL)
-      {
-      CfOut(cf_error,"fopen","Unable to save histograms");
-      return;
-      }
+    if ((fp = fopen(filename,"w")) == NULL)
+       {
+       CfOut(cf_error,"fopen","Unable to save histograms");
+       return;
+       }
    
-   for (position = 0; position < CF_GRAINS; position++)
-      {
-      fprintf(fp,"%u ",position);
+    for (position = 0; position < CF_GRAINS; position++)
+       {
+       fprintf(fp,"%u ",position);
       
-      for (i = 0; i < CF_OBSERVABLES; i++)
-         {
-         for (day = 0; day < 7; day++)
-            {
-            fprintf(fp,"%u ",HISTOGRAM[i][day][position]);
-            }
-         }
-      fprintf(fp,"\n");
-      }
+       for (i = 0; i < CF_OBSERVABLES; i++)
+          {
+          for (day = 0; day < 7; day++)
+             {
+             fprintf(fp,"%u ",HISTOGRAM[i][day][position]);
+             }
+          }
+       fprintf(fp,"\n");
+       }
    
-   fclose(fp);
-      }
+    fclose(fp);
+    }
 }
 
 /*****************************************************************************/
 
 double WAverage(double anew,double aold,double age)
 
- /* For a couple of weeks, learn eagerly. Otherwise variances will
-    be way too large. Then downplay newer data somewhat, and rely on
-    experience of a couple of months of data ... */
+/* For a couple of weeks, learn eagerly. Otherwise variances will
+   be way too large. Then downplay newer data somewhat, and rely on
+   experience of a couple of months of data ... */
 
-{ double av;
+{ double av,cf_sane_monitor_limit = 9999999.0;
   double wnew,wold;
+
+// First do some database corruption self-healing
+  
+if (aold > cf_sane_monitor_limit && anew > cf_sane_monitor_limit)
+   {
+   return 0;
+   }
+  
+if (aold > cf_sane_monitor_limit)
+   {
+   return anew; 
+   }
+
+if (aold > cf_sane_monitor_limit)
+   {
+   return aold; 
+   }
+
+// Now look at the self-learning
 
 if (FORGETRATE > 0.9 || FORGETRATE < 0.1)
    {
    FORGETRATE = 0.6;
    }
-  
+
 if (age < 2.0)  /* More aggressive learning for young database */
    {
    wnew = FORGETRATE;
@@ -1566,45 +1545,45 @@ return av;
 double SetClasses(char * name,double variable,double av_expect,double av_var,double localav_expect,double localav_var,struct Item **classlist,char *timekey)
 
 { char buffer[CF_BUFSIZE],buffer2[CF_BUFSIZE];
-  double dev,delta,sigma,ldelta,lsigma,sig;
+ double dev,delta,sigma,ldelta,lsigma,sig;
 
-Debug("\n SetClasses(%s,X=%lf,avX=%lf,varX=%lf,lavX=%lf,lvarX=%lf,%s)\n",name,variable,av_expect,av_var,localav_expect,localav_var,timekey);
+ Debug("\n SetClasses(%s,X=%lf,avX=%lf,varX=%lf,lavX=%lf,lvarX=%lf,%s)\n",name,variable,av_expect,av_var,localav_expect,localav_var,timekey);
 
-delta = variable - av_expect;
-sigma = sqrt(av_var);
-ldelta = variable - localav_expect;
-lsigma = sqrt(localav_var);
-sig = sqrt(sigma*sigma+lsigma*lsigma); 
+ delta = variable - av_expect;
+ sigma = sqrt(av_var);
+ ldelta = variable - localav_expect;
+ lsigma = sqrt(localav_var);
+ sig = sqrt(sigma*sigma+lsigma*lsigma); 
 
-Debug(" delta = %lf,sigma = %lf, lsigma = %lf, sig = %lf\n",delta,sigma,lsigma,sig);
+ Debug(" delta = %lf,sigma = %lf, lsigma = %lf, sig = %lf\n",delta,sigma,lsigma,sig);
  
-if (sigma == 0.0 || lsigma == 0.0)
-   {
-   Debug(" No sigma variation .. can't measure class\n");
-   return sig;
-   }
+ if (sigma == 0.0 || lsigma == 0.0)
+    {
+    Debug(" No sigma variation .. can't measure class\n");
+    return sig;
+    }
 
-Debug("Setting classes for %s...\n",name);
+ Debug("Setting classes for %s...\n",name);
  
-if (fabs(delta) < cf_noise_threshold) /* Arbitrary limits on sensitivity  */
-   {
-   Debug(" Sensitivity too high ..\n");
+ if (fabs(delta) < cf_noise_threshold) /* Arbitrary limits on sensitivity  */
+    {
+    Debug(" Sensitivity too high ..\n");
 
-   buffer[0] = '\0';
-   strcpy(buffer,name);
+    buffer[0] = '\0';
+    strcpy(buffer,name);
 
-   if ((delta > 0) && (ldelta > 0))
-      {
-      strcat(buffer,"_high");
-      }
-   else if ((delta < 0) && (ldelta < 0))
-      {
-      strcat(buffer,"_low");
-      }
-   else
-      {
-      strcat(buffer,"_normal");
-      }
+    if ((delta > 0) && (ldelta > 0))
+       {
+       strcat(buffer,"_high");
+       }
+    else if ((delta < 0) && (ldelta < 0))
+       {
+       strcat(buffer,"_low");
+       }
+    else
+       {
+       strcat(buffer,"_normal");
+       }
         
     dev = sqrt(delta*delta/(1.0+sigma*sigma)+ldelta*ldelta/(1.0+lsigma*lsigma));
         
@@ -1616,8 +1595,8 @@ if (fabs(delta) < cf_noise_threshold) /* Arbitrary limits on sensitivity  */
        NewPersistentContext(buffer2,CF_PERSISTENCE,cfpreserve); 
        }
    
-   return sig; /* Granularity makes this silly */
-   }
+    return sig; /* Granularity makes this silly */
+    }
  else
     {
     buffer[0] = '\0';
@@ -1682,14 +1661,14 @@ void SetVariable(char *name,double value,double average,double stddev,struct Ite
 
 { char var[CF_BUFSIZE];
 
-snprintf(var,CF_MAXVARSIZE,"value_%s=%.0lf",name,value);
-AppendItem(classlist,var,"");
+ snprintf(var,CF_MAXVARSIZE,"value_%s=%.0lf",name,value);
+ AppendItem(classlist,var,"");
 
-snprintf(var,CF_MAXVARSIZE,"av_%s=%.2lf",name,average);
-AppendItem(classlist,var,"");
+ snprintf(var,CF_MAXVARSIZE,"av_%s=%.2lf",name,average);
+ AppendItem(classlist,var,"");
 
-snprintf(var,CF_MAXVARSIZE,"dev_%s=%.2lf",name,stddev);
-AppendItem(classlist,var,""); 
+ snprintf(var,CF_MAXVARSIZE,"dev_%s=%.2lf",name,stddev);
+ AppendItem(classlist,var,""); 
 }
 
 /*****************************************************************************/
@@ -1705,10 +1684,10 @@ void ZeroArrivals()
 
 { int i;
  
-for (i = 0; i < CF_OBSERVABLES; i++)
-   {
-   THIS[i] = 0;
-   }
+ for (i = 0; i < CF_OBSERVABLES; i++)
+    {
+    CF_THIS[i] = 0;
+    }
 }
 
 /*****************************************************************************/
@@ -1750,7 +1729,7 @@ else
 
 /* This routine puts some inertia into the changes, so that the system
    doesn't respond to every little change ...   IR and UV cutoff */
- 
+
 delta = sqrt((new-average)*(new-average)+(new-localav)*(new-localav));
 
 if (delta > 4.0*dev)  /* IR */
@@ -1787,64 +1766,64 @@ else
 void SetEntropyClasses(char *service,struct Item *list,char *inout)
 
 { struct Item *ip, *addresses = NULL;
-  char local[CF_BUFSIZE],remote[CF_BUFSIZE],class[CF_BUFSIZE],vbuff[CF_BUFSIZE], *sp;
-  int i = 0, min_signal_diversity = 1,total=0;
-  double *p = NULL, S = 0.0, percent = 0.0;
+ char local[CF_BUFSIZE],remote[CF_BUFSIZE],class[CF_BUFSIZE],vbuff[CF_BUFSIZE], *sp;
+ int i = 0, min_signal_diversity = 1,total=0;
+ double *p = NULL, S = 0.0, percent = 0.0;
 
 
-if (IsSocketType(service))
-   {
-   for (ip = list; ip != NULL; ip=ip->next)
-      {   
-      if (strlen(ip->name) > 0)
-         {
-         if (strncmp(ip->name,"tcp",3) == 0)
-            {
-            sscanf(ip->name,"%*s %*s %*s %s %s",local,remote); /* linux-like */
-            }
-         else
-            {
-            sscanf(ip->name,"%s %s",local,remote);             /* solaris-like */
-            }
+ if (IsSocketType(service))
+    {
+    for (ip = list; ip != NULL; ip=ip->next)
+       {   
+       if (strlen(ip->name) > 0)
+          {
+          if (strncmp(ip->name,"tcp",3) == 0)
+             {
+             sscanf(ip->name,"%*s %*s %*s %s %s",local,remote); /* linux-like */
+             }
+          else
+             {
+             sscanf(ip->name,"%s %s",local,remote);             /* solaris-like */
+             }
          
-         strncpy(vbuff,remote,CF_BUFSIZE-1);
+          strncpy(vbuff,remote,CF_BUFSIZE-1);
          
-         for (sp = vbuff+strlen(vbuff)-1; isdigit((int)*sp); sp--)
-            {     
-            }
+          for (sp = vbuff+strlen(vbuff)-1; isdigit((int)*sp); sp--)
+             {     
+             }
          
-         *sp = '\0';
+          *sp = '\0';
          
-         if (!IsItemIn(addresses,vbuff))
-            {
-            total++;
-            AppendItem(&addresses,vbuff,"");
-            IncrementItemListCounter(addresses,vbuff);
-            }
-         else
-            {
-            total++;    
-            IncrementItemListCounter(addresses,vbuff);
-            }      
-         }
-      }
+          if (!IsItemIn(addresses,vbuff))
+             {
+             total++;
+             AppendItem(&addresses,vbuff,"");
+             IncrementItemListCounter(addresses,vbuff);
+             }
+          else
+             {
+             total++;    
+             IncrementItemListCounter(addresses,vbuff);
+             }      
+          }
+       }
    
    
-   if (total > min_signal_diversity)
-      {
-      p = (double *) malloc((total+1)*sizeof(double));
+    if (total > min_signal_diversity)
+       {
+       p = (double *) malloc((total+1)*sizeof(double));
       
-      for (i = 0,ip = addresses; ip != NULL; i++,ip=ip->next)
-         {
-         p[i] = ((double)(ip->counter))/((double)total);
+       for (i = 0,ip = addresses; ip != NULL; i++,ip=ip->next)
+          {
+          p[i] = ((double)(ip->counter))/((double)total);
          
-         S -= p[i]*log(p[i]);
-         }
+          S -= p[i]*log(p[i]);
+          }
       
-      percent = S/log((double)total)*100.0;
-      free(p);       
-      }
-   }
+       percent = S/log((double)total)*100.0;
+       free(p);       
+       }
+    }
  else
     {
     int classes = 0;
@@ -1880,23 +1859,23 @@ if (IsSocketType(service))
     free(p);
     }
  
-if (percent > 90)
-   {
-   snprintf(class,CF_MAXVARSIZE,"entropy_%s_%s_high",service,inout);
-   AppendItem(&ENTROPIES,class,"");
-   }
-else if (percent < 20)
-   {
-   snprintf(class,CF_MAXVARSIZE,"entropy_%s_%s_low",service,inout);
-   AppendItem(&ENTROPIES,class,"");
-   }
-else
-   {
-   snprintf(class,CF_MAXVARSIZE,"entropy_%s_%s_medium",service,inout);
-   AppendItem(&ENTROPIES,class,"");
-   }
+ if (percent > 90)
+    {
+    snprintf(class,CF_MAXVARSIZE,"entropy_%s_%s_high",service,inout);
+    AppendItem(&ENTROPIES,class,"");
+    }
+ else if (percent < 20)
+    {
+    snprintf(class,CF_MAXVARSIZE,"entropy_%s_%s_low",service,inout);
+    AppendItem(&ENTROPIES,class,"");
+    }
+ else
+    {
+    snprintf(class,CF_MAXVARSIZE,"entropy_%s_%s_medium",service,inout);
+    AppendItem(&ENTROPIES,class,"");
+    }
  
-DeleteItemList(addresses);
+ DeleteItemList(addresses);
 }
 
 /***************************************************************/
@@ -1904,16 +1883,16 @@ DeleteItemList(addresses);
 void SaveTCPEntropyData(struct Item *list,int i,char *inout)
 
 { struct Item *ip;
-  FILE *fp;
-  char filename[CF_BUFSIZE];
+ FILE *fp;
+ char filename[CF_BUFSIZE];
 
-CfOut(cf_verbose,"","TCP Save %s\n",TCPNAMES[i]);
+ CfOut(cf_verbose,"","TCP Save %s\n",TCPNAMES[i]);
   
-if (list == NULL)
-   {
-   CfOut(cf_verbose,"","No %s-%s events\n",TCPNAMES[i],inout);
-   return;
-   }
+ if (list == NULL)
+    {
+    CfOut(cf_verbose,"","No %s-%s events\n",TCPNAMES[i],inout);
+    return;
+    }
 
  if (strncmp(inout,"in",2) == 0)
     {
@@ -1924,20 +1903,20 @@ if (list == NULL)
     snprintf(filename,CF_BUFSIZE-1,"%s/state/cf_outgoing.%s",CFWORKDIR,TCPNAMES[i]); 
     }
 
-CfOut(cf_verbose,"","TCP Save %s\n",filename);
+ CfOut(cf_verbose,"","TCP Save %s\n",filename);
  
-if ((fp = fopen(filename,"w")) == NULL)
-   {
-   CfOut(cf_verbose,"","Unable to write datafile %s\n",filename);
-   return;
-   }
+ if ((fp = fopen(filename,"w")) == NULL)
+    {
+    CfOut(cf_verbose,"","Unable to write datafile %s\n",filename);
+    return;
+    }
  
-for (ip = list; ip != NULL; ip=ip->next)
-   {
-   fprintf(fp,"%d %s\n",ip->counter,ip->name);
-   }
+ for (ip = list; ip != NULL; ip=ip->next)
+    {
+    fprintf(fp,"%d %s\n",ip->counter,ip->name);
+    }
  
-fclose(fp);
+ fclose(fp);
 }
 
 
@@ -1946,15 +1925,15 @@ fclose(fp);
 void IncrementCounter(struct Item **list,char *name)
 
 {
-if (!IsItemIn(*list,name))
-   {
-   AppendItem(list,name,"");
-   IncrementItemListCounter(*list,name);
-   }
-else
-   {
-   IncrementItemListCounter(*list,name);
-   } 
+ if (!IsItemIn(*list,name))
+    {
+    AppendItem(list,name,"");
+    IncrementItemListCounter(*list,name);
+    }
+ else
+    {
+    IncrementItemListCounter(*list,name);
+    } 
 }
 
 /***************************************************************/
@@ -1964,7 +1943,7 @@ int GetFileGrowth(char *filename,enum observables index)
 { struct stat statbuf;
   size_t q, dq;
 
-if (stat(filename,&statbuf) == -1)
+if (cfstat(filename,&statbuf) == -1)
    {
    return 0;
    }
@@ -1978,7 +1957,7 @@ dq = q - LASTQ[index];
 if (LASTQ[index] == 0)
    {
    LASTQ[index] = q;
-   return dq/10;       /* arbitrary spike mitigation */
+   return q/100;       /* arbitrary spike mitigation */
    }
 
 LASTQ[index] = q;
@@ -2025,26 +2004,26 @@ void GatherSensorData()
 void GatherPromisedMeasures()
 
 { struct Bundle *bp;
-  struct SubType *sp;
-  struct Promise *pp;
-  char *scope;
+ struct SubType *sp;
+ struct Promise *pp;
+ char *scope;
   
-for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
-   {
-   scope = bp->name;
-   SetNewScope(bp->name);
+ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
+    {
+    scope = bp->name;
+    SetNewScope(bp->name);
 
-   if ((strcmp(bp->type,CF_AGENTTYPES[cf_monitor]) == 0) || (strcmp(bp->type,CF_AGENTTYPES[cf_common]) == 0))
-      {
-      for (sp = bp->subtypes; sp != NULL; sp = sp->next) /* get schedule */
-         {
-         for (pp = sp->promiselist; pp != NULL; pp=pp->next)
-            {
-            ExpandPromise(cf_monitor,scope,pp,KeepMonitorPromise);
-            }
-         }
-      }
-   }
+    if ((strcmp(bp->type,CF_AGENTTYPES[cf_monitor]) == 0) || (strcmp(bp->type,CF_AGENTTYPES[cf_common]) == 0))
+       {
+       for (sp = bp->subtypes; sp != NULL; sp = sp->next) /* get schedule */
+          {
+          for (pp = sp->promiselist; pp != NULL; pp=pp->next)
+             {
+             ExpandPromise(cf_monitor,scope,pp,KeepMonitorPromise);
+             }
+          }
+       }
+    }
 }
 
 /******************************************************************************/
@@ -2052,71 +2031,71 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
 int GetAcpi()
 
 { DIR *dirh;
-  FILE *fp;
-  struct dirent *dirp;
-  int count = 0;
-  char path[CF_BUFSIZE],buf[CF_BUFSIZE],index[4];
-  double temp = 0;
-  struct Attributes attr;
+ FILE *fp;
+ struct dirent *dirp;
+ int count = 0;
+ char path[CF_BUFSIZE],buf[CF_BUFSIZE],index[4];
+ double temp = 0;
+ struct Attributes attr;
 
-memset(&attr,0,sizeof(attr));
-attr.transaction.audit = false;
+ memset(&attr,0,sizeof(attr));
+ attr.transaction.audit = false;
 
-Debug("ACPI temperature\n");
+ Debug("ACPI temperature\n");
 
-if ((dirh = opendir("/proc/acpi/thermal_zone")) == NULL)
-   {
-   CfOut(cf_verbose,"opendir","Can't open directory %s\n",path);
-   return false;
-   }
+ if ((dirh = opendir("/proc/acpi/thermal_zone")) == NULL)
+    {
+    CfOut(cf_verbose,"opendir","Can't open directory %s\n",path);
+    return false;
+    }
 
-for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
-   {
-   if (!ConsiderFile(dirp->d_name,path,attr,NULL))
-      {
-      continue;
-      }
+ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+    {
+    if (!ConsiderFile(dirp->d_name,path,attr,NULL))
+       {
+       continue;
+       }
    
-   snprintf(path,CF_BUFSIZE,"/proc/acpi/thermal_zone/%s/temperature",dirp->d_name);
+    snprintf(path,CF_BUFSIZE,"/proc/acpi/thermal_zone/%s/temperature",dirp->d_name);
    
-   if ((fp = fopen(path,"r")) == NULL)
-      {
-      printf("Couldn't open %s\n",path);
-      continue;
-      }
+    if ((fp = fopen(path,"r")) == NULL)
+       {
+       printf("Couldn't open %s\n",path);
+       continue;
+       }
 
-   fgets(buf,CF_BUFSIZE-1,fp);
+    fgets(buf,CF_BUFSIZE-1,fp);
 
-   sscanf(buf,"%*s %lf",&temp);
+    sscanf(buf,"%*s %lf",&temp);
 
-   for (count = 0; count < 4; count++)
-      {
-      snprintf(index,2,"%d",count);
+    for (count = 0; count < 4; count++)
+       {
+       snprintf(index,2,"%d",count);
 
-      if (strstr(dirp->d_name,index))
-         {
-         switch (count)
-            {
-            case 0: THIS[ob_temp0] = temp;
-                break;
-            case 1: THIS[ob_temp1] = temp;
-                break;
-            case 2: THIS[ob_temp2] = temp;
-                break;
-            case 3: THIS[ob_temp3] = temp;
-                break;
-            }
+       if (strstr(dirp->d_name,index))
+          {
+          switch (count)
+             {
+             case 0: CF_THIS[ob_temp0] = temp;
+                 break;
+             case 1: CF_THIS[ob_temp1] = temp;
+                 break;
+             case 2: CF_THIS[ob_temp2] = temp;
+                 break;
+             case 3: CF_THIS[ob_temp3] = temp;
+                 break;
+             }
 
-         Debug("Set temp%d to %lf\n",count,temp);
-         }
-      }
+          Debug("Set temp%d to %lf\n",count,temp);
+          }
+       }
    
-   fclose(fp);
-   }
+    fclose(fp);
+    }
 
-closedir(dirh);
+ closedir(dirh);
 
-return true;
+ return true;
 }
 
 /******************************************************************************/
@@ -2124,188 +2103,188 @@ return true;
 int GetLMSensors()
 
 { FILE *pp;
-  struct Item *ip,*list = NULL;
-  double temp = 0;
-  char name[CF_BUFSIZE];
-  int count;
-  char vbuff[CF_BUFSIZE];
+ struct Item *ip,*list = NULL;
+ double temp = 0;
+ char name[CF_BUFSIZE];
+ int count;
+ char vbuff[CF_BUFSIZE];
   
-THIS[ob_temp0] = 0.0;
-THIS[ob_temp1] = 0.0;
-THIS[ob_temp2] = 0.0;
-THIS[ob_temp3] = 0.0;
+ CF_THIS[ob_temp0] = 0.0;
+ CF_THIS[ob_temp1] = 0.0;
+ CF_THIS[ob_temp2] = 0.0;
+ CF_THIS[ob_temp3] = 0.0;
   
-if ((pp = cf_popen("/usr/bin/sensors","r")) == NULL)
-   {
-   LMSENSORS = false; /* Broken */
-   return false;
-   }
+ if ((pp = cf_popen("/usr/bin/sensors","r")) == NULL)
+    {
+    LMSENSORS = false; /* Broken */
+    return false;
+    }
 
-CfReadLine(vbuff,CF_BUFSIZE,pp); 
+ CfReadLine(vbuff,CF_BUFSIZE,pp); 
 
-while (!feof(pp))
-   {
-   CfReadLine(vbuff,CF_BUFSIZE,pp);
+ while (!feof(pp))
+    {
+    CfReadLine(vbuff,CF_BUFSIZE,pp);
 
-   if (strstr(vbuff,"Temp")||strstr(vbuff,"temp"))
-      {
-      PrependItem(&list,vbuff,NULL);
-      }
-   }
+    if (strstr(vbuff,"Temp")||strstr(vbuff,"temp"))
+       {
+       PrependItem(&list,vbuff,NULL);
+       }
+    }
 
-cf_pclose(pp);
+ cf_pclose(pp);
 
-if (ListLen(list) > 0)
-   {
-   Debug("LM Sensors seemed to return ok data\n");
-   }
-else
-   {
-   return false;
-   }
+ if (ListLen(list) > 0)
+    {
+    Debug("LM Sensors seemed to return ok data\n");
+    }
+ else
+    {
+    return false;
+    }
 
 /* lmsensor names are hopelessly inconsistent - so try a few things */
 
-for (ip = list; ip != NULL; ip=ip->next)
-   {
-   for (count = 0; count < 4; count++)
-      {
-      snprintf(name,16,"CPU%d Temp:",count);
+ for (ip = list; ip != NULL; ip=ip->next)
+    {
+    for (count = 0; count < 4; count++)
+       {
+       snprintf(name,16,"CPU%d Temp:",count);
 
-      if (strncmp(ip->name,name,strlen(name)) == 0)
-         {
-         sscanf(ip->name,"%*[^:]: %lf",&temp);
+       if (strncmp(ip->name,name,strlen(name)) == 0)
+          {
+          sscanf(ip->name,"%*[^:]: %lf",&temp);
          
-         switch (count)
-            {
-            case 0: THIS[ob_temp0] = temp;
-                break;
-            case 1: THIS[ob_temp1] = temp;
-                break;
-            case 2: THIS[ob_temp2] = temp;
-                break;
-            case 3: THIS[ob_temp3] = temp;
-                break;
-            }
+          switch (count)
+             {
+             case 0: CF_THIS[ob_temp0] = temp;
+                 break;
+             case 1: CF_THIS[ob_temp1] = temp;
+                 break;
+             case 2: CF_THIS[ob_temp2] = temp;
+                 break;
+             case 3: CF_THIS[ob_temp3] = temp;
+                 break;
+             }
 
-         Debug("Set temp%d to %lf from what looks like cpu temperature\n",count,temp);
-         }
-      }
-   }
+          Debug("Set temp%d to %lf from what looks like cpu temperature\n",count,temp);
+          }
+       }
+    }
 
-if (THIS[ob_temp0] != 0)
-   {
-   /* We got something plausible */
-   return true;
-   }
+ if (CF_THIS[ob_temp0] != 0)
+    {
+    /* We got something plausible */
+    return true;
+    }
 
 /* Alternative name Core x: */
 
-for (ip = list; ip != NULL; ip=ip->next)
-   {
-   for (count = 0; count < 4; count++)
-      {
-      snprintf(name,16,"Core %d:",count);
+ for (ip = list; ip != NULL; ip=ip->next)
+    {
+    for (count = 0; count < 4; count++)
+       {
+       snprintf(name,16,"Core %d:",count);
 
-      if (strncmp(ip->name,name,strlen(name)) == 0)
-         {
-         sscanf(ip->name,"%*[^:]: %lf",&temp);
+       if (strncmp(ip->name,name,strlen(name)) == 0)
+          {
+          sscanf(ip->name,"%*[^:]: %lf",&temp);
          
-         switch (count)
-            {
-            case 0: THIS[ob_temp0] = temp;
-                break;
-            case 1: THIS[ob_temp1] = temp;
-                break;
-            case 2: THIS[ob_temp2] = temp;
-                break;
-            case 3: THIS[ob_temp3] = temp;
-                break;
-            }
+          switch (count)
+             {
+             case 0: CF_THIS[ob_temp0] = temp;
+                 break;
+             case 1: CF_THIS[ob_temp1] = temp;
+                 break;
+             case 2: CF_THIS[ob_temp2] = temp;
+                 break;
+             case 3: CF_THIS[ob_temp3] = temp;
+                 break;
+             }
 
-         Debug("Set temp%d to %lf from what looks like core temperatures\n",count,temp);
-         }
-      }
-   }
+          Debug("Set temp%d to %lf from what looks like core temperatures\n",count,temp);
+          }
+       }
+    }
 
-if (THIS[ob_temp0] != 0)
-   {
-   /* We got something plausible */
-   return true;
-   }
+ if (CF_THIS[ob_temp0] != 0)
+    {
+    /* We got something plausible */
+    return true;
+    }
 
-for (ip = list; ip != NULL; ip=ip->next)
-   {
-   if (strncmp(ip->name,"CPU Temp:",strlen("CPU Temp:")) == 0  )
-      {
-      sscanf(ip->name,"%*[^:]: %lf",&temp);
-      Debug("Setting temp0 to CPU Temp\n");
-      THIS[ob_temp0] = temp;
-      }
+ for (ip = list; ip != NULL; ip=ip->next)
+    {
+    if (strncmp(ip->name,"CPU Temp:",strlen("CPU Temp:")) == 0  )
+       {
+       sscanf(ip->name,"%*[^:]: %lf",&temp);
+       Debug("Setting temp0 to CPU Temp\n");
+       CF_THIS[ob_temp0] = temp;
+       }
 
-   if (strncmp(ip->name,"M/B Temp:",strlen("M/B Temp:")) == 0  )
-      {
-      sscanf(ip->name,"%*[^:]: %lf",&temp);
-      Debug("Setting temp0 to M/B Temp\n");
-      THIS[ob_temp1] = temp;
-      }
+    if (strncmp(ip->name,"M/B Temp:",strlen("M/B Temp:")) == 0  )
+       {
+       sscanf(ip->name,"%*[^:]: %lf",&temp);
+       Debug("Setting temp0 to M/B Temp\n");
+       CF_THIS[ob_temp1] = temp;
+       }
 
-   if (strncmp(ip->name,"Sys Temp:",strlen("Sys Temp:")) == 0  )
-      {
-      sscanf(ip->name,"%*[^:]: %lf",&temp);
-      Debug("Setting temp0 to Sys Temp\n");
-      THIS[ob_temp2] = temp;
-      }
+    if (strncmp(ip->name,"Sys Temp:",strlen("Sys Temp:")) == 0  )
+       {
+       sscanf(ip->name,"%*[^:]: %lf",&temp);
+       Debug("Setting temp0 to Sys Temp\n");
+       CF_THIS[ob_temp2] = temp;
+       }
 
-   if (strncmp(ip->name,"AUX Temp:",strlen("AUX Temp:")) == 0  )
-      {
-      sscanf(ip->name,"%*[^:]: %lf",&temp);
-      Debug("Setting temp0 to AUX Temp\n");
-      THIS[ob_temp3] = temp;
-      }
-   }
+    if (strncmp(ip->name,"AUX Temp:",strlen("AUX Temp:")) == 0  )
+       {
+       sscanf(ip->name,"%*[^:]: %lf",&temp);
+       Debug("Setting temp0 to AUX Temp\n");
+       CF_THIS[ob_temp3] = temp;
+       }
+    }
 
-if (THIS[ob_temp0] != 0)
-   {
-   /* We got something plausible */
-   return true;
-   }
+ if (CF_THIS[ob_temp0] != 0)
+    {
+    /* We got something plausible */
+    return true;
+    }
 
 
 /* Alternative name Core x: */
 
-for (ip = list; ip != NULL; ip=ip->next)
-   {
-   for (count = 0; count < 4; count++)
-      {
-      snprintf(name,16,"temp%d:",count);
+ for (ip = list; ip != NULL; ip=ip->next)
+    {
+    for (count = 0; count < 4; count++)
+       {
+       snprintf(name,16,"temp%d:",count);
 
-      if (strncmp(ip->name,name,strlen(name)) == 0)
-         {
-         sscanf(ip->name,"%*[^:]: %lf",&temp);
+       if (strncmp(ip->name,name,strlen(name)) == 0)
+          {
+          sscanf(ip->name,"%*[^:]: %lf",&temp);
          
-         switch (count)
-            {
-            case 0: THIS[ob_temp0] = temp;
-                break;
-            case 1: THIS[ob_temp1] = temp;
-                break;
-            case 2: THIS[ob_temp2] = temp;
-                break;
-            case 3: THIS[ob_temp3] = temp;
-                break;
-            }
+          switch (count)
+             {
+             case 0: CF_THIS[ob_temp0] = temp;
+                 break;
+             case 1: CF_THIS[ob_temp1] = temp;
+                 break;
+             case 2: CF_THIS[ob_temp2] = temp;
+                 break;
+             case 3: CF_THIS[ob_temp3] = temp;
+                 break;
+             }
 
-         Debug("Set temp%d to %lf\n",count,temp);
-         }
-      }
-   }
+          Debug("Set temp%d to %lf\n",count,temp);
+          }
+       }
+    }
 
 /* Give up? */
 
-DeleteItemList(list);
+ DeleteItemList(list);
 
-return true;
+ return true;
 }
 
 /*********************************************************************/
@@ -2313,14 +2292,14 @@ return true;
 int ByteSizeList(struct Item *list)
 
 { int count = 0;
-  struct Item *ip;
+ struct Item *ip;
  
-for (ip = list; ip != NULL; ip=ip->next)
-   {
-   count+=strlen(ip->name);
-   }
+ for (ip = list; ip != NULL; ip=ip->next)
+    {
+    count+=strlen(ip->name);
+    }
 
-return count; 
+ return count; 
 }
 
 /*********************************************************************/
@@ -2331,35 +2310,168 @@ void KeepMonitorPromise(struct Promise *pp)
 
 { char *sp = NULL;
  
-if (!IsDefinedClass(pp->classes))
-   {
-   CfOut(cf_verbose,"","\n");
-   CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
-   CfOut(cf_verbose,"","Skipping whole next promise (%s), as context %s is not relevant\n",pp->promiser,pp->classes);
-   CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
-   return;
-   }
+ if (!IsDefinedClass(pp->classes))
+    {
+    CfOut(cf_verbose,"","\n");
+    CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
+    CfOut(cf_verbose,"","Skipping whole next promise (%s), as context %s is not relevant\n",pp->promiser,pp->classes);
+    CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
+    return;
+    }
  
-if (VarClassExcluded(pp,&sp))
-   {
-   CfOut(cf_verbose,"","\n");
-   CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
-   CfOut(cf_verbose,"","Skipping whole next promise (%s), as var-context %s is not relevant\n",pp->promiser,sp);
-   CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
-   return;
-   }
+ if (VarClassExcluded(pp,&sp))
+    {
+    CfOut(cf_verbose,"","\n");
+    CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
+    CfOut(cf_verbose,"","Skipping whole next promise (%s), as var-context %s is not relevant\n",pp->promiser,sp);
+    CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
+    return;
+    }
 
-if (strcmp("classes",pp->agentsubtype) == 0)
-   {
-   KeepClassContextPromise(pp);
-   return;
-   }
+ if (strcmp("classes",pp->agentsubtype) == 0)
+    {
+    KeepClassContextPromise(pp);
+    return;
+    }
 
-if (strcmp("measurements",pp->agentsubtype) == 0)
-   {
-   VerifyMeasurementPromise(THIS,pp);
-   return;
-   }
+ if (strcmp("measurements",pp->agentsubtype) == 0)
+    {
+    VerifyMeasurementPromise(CF_THIS,pp);
+    *pp->donep = false;
+    return;
+    }
 }
 
 
+#ifndef MINGW
+
+/*******************************************************************/
+/* Unix implementations                                            */
+/*******************************************************************/
+
+int Unix_GatherProcessUsers(struct Item **userList, int *userListSz, int *numRootProcs, int *numOtherProcs)
+    
+{
+ FILE *pp;
+ char pscomm[CF_BUFSIZE];
+ char user[CF_MAXVARSIZE];
+ char vbuff[CF_BUFSIZE];
+ 
+ snprintf(pscomm,CF_BUFSIZE,"%s %s",VPSCOMM[VSYSTEMHARDCLASS],VPSOPTS[VSYSTEMHARDCLASS]);
+
+ if ((pp = cf_popen(pscomm,"r")) == NULL)
+    {
+    return false;
+    }
+
+ CfReadLine(vbuff,CF_BUFSIZE,pp); 
+
+ while (!feof(pp))
+    {
+    CfReadLine(vbuff,CF_BUFSIZE,pp);
+    sscanf(vbuff,"%s",user);
+   
+    if (!IsItemIn(*userList,user))
+       {
+       PrependItem(userList,user,NULL);
+       (*userListSz)++;
+       }
+
+    if (strcmp(user,"root") == 0)
+       {
+       (*numRootProcs)++;
+       }
+    else
+       {
+       (*numOtherProcs)++;
+       }
+    }
+
+ cf_pclose(pp);
+
+ return true;
+}
+
+/*****************************************************************************/
+
+void Unix_GatherCPUData()
+
+{ double q,dq;
+ char name[CF_MAXVARSIZE],cpuname[CF_MAXVARSIZE],buf[CF_BUFSIZE];
+ long count,userticks=0,niceticks=0,systemticks=0,idle=0,iowait=0,irq=0,softirq=0;
+ long total_time = 1;
+ FILE *fp;
+ enum observables index = ob_spare;
+  
+ if ((fp=fopen("/proc/stat","r")) == NULL)
+    {
+    CfOut(cf_verbose,"","Didn't find proc data\n");
+    return;
+    }
+
+ CfOut(cf_verbose,"","Reading /proc/stat utilization data -------\n");
+
+ count = 0;
+
+ while (!feof(fp))
+    {
+    fgets(buf,CF_BUFSIZE,fp);
+
+    sscanf(buf,"%s%ld%ld%ld%ld%ld%ld%ld",&cpuname,&userticks,&niceticks,&systemticks,&idle,&iowait,&irq,&softirq);
+    snprintf(name,16,"cpu%d",count);
+   
+    total_time = (userticks+niceticks+systemticks+idle); 
+
+    q = 100.0 * (double)(total_time - idle);
+
+    if (strncmp(cpuname,name,strlen(name)) == 0)
+       {
+       CfOut(cf_verbose,"","Found CPU %d\n",count);
+
+       switch (count++)
+          {
+          case 0: index = ob_cpu0;
+              break;
+          case 1: index = ob_cpu1;
+              break;
+          case 2: index = ob_cpu2;
+              break;
+          case 3: index = ob_cpu3;
+              break;
+          default:
+              index = ob_spare;
+              CfOut(cf_verbose,"","Error reading proc/stat\n");
+              continue;
+          }
+       }
+    else if (strncmp(cpuname,"cpu",3) == 0)
+       {
+       CfOut(cf_verbose,"","Found aggregate CPU\n",count);
+       index = ob_cpuall;
+       }
+    else 
+       {
+       CfOut(cf_verbose,"","Found nothing (%s)\n",cpuname);
+       index = ob_spare;
+       fclose(fp);
+       return;
+       }
+
+    dq = (q - LASTQ[index])/(double)total_time; /* % Utilization */
+
+    if (dq > 100 || dq < 0) // Counter wrap around
+       {
+       dq = 50;
+       }
+   
+    CF_THIS[index] = dq;
+    LASTQ[index] = q;
+
+    CfOut(cf_verbose,"","Set %s=%d to %.1lf after %d 100ths of a second \n",OBS[index][1],index,CF_THIS[index],total_time);         
+    }
+
+ fclose(fp);
+}
+
+
+#endif  /* NOT MINGW */

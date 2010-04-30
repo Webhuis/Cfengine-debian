@@ -48,6 +48,7 @@ enum typesequence
    kp_methods,
    kp_files,
    kp_databases,
+   kp_services,
    kp_reports,
    kp_none
    };
@@ -64,6 +65,7 @@ char *TYPESEQUENCE[] =
    "methods",
    "files",
    "databases",
+   "services",
    "reports",
    NULL
    };
@@ -84,9 +86,9 @@ extern struct Rlist *SERVERLIST;
 /* Command line options                                            */
 /*******************************************************************/
 
- char *ID = "The main cfengine agent is the instigator of change\n"
+ char *ID = "The main Cfengine agent is the instigator of change\n"
             "in the system. In that sense it is the most important\n"
-            "part of the cfengine suite.\n";
+            "part of the Cfengine suite.\n";
 
  struct option OPTIONS[15] =
       {
@@ -139,6 +141,7 @@ ThisAgentInit();
 KeepPromises();
 NoteClassUsage(VHEAP);
 NoteVarUsage();
+GenericDeInitialize();
 return 0;
 }
 
@@ -149,10 +152,10 @@ return 0;
 void CheckOpts(int argc,char **argv)
 
 { extern char *optarg;
-  char arg[CF_BUFSIZE];
+ char arg[CF_BUFSIZE],*sp;
   struct Item *actionList;
   int optindex = 0;
-  int c;
+  int c,alpha = false,v6 = false;
 
 /* Because of the MacOS linker we have to call this from each agent
    individually before Generic Initialize */
@@ -212,10 +215,42 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:xMBb:",OPTIONS,&optindex)) != E
           break;
 
       case 's':
-          strncpy(POLICY_SERVER,optarg,CF_BUFSIZE-1);
+	  
+	  // temporary assure that network functions are working
+   	  OpenNetwork();
+
+          strncpy(POLICY_SERVER,Hostname2IPString(optarg),CF_BUFSIZE-1);
+
+          CloseNetwork();
+
+
+          for (sp = POLICY_SERVER; *sp != '\0'; sp++)
+             {
+             if (isalpha(*sp))
+                {
+                alpha = true;
+                }
+
+             if (ispunct(*sp) && *sp != ':' && *sp != '.')
+                {
+                alpha = true;
+                }
+             
+             if (*sp == ':')
+                {
+                v6 = true;
+                }
+             }
+
+          if (alpha && !v6)
+             {
+             FatalError("Error specifying policy server. The policy server's IP address could not be looked up. Please use the IP address instead if there is no error.");
+             }
+          
           break;
           
-      case 'K': IGNORELOCK = true;
+      case 'K':
+          IGNORELOCK = true;
           break;
                     
       case 'D': NewClassesFromString(optarg);
@@ -260,6 +295,11 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:xMBb:",OPTIONS,&optindex)) != E
       }
   }
 
+if (argv[optind] != NULL)
+   {
+   CfOut(cf_error,"","Unexpected argument with no preceding option: %s\n",argv[optind]);
+   }
+
 Debug("Set debugging\n");
 }
 
@@ -269,7 +309,12 @@ void ThisAgentInit()
 
 { FILE *fp;
   char filename[CF_BUFSIZE];
- 
+
+#ifdef HAVE_SETSID
+CfOut(cf_verbose,""," -> Immunizing against parental death");
+setsid();
+#endif
+
 signal(SIGINT,HandleSignals);
 signal(SIGTERM,HandleSignals);
 signal(SIGHUP,SIG_IGN);
@@ -280,33 +325,36 @@ signal(SIGUSR2,HandleSignals);
 CFA_MAXTHREADS = 30;
 EDITFILESIZE = 100000;
 
-snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
-
-if ((fp = fopen(filename,"a")) == NULL)
-   {
-   CfOut(cf_error,"fopen","Unable to create a writable log %s\n",filename);
-   }
-else
-   {
-   fclose(fp);
-   }
-
 /*
   do not set signal(SIGCHLD,SIG_IGN) in agent near
   popen() - or else pclose will fail to return
   status which we need for setting returns
 */
+
+snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
+MapName(filename);
+if ((fp = fopen(filename,"a")) != NULL)
+   {
+   fclose(fp);
+   }
 }
 
 /*******************************************************************/
 
 void KeepPromises()
 
-{
+{ double efficiency;
+ 
 BeginAudit();
 KeepControlPromises();
 KeepPromiseBundles();
 EndAudit();
+
+CfOut(cf_verbose,"","Estimated system complexity as touched objects = %d, for %d promises",CF_NODES,CF_EDGES);
+
+efficiency = 100.0*CF_EDGES/(double)(CF_NODES+CF_EDGES);
+
+NoteEfficiency(efficiency);
 }
 
 /*******************************************************************/
@@ -342,6 +390,13 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
       {
       CFA_MAXTHREADS = (int)Str2Int(retval);
       CfOut(cf_verbose,"","SET maxconnections = %d\n",CFA_MAXTHREADS);
+      continue;
+      }
+
+   if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_checksum_alert_time].lval) == 0)
+      {
+      CF_PERSISTENCE = (int)Str2Int(retval);
+      CfOut(cf_verbose,"","SET checksum_alert_time = %d\n",CF_PERSISTENCE);
       continue;
       }
 
@@ -564,7 +619,7 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_syslog].lval) == 0)
       {
       LOGGING = GetBoolean(retval);
-      CfOut(cf_verbose,"","SET syslog = %c\n",LOGGING);
+      CfOut(cf_verbose,"","SET syslog = %d\n",LOGGING);
       continue;
       }
 
@@ -593,6 +648,19 @@ if (GetVariable("control_common",CFG_CONTROLBODY[cfg_lastseenexpireafter].lval,&
    {
    LASTSEENEXPIREAFTER = Str2Int(retval);
    }
+
+if (GetVariable("control_common",CFG_CONTROLBODY[cfg_syslog_port].lval,&retval,&rettype) != cf_notype)
+   {
+   SYSLOGPORT = (unsigned short)Str2Int(retval);
+   CfOut(cf_verbose,"","SET syslog_port to %d",SYSLOGPORT);
+   }
+
+if (GetVariable("control_common",CFG_CONTROLBODY[cfg_syslog_host].lval,&retval,&rettype) != cf_notype)
+   {   
+   strncpy(SYSLOGHOST,Hostname2IPString(retval),CF_MAXVARSIZE-1);
+   CfOut(cf_verbose,"","SET syslog_host to %s",SYSLOGHOST);
+   }
+
 }
 
 /*********************************************************************/
@@ -648,11 +716,14 @@ for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
           ok = false;
           break;
       }
-   
-   if (!(GetBundle(name,"agent")||(GetBundle(name,"common"))))
+
+   if (!IGNORE_MISSING_BUNDLES)
       {
-      CfOut(cf_error,"","Bundle \"%s\" listed in the bundlesequence was not found\n",name);
-      ok = false;
+      if (!(GetBundle(name,"agent")||(GetBundle(name,"common"))))
+         {
+         CfOut(cf_error,"","Bundle \"%s\" listed in the bundlesequence was not found\n",name);
+         ok = false;
+         }
       }
    }
 
@@ -734,6 +805,7 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
       for (pp = sp->promiselist; pp != NULL; pp=pp->next)
          {
          SaveClassEnvironment();
+
          ExpandPromise(cf_agent,bp->name,pp,KeepAgentPromise);
 
          if (Abort())
@@ -754,6 +826,10 @@ return true;
 
 void CheckAgentAccess(struct Rlist *list)
 
+#ifdef MINGW
+{
+}
+#else  /* NOT MINGW */
 { char id[CF_MAXVARSIZE];
   struct passwd *pw;
   struct Rlist *rp,*rp2;
@@ -775,7 +851,7 @@ if (VINPUTLIST != NULL)
    {
    for (rp = VINPUTLIST; rp != NULL; rp=rp->next)
       {
-      stat(rp->item,&sb);
+      cfstat(rp->item,&sb);
       
       if (ACCESSLIST)
          {
@@ -807,6 +883,7 @@ if (VINPUTLIST != NULL)
 
 FatalError("You are denied access to run this policy");
 }
+#endif  /* NOT MINGW */
 
 /*********************************************************************/
 
@@ -837,6 +914,10 @@ if (VarClassExcluded(pp,&sp))
    CfOut(cf_verbose,"",". . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
    return;
    }
+
+// Record promises examined for efficiency calc
+
+CF_EDGES++;
 
 if (strcmp("classes",pp->agentsubtype) == 0)
    {
@@ -872,7 +953,7 @@ if (strcmp("packages",pp->agentsubtype) == 0)
 
 if (strcmp("files",pp->agentsubtype) == 0)
    {
-   if (GetBooleanConstraint("background",pp->conlist))
+   if (GetBooleanConstraint("background",pp))
       {      
       ParallelFindAndVerifyFilesPromises(pp);
       }
@@ -902,6 +983,13 @@ if (strcmp("databases",pp->agentsubtype) == 0)
 if (strcmp("methods",pp->agentsubtype) == 0)
    {
    VerifyMethodsPromise(pp);
+   EndMeasurePromise(start,pp);
+   return;
+   }
+
+if (strcmp("services",pp->agentsubtype) == 0)
+   {
+   VerifyServicesPromise(pp);
    EndMeasurePromise(start,pp);
    return;
    }
@@ -956,11 +1044,13 @@ switch(type)
 
    case kp_storage:
 
+       #ifndef MINGW  // TODO: Run if implemented on Windows
        if (MOUNTEDFSLIST != NULL)
           {
           DeleteMountInfo(MOUNTEDFSLIST);
           MOUNTEDFSLIST = NULL;
           }
+	   #endif  /* NOT MINGW */
 
        break;
 
@@ -989,6 +1079,12 @@ switch(type)
        for (rp = SERVERLIST; rp != NULL; rp = rp->next)
           {
           svp = (struct ServerItem *)rp->item;
+
+          if (svp == NULL)
+             {
+             continue;
+             }
+          
           ServerDisconnection(svp->conn);
           
           if (svp->server)
@@ -1011,14 +1107,17 @@ switch(type)
        break;
 
    case kp_storage:
-
+#ifndef MINGW
        CfOut(cf_verbose,""," -> Number of changes observed in %s is %d\n",VFSTAB[VSYSTEMHARDCLASS],FSTAB_EDITS);
        
        if (FSTAB_EDITS && FSTABLIST && !DONTDO)
           {
-          SaveItemListAsFile(FSTABLIST,VFSTAB[VSYSTEMHARDCLASS],a,NULL);
-          DeleteItemList(FSTABLIST);
-          FSTABLIST = NULL;
+          if (FSTABLIST)
+             {
+             SaveItemListAsFile(FSTABLIST,VFSTAB[VSYSTEMHARDCLASS],a,NULL);
+             DeleteItemList(FSTABLIST);
+             FSTABLIST = NULL;
+             }
           FSTAB_EDITS = 0;
           }
 
@@ -1029,7 +1128,7 @@ switch(type)
           MountAll();
           CfOut(cf_verbose,"","");
           }
-
+#endif  /* NOT MINGW */
        break;
 
    case kp_packages:
@@ -1098,7 +1197,18 @@ CfOut(cf_verbose,"","\n");
 void ParallelFindAndVerifyFilesPromises(struct Promise *pp)
     
 { pid_t child = 1;
-  int background = GetBooleanConstraint("background",pp->conlist);
+  int background = GetBooleanConstraint("background",pp);
+
+#ifdef MINGW
+
+if(background)
+  {
+   CfOut(cf_verbose, "", "Background processing of files promises is not supported on Windows");
+  }
+  
+FindAndVerifyFilesPromises(pp);
+
+#else  /* NOT MINGW */
 
 if (background && (CFA_BACKGROUND < CFA_BACKGROUND_LIMIT))
    {
@@ -1121,9 +1231,12 @@ else if (CFA_BACKGROUND >= CFA_BACKGROUND_LIMIT)
    CfOut(cf_verbose,""," !> Promised parallel execution promised but exceeded the max number of promised background tasks, so serializing");
    }
 
+   
 if (child || !background)
    {
    FindAndVerifyFilesPromises(pp);
    }
+   
+#endif  /* NOT MINGW */
 }
 

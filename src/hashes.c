@@ -279,6 +279,26 @@ if (ptr == NULL)
    return false;
    }
 
+// Look for outstanding lists in variable rvals
+
+if (THIS_AGENT_TYPE == cf_common)
+   {
+   struct Rlist *listvars = NULL, *scalarvars = NULL;
+
+   if (strcmp(CONTEXTID,"this") != 0)
+      {
+      ScanRval(CONTEXTID,&scalarvars,&listvars,rval,rtype,NULL);
+      
+      if (listvars != NULL)
+         {
+         CfOut(cf_error,""," !! Redefinition of variable \"%s\" (embedded list in RHS) in context \"%s\"",lval,CONTEXTID);
+         }
+   
+      DeleteRlist(scalarvars);
+      DeleteRlist(listvars);
+      }
+   }
+
 while (ptr->hashtable[slot])
    {
    Debug("Hash table Collision! - slot %d = (%s|%s)\n",slot,lval,ptr->hashtable[slot]->lval);
@@ -287,12 +307,13 @@ while (ptr->hashtable[slot])
       {
       if (CompareVariableValue(rval,rtype,ptr->hashtable[slot]) == 0)
          {
+         DeleteAssoc(ap);
          return true;
          }
 
-      if (UnresolvedVariables(ptr->hashtable[slot],rtype) != 0)
+      if (!UnresolvedVariables(ptr->hashtable[slot],rtype))
          {
-         CfOut(cf_inform,"","Duplicate selection of value for variable \"%s\" (broken promise) in scope %s",lval,ptr->scope);
+         CfOut(cf_inform,""," !! Duplicate selection of value for variable \"%s\" in scope %s",lval,ptr->scope);
       
          if (fname)
             {
@@ -303,10 +324,14 @@ while (ptr->hashtable[slot])
             CfOut(cf_inform,"","in bundle parameterization\n",fname,lineno);
             }
          }
+      else
+         {
+         CfOut(cf_inform,""," !! Unresolved variables in rval of \"%s\" in scope %s",lval,ptr->scope);
+         }
 
       DeleteAssoc(ptr->hashtable[slot]);
       ptr->hashtable[slot] = ap;
-      Debug("Stored %s in context %s\n",lval,scope);
+      Debug("Stored \"%s\" in context %s at position %d\n",lval,scope,slot);
       return true;
       }
    else
@@ -320,7 +345,8 @@ while (ptr->hashtable[slot])
       }
    }
 
-ptr->hashtable[slot] = ap;   
+ptr->hashtable[slot] = ap;
+
 Debug("Added Variable %s at hash address %d in scope %s with value (omitted)\n",lval,slot,scope);
 return true;
 }
@@ -345,6 +371,7 @@ if (len == 0)
    return;
    }
 
+
 for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
    {
    if (strcmp(ptr->scope,scope) == 0)
@@ -363,9 +390,14 @@ for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
                   {
                   /* Link up temp hash to variable lol */
 
-// state = rp->state_ptr;
                   state = (struct Rlist *)(cplist->rval);
 
+                  if (rp->state_ptr && rp->state_ptr->type == CF_FNCALL)
+                     {
+                     /* Unexpanded function must be skipped.*/
+                     return;
+                     }
+                  
                   if (rp->state_ptr)
                      {
                      Debug("Rewriting expanded type for %s from %s to %s\n",cphash->lval,CF_DATATYPES[cphash->dtype],rp->state_ptr->item);

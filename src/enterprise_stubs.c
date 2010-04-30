@@ -53,6 +53,7 @@ void *Nova_LDAPArray(char *array,char *uri,char *dn,char *filter,char *scope,cha
 void *Nova_RegLDAP(char *uri,char *dn,char *filter,char *name,char *scope,char *regex,char *sec);
 
 struct Averages SHIFT_VALUE;
+char CURRENT_SHIFT[CF_MAXVARSIZE];
 
 /*****************************************************************************/
 
@@ -82,7 +83,40 @@ void EnterpriseVersion()
 
 {
 #ifdef HAVE_LIBCFNOVA
- Nova_Version();
+Nova_Version();
+#endif 
+}
+
+/*****************************************************************************/
+
+int CfSessionKeySize(char c)
+{
+#ifdef HAVE_LIBCFNOVA
+return Nova_CfSessionKeySize(c);
+#else
+return CF_BLOWFISHSIZE; 
+#endif 
+}
+
+/*****************************************************************************/
+
+char CfEnterpriseOptions()
+{
+#ifdef HAVE_LIBCFNOVA
+return Nova_CfEnterpriseOptions();
+#else
+return 'c';
+#endif 
+}
+
+/*****************************************************************************/
+
+const EVP_CIPHER *CfengineCipher(char type)
+{
+#ifdef HAVE_LIBCFNOVA
+return Nova_CfengineCipher(type);
+#else
+return EVP_bf_cbc();
 #endif 
 }
 
@@ -95,6 +129,18 @@ int EnterpriseExpiry(char *day,char *month,char *year)
 return Nova_EnterpriseExpiry(day,month,year);
 #else
 return false;
+#endif
+}
+
+/*****************************************************************************/
+
+void CheckLicenses()
+
+{
+#ifdef HAVE_LIBCFNOVA
+return Nova_CheckLicensePromise();
+#else
+return;
 #endif
 }
 
@@ -167,9 +213,16 @@ char *MailSubject()
 
 { static char buffer[CF_BUFSIZE];
 #ifdef HAVE_LIBCFNOVA
- strcpy(buffer,"nova");
+if (LICENSES)
+   {
+   strcpy(buffer,"Nova");
+   }
+else
+   {
+   strcpy(buffer,"EXPIRED");
+   }
 #else
- buffer[0] = '\0';
+strcpy(buffer,"community");
 #endif
 return buffer;
 }
@@ -180,9 +233,31 @@ void SetPolicyServer(char *name)
 
 {
 #ifdef HAVE_LIBCFNOVA
- Nova_SetPolicyServer(name);
+Nova_SetPolicyServer(name);
 #else
- CfOut(cf_verbose,"","Setting policy server requires version Nova or above");
+CfOut(cf_verbose,"","Setting policy server requires version Nova or above");
+#endif 
+}
+
+/*****************************************************************************/
+
+void LogFileChange(char *file,int change,struct Attributes a,struct Promise *pp)
+{
+#ifdef HAVE_LIBCFNOVA
+Nova_LogFileChange(file,change,a,pp);
+#else
+CfOut(cf_verbose,"","Logging file differences requires version Nova or above");
+#endif 
+}
+
+/*****************************************************************************/
+
+void RemoteSyslog(struct Attributes a,struct Promise *pp)
+{
+#ifdef HAVE_LIBCFNOVA
+Nova_RemoteSyslog(a,pp);
+#else
+CfOut(cf_verbose,"","Remote logging requires version Nova or above");
 #endif 
 }
 
@@ -194,7 +269,7 @@ void BundleNode(FILE *fp,char *bundle)
 
 {
 #ifdef HAVE_LIBCFNOVA
- Nova_BundleNode(fp,bundle);
+Nova_BundleNode(fp,bundle);
 #else
 #endif
 }
@@ -235,11 +310,11 @@ return "";
 
 /*****************************************************************************/
 
-void NotePromiseCompliance(struct Promise *pp,double val)
+void NotePromiseCompliance(struct Promise *pp,double val,enum cf_status status)
 
 {
 #ifdef HAVE_LIBCFNOVA
- Nova_NotePromiseCompliance(pp,val);
+Nova_NotePromiseCompliance(pp,val,status);
 #else
 #endif
 }
@@ -250,9 +325,20 @@ void PreSanitizePromise(struct Promise *pp)
 
 {
 #ifdef HAVE_LIBCFNOVA
- Nova_PreSanitizePromise(pp);
+Nova_PreSanitizePromise(pp);
 #else
 #endif
+}
+
+/*****************************************************************************/
+
+void TrackValue(char *date,double kept,double repaired, double notkept)
+
+{
+#ifdef HAVE_LIBCFNOVA
+Nova_TrackValue(date,kept,repaired,notkept);
+#else
+#endif 
 }
 
 /*****************************************************************************/
@@ -340,7 +426,14 @@ void HistoryUpdate(struct Averages newvals)
 /* We do this only once per hour - this should not be changed */
 
 Banner("Update long-term history");
-  
+
+if (strlen(CURRENT_SHIFT) == 0)
+   {
+   // initialize
+   Nova_ResetShiftAverage(&SHIFT_VALUE);
+   }
+
+memset(&dummyattr,0,sizeof(dummyattr));
 dummyattr.transaction.ifelapsed = 59;
 
 thislock = AcquireLock(pp->promiser,VUQNAME,now,dummyattr,pp);
@@ -348,6 +441,7 @@ thislock = AcquireLock(pp->promiser,VUQNAME,now,dummyattr,pp);
 if (thislock.lock == NULL)
    {
    Nova_UpdateShiftAverage(&SHIFT_VALUE,&newvals);
+   DeletePromise(pp);
    return;
    }
 
@@ -365,8 +459,7 @@ if (!NOHARDCLASSES)
    NewScope("control_monitor");
    NewScope("control_common");
    GetNameInfo3();
-   GetInterfaceInfo3();
-   FindV6InterfaceInfo();
+   CfGetInterfaceInfo(cf_monitor);
    Get3Environment();
    OSClasses();
    SetReferenceTime(true);
@@ -376,10 +469,17 @@ LoadPersistentContext();
 LoadSystemConstants();
 
 YieldCurrentLock(thislock);
+DeletePromise(pp);
 
 snprintf(timekey,CF_MAXVARSIZE-1,"%s_%s_%s_%s",VDAY,VMONTH,VLIFECYCLE,VSHIFT);
 Nova_HistoryUpdate(timekey,newvals);
-Nova_ResetShiftAverage(&SHIFT_VALUE);
+
+if (strcmp(CURRENT_SHIFT,VSHIFT) != 0)
+   {
+   strcpy(CURRENT_SHIFT,VSHIFT);
+   Nova_ResetShiftAverage(&SHIFT_VALUE);
+   }
+
 Nova_DumpSlowlyVaryingObservations();
 
 #else
@@ -388,7 +488,7 @@ Nova_DumpSlowlyVaryingObservations();
 
 /*****************************************************************************/
 
-void GetClassName(int i,char *name)
+void CfGetClassName(int i,char *name)
 {
 #ifdef HAVE_LIBCFNOVA
  char desc[CF_BUFSIZE];
@@ -439,24 +539,24 @@ CfOut(cf_verbose,"","# Access to server literals is only available in version No
 
 /*****************************************************************************/
 
-char *ReturnLiteralData(char *handle)
+int ReturnLiteralData(char *handle,char *ret)
 
 {
 #ifdef HAVE_LIBCFNOVA
-return Nova_ReturnLiteralData(handle);
+return Nova_ReturnLiteralData(handle,ret);
 #else
- CfOut(cf_verbose,"","# Access to server literals is only available in version Nova and above\n");
-return "";
+CfOut(cf_verbose,"","# Access to server literals is only available in version Nova and above\n");
+return 0;
 #endif 
 }
 
 /*****************************************************************************/
 
-char *GetRemoteScalar(char *handle,char *server,int encrypted)
+char *GetRemoteScalar(char *proto,char *handle,char *server,int encrypted,char *rcv)
 
 {
 #ifdef HAVE_LIBCFNOVA
-return Nova_GetRemoteScalar(handle,server,encrypted);
+return Nova_GetRemoteScalar(proto,handle,server,encrypted,rcv);
 #else
 CfOut(cf_verbose,"","# Access to server literals is only available in version Nova and above\n");
 return "";
@@ -490,6 +590,17 @@ return false;
 }
 
 /*****************************************************************************/
+
+void TranslatePath(char *new,char *old)
+{
+#ifdef HAVE_LIBCFNOVA
+Nova_TranslatePath(new,old);
+#else
+strncpy(new,old,CF_BUFSIZE-1);
+#endif 
+}
+
+/*****************************************************************************/
 /* Reporting                                                                 */
 /*****************************************************************************/
 
@@ -500,6 +611,42 @@ void SummarizeCompliance(int xml,int html,int csv,int embed,char *stylesheet,cha
  Nova_SummarizeCompliance(xml,html,csv,embed,stylesheet,head,foot,web);
 #else
  CfOut(cf_verbose,"","# Compliance reporting feature is only available in version Nova and above\n");
+#endif
+}
+
+/*****************************************************************************/
+
+void SummarizeValue(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web)
+
+{
+#ifdef HAVE_LIBCFNOVA
+Nova_SummarizeValue(xml,html,csv,embed,stylesheet,head,foot,web);
+#else
+CfOut(cf_verbose,"","# Value reporting feature is only available in version Nova and above - use the state/cf_value.log\n");
+#endif
+}
+
+/*****************************************************************************/
+
+void SummarizePromiseRepaired(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web)
+
+{
+#ifdef HAVE_LIBCFNOVA
+Nova_SummarizePromiseRepaired(xml,html,csv,embed,stylesheet,head,foot,web);
+#else
+CfOut(cf_verbose,"","# Compliance reporting feature is only available in version Nova and above\n");
+#endif
+}
+
+/*****************************************************************************/
+
+void SummarizePromiseNotKept(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web)
+
+{
+#ifdef HAVE_LIBCFNOVA
+Nova_SummarizePromiseNotKept(xml,html,csv,embed,stylesheet,head,foot,web);
+#else
+CfOut(cf_verbose,"","# Compliance reporting feature is only available in version Nova and above\n");
 #endif
 }
 
@@ -529,11 +676,11 @@ void CSV2XML(struct Rlist *list)
 
 /*****************************************************************************/
 
-void Aggregate()
+void Aggregate(char *stylesheet,char *banner,char *footer,char *webdriver)
 
 {
 #ifdef HAVE_LIBCFNOVA
- Nova_Aggregate();
+Nova_Aggregate(stylesheet,banner,footer,webdriver);
 #endif 
 }
 
@@ -543,7 +690,7 @@ void NoteVarUsage()
 
 {
 #ifdef HAVE_LIBCFNOVA
- Nova_NoteVarUsage();
+Nova_NoteVarUsage();
 #endif 
 }
 
@@ -640,7 +787,18 @@ void SummarizeUpdates(int xml,int html,int csv,int embed,char *stylesheet,char *
  CfOut(cf_verbose,"","# Software summary reporting feature is only available in version Nova and above\n");
 #endif
 }
-    
+
+/*****************************************************************************/
+
+void VerifyServices(struct Attributes a,struct Promise *pp)
+{
+#ifdef HAVE_LIBCFNOVA
+ Nova_VerifyServices(a,pp);
+#else
+ CfOut(cf_verbose,"","# Services promises are only available in Cfengine Nova and above");
+#endif
+}
+
 /*****************************************************************************/
 /* Montoring                                                                 */
 /*****************************************************************************/
@@ -907,6 +1065,20 @@ return false;
 
 /*****************************************************************************/
 /* Misc                                                                      */
+/*****************************************************************************/
+
+void NoteEfficiency(double e)
+
+{
+#ifdef HAVE_LIBCFNOVA
+ struct Attributes a;
+ struct Promise p;
+ 
+NovaNamedEvent("Configuration model efficiency",e,a,&p);
+CfOut(cf_verbose,"","Configuration model efficiency for %s = %.2lf%%",VUQNAME,e);
+#endif 
+}
+
 /*****************************************************************************/
 
 char *GetProcessOptions()

@@ -38,6 +38,23 @@ int SelectLeaf(char *path,struct stat *sb,struct Attributes attr,struct Promise 
   int result = true, tmpres;
   char *criteria = NULL;
   struct Rlist *rp;
+
+#ifdef MINGW
+if(attr.select.issymlinkto != NULL)
+{
+CfOut(cf_verbose, "", "files_select.issymlinkto is ignored on Windows (symbolic links are not supported by Windows)");
+}
+
+if(attr.select.groups != NULL)
+{
+CfOut(cf_verbose, "", "files_select.search_groups is ignored on Windows (file groups are not supported by Windows)");
+}
+
+if(attr.select.bsdflags != NULL)
+{
+CfOut(cf_verbose, "", "files_select.search_bsdflags is ignored on Windows");
+}
+#endif  /* MINGW */
   
 if (!attr.haveselect)
    {
@@ -77,7 +94,7 @@ if (SelectTypeMatch(sb,attr.select.filetypes))
    PrependItem(&leaf_attr,"file_types","");
    }
 
-if (attr.select.owners && SelectOwnerMatch(sb,attr.select.owners))
+if (attr.select.owners && SelectOwnerMatch(path,sb,attr.select.owners))
    {
    PrependItem(&leaf_attr,"owner","");
    }
@@ -87,15 +104,20 @@ if (attr.select.owners == NULL)
    PrependItem(&leaf_attr,"owner","");
    }
 
+#ifdef MINGW
+PrependItem(&leaf_attr,"group","");
+
+#else  /* NOT MINGW */
 if (attr.select.groups && SelectGroupMatch(sb,attr.select.groups))
    {
    PrependItem(&leaf_attr,"group","");
    }
-
+   
 if (attr.select.groups == NULL)
    {
    PrependItem(&leaf_attr,"group","");
    }
+#endif  /* NOT MINGW */
 
 if (SelectModeMatch(sb,attr.select.perms))
    {
@@ -179,11 +201,6 @@ int SelectTypeMatch(struct stat *lstatptr,struct Rlist *crit)
 
 { struct Item *leafattrib = NULL;
   struct Rlist *rp;
-
-if (S_ISLNK(lstatptr->st_mode))
-   {
-   PrependItem(&leafattrib,"symlink","");
-   }
  
 if (S_ISREG(lstatptr->st_mode))
    {
@@ -195,6 +212,12 @@ if (S_ISDIR(lstatptr->st_mode))
    {
    PrependItem(&leafattrib,"dir","");
    }
+
+#ifndef MINGW   
+if (S_ISLNK(lstatptr->st_mode))
+   {
+   PrependItem(&leafattrib,"symlink","");
+   }   
  
 if (S_ISFIFO(lstatptr->st_mode))
    {
@@ -215,6 +238,7 @@ if (S_ISBLK(lstatptr->st_mode))
    {
    PrependItem(&leafattrib,"block","");
    }
+#endif  /* NOT MINGW */
 
 #ifdef HAVE_DOOR_CREATE
 if (S_ISDOOR(lstatptr->st_mode))
@@ -238,68 +262,38 @@ return false;
 
 /*******************************************************************/
 
-int SelectOwnerMatch(struct stat *lstatptr,struct Rlist *crit)
+/* Writes the owner of file 'path', with stat 'lstatptr' into buffer 'owner' of
+ * size 'ownerSz'. Returns true on success, false otherwise                      */
+int GetOwnerName(char *path, struct stat *lstatptr, char *owner, int ownerSz)
 
-{ struct Item *leafattrib = NULL;
-  char buffer[CF_SMALLBUF];
-  struct passwd *pw;
-  struct Rlist *rp;
-
-sprintf(buffer,"%d",lstatptr->st_uid);
-PrependItem(&leafattrib,buffer,""); 
-
-if ((pw = getpwuid(lstatptr->st_uid)) != NULL)
-   {
-   PrependItem(&leafattrib,pw->pw_name,""); 
-   }
-else
-   {
-   PrependItem(&leafattrib,"none",""); 
-   }
-
-for (rp = crit; rp != NULL; rp = rp->next)
-   {
-   if (EvaluateORString((char *)rp->item,leafattrib,0))
-      {
-      Debug(" - ? Select owner match\n");
-      DeleteItemList(leafattrib);
-      return true;
-      }
-
-   if (pw && FullTextMatch((char *)rp->item,pw->pw_name))
-      {
-      Debug(" - ? Select owner match\n");
-      DeleteItemList(leafattrib);
-      return true;
-      }
-
-   if (FullTextMatch((char *)rp->item,buffer))
-      {
-      Debug(" - ? Select owner match\n");
-      DeleteItemList(leafattrib);
-      return true;
-      }
-   }
-
-DeleteItemList(leafattrib);
-return false;
-} 
+{
+#ifdef MINGW
+return NovaWin_GetOwnerName(path, owner, ownerSz);
+#else  /* NOT MINGW */
+return Unix_GetOwnerName(lstatptr, owner, ownerSz);
+#endif  /* NOT MINGW */
+}
 
 /*******************************************************************/
 
-int SelectGroupMatch(struct stat *lstatptr,struct Rlist *crit)
+int SelectOwnerMatch(char *path,struct stat *lstatptr,struct Rlist *crit)
 
 { struct Item *leafattrib = NULL;
-  char buffer[CF_SMALLBUF];
-  struct group *gr;
   struct Rlist *rp;
-  
-sprintf(buffer,"%d",lstatptr->st_gid);
-PrependItem(&leafattrib,buffer,""); 
+  char ownerName[CF_BUFSIZE];
+  int gotOwner;
 
-if ((gr = getgrgid(lstatptr->st_gid)) != NULL)
+#ifndef MINGW  // no uids on Windows
+char buffer[CF_SMALLBUF];
+sprintf(buffer,"%d",lstatptr->st_uid);
+PrependItem(&leafattrib,buffer,""); 
+#endif  /* MINGW */
+
+gotOwner = GetOwnerName(path, lstatptr, ownerName, sizeof(ownerName));
+
+if (gotOwner)
    {
-   PrependItem(&leafattrib,gr->gr_name,""); 
+   PrependItem(&leafattrib,ownerName,""); 
    }
 else
    {
@@ -310,24 +304,26 @@ for (rp = crit; rp != NULL; rp = rp->next)
    {
    if (EvaluateORString((char *)rp->item,leafattrib,0))
       {
-      Debug(" - ? Select group match\n");
+      Debug(" - ? Select owner match\n");
       DeleteItemList(leafattrib);
       return true;
       }
 
-   if (gr && FullTextMatch((char *)rp->item,gr->gr_name))
+   if (gotOwner && FullTextMatch((char *)rp->item,ownerName))
       {
       Debug(" - ? Select owner match\n");
       DeleteItemList(leafattrib);
       return true;
       }
 
+#ifndef MINGW	  
    if (FullTextMatch((char *)rp->item,buffer))
       {
       Debug(" - ? Select owner match\n");
       DeleteItemList(leafattrib);
       return true;
       }
+#endif  /* NOT MINGW */
    }
 
 DeleteItemList(leafattrib);
@@ -463,7 +459,9 @@ return false;
 
 int SelectIsSymLinkTo(char *filename,struct Rlist *crit)
 
-{ char buffer[CF_BUFSIZE];
+{
+#ifndef MINGW
+  char buffer[CF_BUFSIZE];
   struct Rlist *rp;
 
 for (rp = crit; rp != NULL; rp = rp->next)
@@ -481,7 +479,7 @@ for (rp = crit; rp != NULL; rp = rp->next)
       return true;
       }
    }
-
+#endif  /* NOT MINGW */
 return false;      
 }
 
@@ -503,3 +501,79 @@ else
    }
 }
 
+
+#ifndef MINGW
+
+/*******************************************************************/
+/* Unix implementations                                            */
+/*******************************************************************/
+
+int Unix_GetOwnerName(struct stat *lstatptr, char *owner, int ownerSz)
+
+{
+struct passwd *pw;
+
+memset(owner, 0, ownerSz);
+pw = getpwuid(lstatptr->st_uid);
+
+if(pw == NULL)
+  {
+  CfOut(cf_error, "getpwuid", "!! Could not get owner name of user with uid=%d", lstatptr->st_uid);
+  return false;
+  }
+  
+strncpy(owner, pw->pw_name, ownerSz - 1);
+
+return true;
+}
+
+/*******************************************************************/
+
+int SelectGroupMatch(struct stat *lstatptr,struct Rlist *crit)
+
+{ struct Item *leafattrib = NULL;
+  char buffer[CF_SMALLBUF];
+  struct group *gr;
+  struct Rlist *rp;
+  
+sprintf(buffer,"%d",lstatptr->st_gid);
+PrependItem(&leafattrib,buffer,""); 
+
+if ((gr = getgrgid(lstatptr->st_gid)) != NULL)
+   {
+   PrependItem(&leafattrib,gr->gr_name,""); 
+   }
+else
+   {
+   PrependItem(&leafattrib,"none",""); 
+   }
+
+for (rp = crit; rp != NULL; rp = rp->next)
+   {
+   if (EvaluateORString((char *)rp->item,leafattrib,0))
+      {
+      Debug(" - ? Select group match\n");
+      DeleteItemList(leafattrib);
+      return true;
+      }
+
+   if (gr && FullTextMatch((char *)rp->item,gr->gr_name))
+      {
+      Debug(" - ? Select owner match\n");
+      DeleteItemList(leafattrib);
+      return true;
+      }
+
+   if (FullTextMatch((char *)rp->item,buffer))
+      {
+      Debug(" - ? Select owner match\n");
+      DeleteItemList(leafattrib);
+      return true;
+      }
+   }
+
+DeleteItemList(leafattrib);
+return false;
+} 
+
+#endif  /* NOT MINGW */

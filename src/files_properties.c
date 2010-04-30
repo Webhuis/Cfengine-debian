@@ -62,7 +62,7 @@ if (strlen(nodename) < 1)
 if (IsItemIn(SUSPICIOUSLIST,nodename))
    {
    struct stat statbuf;
-   if (stat(nodename,&statbuf) != -1)
+   if (cfstat(nodename,&statbuf) != -1)
       {
       if (S_ISREG(statbuf.st_mode))
          {
@@ -127,13 +127,13 @@ if (suspicious && NONALPHAFILES)
    
    CfOut(cf_error,"","Renaming file %s to %s",vbuff,newname);
    
-   if (rename(vbuff,newname) == -1)
+   if (cf_rename(vbuff,newname) == -1)
       {
-      CfOut(cf_verbose,"rename","Rename failed - foreign filesystem?\n");
+      CfOut(cf_verbose,"cf_rename","Rename failed - foreign filesystem?\n");
       }
-   if (chmod(newname,0644) == -1)
+   if (cf_chmod(newname,0644) == -1)
       {
-      CfOut(cf_verbose,"chmod","Mode change failed - foreign filesystem?\n");
+      CfOut(cf_verbose,"cf_chmod","Mode change failed - foreign filesystem?\n");
       }
    return false;
    }

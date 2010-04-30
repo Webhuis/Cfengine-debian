@@ -1,18 +1,18 @@
-/* 
+/*
    Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
- 
+
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
    Free Software Foundation; version 3.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
-  You should have received a copy of the GNU General Public License  
+
+  You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
@@ -37,10 +37,14 @@
 void SummarizeTransaction(struct Attributes attr,struct Promise *pp,char *logname)
 
 { FILE *fout;
- 
+
 if (logname && attr.transaction.log_string)
    {
-   if (strcmp(logname,"stdout") == 0)
+   if (strcmp(logname,"udp_syslog") == 0)
+      {
+      RemoteSyslog(attr,pp);
+      }
+   else if (strcmp(logname,"stdout") == 0)
       {
       printf("L: %s\n",attr.transaction.log_string);
       }
@@ -51,10 +55,10 @@ if (logname && attr.transaction.log_string)
          CfOut(cf_error,"","Unable to open private log %s",logname);
          return;
          }
-      
+
       CfOut(cf_verbose,""," -> Logging string \"%s\" to %s\n",attr.transaction.log_string,logname);
       fprintf(fout,"%s\n",attr.transaction.log_string);
-      
+
       fclose(fout);
       }
 
@@ -81,7 +85,7 @@ struct CfLock AcquireLock(char *operand,char *host,time_t now,struct Attributes 
   char str_digest[CF_BUFSIZE];
   struct CfLock this;
   unsigned char digest[EVP_MAX_MD_SIZE+1];
-    
+
 this.last = (char *) CF_UNDEFINED;
 this.lock = (char *) CF_UNDEFINED;
 this.log  = (char *) CF_UNDEFINED;
@@ -123,7 +127,7 @@ if (THIS_AGENT_TYPE == cf_agent)
       CfOut(cf_verbose,""," -> This promise has already been verified");
       return this;
       }
-   
+
    PrependItem(&DONELIST,str_digest,NULL);
    }
 
@@ -183,7 +187,7 @@ if (elapsedtime < attr.transaction.ifelapsed)
 
 lastcompleted = FindLock(cflock);
 elapsedtime = (time_t)(now-lastcompleted) / 60;
-    
+
 if (lastcompleted != 0)
    {
    if (elapsedtime >= attr.transaction.expireafter)
@@ -196,30 +200,21 @@ if (lastcompleted != 0)
          {
          CfOut(cf_error,"","Illegal pid in corrupt lock %s - ignoring lock\n",cflock);
          }
+#ifdef MINGW  // killing processes with e.g. task manager does not allow for termination handling
+      else if(!NovaWin_IsProcessRunning(pid))
+        {
+          CfOut(cf_verbose,"","Process with pid %d is not running - ignoring lock (Windows does not support graceful processes termination)\n",pid);
+          LogLockCompletion(cflog,pid,"Lock expired, process not running",cc_operator,cc_operand);
+          unlink(cflock);
+        }
+#endif  /* MINGW */
       else
          {
          CfOut(cf_verbose,"","Trying to kill expired process, pid %d\n",pid);
-         
-         err = 0;
-         
-         if ((err = kill(pid,SIGINT)) == -1)
-            {
-            sleep(1);
-            err=0;
-            
-            if ((err = kill(pid,SIGTERM)) == -1)
-               {   
-               sleep(5);
-               err=0;
-               
-               if ((err = kill(pid,SIGKILL)) == -1)
-                  {
-                  sleep(1);
-                  }
-               }
-            }
-         
-         if (err == 0 || errno == ESRCH)
+
+         err = GracefulTerminate(pid);
+
+         if (err || errno == ESRCH)
             {
             LogLockCompletion(cflog,pid,"Lock expired, process killed",cc_operator,cc_operand);
             unlink(cflock);
@@ -227,7 +222,7 @@ if (lastcompleted != 0)
          else
             {
             CfOut(cf_error,"kill","Unable to kill expired cfagent process %d from lock %s, exiting this time..\n",pid,cflock);
-            
+
             FatalError("");
             }
          }
@@ -238,7 +233,7 @@ if (lastcompleted != 0)
       return this;
       }
    }
- 
+
 WriteLock(cflock);
 
 this.lock = strdup(cflock);
@@ -287,7 +282,7 @@ if (WriteLock(this.last) == -1)
    free(this.log);
    return;
    }
- 
+
 LogLockCompletion(this.log,getpid(),"Lock removed normally ",this.lock,"");
 
 free(this.last);
@@ -307,7 +302,14 @@ for (rp = params; rp != NULL; rp=rp->next)
    count++;
    }
 
-max_sample = CF_BUFSIZE / (2*count);
+if (count)
+   {
+   max_sample = CF_BUFSIZE / (2*count);
+   }
+else
+   {
+   max_sample = 0;
+   }
 
 strncat(lockname,locktype,CF_BUFSIZE/10);
 strcat(lockname,"_");
@@ -320,6 +322,148 @@ for (rp = params; rp != NULL; rp=rp->next)
    }
 }
 
+/************************************************************************/
+
+int ThreadLock(enum cf_thread_mutex name)
+
+{ int val = 0;
+
+switch(name)
+   {
+   case cft_system:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_lock(&MUTEX_SYSCALL)) != 0)
+          {
+          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
+          }
+#endif
+
+       break;
+
+   case cft_count:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_lock(&MUTEX_COUNT)) != 0)
+          {
+          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
+          }
+#endif
+
+       break;
+
+   case cft_lock:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_lock(&MUTEX_LOCK)) != 0)
+          {
+          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
+          }
+#endif
+
+       break;
+
+   case cft_getaddr:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_lock(&MUTEX_GETADDR)) != 0)
+          {
+          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
+          }
+#endif
+       break;
+
+   case cft_output:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_lock(&MUTEX_OUTPUT)) != 0)
+          {
+          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
+          }
+#endif
+       break;
+
+
+   default:
+       break;
+  }
+
+return (val == 0);
+}
+
+/************************************************************************/
+
+int ThreadUnlock(enum cf_thread_mutex name)
+
+{ int val = 0;
+
+switch(name)
+   {
+   case cft_system:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+       if ((val = pthread_mutex_unlock(&MUTEX_SYSCALL)) != 0)
+          {
+          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
+          }
+#endif
+       break;
+
+   case cft_count:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_unlock(&MUTEX_COUNT)) != 0)
+          {
+          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
+          }
+#endif
+   break;
+
+   case cft_lock:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_unlock(&MUTEX_LOCK)) != 0)
+          {
+          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
+          }
+#endif
+   break;
+
+   case cft_getaddr:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_unlock(&MUTEX_GETADDR)) != 0)
+          {
+          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
+          }
+#endif
+   break;
+
+   case cft_output:
+
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
+       if ((val = pthread_mutex_unlock(&MUTEX_OUTPUT)) != 0)
+          {
+          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
+          }
+#endif
+       break;
+
+
+   }
+
+return (val == 0);
+}
+
 /*****************************************************************************/
 /* Level                                                                     */
 /*****************************************************************************/
@@ -329,9 +473,9 @@ time_t FindLock(char *last)
 { time_t mtime;
 
 if ((mtime = FindLockTime(last)) == -1)
-   {   
+   {
    /* Do this to prevent deadlock loops from surviving if IfElapsed > T_sched */
-   
+
    if (WriteLock(last) == -1)
       {
       CfOut(cf_error,"","Unable to lock %s\n",last);
@@ -350,7 +494,7 @@ else
 
 int WriteLock(char *name)
 
-{ DB *dbp;
+{ CF_DB *dbp;
   struct LockData entry;
 
 Debug("WriteLock(%s)\n",name);
@@ -363,9 +507,9 @@ if ((dbp = OpenLock()) == NULL)
 DeleteDB(dbp,name);
 
 entry.pid = getpid();
-entry.time = time((time_t *)NULL); 
+entry.time = time((time_t *)NULL);
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD 
+#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
 if (pthread_mutex_lock(&MUTEX_LOCK) != 0)
    {
    CfOut(cf_error,"pthread_mutex_lock","pthread_mutex_lock failed");
@@ -380,9 +524,9 @@ if (pthread_mutex_unlock(&MUTEX_LOCK) != 0)
    CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
    }
 #endif
- 
+
 CloseLock(dbp);
-return 0; 
+return 0;
 }
 
 /*****************************************************************************/
@@ -412,7 +556,7 @@ if ((tim = time((time_t *)NULL)) == -1)
    Debug("Cfengine: couldn't read system clock\n");
    }
 
-sprintf(buffer,"%s",ctime(&tim));
+sprintf(buffer,"%s",cf_ctime(&tim));
 
 Chop(buffer);
 
@@ -420,7 +564,7 @@ fprintf(fp,"%s:%s:pid=%d:%s:%s\n",buffer,str,pid,operator,operand);
 
 fclose(fp);
 
-if (stat(cflog,&statbuf) != -1)
+if (cfstat(cflog,&statbuf) != -1)
    {
    if (statbuf.st_size > CFLOGSIZE)
       {
@@ -434,8 +578,7 @@ if (stat(cflog,&statbuf) != -1)
 
 int RemoveLock(char *name)
 
-{ DBT key;
-  DB *dbp;
+{ CF_DB *dbp;
 
 if ((dbp = OpenLock()) == NULL)
    {
@@ -447,8 +590,8 @@ if (pthread_mutex_lock(&MUTEX_LOCK) != 0)
    {
    CfOut(cf_error,"pthread_mutex_lock","pthread_mutex_lock failed");
    }
-#endif 
-  
+#endif
+
 DeleteDB(dbp,name);
 
 #if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
@@ -457,20 +600,20 @@ if (pthread_mutex_unlock(&MUTEX_LOCK) != 0)
    CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
    }
 #endif
- 
+
 CloseLock(dbp);
-return 0; 
+return 0;
 }
 
 /************************************************************************/
 
 time_t FindLockTime(char *name)
 
-{ DB *dbp;
+{ CF_DB *dbp;
   struct LockData entry;
 
 Debug("FindLockTime(%s)\n",name);
-  
+
 if ((dbp = OpenLock()) == NULL)
    {
    return -1;
@@ -492,7 +635,7 @@ else
 
 pid_t FindLockPid(char *name)
 
-{ DB *dbp;
+{ CF_DB *dbp;
   struct LockData entry;
 
 if ((dbp = OpenLock()) == NULL)
@@ -514,12 +657,13 @@ else
 
 /************************************************************************/
 
-DB *OpenLock()
+CF_DB *OpenLock()
 
 { char name[CF_BUFSIZE];
-  DB *dbp;
+  CF_DB *dbp;
 
-snprintf(name,CF_BUFSIZE,"%s/cfengine_lock_db",CFWORKDIR);
+snprintf(name,CF_BUFSIZE,"%s/state/%s",CFWORKDIR, CF_LOCKDB_FILE);
+MapName(name);
 
 if (!OpenDB(name,&dbp))
    {
@@ -533,11 +677,11 @@ return dbp;
 
 /************************************************************************/
 
-void CloseLock(DB *dbp)
+void CloseLock(CF_DB *dbp)
 
 {
 if (dbp)
-   { 
-   dbp->close(dbp,0);
+   {
+   CloseDB(dbp);
    }
 }

@@ -1,0 +1,123 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle setvars in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: vars
+
+      vars promise by 'rhs[lhs1]' (implicit) if context is any
+
+             string => Mary had a little pig       if body context any
+            Promise (version not specified) belongs to bundle 'setvars' (type agent) in file '/home/mark/LapTop/Cfengine3/trunk/tests/units/unit_setvar.cf' near line 13
+
+
+      vars promise by 'rhs[lhs2]' (implicit) if context is any
+
+             string => Whose Fleece was white as snow       if body context any
+            Promise (version not specified) belongs to bundle 'setvars' (type agent) in file '/home/mark/LapTop/Cfengine3/trunk/tests/units/unit_setvar.cf' near line 14
+
+
+      vars promise by 'rhs[lhs3]' (implicit) if context is any
+
+             string => And everywhere that MAry went       if body context any
+            Promise (version not specified) belongs to bundle 'setvars' (type agent) in file '/home/mark/LapTop/Cfengine3/trunk/tests/units/unit_setvar.cf' near line 15
+
+
+   TYPE: files
+
+      files promise by '/tmp/system' (implicit) if context is any
+
+             create => true       if body context any
+          edit_line => set_variable_values(setvars.rhs,)            Promise (version not specified) belongs to bundle 'setvars' (type agent) in file '/home/mark/LapTop/Cfengine3/trunk/tests/units/unit_setvar.cf' near line 24
+
+
+   }
+
+
+Bundle set_variable_values in the context of edit_line
+
+   ARGS:
+
+   scalar arg v
+
+   {
+   TYPE: vars
+
+      vars promise by 'index' (implicit) if context is any
+
+              slist => getindices($(v),)            Promise (version not specified) belongs to bundle 'set_variable_values' (type edit_line) in file '/home/mark/LapTop/Cfengine3/trunk/tests/units/unit_setvar.cf' near line 38
+
+
+   TYPE: field_edits
+
+      field_edits promise by '$(index)\s*=.*' (implicit) if context is any
+
+         edit_field => col body for type edit_field
+               arg split
+               arg col
+               arg newval
+               arg method
+
+               {
+               field_separator => $(split) if sub-body context any
+               select_field => $(col) if sub-body context any
+               value_separator => , if sub-body context any
+               field_value => $(newval) if sub-body context any
+               field_operation => $(method) if sub-body context any
+               extend_fields => true if sub-body context any
+               allow_blank_fields => true if sub-body context any
+               }
+            classes => if_notkept body for type classes
+               arg x
+
+               {
+               promise_notkept =>  {'$(x)'} if sub-body context any
+               }
+            Promise (version not specified) belongs to bundle 'set_variable_values' (type edit_line) in file '/home/mark/LapTop/Cfengine3/trunk/tests/units/unit_setvar.cf' near line 46
+
+
+   TYPE: insert_lines
+
+      insert_lines promise by '$(index)=$($(v)[$(index)])' (implicit) if context is any
+
+         ifvarclass => canonify(not_$(index),)            Promise (version not specified) belongs to bundle 'set_variable_values' (type edit_line) in file '/home/mark/LapTop/Cfengine3/trunk/tests/units/unit_setvar.cf' near line 51
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'setvars'} if sub-body context any
+   }
+
+col body for type edit_field
+   arg split
+   arg col
+   arg newval
+   arg method
+
+   {
+   field_separator => $(split) if sub-body context any
+   select_field => $(col) if sub-body context any
+   value_separator => , if sub-body context any
+   field_value => $(newval) if sub-body context any
+   field_operation => $(method) if sub-body context any
+   extend_fields => true if sub-body context any
+   allow_blank_fields => true if sub-body context any
+   }
+
+if_notkept body for type classes
+   arg x
+
+   {
+   promise_notkept =>  {'$(x)'} if sub-body context any
+   }
+

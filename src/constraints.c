@@ -38,7 +38,7 @@ struct Item *EDIT_ANCHORS = NULL;
 
 /*******************************************************************/
 
-struct Constraint *AppendConstraint(struct Constraint **conlist,char *lval, void *rval, char type,char *classes)
+struct Constraint *AppendConstraint(struct Constraint **conlist,char *lval, void *rval, char type,char *classes,int body)
 
 /* Note rval must be pre-allocated for this function, e.g. use
    CopyRvalItem in call.  This is to make the parser and var expansion
@@ -102,6 +102,7 @@ cp->lineno = P.line_no;
 cp->lval = sp;
 cp->rval = rval;
 cp->type = type;  /* literal, bodyname, builtin function */
+cp->isbody = body;
 cp->next = NULL;
 return cp;
 }
@@ -141,7 +142,59 @@ for (cp = conlist; cp != NULL; cp = next)
 
 /*****************************************************************************/
 
-int GetBooleanConstraint(char *lval,struct Constraint *list)
+int GetBooleanConstraint(char *lval,struct Promise *pp)
+
+{ struct Constraint *cp;
+  int retval = CF_UNDEFINED;
+
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
+   {
+   if (strcmp(cp->lval,lval) == 0)
+      {
+      if (IsDefinedClass(cp->classes))
+         {
+         if (retval != CF_UNDEFINED)
+            {
+            CfOut(cf_error,""," !! Multiple \"%s\" (boolean) constraints break this promise\n",lval);
+            PromiseRef(cf_error,pp);
+            }
+         }
+      else
+         {
+         continue;
+         }
+
+      if (cp->type != CF_SCALAR)
+         {
+         CfOut(cf_error,"","Software error - expected type (%c) for boolean constraint %s did not match internals\n",cp->type,lval);
+         PromiseRef(cf_error,pp);
+         FatalError("Aborted");
+         }
+
+      if (strcmp(cp->rval,"true") == 0||strcmp(cp->rval,"yes") == 0)
+         {
+         retval = true;
+         continue;
+         }
+
+      if (strcmp(cp->rval,"false") == 0||strcmp(cp->rval,"no") == 0)
+         {
+         retval = false;
+         }
+      }
+   }
+
+if (retval == CF_UNDEFINED)
+   {
+   retval = false;
+   }
+
+return retval;
+}
+
+/*****************************************************************************/
+
+int GetRawBooleanConstraint(char *lval,struct Constraint *list)
 
 { struct Constraint *cp;
   int retval = CF_UNDEFINED;
@@ -154,7 +207,7 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != CF_UNDEFINED)
             {
-            CfOut(cf_error,"","Multiple %s constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Multiple \"%s\" (boolean) body constraints break this promise\n",lval);
             }
          }
       else
@@ -191,12 +244,12 @@ return retval;
 
 /*****************************************************************************/
 
-int GetBundleConstraint(char *lval,struct Constraint *list)
+int GetBundleConstraint(char *lval,struct Promise *pp)
 
 { struct Constraint *cp;
   int retval = CF_UNDEFINED;
 
-for (cp = list; cp != NULL; cp=cp->next)
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    if (strcmp(cp->lval,lval) == 0)
       {
@@ -204,7 +257,8 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != CF_UNDEFINED)
             {
-            CfOut(cf_error,"","Multiple %s constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Multiple \"%s\" constraints break this promise\n",lval);
+            PromiseRef(cf_error,pp);
             }
          }
       else
@@ -215,6 +269,7 @@ for (cp = list; cp != NULL; cp=cp->next)
       if (!(cp->type == CF_FNCALL || cp->type == CF_SCALAR))
          {
          CfOut(cf_error,"","Software error - type (%c) for bundle constraint %s did not match internals\n",cp->type,lval);
+         PromiseRef(cf_error,pp);
          FatalError("Aborted");
          }
 
@@ -227,12 +282,12 @@ return false;
 
 /*****************************************************************************/
 
-int GetIntConstraint(char *lval,struct Constraint *list)
+int GetIntConstraint(char *lval,struct Promise *pp)
 
 { struct Constraint *cp;
   int retval = CF_NOINT;
 
-for (cp = list; cp != NULL; cp=cp->next)
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    if (strcmp(cp->lval,lval) == 0)
       {
@@ -240,7 +295,8 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != CF_NOINT)
             {
-            CfOut(cf_error,"","Multiple %s int constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Multiple \"%s\" (int) constraints break this promise\n",lval);
+            PromiseRef(cf_error,pp);
             }
          }
       else
@@ -251,6 +307,7 @@ for (cp = list; cp != NULL; cp=cp->next)
       if (cp->type != CF_SCALAR)
          {
          CfOut(cf_error,"","Software error - expected type for int constraint %s did not match internals\n",lval);
+         PromiseRef(cf_error,pp);
          FatalError("Aborted");
          }
 
@@ -263,12 +320,12 @@ return retval;
 
 /*****************************************************************************/
 
-double GetRealConstraint(char *lval,struct Constraint *list)
+double GetRealConstraint(char *lval,struct Promise *pp)
 
 { struct Constraint *cp;
   double retval = CF_NODOUBLE;
 
-for (cp = list; cp != NULL; cp=cp->next)
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    if (strcmp(cp->lval,lval) == 0)
       {
@@ -276,7 +333,7 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != CF_NODOUBLE)
             {
-            CfOut(cf_error,"","Multiple %s int constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Multiple \"%s\" (real) constraints break this promise\n",lval);
             }
          }
       else
@@ -299,14 +356,14 @@ return retval;
 
 /*****************************************************************************/
 
-mode_t GetOctalConstraint(char *lval,struct Constraint *list)
+mode_t GetOctalConstraint(char *lval,struct Promise *pp)
 
 { struct Constraint *cp;
   mode_t retval = 077;
 
 // We could handle units here, like kb,b,mb
   
-for (cp = list; cp != NULL; cp=cp->next)
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    if (strcmp(cp->lval,lval) == 0)
       {
@@ -314,7 +371,8 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != 077)
             {
-            CfOut(cf_error,"","Multiple %s int constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Multiple \"%s\" (int,octal) constraints break this promise\n",lval);
+            PromiseRef(cf_error,pp);
             }
          }
       else
@@ -325,6 +383,7 @@ for (cp = list; cp != NULL; cp=cp->next)
       if (cp->type != CF_SCALAR)
          {
          CfOut(cf_error,"","Software error - expected type for int constraint %s did not match internals\n",lval);
+         PromiseRef(cf_error,pp);
          FatalError("Aborted");
          }
 
@@ -337,13 +396,18 @@ return retval;
 
 /*****************************************************************************/
 
-uid_t GetUidConstraint(char *lval,struct Constraint *list, struct Promise *pp)
+uid_t GetUidConstraint(char *lval,struct Promise *pp)
 
+#ifdef MINGW
+{  // we use sids on windows instead
+  return CF_SAME_OWNER;
+}
+#else  /* NOT MINGW */
 { struct Constraint *cp;
   int retval = CF_SAME_OWNER;
   char buffer[CF_MAXVARSIZE];
 
-for (cp = list; cp != NULL; cp=cp->next)
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    if (strcmp(cp->lval,lval) == 0)
       {
@@ -351,7 +415,8 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != CF_UNDEFINED)
             {
-            CfOut(cf_error,"","Multiple %s owner constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Multiple \"%s\" (owner/uid) constraints break this promise\n",lval);
+            PromiseRef(cf_error,pp);
             }
          }
       else
@@ -362,6 +427,7 @@ for (cp = list; cp != NULL; cp=cp->next)
       if (cp->type != CF_SCALAR)
          {
          CfOut(cf_error,"","Software error - expected type for owner constraint %s did not match internals\n",lval);
+         PromiseRef(cf_error,pp);
          FatalError("Aborted");
          }
 
@@ -371,16 +437,22 @@ for (cp = list; cp != NULL; cp=cp->next)
 
 return retval;
 }
+#endif  /* NOT MINGW */
 
 /*****************************************************************************/
 
-gid_t GetGidConstraint(char *lval,struct Constraint *list, struct Promise *pp)
+gid_t GetGidConstraint(char *lval,struct Promise *pp)
 
+#ifdef MINGW
+{  // not applicable on windows: processes have no group
+  return CF_SAME_GROUP;
+}
+#else
 { struct Constraint *cp;
   int retval = CF_SAME_OWNER;
   char buffer[CF_MAXVARSIZE];
     
-for (cp = list; cp != NULL; cp=cp->next)
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    if (strcmp(cp->lval,lval) == 0)
       {
@@ -388,7 +460,8 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != CF_UNDEFINED)
             {
-            CfOut(cf_error,"","Multiple %s group constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Multiple \"%s\"  (group/gid) constraints break this promise\n",lval);
+            PromiseRef(cf_error,pp);
             }
          }
       else
@@ -399,6 +472,7 @@ for (cp = list; cp != NULL; cp=cp->next)
       if (cp->type != CF_SCALAR)
          {
          CfOut(cf_error,"","Software error - expected type for group constraint %s did not match internals\n",lval);
+         PromiseRef(cf_error,pp);
          FatalError("Aborted");
          }
 
@@ -408,15 +482,16 @@ for (cp = list; cp != NULL; cp=cp->next)
 
 return retval;
 }
+#endif  /* NOT MINGW */
 
 /*****************************************************************************/
 
-struct Rlist *GetListConstraint(char *lval,struct Constraint *list)
+struct Rlist *GetListConstraint(char *lval,struct Promise *pp)
 
 { struct Constraint *cp;
   struct Rlist *retval = NULL;
 
-for (cp = list; cp != NULL; cp=cp->next)
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    if (strcmp(cp->lval,lval) == 0)
       {
@@ -424,7 +499,8 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != NULL)
             {
-            CfOut(cf_error,"","Multiple %s int constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Multiple \"%s\" int constraints break this promise\n",lval);
+            PromiseRef(cf_error,pp);
             }
          }
       else
@@ -435,6 +511,7 @@ for (cp = list; cp != NULL; cp=cp->next)
       if (cp->type != CF_LIST)
          {
          CfOut(cf_error,"","Software error - expected type for list constraint %s did not match internals\n",lval);
+         PromiseRef(cf_error,pp);
          FatalError("Aborted");
          }
 
@@ -447,17 +524,17 @@ return retval;
 
 /*****************************************************************************/
 
-void *GetConstraint(char *lval,struct Constraint *list,char rtype)
+void *GetConstraint(char *lval,struct Promise *pp,char rtype)
 
 { struct Constraint *cp;
   void *retval = NULL;
 
 if (!VerifyConstraintName(lval))
    {
-   CfOut(cf_error,"","Self-diagnostic: Constraint type %s is not a registered type\n",lval);
+   CfOut(cf_error,""," !! Self-diagnostic: Constraint type \"%s\" is not a registered type\n",lval);
    }
 
-for (cp = list; cp != NULL; cp=cp->next)
+for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    if (strcmp(cp->lval,lval) == 0)
       {
@@ -465,7 +542,8 @@ for (cp = list; cp != NULL; cp=cp->next)
          {
          if (retval != NULL)
             {
-            CfOut(cf_error,"","Inconsistent %s constraints break this promise\n",lval);
+            CfOut(cf_error,""," !! Inconsistent \"%s\" constraints break this promise\n",lval);
+            PromiseRef(cf_error,pp);
             }
 
          retval = cp->rval;
@@ -486,7 +564,7 @@ return retval;
 void ReCheckAllConstraints(struct Promise *pp)
 
 { struct Constraint *cp;
-  char *sp,*handle = GetConstraint("handle",pp->conlist,CF_SCALAR);
+  char *sp,*handle = GetConstraint("handle",pp,CF_SCALAR);
   struct PromiseIdent *prid;
 
 if (handle)
@@ -535,7 +613,7 @@ if (strcmp(pp->agentsubtype,"insert_lines") == 0)
    {
    /* Multiple additions with same criterion will not be convergent */
    
-   if (sp = GetConstraint("select_line_matching",pp->conlist,CF_SCALAR))
+   if (sp = GetConstraint("select_line_matching",pp,CF_SCALAR))
       {
       if (IsItemIn(EDIT_ANCHORS,sp))
          {
@@ -621,6 +699,11 @@ for  (i = 0; i < CF3_MODULES; i++)
 
 for (i = 0; CF_COMMON_BODIES[i].lval != NULL; i++)
    {
+   if (CF_COMMON_BODIES[i].dtype == cf_body)
+      {
+      continue;
+      }
+   
    if (strcmp(lval,CF_COMMON_BODIES[i].lval) == 0)
       {
       Debug("Found a match for lval %s in the common constraint attributes\n",lval);

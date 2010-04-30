@@ -31,11 +31,17 @@
 extern struct PromiseParser P;
 extern int REQUIRE_COMMENTS;
 extern char POLICY_SERVER[CF_BUFSIZE];
-
+extern int VIEWS;
+extern int LICENSES;
+extern char EXPIRY[32];
+extern int IGNORE_MISSING_INPUTS;
+extern int IGNORE_MISSING_BUNDLES;
 extern char WEBDRIVER[CF_MAXVARSIZE];
 extern char BANNER[2*CF_BUFSIZE];
 extern char FOOTER[CF_BUFSIZE];
 extern char STYLESHEET[CF_BUFSIZE];
+extern int CF_NODES;
+extern int CF_EDGES;
 
 extern struct Bundle *BUNDLES;
 extern struct Body *BODIES;
@@ -57,11 +63,12 @@ extern struct Item *ROTATED;
 extern double FORGETRATE;
 
 extern struct Rlist *CF_STCK;
+extern int EDIT_MODEL;
 extern int CF_STCKFRAME;
 extern int CFA_BACKGROUND;
 extern int CFA_BACKGROUND_LIMIT;
 extern int AM_BACKGROUND_PROCESS;
-
+extern int CF_PERSISTENCE;
 extern int LOOKUP;
 extern int BOOTSTRAP;
 extern int XML;
@@ -75,6 +82,8 @@ extern char *CF_DATATYPES[];
 extern char *CF_AGENTTYPES[];
 extern char HASHDB[CF_BUFSIZE];
 extern int FSTAB_EDITS;
+extern char GRAPHDIR[CF_BUFSIZE];
+
 
 extern int CFA_MAXTHREADS;
 extern char *THIS_BUNDLE;
@@ -83,6 +92,8 @@ extern enum cfagenttype THIS_AGENT_TYPE;
 extern int INSTALL_SKIP;
 extern int SHOWREPORTS;
 extern int FACILITY;
+extern char SYSLOGHOST[CF_MAXVARSIZE];
+extern unsigned short SYSLOGPORT;
 extern time_t PROMISETIME;
 extern int ABORTBUNDLE;
 extern struct Item *ABORTBUNDLEHEAP;
@@ -109,6 +120,10 @@ extern char FILE_SEPARATOR_STR[2];
 extern time_t DATESTAMPS[CF_OBSERVABLES];
 extern char AGGREGATION[CF_BUFSIZE];
 extern char *UNITS[CF_OBSERVABLES];
+
+extern double VAL_KEPT;
+extern double VAL_REPAIRED;
+extern double VAL_NOTKEPT;
 
 extern double METER_KEPT[meter_endmark];
 extern double METER_REPAIRED[meter_endmark];
@@ -219,4 +234,10 @@ extern struct BodySyntax CF_PROCESS_BODIES[];
 #ifndef CF3_MOD_PROCESS
 extern struct SubTypeSyntax CF_MEASUREMENT_SUBTYPES[];
 extern struct BodySyntax CF_MEASURE_BODIES[];
+#endif
+
+#ifndef CF3_MOD_SERVICES
+extern struct SubTypeSyntax CF_SERVICES_SUBTYPES[];
+extern struct BodySyntax CF_SERVMETHOD_BODY[];
+extern struct BodySyntax CF_SERVICES_BODIES[];
 #endif

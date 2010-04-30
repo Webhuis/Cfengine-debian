@@ -64,6 +64,15 @@ void VerifyStoragePromise(char *path,struct Promise *pp)
 
 a = GetStorageAttributes(pp);
 
+CF_NODES++;
+
+#ifdef MINGW
+if(!a.havemount)
+{
+CfOut(cf_verbose, "", "storage.mount is not supported on Windows");
+}
+#endif
+
 /* No parameter conflicts here */
 
 if (a.mount.unmount)
@@ -92,17 +101,20 @@ if (thislock.lock == NULL)
 
 /* Do mounts first */
 
+#ifndef MINGW
 if (a.havemount)
    {
    if (!MOUNTEDFSLIST && !LoadMountInfo(&MOUNTEDFSLIST))
       {
       CfOut(cf_error,"","Couldn't obtain a list of mounted filesystems - aborting\n");
+	  YieldCurrentLock(thislock);
       return;
       }
 
    VerifyMountPromise(path,a,pp);
    }
-
+#endif  /* NOT MINGW */
+   
 /* Then check file system */
 
 if (a.havevolume)
@@ -124,83 +136,6 @@ YieldCurrentLock(thislock);
 /** Level                                                          */
 /*******************************************************************/
 
-int VerifyMountPromise(char *name,struct Attributes a,struct Promise *pp)
-
-{ struct CfMount mount;
-  char *options;
-  char dir[CF_BUFSIZE];
-  int changes = 0;
- 
-CfOut(cf_verbose,""," -> Verifying mounted file systems on %s\n",name);
-
-snprintf(dir,CF_BUFSIZE,"%s/.",name);
-
-if (!IsPrivileged())                            
-   {
-   cfPS(cf_error,CF_INTERPT,"",pp,a,"Only root can mount filesystems.\n","");
-   return false;
-   }
-
-options = Rlist2String(a.mount.mount_options,",");
-
-if (!FileSystemMountedCorrectly(MOUNTEDFSLIST,name,options,a,pp))
-   {
-   if (!a.mount.unmount)
-      {
-      if (!MakeParentDirectory(dir,a.move_obstructions))
-         {
-         }
-
-      if (a.mount.editfstab)
-         {
-         changes += VerifyInFstab(name,a,pp);
-         }
-      else
-         {
-         cfPS(cf_inform,CF_FAIL,"",pp,a," -> Filesystem %s was not mounted as promised, and no edits were promised in %s\n",name,VFSTAB[VSYSTEMHARDCLASS]);
-         // Mount explicitly
-         }
-      }
-   else
-      {
-      if (a.mount.editfstab)
-         {
-         changes += VerifyNotInFstab(name,a,pp);
-         }
-      }
-
-   if (changes)
-      {
-      CF_MOUNTALL = true;
-      CF_SAVEFSTAB = true;
-      }
-   }
-else
-   {
-   if (a.mount.unmount)
-      {
-      VerifyUnmount(name,a,pp);
-      }
-   
-   if (a.mount.editfstab)
-      {
-      if (VerifyNotInFstab(name,a,pp))
-         {
-         CF_SAVEFSTAB = true;
-         }
-      }
-   else
-      {
-      cfPS(cf_inform,CF_NOP,"",pp,a," -> Filesystem %s seems to be mounted as promised\n",name);
-      }
-   }
-
-free(options);
-return true;
-}
-
-/*******************************************************************/
-
 int VerifyFileSystem(char *name,struct Attributes a,struct Promise *pp)
 
 { struct stat statbuf, localstat;
@@ -211,7 +146,7 @@ int VerifyFileSystem(char *name,struct Attributes a,struct Promise *pp)
 
 CfOut(cf_verbose,""," -> Checking required filesystem %s\n",name);
 
-if (stat(name,&statbuf) == -1)
+if (cfstat(name,&statbuf) == -1)
    {
    return(false);
    }
@@ -295,13 +230,21 @@ int VerifyFreeSpace(char *file,struct Attributes a,struct Promise *pp)
 { struct stat statbuf;
   int free;
   int kilobytes;
+  
+#ifdef MINGW
+if(!a.volume.check_foreign)
+{
+CfOut(cf_verbose, "", "storage.volume.check_foreign is not supported on Windows (checking every mount)");
+}
+#endif  /* MINGW */
 
-if (stat(file,&statbuf) == -1)
+if (cfstat(file,&statbuf) == -1)
    {
    CfOut(cf_error,"stat","Couldn't stat %s checking diskspace\n",file);
    return true;
    }
 
+#ifndef MINGW
 if (!a.volume.check_foreign)
    {
    if (IsForeignFileSystem(&statbuf,file))
@@ -310,7 +253,8 @@ if (!a.volume.check_foreign)
       return true;
       }
    }
-
+#endif  /* NOT MINGW */
+   
 kilobytes = a.volume.freespace;
 
 if (kilobytes < 0)
@@ -320,7 +264,7 @@ if (kilobytes < 0)
 
    if (free < kilobytes)
       {
-      cfPS(cf_error,CF_CHG,"",pp,a," !! Free disk space is under %d%% for volume containing %s (%d%% free)\n",kilobytes,file,free);
+      cfPS(cf_error,CF_FAIL,"",pp,a," !! Free disk space is under %d%% for volume containing %s (%d%% free)\n",kilobytes,file,free);
       return false;
       }
    }
@@ -330,7 +274,7 @@ else
 
    if (free < kilobytes)
       {
-      cfPS(cf_error,CF_CHG,"",pp,a," !! Disk space under %d kB for volume containing %s (%d kB free)\n",kilobytes,file,free);
+      cfPS(cf_error,CF_FAIL,"",pp,a," !! Disk space under %d kB for volume containing %s (%d kB free)\n",kilobytes,file,free);
       return false;
       }
    }
@@ -420,7 +364,7 @@ else
    strcat(vbuff,"..");
    }
 
-if (stat(vbuff,&parentstat) == -1)
+if (cfstat(vbuff,&parentstat) == -1)
    {
    Debug2("File %s couldn't stat its parent directory! Assuming permission\n",dir);
    Debug2("is denied because the file system is mounted from another host.\n");
@@ -436,3 +380,87 @@ if (childstat->st_dev != parentstat.st_dev)
 Debug("NotMountedFileSystem\n");
 return(false);
 }
+
+
+/*********************************************************************/
+/*  Unix-specific implementations                                    */
+/*********************************************************************/
+
+#ifndef MINGW
+
+int VerifyMountPromise(char *name,struct Attributes a,struct Promise *pp)
+
+{ struct CfMount mount;
+  char *options;
+  char dir[CF_BUFSIZE];
+  int changes = 0;
+ 
+CfOut(cf_verbose,""," -> Verifying mounted file systems on %s\n",name);
+
+snprintf(dir,CF_BUFSIZE,"%s/.",name);
+
+if (!IsPrivileged())                            
+   {
+   cfPS(cf_error,CF_INTERPT,"",pp,a,"Only root can mount filesystems.\n","");
+   return false;
+   }
+
+options = Rlist2String(a.mount.mount_options,",");
+
+if (!FileSystemMountedCorrectly(MOUNTEDFSLIST,name,options,a,pp))
+   {
+   if (!a.mount.unmount)
+      {
+      if (!MakeParentDirectory(dir,a.move_obstructions))
+         {
+         }
+
+      if (a.mount.editfstab)
+         {
+         changes += VerifyInFstab(name,a,pp);
+         }
+      else
+         {
+         cfPS(cf_inform,CF_FAIL,"",pp,a," -> Filesystem %s was not mounted as promised, and no edits were promised in %s\n",name,VFSTAB[VSYSTEMHARDCLASS]);
+         // Mount explicitly
+         VerifyMount(name,a,pp);               
+         }
+      }
+   else
+      {
+      if (a.mount.editfstab)
+         {
+         changes += VerifyNotInFstab(name,a,pp);
+         }
+      }
+
+   if (changes)
+      {
+      CF_MOUNTALL = true;
+      CF_SAVEFSTAB = true;
+      }
+   }
+else
+   {
+   if (a.mount.unmount)
+      {
+      VerifyUnmount(name,a,pp);
+      if (a.mount.editfstab)
+         {
+         if (VerifyNotInFstab(name,a,pp))
+            {
+            CF_SAVEFSTAB = true;
+            }
+         }
+      }
+   else
+      {
+      cfPS(cf_inform,CF_NOP,"",pp,a," -> Filesystem %s seems to be mounted as promised\n",name);
+      }
+   }
+
+free(options);
+return true;
+}
+
+#endif  /* NOT MINGW */

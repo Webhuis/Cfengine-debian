@@ -49,6 +49,7 @@ rex = CompileRegExp(regexp);
 
 if (rex.failed)
    {
+   CfOut(cf_error, "CompileRegExp", "!! Could not parse regular expression '%s'", regexp);
    return false;
    }
 
@@ -158,16 +159,97 @@ else
 int IsRegex(char *str)
 
 { char *sp;
+  int ret = false;
+  enum { r_norm, r_norepeat, r_literal } special = r_norepeat;
+  int bracket = 0;
+  int paren = 0;
 
+/* Try to see when something is intended as a regular expression */
+  
 for (sp = str; *sp != '\0'; sp++)
    {
-   if (strchr("^*+\[]()$",*sp))
+   if (special == r_literal)
       {
-      return true;  /* Maybe */
+      special = r_norm;
+      continue;
       }
+   else if (*sp == '\\')
+      {
+      special = r_literal;
+      continue;
+      }
+   else if (bracket && *sp != ']')
+      {
+      if (*sp == '[')
+         {
+         return false;
+         }
+      continue;
+      }
+ 
+   switch (*sp)
+      {
+      case '^':
+	 special = (sp == str) ? r_norepeat : r_norm;
+	 break;
+      case '*':
+      case '+':
+	 if (special == r_norepeat)
+            {
+            return false;
+            }
+	 special = r_norepeat;
+	 ret = true;
+	 break;
+      case '[':
+	 special = r_norm;
+	 bracket++;
+	 ret = true;
+	 break;
+      case ']':
+	 if (bracket == 0)
+            {
+            return false;
+            }
+	 bracket = 0;
+	 special = r_norm;
+	 break;
+      case '(':
+	 special = r_norepeat;
+	 paren++;
+	 break;
+
+      case ')':
+	 special = r_norm;
+	 paren--;
+	 if (paren < 0)
+            {
+            return false;
+            }
+	 break;
+         
+      case '|':
+	 special = r_norepeat;
+	 if (paren > 0)
+            {
+            ret = true;
+            }
+	 break;
+         
+      default:
+	 special = r_norm;
+      }
+
    }
 
-return false;
+if (bracket != 0 || paren != 0 || special == r_literal)
+   {
+   return false;
+   }
+else
+   {
+   return ret;
+   }
 }
 
 /*********************************************************************/
@@ -302,7 +384,7 @@ rx = pcre_compile(regexp,0,&errorstr,&erroffset,NULL);
 
 if (rx == NULL)
    {
-   CfOut(cf_error,"","Regular expression error \"%s\" in %s at %d: %s\n",errorstr,regexp,erroffset);
+   CfOut(cf_error,"","Regular expression error \"%s\" in expression \"%s\" at %d\n",errorstr,regexp,erroffset);
    this.failed = true;
    }
 else
@@ -417,15 +499,18 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
    
    for (i = 0; i < rc; i++) /* make backref vars $(1),$(2) etc */
       {
-      char substring[1024];
+      char substring[CF_MAXVARSIZE];
       char lval[4];
       char *backref_start = teststring + ovector[i*2];
       int backref_len = ovector[i*2+1] - ovector[i*2];
-      
-      memset(substring,0,1024);
-      strncpy(substring,backref_start,backref_len);
-      snprintf(lval,3,"%d",i);
-      ForceScalar(lval,substring);
+
+      if (backref_len < CF_MAXVARSIZE)
+         {
+         memset(substring,0,CF_MAXVARSIZE);
+         strncpy(substring,backref_start,backref_len);
+         snprintf(lval,3,"%d",i);
+         ForceScalar(lval,substring);
+         }
       }
 
    pcre_free(rx);
@@ -453,16 +538,16 @@ if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
    for (i = 0; i < 2; i++) /* make backref vars $(1),$(2) etc */
       {
       int backref_len;
-      char substring[1024];
+      char substring[CF_MAXVARSIZE];
       char lval[4];
       regoff_t s,e;
       s = (int)pmatch[i].rm_so;
       e = (int)pmatch[i].rm_eo;
       backref_len = e - s;
 
-      if (backref_len < 1024)
+      if (backref_len < CF_MAXVARSIZE)
          {
-         memset(substring,0,1024);
+         memset(substring,0,CF_MAXVARSIZE);
          strncpy(substring,(char *)(teststring+s),backref_len);
          snprintf(lval,3,"%d",i);
          ForceScalar(lval,substring);
@@ -519,18 +604,25 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
    
    for (i = 0; i < rc; i++) /* make backref vars $(1),$(2) etc */
       {
-      char substring[1024];
+      char substring[CF_MAXVARSIZE];
       char lval[4];
       char *backref_start = teststring + ovector[i*2];
       int backref_len = ovector[i*2+1] - ovector[i*2];
       
-      memset(substring,0,1024);
-      strncpy(substring,backref_start,backref_len);
-      snprintf(lval,3,"%d",i);
-      ForceScalar(lval,substring);
+      memset(substring,0,CF_MAXVARSIZE);
+
+      if (backref_len < CF_MAXVARSIZE)
+         {
+         strncpy(substring,backref_start,backref_len);
+         snprintf(lval,3,"%d",i);
+         ForceScalar(lval,substring);
+         }
       }
 
-   pcre_free(rx);
+   if (rx)
+      {
+      pcre_free(rx);
+      }
       
    if ((match_start == teststring) && (match_len == strlen(teststring)))
       {
@@ -562,7 +654,7 @@ if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
    for (i = 1; i < 2; i++) /* make backref vars $(1),$(2) etc */
       {
       int backref_len;
-      char substring[1024];
+      char substring[CF_MAXVARSIZE];
       char lval[4];
       start = pmatch[i].rm_so;
       end = pmatch[i].rm_eo;
@@ -570,7 +662,7 @@ if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
       
       if (backref_len < CF_MAXVARSIZE)
          {
-         memset(substring,0,1024);
+         memset(substring,0,CF_MAXVARSIZE);
          strncpy(substring,teststring+start,backref_len);
          snprintf(lval,3,"%d",i);
          ForceScalar(lval,substring);         
@@ -659,7 +751,7 @@ if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
    for (i = 1; i < 2; i++) /* make backref vars $(1),$(2) etc */
       {
       int backref_len;
-      char substring[1024];
+      char substring[CF_MAXVARSIZE];
       char lval[4];
       start = pmatch[i].rm_so;
       end = pmatch[i].rm_eo;
@@ -680,13 +772,16 @@ regfree(&rx);
 
 if (strlen(backreference) == 0)
    {
-   Debug("The regular expression \"%s\" yielded no matching back-reference",regex);
+   Debug("The regular expression \"%s\" yielded no matching back-reference\n",regex);
    strncpy(backreference,"CF_NOMATCH",CF_MAXVARSIZE);
+   }
+else
+   {
+   Debug("The regular expression \"%s\" yielded backreference \"%s\" on %s\n",regex,backreference,teststring);
    }
 
 return backreference;
 }
-
 
 /*********************************************************************/
 /* Enumerated languages - fuzzy match model                          */
@@ -1180,7 +1275,44 @@ if (strcmp(buf1,buf2) != 0)
 return 0;
 }
 
+/*********************************************************************/
 
+void EscapeSpecialChars(char *str, char *strEsc, int strEscSz, char *noEsc)
+
+/* Escapes non-alphanumeric chars, except sequence given in noEsc */
+
+{ char *sp;
+  int strEscPos = 0;
+  
+if (noEsc == NULL)
+   {
+   noEsc = "";
+   }
+
+memset(strEsc, 0, strEscSz);
+
+for (sp = str; (*sp != '\0') && (strEscPos < strEscSz - 2); sp++)
+   {
+   if (strncmp(sp, noEsc, strlen(noEsc)) == 0)
+      {
+      if (strEscSz <= strEscPos + strlen(noEsc))
+         {
+         break;
+         }
+      
+      strcat(strEsc, noEsc);
+      strEscPos += strlen(noEsc);
+      sp += strlen(noEsc);
+      }
+   
+   if (!isalnum(*sp))
+      {
+      strEsc[strEscPos++] = '\\';
+      }
+   
+   strEsc[strEscPos++] = *sp;
+   }
+}
 
 
 /* EOF */

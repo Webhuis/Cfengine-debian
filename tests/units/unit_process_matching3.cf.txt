@@ -1,0 +1,57 @@
+***********************************************************
+ Promises 
+***********************************************************
+Bundle testbundle in the context of agent
+
+   ARGS:
+
+   {
+   TYPE: processes
+
+      processes promise by '.*' (implicit) if context is any
+
+         process_select => proc_finder body for type process_select
+               arg p
+
+               {
+               stime => irange(ago(0,0,0,2,0,0,)now,) if sub-body context any
+               process_result => stime if sub-body context any
+               }
+         process_count => up body for type process_count
+               arg s
+
+               {
+               match_range => 1,10 if sub-body context any
+               out_of_range_define =>  {'$(s)_out_of_control'} if sub-body context any
+               }
+            Promise (version not specified) belongs to bundle 'testbundle' (type agent) in file './unit_process_matching3.cf' near line 22
+
+
+   }
+
+
+
+
+All Bodies
+
+control body for type common(no parameters)
+   {
+   bundlesequence =>  {'testbundle'} if sub-body context any
+   }
+
+up body for type process_count
+   arg s
+
+   {
+   match_range => 1,10 if sub-body context any
+   out_of_range_define =>  {'$(s)_out_of_control'} if sub-body context any
+   }
+
+proc_finder body for type process_select
+   arg p
+
+   {
+   stime => irange(ago(0,0,0,2,0,0,)now,) if sub-body context any
+   process_result => stime if sub-body context any
+   }
+

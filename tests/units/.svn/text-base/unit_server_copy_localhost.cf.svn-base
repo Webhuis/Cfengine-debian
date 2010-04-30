@@ -1,3 +1,25 @@
+#  Copyright (C) Cfengine AS
+
+#  This file is part of Cfengine 3 - written and maintained by Cfengine AS.
+
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by the
+#  Free Software Foundation; version 3.
+
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+
+# To the extent this program is licensed as part of the Enterprise
+# versions of Cfengine, the applicable Commerical Open Source License
+# (COSL) may apply to this file if you as a licensee so wish it. See
+# included file COSL.txt.
+
 ########################################################
 #
 # Simple test copy from server connection to cfServer
@@ -15,7 +37,6 @@
 ########################################################
 
 body common control
-
 {
 bundlesequence  => { "testbundle" };
 version => "1.2.3";
@@ -26,7 +47,7 @@ version => "1.2.3";
 bundle agent testbundle
 
 {
-files:
+files: 
 
   "/home/mark/tmp/testcopy" 
 
@@ -74,6 +95,7 @@ body copy_from mycopy(from,server)
 source      => "$(from)";
 servers     => { "$(server)" };
 compare     => "digest";
+encrypt     => "true";
 verify      => "true";
 copy_backup => "true";                  #/false/timestamp
 purge       => "false";
@@ -100,6 +122,7 @@ body server control
 allowconnects         => { "127.0.0.1" , "::1" };
 allowallconnects      => { "127.0.0.1" , "::1" };
 trustkeysfrom         => { "127.0.0.1" , "::1" };
+# allowusers
 }
 
 #########################################################
@@ -107,6 +130,7 @@ trustkeysfrom         => { "127.0.0.1" , "::1" };
 bundle server access_rules()
 
 {
+
 access:
 
   "/home/mark/LapTop"

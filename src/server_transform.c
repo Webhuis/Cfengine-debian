@@ -61,7 +61,7 @@ extern struct Auth *ROLESTOP;
 /*******************************************************************/
 
 void KeepFileAccessPromise(struct Promise *pp);
-void KeepLiteralAccessPromise(struct Promise *pp);
+void KeepLiteralAccessPromise(struct Promise *pp, char *type);
 
 /*******************************************************************/
 /* Level                                                           */
@@ -81,6 +81,8 @@ void Summarize()
 { struct Auth *ptr;
   struct Item *ip,*ipr;
 
+CfOut(cf_verbose,"","Summarize control promises\n");
+  
 if (DEBUG || D2)
    {
    printf("\nACCESS GRANTED ----------------------:\n");
@@ -111,57 +113,59 @@ if (DEBUG || D2)
          printf("   Deny: %s\n",ip->name);
          }      
       }
-   
-   printf("\nHost IPs allowed connection access :\n");
-   
-   for (ip = NONATTACKERLIST; ip != NULL; ip=ip->next)
-      {
-      printf("IP: %s\n",ip->name);
-      }
-   
-   printf("\nHost IPs denied connection access :\n");
-   
-   for (ip = ATTACKERLIST; ip != NULL; ip=ip->next)
-      {
-      printf("IP: %s\n",ip->name);
-      }
-   
-   printf("\nHost IPs allowed multiple connection access :\n");
 
-   for (ip = MULTICONNLIST; ip != NULL; ip=ip->next)
-      {
-      printf("IP: %s\n",ip->name);
-      }
-
-   printf("\nHost IPs from whom we shall accept public keys on trust :\n");
-
-   for (ip = TRUSTKEYLIST; ip != NULL; ip=ip->next)
-      {
-      printf("IP: %s\n",ip->name);
-      }
-
-   printf("\nUsers from whom we accept connections :\n");
-
-   for (ip = ALLOWUSERLIST; ip != NULL; ip=ip->next)
-      {
-      printf("USERS: %s\n",ip->name);
-      }
-
-   printf("\nHost IPs from NAT which we don't verify :\n");
-
-   for (ip = SKIPVERIFY; ip != NULL; ip=ip->next)
-      {
-      printf("IP: %s\n",ip->name);
-      }
-
-   printf("\nDynamical Host IPs (e.g. DHCP) whose bindings could vary over time :\n");
-
-   for (ip = DHCPLIST; ip != NULL; ip=ip->next)
-      {
-      printf("IP: %s\n",ip->name);
-      }
-
+   printf("\n");
    }
+
+CfOut(cf_verbose,""," -> Host IPs allowed connection access :\n");
+
+for (ip = NONATTACKERLIST; ip != NULL; ip=ip->next)
+   {
+   CfOut(cf_verbose,""," .... IP: %s\n",ip->name);
+   }
+
+CfOut(cf_verbose,"","Host IPs denied connection access :\n");
+
+for (ip = ATTACKERLIST; ip != NULL; ip=ip->next)
+   {
+   CfOut(cf_verbose,""," .... IP: %s\n",ip->name);
+   }
+
+CfOut(cf_verbose,"","Host IPs allowed multiple connection access :\n");
+
+for (ip = MULTICONNLIST; ip != NULL; ip=ip->next)
+   {
+   CfOut(cf_verbose,""," .... IP: %s\n",ip->name);
+   }
+
+CfOut(cf_verbose,"","Host IPs from whom we shall accept public keys on trust :\n");
+
+for (ip = TRUSTKEYLIST; ip != NULL; ip=ip->next)
+   {
+   CfOut(cf_verbose,""," .... IP: %s\n",ip->name);
+   }
+
+CfOut(cf_verbose,"","Users from whom we accept connections :\n");
+
+for (ip = ALLOWUSERLIST; ip != NULL; ip=ip->next)
+   {
+   CfOut(cf_verbose,""," .... USERS: %s\n",ip->name);
+   }
+
+CfOut(cf_verbose,"","Host IPs from NAT which we don't verify :\n");
+
+for (ip = SKIPVERIFY; ip != NULL; ip=ip->next)
+   {
+   CfOut(cf_verbose,""," .... IP: %s\n",ip->name);
+   }
+
+CfOut(cf_verbose,"","Dynamical Host IPs (e.g. DHCP) whose bindings could vary over time :\n");
+
+for (ip = DHCPLIST; ip != NULL; ip=ip->next)
+   {
+   CfOut(cf_verbose,""," .... IP: %s\n",ip->name);
+   }
+
 }
 
 
@@ -359,7 +363,24 @@ for (cp = ControlBodyConstraints(cf_server); cp != NULL; cp=cp->next)
       strncpy(STR_CFENGINEPORT,retval,15);
       CfOut(cf_verbose,"","SET default portnumber = %u = %s = %s\n",(int)SHORT_CFENGINEPORT,STR_CFENGINEPORT,retval);
       continue;
-      }   
+      }
+
+   if (strcmp(cp->lval,CFS_CONTROLBODY[cfs_bindtointerface].lval) == 0)
+      {
+      strncpy(BINDINTERFACE,retval,CF_BUFSIZE-1);
+      CfOut(cf_verbose,"","SET bindtointerface = %s\n",BINDINTERFACE);
+      continue;
+      }
+   }
+
+if (GetVariable("control_common",CFG_CONTROLBODY[cfg_syslog_host].lval,&retval,&rettype) != cf_notype)
+   {
+   SYSLOGPORT = (unsigned short)Str2Int(retval);
+   }
+
+if (GetVariable("control_common",CFG_CONTROLBODY[cfg_syslog_port].lval,&retval,&rettype) != cf_notype)
+   {
+   strncpy(SYSLOGHOST,Hostname2IPString(retval),CF_MAXVARSIZE-1);
    }
 }
 
@@ -422,11 +443,17 @@ if (strcmp(pp->agentsubtype,"classes") == 0)
    return;
    }
 
-sp = (char *)GetConstraint("resource_type",pp->conlist,CF_SCALAR);
+sp = (char *)GetConstraint("resource_type",pp,CF_SCALAR);
 
 if (strcmp(pp->agentsubtype,"access") == 0 && sp && strcmp(sp,"literal") == 0)
    {
-   KeepLiteralAccessPromise(pp);
+   KeepLiteralAccessPromise(pp,"literal");
+   return;
+   }
+
+if (strcmp(pp->agentsubtype,"access") == 0 && sp && strcmp(sp,"context") == 0)
+   {
+   KeepLiteralAccessPromise(pp,"context");
    return;
    }
 
@@ -527,14 +554,14 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
 
 /*********************************************************************/
 
-void KeepLiteralAccessPromise(struct Promise *pp)
+void KeepLiteralAccessPromise(struct Promise *pp,char *type)
 
 { struct Constraint *cp;
   struct Body *bp;
   struct FnCall *fp;
   struct Rlist *rp;
   struct Auth *ap,*dp;
-  char *handle = GetConstraint("handle",pp->conlist,CF_SCALAR);
+  char *handle = GetConstraint("handle",pp,CF_SCALAR);
   char *val;
 
 if (handle == NULL)
@@ -557,6 +584,16 @@ if (!GetAuthPath(handle,VARDENY))
 
 ap = GetAuthPath(handle,VARADMIT);
 dp = GetAuthPath(handle,VARDENY);
+
+if (strcmp(type,"literal") == 0)
+   {
+   ap->literal = true;
+   }
+
+if (strcmp(type,"context") == 0)
+   {
+   ap->classpattern = true;
+   }
 
 for (cp = pp->conlist; cp != NULL; cp = cp->next)
    {
@@ -668,6 +705,14 @@ void InstallServerAuthPath(char *path,struct Auth **list,struct Auth **listtop)
 { struct Auth *ptr;
   char ebuff[CF_EXPANDSIZE]; 
 
+#ifdef MINGW
+int i;
+for(i = 0; path[i] != '\0'; i++)
+  {
+  path[i] = ToLower(path[i]);
+  }
+#endif  /* MINGW */
+
 if ((ptr = (struct Auth *)malloc(sizeof(struct Auth))) == NULL)
    {
    FatalError("Memory Allocation failed for InstallAuthPath() #1");
@@ -689,6 +734,7 @@ else
 
 ptr->accesslist = NULL;
 ptr->maproot = NULL;
+ptr->literal = false;
 ptr->encrypt = false; 
 ptr->next = NULL;
 *listtop = ptr;
@@ -702,6 +748,14 @@ struct Auth *GetAuthPath(char *path,struct Auth *list)
 
 { struct Auth *ap;
   char ebuff[CF_EXPANDSIZE]; 
+
+#ifdef MINGW
+int i;
+for(i = 0; path[i] != '\0'; i++)
+  {
+  path[i] = ToLower(path[i]);
+  }
+#endif  /* MINGW */
 
 if (strlen(path) != 1)
    {

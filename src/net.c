@@ -38,6 +38,8 @@ int SendTransaction(int sd,char *buffer,int len,char status)
 
 { char work[CF_BUFSIZE];
   int wlen;
+
+memset(work, 0, sizeof(work));
  
 if (len == 0) 
    {
@@ -83,6 +85,7 @@ if (RecvSocketStream(sd,proto,CF_INBAND_OFFSET,0) == -1)   /* Get control channe
    }
 
 sscanf(proto,"%c %u",&status,&len);
+
 Debug("Transaction Receive [%s][%s]\n",proto,proto+CF_INBAND_OFFSET);
 
 if (len > CF_BUFSIZE - CF_INBAND_OFFSET)
@@ -97,16 +100,16 @@ if (strncmp(proto,"CAUTH",5) == 0)
    return -1;
    }
  
- if (more != NULL)
-    {
-    switch(status)
-       {
-       case 'm': *more = true;
-           break;
-       default: *more = false;
-       }
-    }
- 
+if (more != NULL)
+   {
+   switch(status)
+      {
+      case 'm': *more = true;
+          break;
+      default: *more = false;
+      }
+   }
+
 return RecvSocketStream(sd,buffer,len,0);
 }
 
@@ -160,12 +163,6 @@ return toget;
 
 /*************************************************************************/
 
-/*
- * Drop in replacement for send but includes
- * guaranteed whole buffer sending.
- * Wed Feb 28 11:30:55 GMT 2001, Morten Hermanrud, mhe@say.no
- */
-
 int SendSocketStream(int sd,char buffer[CF_BUFSIZE],int tosend,int flags)
 
 { int sent,already=0;
@@ -174,7 +171,7 @@ do
    {
    Debug("Attempting to send %d bytes\n",tosend-already);
 
-   sent=send(sd,buffer+already,tosend-already,flags);
+   sent = send(sd,buffer+already,tosend-already,flags);
    
    switch(sent)
       {

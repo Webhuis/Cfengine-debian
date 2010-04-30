@@ -40,22 +40,13 @@ void HandleSignals(int signum)
 if (signum != SIGCHLD)
    {
    CfOut(cf_error,"","Received signal %d (%s) while doing [%s]",signum,SIGNALS[signum],CFLOCK);
-   CfOut(cf_error,"","Logical start time %s ",ctime(&CFSTARTTIME));
-   CfOut(cf_error,"","This sub-task started really at %s\n",ctime(&CFINITSTARTTIME));
+   CfOut(cf_error,"","Logical start time %s ",cf_ctime(&CFSTARTTIME));
+   CfOut(cf_error,"","This sub-task started really at %s\n",cf_ctime(&CFINITSTARTTIME));
    fflush(stdout);
    
    if (signum == SIGTERM || signum == SIGINT || signum == SIGHUP || signum == SIGSEGV || signum == SIGKILL|| signum == SIGPIPE)
       {
-      struct CfLock best_guess;
-
-      CfOut(cf_verbose,"","Trying to remove lock - try %s",CFLOCK);
-      best_guess.lock = strdup(CFLOCK);
-      best_guess.last = strdup(CFLAST);
-      best_guess.log = strdup(CFLOG);
-      YieldCurrentLock(best_guess);
-      unlink(PIDFILE);
-      EndAudit();
-      closelog();
+      SelfTerminatePrelude();
       exit(0);
       }
    else if (signum == SIGUSR1)
@@ -77,3 +68,18 @@ if (signum != SIGCHLD)
    }
 }
 
+/*****************************************************************************/
+
+void SelfTerminatePrelude()
+{
+struct CfLock best_guess;
+
+CfOut(cf_verbose,"","Trying to remove lock - try %s",CFLOCK);
+best_guess.lock = strdup(CFLOCK);
+best_guess.last = strdup(CFLAST);
+best_guess.log = strdup(CFLOG);
+YieldCurrentLock(best_guess);
+unlink(PIDFILE);
+EndAudit();
+GenericDeInitialize();
+}

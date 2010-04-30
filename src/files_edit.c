@@ -60,6 +60,8 @@ if (a.edits.empty_before_use)
    ec->file_start = NULL;
    }
 
+EDIT_MODEL = true;
+
 return ec;
 }
 
@@ -70,6 +72,8 @@ void FinishEditContext(struct edit_context *ec,struct Attributes a,struct Promis
 { int retval = false;
   struct Item *ip;
 
+EDIT_MODEL = false;
+  
 if (DONTDO || a.transaction.action == cfa_warn)
    {
    if (ec && !CompareToFile(ec->file_start,ec->filename,a,pp) && ec->num_edits > 0)
@@ -123,9 +127,9 @@ int LoadFileAsItemList(struct Item **liststart,char *file,struct Attributes a,st
   struct stat statbuf;
   char line[CF_BUFSIZE];
   
-if (stat(file,&statbuf) == -1)
+if (cfstat(file,&statbuf) == -1)
    {
-   cfPS(cf_inform,CF_INTERPT,"stat",pp,a,"File %s could not be loaded",file);
+   CfOut(cf_verbose,"stat"," ** Information: the proposed file \"%s\" could not be loaded",file);
    return false;
    }
 
@@ -191,7 +195,7 @@ if (selinux_enabled)
 
 stamp_now = time((time_t *)NULL);
   
-if (stat(file,&statbuf) == -1)
+if (cfstat(file,&statbuf) == -1)
    {
    cfPS(cf_error,CF_FAIL,"stat",pp,a," !! Can no longer access file %s, which needed editing!\n",file);
    return false;
@@ -201,7 +205,7 @@ strcpy(backup,file);
 
 if (a.edits.backup == cfa_timestamp)
    {
-   snprintf(stamp,CF_BUFSIZE,"_%d_%s", CFSTARTTIME,CanonifyName(ctime(&stamp_now)));
+   snprintf(stamp,CF_BUFSIZE,"_%d_%s", CFSTARTTIME,CanonifyName(cf_ctime(&stamp_now)));
    strcat(backup,stamp);
    }
 
@@ -230,9 +234,9 @@ if (fclose(fp) == -1)
  
 cfPS(cf_inform,CF_CHG,"",pp,a,"Edited file %s \n",file); 
 
-if (rename(file,backup) == -1)
+if (cf_rename(file,backup) == -1)
    {
-   cfPS(cf_error,CF_FAIL,"rename",pp,a," !! Can't rename %s to %s - so promised edits could not be moved into place\n",file,backup);
+   cfPS(cf_error,CF_FAIL,"cf_rename",pp,a," !! Can't rename %s to %s - so promised edits could not be moved into place\n",file,backup);
    return false;
    }
 
@@ -248,14 +252,14 @@ else
    unlink(backup);
    }
 
-if (rename(new,file) == -1)
+if (cf_rename(new,file) == -1)
    {
-   cfPS(cf_error,CF_FAIL,"rename",pp,a," !! Can't rename %s to %s - so promised edits could not be moved into place\n",new,file);
+   cfPS(cf_error,CF_FAIL,"cf_rename",pp,a," !! Can't rename %s to %s - so promised edits could not be moved into place\n",new,file);
    return false;
    }       
 
 mask = umask(0); 
-chmod(file,statbuf.st_mode);                    /* Restore file permissions etc */
+cf_chmod(file,statbuf.st_mode);                    /* Restore file permissions etc */
 chown(file,statbuf.st_uid,statbuf.st_gid);
 umask(mask); 
 

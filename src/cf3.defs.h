@@ -54,6 +54,11 @@
 
 #define CF3COPYRIGHT "(C) Cfengine AS 2008-"
 
+
+#define LIC_DAY "1"
+#define LIC_MONTH "July"
+#define LIC_YEAR "2000"
+
 #define CF_SCALAR 's'
 #define CF_LIST   'l'
 #define CF_FNCALL 'f'
@@ -75,6 +80,9 @@
 #define CF_DONEPASSES  4
 
 #define CF_TIME_SIZE 32
+#define CF_FIPS_SIZE 32
+
+#define CFPULSETIME 60
 
 /*************************************************************************/
 /** Design criteria                                                      */
@@ -91,7 +99,7 @@
 #define CF_DEFINECLASSES "classes"
 #define CF_TRANSACTION   "action"
 
-#define CF3_MODULES 12 /* This value needs to be incremented when adding modules */
+#define CF3_MODULES 13 /* This value needs to be incremented when adding modules */
 
 /*************************************************************************/
 
@@ -111,6 +119,7 @@ struct PromiseParser
    char *lval;
    void *rval;
    char rtype;
+   int isbody;
 
    char *promiser;
    void *promisee;
@@ -215,12 +224,17 @@ enum cfagenttype
 enum cfgcontrol
    {
    cfg_bundlesequence,
+   cfg_ignore_missing_bundles,
+   cfg_ignore_missing_inputs,
    cfg_inputs,
    cfg_version,
    cfg_lastseenexpireafter,
    cfg_output_prefix,
    cfg_domain,
    cfg_require_comments,
+   cfg_licenses,
+   cfg_syslog_host,
+   cfg_syslog_port,
    cfg_noagent
    };
     
@@ -238,6 +252,7 @@ enum cfacontrol
    cfa_bindtointerface,
    cfa_hashupdates,
    cfa_childlibpath,
+   cfa_checksum_alert_time,
    cfa_defaultcopytype,
    cfa_dryrun,
    cfa_editbinaryfilesize,
@@ -265,6 +280,7 @@ enum cfacontrol
    cfa_skipidentify,
    cfa_suspiciousnames,
    cfa_syslog,
+   cfa_track_value,
    cfa_timezone,
    cfa_timeout,
    cfa_verbose,
@@ -357,6 +373,7 @@ enum cfkcontrol
    cfk_graph_dir,
    cfk_genman,
    cfk_mandir,
+   cfk_views,
    cfk_notype
    };
 
@@ -409,6 +426,8 @@ enum cfreport
    cf_verbose,
    cf_error,
    cf_log,
+   cf_reporting,
+   cf_cmdout,
    cf_noreport
    };
 
@@ -439,12 +458,14 @@ enum cfeditorder
 #define CF_MODERANGE   "[0-7augorwxst,+-]+"
 #define CF_BSDFLAGRANGE "[+-]*[(arch|archived|nodump|opaque|sappnd|sappend|schg|schange|simmutable|sunlnk|sunlink|uappnd|uappend|uchg|uchange|uimmutable|uunlnk|uunlink)]+"
 #define CF_CLASSRANGE  "[a-zA-Z0-9_!&@@$|.()]+"
-#define CF_IDRANGE     "[a-zA-Z0-9_$.]+"
+#define CF_IDRANGE     "[a-zA-Z0-9_$()\\[\\].]+"
 #define CF_USERRANGE   "[a-zA-Z0-9_$.-]+"
+#define CF_IPRANGE     "[a-zA-Z0-9_$.:-]+"
 #define CF_FNCALLRANGE "[a-zA-Z0-9_().$@]+"
 #define CF_NAKEDLRANGE "@[(][a-zA-Z0-9]+[)]"
 #define CF_ANYSTRING   ".*"
-#define CF_PATHRANGE   "[cC]:\\\\.*|/.*"
+#define CF_PATHRANGE   "\042?(([a-zA-Z]:\\\\.*)|(/.*))"  // can start with e.g. c:\... or "c:\...  |  unix
+#define CF_LOGRANGE    "stdout|udp_syslog|(\042?[a-zA-Z]:\\\\.*)|(/.*)"
 
 #define CF_FACILITY "LOG_USER,LOG_DAEMON,LOG_LOCAL0,LOG_LOCAL1,LOG_LOCAL2,LOG_LOCAL3,LOG_LOCAL4,LOG_LOCAL5,LOG_LOCAL6,LOG_LOCAL7"
 
@@ -488,17 +509,26 @@ enum fncalltype
    cfn_changedbefore,
    cfn_classify,
    cfn_classmatch,
+   cfn_countclassesmatching,
+   cfn_countlinesmatching,
+   cfn_diskfree,
+   cfn_escape,
    cfn_execresult,
    cfn_fileexists,
    cfn_filesexist,
+   cfn_getfields,
    cfn_getindices,
+   cfn_getenv,
    cfn_getgid,
    cfn_getuid,
+   cfn_grep,
    cfn_groupexists,
    cfn_hash,
    cfn_hashmatch,
-   cfn_hostrange,
+   cfn_host2ip,
    cfn_hostinnetgroup,
+   cfn_hostrange,
+   cfn_hostsseen,
    cfn_iprange,
    cfn_irange,
    cfn_isdir,
@@ -508,6 +538,7 @@ enum fncalltype
    cfn_isnewerthan,
    cfn_isplain,
    cfn_isvariable,
+   cfn_join,
    cfn_lastnode,
    cfn_ldaparray,
    cfn_ldaplist,
@@ -528,17 +559,20 @@ enum fncalltype
    cfn_readtcp,
    cfn_regarray,
    cfn_regcmp,
+   cfn_regextract,
    cfn_registryvalue,
    cfn_regline,
    cfn_reglist,
    cfn_regldap,
    cfn_remotescalar,
+   cfn_remoteclassesmatching,
    cfn_returnszero,
    cfn_rrange,
    cfn_selectservers,
    cfn_splayclass,
    cfn_splitstring,
    cfn_strcmp,
+   cfn_translatepath,
    cfn_usemodule,
    cfn_userexists,
    cfn_unknown,
@@ -634,6 +668,7 @@ struct Constraint
    char type;     /* scalar, list, or function */
    char *classes; /* only used within bodies */
    int lineno;
+   int isbody;
    struct Audit *audit;
    struct Constraint *next;
    };
@@ -744,6 +779,7 @@ enum cfcomparison
    cfa_checksum,
    cfa_hash,
    cfa_binary,
+   cfa_exists,
    cfa_nocomparison
    };
 
@@ -872,6 +908,24 @@ enum action_policy
   cfa_no_ppolicy
   };
 
+enum cf_thread_mutex
+  {
+  cft_system,
+  cft_count,
+  cft_getaddr,
+  cft_lock,
+  cft_output,
+  cft_dbhandle,
+  cft_no_tpolicy
+  };
+
+enum cf_status
+  {
+  cfn_repaired,
+  cfn_notkept,
+  cfn_nop
+  };
+
 /************************************************************************************/
 
 enum cf_acl_method
@@ -891,9 +945,10 @@ enum cf_acl_type
        
 enum cf_acl_inherit
    {
+   cfacl_nochange,
    cfacl_specify,
    cfacl_parent,
-   cfacl_none,
+   cfacl_clear,
    cfacl_noinherit,
    };
 
@@ -906,6 +961,14 @@ struct CfACL
    struct Rlist *acl_inherit_entries;
    };
 
+typedef enum
+  {
+  INHERIT_ACCESS_ONLY,
+  INHERIT_DEFAULT_ONLY,
+  INHERIT_ACCESS_AND_DEFAULT
+  }inherit_t;
+
+
 /*************************************************************************/
 /* Runtime constraint structures                                         */
 /*************************************************************************/
@@ -914,7 +977,7 @@ struct CfACL
 
 struct CfRegEx
 {
-#ifdef HAVE_LIBPCRE
+#if defined HAVE_PCRE_H || defined HAVE_PCRE_PCRE_H
    pcre *rx;
    const char *err;
    int err_offset;
@@ -970,7 +1033,11 @@ struct TransactionContext
    char *log_kept;
    char *log_repaired;
    char *log_failed;
+   int log_priority;
    char *measure_id;
+   double value_kept;
+   double value_notkept;
+   double value_repaired;
    int  audit;
    enum cfreport report_level;
    enum cfreport log_level;
@@ -988,6 +1055,9 @@ struct DefineClasses
    struct Rlist *interrupt;
    int persist;
    enum statepolicy timer;
+   struct Rlist *del_change;
+   struct Rlist *del_kept;
+   struct Rlist *del_notkept;
    };
 
 
@@ -1146,6 +1216,14 @@ struct ServerItem
 
 /*************************************************************************/
 
+struct CfState
+   {
+   unsigned int expires;
+   enum statepolicy policy;
+   };
+
+/*************************************************************************/
+
 struct FilePerms
    {
    mode_t plus;
@@ -1210,6 +1288,7 @@ struct FileChange
    {
    enum cfhashes hash;
    enum cfchanges report_changes;
+   int report_diffs;
    int update;
    };
 
@@ -1396,6 +1475,9 @@ struct Packages
    char *package_patch_name_regex;
    char *package_patch_arch_regex;
    char *package_patch_installed_regex;
+      
+   char *package_list_update_command;
+   int package_list_update_ifelapsed;
 
    char *package_version_regex;
    char *package_name_regex;
@@ -1409,6 +1491,9 @@ struct Packages
    char *package_verify_command;
    char *package_noverify_regex;
    char *package_name_convention;
+
+   char *package_multiline_start;
+      
    int package_noverify_returncode;
    };
 
@@ -1423,6 +1508,7 @@ struct Measurement
    int select_line_number;
    char *extraction_regex;
    char *units;
+   int growing;
    };
 
 /*************************************************************************/
@@ -1452,6 +1538,26 @@ struct CfDatabase
     
 /*************************************************************************/
 
+enum cf_srv_policy
+   {
+   cfsrv_start,
+   cfsrv_stop,
+   cfsrv_disable,
+   cfsrv_nostatus
+   };
+
+struct CfServices
+   {
+   struct Rlist *service_depend;
+   char *service_type;
+   char *service_args;
+   enum cf_srv_policy service_policy;
+   char *service_autostart_policy;
+   char *service_depend_chain;
+   };
+
+/*************************************************************************/
+
  /* This is huge, but the simplification of logic is huge too
     so we leave it to the compiler to optimize */
 
@@ -1470,6 +1576,7 @@ struct Attributes
    struct Measurement measure;
    struct CfACL acl;
    struct CfDatabase database;
+   struct CfServices service;
    char *transformer;
    char *pathtype;
    char *repository;

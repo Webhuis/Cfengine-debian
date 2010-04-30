@@ -80,7 +80,7 @@ struct BodySyntax CF_EDITCOL_BODY[] =
    {"field_operation",cf_opts,"prepend,append,alphanum,delete,set","Menu option policy for editing subfields"},
    {"field_separator",cf_str,CF_ANYSTRING,"The regular expression used to separate fields in a line"},
    {"field_value",cf_str,CF_ANYSTRING,"Set field value to a fixed value"},
-   {"select_field",cf_int,CF_VALRANGE,"Integer index of the field required 1..n"},
+   {"select_field",cf_int,"1,99999999","Integer index of the field required 1..n"},
    {"value_separator",cf_str,CF_CHARRANGE,"Character separator for subfields inside the selected field"},
    {NULL,cf_notype,NULL,NULL}
    };
@@ -181,11 +181,11 @@ struct BodySyntax CF_COMMON_EDITBODIES[] =
 
 struct BodySyntax CF_ACL_BODY[] =
    {
-   {"aces",cf_slist,"((user|group):[^:]+:[-=+,rwx()]*(:(allow|deny))?)|((all|mask):[-=+,rwx()]*(:(allow|deny))?)","Native settings for access control entry"},
-   {"acl_directory_inherit",cf_opts,"parent,specify,none","Access control list type for the affected file system"},
+   {"aces",cf_slist,"((user|group):[^:]+:[-=+,rwx()dtTabBpcoD]*(:(allow|deny))?)|((all|mask):[-=+,rwx()]*(:(allow|deny))?)","Native settings for access control entry"},
+   {"acl_directory_inherit",cf_opts,"nochange,parent,specify,clear","Access control list type for the affected file system"},
    {"acl_method",cf_opts,"append,overwrite","Editing method for access control list"},
    {"acl_type",cf_opts,"generic,posix,ntfs","Access control list type for the affected file system"},
-   {"specify_inherit_aces",cf_slist,"((user|group):[^:]+:[-=+,rwx()]*(:(allow|deny))?)|((all|mask):[-=+,rwx()]*(:(allow|deny))?)","Native settings for access control entry"},
+   {"specify_inherit_aces",cf_slist,"((user|group):[^:]+:[-=+,rwx()dtTabBpcoD]*(:(allow|deny))?)|((all|mask):[-=+,rwx()]*(:(allow|deny))?)","Native settings for access control entry"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -193,9 +193,10 @@ struct BodySyntax CF_ACL_BODY[] =
 
 struct BodySyntax CF_CHANGEMGT_BODY[] =
    {
-   {"hash",cf_opts,"md5,sha1,best","Hash files for change detection"},
+   {"hash",cf_opts,"md5,sha1,sha256,sha384,sha512,best","Hash files for change detection"},
    {"report_changes",cf_opts,"all,stats,content,none","Specify criteria for change warnings"},
    {"update_hashes",cf_opts,CF_BOOL,"Update hash values immediately after change warning"},
+   {"report_diffs",cf_opts,CF_BOOL,"Generate reports summarizing the major differences between individual text files"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -304,14 +305,14 @@ struct BodySyntax CF_COPYFROM_BODY[] =
    {"source",cf_str,CF_PATHRANGE,"Reference source file from which to copy"},
    {"servers",cf_slist,"[A-Za-z0-9_.:-]+","List of servers in order of preference from which to copy"},
    {"collapse_destination_dir",cf_opts,CF_BOOL,"true/false Place files in subdirectories into the root destination directory during copy"},
-   {"compare",cf_opts,"atime,mtime,ctime,digest,hash","Menu option policy for comparing source and image file attributes"},
+   {"compare",cf_opts,"atime,mtime,ctime,digest,hash,exists,binary","Menu option policy for comparing source and image file attributes"},
    {"copy_backup",cf_opts,"true,false,timestamp","Menu option policy for file backup/version control"},
    {"encrypt",cf_opts,CF_BOOL,"true/false use encrypted data stream to connect to remote host"},
    {"check_root",cf_opts,CF_BOOL,"true/false check permissions on the root directory when depth_search"},
    {"copylink_patterns",cf_slist,"","List of patterns matching files that should be linked instead of copied"},
    {"copy_size",cf_irange,"0,inf","Integer range of file sizes that may be copied"},
    {"findertype",cf_opts,"MacOSX","Menu option for default finder type on MacOSX"},
-   {"linkcopy_patterns",cf_slist,"","List of patterns matching symbolic links that should be replaced with copies"},
+   {"linkcopy_patterns",cf_slist,"","List of patterns matching files that should be replaced with symbolic links"},
    {"link_type",cf_opts,CF_LINKRANGE,"Menu option for type of links to use when copying"},
    {"force_update",cf_opts,CF_BOOL,"true/false force copy update always"},
    {"force_ipv4",cf_opts,CF_BOOL,"true/false force use of ipv4 on ipv6 enabled network"},
