@@ -2,7 +2,7 @@ to fix a small typo in cf-agent
 
 --- a/src/agent.c
 +++ b/src/agent.c
-@@ -920,7 +920,7 @@
+@@ -1008,7 +1008,7 @@
  {
  if (putenv(s) != 0)
     {

@@ -6,7 +6,7 @@ supposed to update the binaries, rather than cf-execd itself
 
 --- a/inputs/library.cf
 +++ b/inputs/library.cf
-@@ -109,7 +109,7 @@
+@@ -131,7 +131,7 @@
  
      exec_fix::
  
@@ -17,7 +17,7 @@ supposed to update the binaries, rather than cf-execd itself
  
 --- a/inputs/update.cf
 +++ b/inputs/update.cf
-@@ -8,19 +8,12 @@
+@@ -30,19 +30,12 @@
  
  files:
  
@@ -38,7 +38,7 @@ supposed to update the binaries, rather than cf-execd itself
  }
  
  ############################################
-@@ -55,4 +48,4 @@
+@@ -77,4 +70,4 @@
  body action immediate
  {
  ifelapsed => "1";

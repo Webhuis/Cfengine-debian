@@ -7,12 +7,12 @@ names, this bug was notified to upstream
 
 --- a/src/env_monitor.c
 +++ b/src/env_monitor.c
-@@ -339,7 +339,7 @@
-    return;
-    }
+@@ -367,7 +367,7 @@
+     return;
+     }
  
--WritePID("cf-monitor.pid");
-+WritePID("cf-monitord.pid");
+- WritePID("cf-monitor.pid");
++ WritePID("cf-monitord.pid");
  
- OpenSniffer();
+  OpenSniffer();
   
