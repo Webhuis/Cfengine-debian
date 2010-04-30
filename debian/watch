@@ -5,6 +5,6 @@ version=3
 # *before* the official version, which does not contain any letter, so we need
 # to adapt our version otherwise uscan will believe, for example, that 3.0.2 is
 # older than 3.0.2b3
-opts="uversionmangle=s/([a-z]\d)/~$1/i,dversionmangle=s/\+dfsg//" \
-http://www.cfengine.org/pages/downloads /tarballs/cfengine-(.*)\.tar\.gz \
+opts="uversionmangle=s{([a-z]\d)}{~$1}i,dversionmangle=s{\+dfsg}{},filenamemangle=s{/tarballs/download.php\?file=}{}" \
+http://www.cfengine.org/pages/downloads /tarballs/.+?cfengine-(.*)\.tar\.gz \
 debian sh debian/repack.sh
