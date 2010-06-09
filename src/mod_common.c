@@ -36,93 +36,6 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
-
-/*********************************************************/
-/* FnCalls are rvalues in certain promise constraints    */
-/*********************************************************/
-
-/* see cf3.defs.h enum fncalltype */
-
-struct FnCallType CF_FNCALL_TYPES[] = 
-   {
-   {"accessedbefore",cf_class,2,"True if arg1 was accessed before arg2 (atime)"},
-   {"accumulated",cf_int,6,"Convert an accumulated amount of time into a system representation"},
-   {"ago",cf_int,6,"Convert a time relative to now to an integer system representation"},
-   {"canonify",cf_str,1,"Convert an abitrary string into a legal class name"},
-   {"changedbefore",cf_class,2,"True if arg1 was changed before arg2 (ctime)"},
-   {"classify",cf_class,1,"True if the canonicalization of the argument is a currently defined class"},
-   {"classmatch",cf_class,1,"True if the regular expression matches any currently defined class"},
-   {"countclassesmatching",cf_int,1,"Count the number of defined classes matching regex arg1"},
-   {"countlinesmatching",cf_int,2,"Count the number of lines matching regex arg1 in file arg2"},
-   {"diskfree",cf_int,1,"Return the free space (in KB) available on the directory's current partition (0 if not found)"},
-   {"escape",cf_str,1,"Escape regular expression characters in a string"},
-   {"execresult",cf_str,2,"Execute named command and assign output to variable"},
-   {"fileexists",cf_class,1,"True if the named file can be accessed"},
-   {"filesexist",cf_class,1,"True if the named list of files can ALL be accessed"},
-   {"getfields",cf_int,4,"Get an array of fields in the lines matching regex arg1 in file arg2, split on regex arg3 as array name arg4"},
-   {"getindices",cf_slist,1,"Get a list of keys to the array whose id is the argument and assign to variable"},
-   {"getenv",cf_str,2,"Return the environment variable named arg1, truncated at arg2 characters"},
-   {"getgid",cf_int,1,"Return the integer group id of the named group on this host"},
-   {"getuid",cf_int,1,"Return the integer user id of the named user on this host"},
-   {"grep",cf_str,2,"Extract the sub-list if items matching the regular expression in arg1 of the list named in arg2"},
-   {"groupexists",cf_class,1,"True if group or numerical id exists on this host"},
-   {"hash",cf_str,2,"Return the hash of arg1, type arg2 and assign to a variable"},
-   {"hashmatch",cf_class,3,"Compute the hash of arg1, of type arg2 and test if it matches the value in arg 3"},
-   {"host2ip",cf_str,1,"Returns the primary name-service IP address for the named host"},
-   {"hostinnetgroup",cf_class,1,"True if the current host is in the named netgroup"},
-   {"hostrange",cf_class,2,"True if the current host lies in the range of enumerated hostnames specified"},
-   {"hostsseen",cf_str,3,"Extract the list of hosts last seen/not seen within the last arg1 minutes"},
-   {"iprange",cf_class,1,"True if the current host lies in the range of IP addresses specified"},
-   {"irange",cf_irange,2,"Define a range of integer values for cfengine internal use"},
-   {"isdir",cf_class,1,"True if the named object is a directory"},
-   {"isgreaterthan",cf_class,2,"True if arg1 is numerically greater than arg2, else compare strings like strcmp"},
-   {"islessthan",cf_class,2,"True if arg1 is numerically less than arg2, else compare strings like NOT strcmp"},
-   {"islink",cf_class,1,"True if the named object is a symbolic link"},
-   {"isnewerthan",cf_class,2,"True if arg1 is newer (modified later) than arg2 (mtime)"},
-   {"isplain",cf_class,1,"True if the named object is a plain/regular file"},
-   {"isvariable",cf_class,1,"True if the named variable is defined"},
-   {"join",cf_str,2,"Join the items of arg2 into a string, using the conjunction in arg1"},
-   {"lastnode",cf_str,2,"Extract the last of a separated string, e.g. filename from a path"},
-   {"ldaparray",cf_class,6,"Extract all values from an ldap record"},
-   {"ldaplist",cf_slist,6,"Extract all named values from multiple ldap records"},
-   {"ldapvalue",cf_str,6,"Extract the first matching named value from ldap"},
-   {"now",cf_int,0,"Convert the current time into system representation"},
-   {"on",cf_int,6,"Convert an exact date/time to an integer system representation"},
-   {"peers",cf_slist,3,"Get a list of peers (not including ourself) from the partition to which we belong"},
-   {"peerleader",cf_str,3,"Get the assigned peer-leader of the partition to which we belong"},
-   {"peerleaders",cf_slist,3,"Get a list of peer leaders from the named partitioning"},
-   {"randomint",cf_int,2,"Generate a random integer between the given limits"},
-   {"readfile",cf_str,2,"Read max number of bytes from named file and assign to variable"},
-   {"readintarray",cf_int,6,"Read an array of integers from a file and assign the dimension to a variable"},
-   {"readintlist",cf_ilist,5,"Read and assign a list variable from a file of separated ints"},
-   {"readrealarray",cf_int,6,"Read an array of real numbers from a file and assign the dimension to a variable"},
-   {"readreallist",cf_rlist,5,"Read and assign a list variable from a file of separated real numbers"},
-   {"readstringarray",cf_int,6,"Read an array of strings from a file and assign the dimension to a variable"},
-   {"readstringlist",cf_slist,5,"Read and assign a list variable from a file of separated strings"},
-   {"readtcp",cf_str,4,"Connect to tcp port, send string and assign result to variable"},
-   {"regarray",cf_class,2,"True if arg1 matches any item in the associative array with id=arg2"},
-   {"regcmp",cf_class,2,"True if arg1 is a regular expression matching that matches string arg2"},
-   {"regextract",cf_class,3,"True if the regular expression in arg 1 matches the string in arg2 and sets a non-empty array of backreferences named arg3"},
-   {"registryvalue",cf_str,2,"Returns a value for an MS-Win registry key,value pair"},
-   {"regline",cf_class,2,"True if the regular expression in arg1 matches a line in file arg2"},
-   {"reglist",cf_class,2,"True if the regular expression in arg2 matches any item in the list whose id is arg1"},
-   {"regldap",cf_class,7,"True if the regular expression in arg6 matches a value item in an ldap search"},
-   {"remotescalar",cf_str,3,"Read a scalar value from a remote cfengine server"},
-   {"remoteclassesmatching",cf_class,4,"Read persistent classes matching a regular expression from a remote cfengine server and add them into local context with prefix"},
-   {"returnszero",cf_class,2,"True if named shell command has exit status zero"},
-   {"rrange",cf_rrange,2,"Define a range of real numbers for cfengine internal use"},
-   {"selectservers",cf_int,6,"Select tcp servers which respond correctly to a query and return their number, set array of names"},
-   {"splayclass",cf_class,2,"True if the first argument's time-slot has arrived, according to a policy in arg2"},
-   {"splitstring",cf_slist,3,"Convert a string in arg1 into a list of max arg3 strings by splitting on a regular expression in arg2"},
-   {"strcmp",cf_class,2,"True if the two strings match exactly"},
-   {"translatepath",cf_str,1,"Translate path separators from Unix style to the host's native"},
-   {"usemodule",cf_class,2,"Execute cfengine module script and set class if successful"},
-   {"userexists",cf_class,1,"True if user name or numerical id exists on this host"},
-   {NULL,cf_notype,0,NULL}
-   };
-
-/*********************************************************/
-
 struct BodySyntax CF_TRANSACTION_BODY[] =
    {
    {"action_policy",cf_opts,"fix,warn,nop","Whether to repair or report about non-kept promises"},
@@ -148,11 +61,11 @@ struct BodySyntax CF_TRANSACTION_BODY[] =
 
 struct BodySyntax CF_DEFINECLASS_BODY[] =
    {
-   {"promise_repaired",cf_slist,CF_IDRANGE,"A list of classes to be defined"},
-   {"repair_failed",cf_slist,CF_IDRANGE,"A list of classes to be defined"},
-   {"repair_denied",cf_slist,CF_IDRANGE,"A list of classes to be defined"},
-   {"repair_timeout",cf_slist,CF_IDRANGE,"A list of classes to be defined"},
-   {"promise_kept",cf_slist,CF_IDRANGE,"A list of classes to be defined"},
+   {"promise_repaired",cf_slist,CF_IDRANGE,"A list of classes to be defined globally"},
+   {"repair_failed",cf_slist,CF_IDRANGE,"A list of classes to be defined globally"},
+   {"repair_denied",cf_slist,CF_IDRANGE,"A list of classes to be defined globally"},
+   {"repair_timeout",cf_slist,CF_IDRANGE,"A list of classes to be defined globally"},
+   {"promise_kept",cf_slist,CF_IDRANGE,"A list of classes to be defined globally"},
    {"cancel_kept",cf_slist,CF_IDRANGE,"A list of classes to be cancelled if the promise is kept"},
    {"cancel_repaired",cf_slist,CF_IDRANGE,"A list of classes to be cancelled if the promise is repaired"},
    {"cancel_notkept",cf_slist,CF_IDRANGE,"A list of classes to be cancelled if the promise is not kept for any reason"},
@@ -226,16 +139,14 @@ struct BodySyntax CFA_CONTROLBODY[] =
    {"dryrun",cf_opts,CF_BOOL,"All talk and no action mode"},
    {"editbinaryfilesize",cf_int,CF_VALRANGE,"Integer limit on maximum binary file size to be edited"},
    {"editfilesize",cf_int,CF_VALRANGE,"Integer limit on maximum text file size to be edited"},
-   {"environment",cf_slist,"[A-Za-z_]+=.*","List of environment variables to be inherited by children"},
+   {"environment",cf_slist,"[A-Za-z0-9_]+=.*","List of environment variables to be inherited by children"},
    {"exclamation",cf_opts,CF_BOOL,"true/false print exclamation marks during security warnings"},
    {"expireafter",cf_int,CF_VALRANGE,"Global default for time before on-going promise repairs are interrupted"},
    {"files_single_copy",cf_slist,"","List of filenames to be watched for multiple-source conflicts"},
    {"files_auto_define",cf_slist,"","List of filenames to define classes if copied"},
-   {"fullencryption",cf_opts,CF_BOOL,"Full encryption mode in server connections, includes directory listings"},
    {"hostnamekeys",cf_opts,CF_BOOL,"true/false label ppkeys by hostname not IP address"},
    {"ifelapsed",cf_int,CF_VALRANGE,"Global default for time that must elapse before promise will be rechecked"},
    {"inform",cf_opts,CF_BOOL,"true/false set inform level default"},
-   {"lastseen",cf_opts,CF_BOOL,"true/false record last observed times for each client-server connections for intermittency modelling"},
    {"intermittency",cf_opts,CF_BOOL,"true/false store detailed recordings of last observed time for all client-server connections for reliability assessment (false)"},
    {"max_children",cf_int,CF_VALRANGE,"Maximum number of background tasks that should be allowed concurrently"},
    {"maxconnections",cf_int,CF_VALRANGE,"Maximum number of outgoing connections to cf-serverd"},
@@ -264,7 +175,7 @@ struct BodySyntax CFS_CONTROLBODY[] =
    {"allowconnects",cf_slist,"","List of IPs or hostnames that may connect to the server port"},
    {"denyconnects",cf_slist,"","List of IPs or hostnames that may NOT connect to the server port"},
    {"allowallconnects",cf_slist,"","List of IPs or hostnames that may have more than one connection to the server port"},
-   {"trustkeysfrom",cf_slist,"","List of IPs or hostnames from whom we accept public keys on trust"},
+   {"trustkeysfrom",cf_slist,"","List of IPs from whom we accept public keys on trust"},
    {"allowusers",cf_slist,"","List of usernames who may execute requests from this server"},
    {"dynamicaddresses",cf_slist,"","List of IPs or hostnames for which the IP/name binding is expected to change"},
    {"skipverify",cf_slist,"","List of IPs or hostnames for which we expect no DNS binding and cannot verify"},
@@ -317,23 +228,23 @@ struct BodySyntax CFEX_CONTROLBODY[] = /* enum cfexcontrol */
 
 struct BodySyntax CFK_CONTROLBODY[] =
    {
-   {"id_prefix",cf_str,".*","The LTM identifier prefix used to label topic maps (used for disambiguation in merging)"},
    {"build_directory",cf_str,".*","The directory in which to generate output files"},
+   {"generate_manual",cf_opts,CF_BOOL,"true/false generate texinfo manual page skeleton for this version"},
+   {"graph_directory",cf_str,CF_PATHRANGE,"Path to directory where rendered .png files will be created"},
+   {"graph_output",cf_opts,CF_BOOL,"true/false generate png visualization of topic map if possible (requires lib)"},
+   {"html_banner",cf_str,"","HTML code for a banner to be added to rendered in html after the header"},
+   {"html_footer",cf_str,"","HTML code for a page footer to be added to rendered in html before the end body tag"},
+   {"id_prefix",cf_str,".*","The LTM identifier prefix used to label topic maps (used for disambiguation in merging)"},
+   {"manual_source_directory",cf_str,CF_PATHRANGE,"Path to directory where raw text about manual topics is found (defaults to build_directory)"},
+   {"query_engine",cf_str,"","Name of a dynamic web-page used to accept and drive queries in a browser"},
+   {"query_output",cf_opts,"html,text","Menu option for generated output format"},
    {"sql_type",cf_opts,"mysql,postgres","Menu option for supported database type"},
    {"sql_database",cf_str,"","Name of database used for the topic map"},
    {"sql_owner",cf_str,"","User id of sql database user"},
    {"sql_passwd",cf_str,"","Embedded password for accessing sql database"},
    {"sql_server",cf_str,"","Name or IP of database server (or localhost)"},
    {"sql_connection_db",cf_str,"","The name of an existing database to connect to in order to create/manage other databases"},
-   {"query_output",cf_opts,"html,text","Menu option for generated output format"},
-   {"query_engine",cf_str,"","Name of a dynamic web-page used to accept and drive queries in a browser"},
    {"style_sheet",cf_str,"","Name of a style-sheet to be used in rendering html output (added to headers)"},
-   {"html_banner",cf_str,"","HTML code for a banner to be added to rendered in html after the header"},
-   {"html_footer",cf_str,"","HTML code for a page footer to be added to rendered in html before the end body tag"},
-   {"graph_output",cf_opts,CF_BOOL,"true/false generate png visualization of topic map if possible (requires lib)"},
-   {"graph_directory",cf_str,CF_PATHRANGE,"Path to directory where rendered .png files will be created"},
-   {"generate_manual",cf_opts,CF_BOOL,"true/false generate texinfo manual page skeleton for this version"},
-   {"manual_source_directory",cf_str,CF_PATHRANGE,"Path to directory where raw text about manual topics is found (defaults to build_directory)"},
    {"view_projections",cf_opts,CF_BOOL,"Perform view-projection analytics in graph generation"},
    {NULL,cf_notype,NULL,NULL}
    };
@@ -352,7 +263,7 @@ struct BodySyntax CFRE_CONTROLBODY[] = /* enum cfrecontrol */
    {"reports",cf_olist,"all,audit,performance,all_locks,active_locks,hashes,classes,last_seen,monitor_now,monitor_history,monitor_summary,compliance,setuid,file_changes,installed_software,software_patches,value,variables","A list of reports that may be generated"},
    {"report_output",cf_opts,"csv,html,text,xml","Menu option for generated output format. Applies only to text reports, graph data remain in xydy format."},
    {"style_sheet",cf_str,"","Name of a style-sheet to be used in rendering html output (added to headers)"},
-   {"time_stamps",cf_opts,CF_BOOL,"true/false whether to generate timestamps on the output directory"},
+   {"time_stamps",cf_opts,CF_BOOL,"true/false whether to generate timestamps in the output directory name"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -411,7 +322,6 @@ struct SubTypeSyntax CF_COMMON_SUBTYPES[] =
      {"*","classes",CF_CLASSBODY},
      {"*","reports",CF_REPORT_BODIES},
      {"agent","*",CF_COMMON_BODIES},
-     {"edit_line","*",CF_COMMON_EDITBODIES},
      {NULL,NULL,NULL}
      };
 
@@ -424,19 +334,21 @@ struct SubTypeSyntax CF_COMMON_SUBTYPES[] =
 
 struct SubTypeSyntax *CF_ALL_SUBTYPES[CF3_MODULES] =
    {
-   CF_COMMON_SUBTYPES,     /* Add modules after this, mod_report.c is here */
-   CF_EXEC_SUBTYPES,       /* mod_exec.c */
-   CF_DATABASES_SUBTYPES,  /* mod_databases.c */
-   CF_FILES_SUBTYPES,      /* mod_files.c */
-   CF_INTERFACES_SUBTYPES, /* mod_interfaces.c */
-   CF_METHOD_SUBTYPES,     /* mod_methods.c */
-   CF_PACKAGES_SUBTYPES,   /* mod_packages.c */
-   CF_PROCESS_SUBTYPES,    /* mod_process.c */
-   CF_SERVICES_SUBTYPES,   /* mod_services.c */
-   CF_STORAGE_SUBTYPES,    /* mod_storage.c */
-   CF_REMACCESS_SUBTYPES,  /* mod_access.c */
-   CF_KNOWLEDGE_SUBTYPES,  /* mod_knowledge.c */
-   CF_MEASUREMENT_SUBTYPES,/* mod_measurement.c */
+   CF_COMMON_SUBTYPES,       /* Add modules after this, mod_report.c is here */
+   CF_EXEC_SUBTYPES,         /* mod_exec.c */
+   CF_DATABASES_SUBTYPES,    /* mod_databases.c */
+   CF_ENVIRONMENT_SUBTYPES,  /* mod_environ.c */
+   CF_FILES_SUBTYPES,        /* mod_files.c */
+   CF_INTERFACES_SUBTYPES,   /* mod_interfaces.c */
+   CF_METHOD_SUBTYPES,       /* mod_methods.c */
+   CF_OUTPUTS_SUBTYPES,      /* mod_outputs.c */
+   CF_PACKAGES_SUBTYPES,     /* mod_packages.c */
+   CF_PROCESS_SUBTYPES,      /* mod_process.c */
+   CF_SERVICES_SUBTYPES,     /* mod_services.c */
+   CF_STORAGE_SUBTYPES,      /* mod_storage.c */
+   CF_REMACCESS_SUBTYPES,    /* mod_access.c */
+   CF_KNOWLEDGE_SUBTYPES,    /* mod_knowledge.c */
+   CF_MEASUREMENT_SUBTYPES,  /* mod_measurement.c */
    
    /* update CF3_MODULES in cf3.defs.h */
    };

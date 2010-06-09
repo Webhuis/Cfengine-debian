@@ -216,7 +216,7 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
             ERRORCOUNT++;            
             CfOut(cf_error,"","Number of arguments does not match for body reference \"%s\" in promise at line %d of %s\n",bodyname,pp->lineno,(pp->audit)->filename);
             }
-      
+    
          for (scp = bp->conlist; scp != NULL; scp = scp->next)
             {
             Debug("Doing arg-mapped sublval = %s (promises.c)\n",scp->lval);
@@ -310,6 +310,7 @@ pcopy->audit = pp->audit;
 pcopy->lineno = pp->lineno;
 pcopy->bundle = strdup(pp->bundle);
 pcopy->ref = pp->ref;
+
 pcopy->agentsubtype = pp->agentsubtype;
 pcopy->conlist = NULL;
 pcopy->next = NULL;
@@ -349,6 +350,13 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
       else
          {
          pcopy->ref = final.item; /* No alloc reference to comment item */
+         
+         if (pcopy->ref && strstr(pcopy->ref,"$(this.promiser)"))
+            {
+            DereferenceComment(pcopy);
+            }
+         
+
          }
       }
 
@@ -586,12 +594,21 @@ if (pp == NULL)
 
 if (pp->this_server != NULL)
    {
+   ThreadLock(cft_policy);
    free(pp->this_server);
+   ThreadUnlock(cft_policy);
    }
  
 if (pp->next != NULL)
    {
    DeletePromises(pp->next);
+   }
+
+if (pp->ref_alloc == 'y')
+   {
+   ThreadLock(cft_policy);
+   free(pp->ref);
+   ThreadUnlock(cft_policy);
    }
 
 DeletePromise(pp);
@@ -602,7 +619,9 @@ DeletePromise(pp);
 struct Promise *NewPromise(char *typename,char *promiser)
 
 { struct Promise *pp;
- 
+
+ThreadLock(cft_policy); 
+
 if ((pp = (struct Promise *)malloc(sizeof(struct Promise))) == NULL)
    {
    CfOut(cf_error,"malloc","Unable to allocate Promise");
@@ -613,6 +632,9 @@ pp->audit = AUDITPTR;
 pp->lineno = 0;
 pp->bundle =  strdup("independent");
 pp->promiser = strdup(promiser);
+
+ThreadUnlock(cft_policy);
+
 pp->promisee = NULL;
 pp->petype = CF_NOPROMISEE;
 pp->classes = NULL;
@@ -645,6 +667,8 @@ if (pp == NULL)
    return;
    }
 
+ThreadLock(cft_policy);
+
 if (pp->promiser != NULL)
    {
    free(pp->promiser);
@@ -663,6 +687,7 @@ free(pp->classes);
 DeleteConstraintList(pp->conlist);
 
 free((char *)pp);
+ThreadUnlock(cft_policy);
 }
 
 /*****************************************************************************/
@@ -703,6 +728,11 @@ void PromiseRef(enum cfreport level,struct Promise *pp)
 { char *v,rettype;
   void *retval;
 
+if (pp == NULL)
+   {
+   return;
+   }
+
 if (GetVariable("control_common","version",&retval,&rettype) != cf_notype)
    {
    v = (char *)retval;
@@ -738,6 +768,10 @@ void HashPromise(char *salt,struct Promise *pp,unsigned char digest[EVP_MAX_MD_S
   struct Rlist *rp;
   struct FnCall *fp;
 
+  char *noRvalHash[] = { "mtime", "atime", "ctime", NULL };
+  int doHash;
+  int i;
+
 md = EVP_get_digestbyname(FileHashName(type));
    
 EVP_DigestInit(&context,md);
@@ -758,6 +792,23 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
    EVP_DigestUpdate(&context,cp->lval,strlen(cp->lval));
 
+   // don't hash rvals that change (e.g. times)
+   doHash = true;
+
+   for (i = 0; noRvalHash[i] != NULL; i++ )
+      {
+      if(strcmp(cp->lval, noRvalHash[i]) == 0)
+	 {
+         doHash = false;
+         break;
+	 }
+      }
+   
+   if(!doHash)
+      {
+      continue;
+      }
+   
    switch(cp->type)
       {
       case CF_SCALAR:
@@ -791,3 +842,31 @@ EVP_DigestFinal(&context,digest,&md_len);
    
 /* Digest length stored in md_len */
 }
+
+/*******************************************************************/
+
+void DereferenceComment(struct Promise *pp)
+
+{ char pre_buffer[CF_BUFSIZE],post_buffer[CF_BUFSIZE],buffer[CF_BUFSIZE],*sp;
+  int offset = 0;
+
+strncpy(pre_buffer,pp->ref,CF_BUFSIZE);
+
+if (sp = strstr(pre_buffer,"$(this.promiser)"))
+   {
+   *sp = '\0';
+   offset = sp - pre_buffer + strlen("$(this.promiser)");
+   strncpy(post_buffer,pp->ref+offset,CF_BUFSIZE);
+   snprintf(buffer,CF_BUFSIZE,"%s%s%s",pre_buffer,pp->promiser,post_buffer);
+
+   if (pp->ref_alloc == 'y')
+      {
+      free(pp->ref);
+      }
+ 
+   pp->ref = strdup(buffer);
+   pp->ref_alloc = 'y';
+   }
+}
+
+

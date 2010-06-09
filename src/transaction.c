@@ -324,144 +324,129 @@ for (rp = params; rp != NULL; rp=rp->next)
 
 /************************************************************************/
 
-int ThreadLock(enum cf_thread_mutex name)
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
 
-{ int val = 0;
+pthread_mutex_t *NameToThreadMutex(enum cf_thread_mutex name)
 
+{
 switch(name)
    {
    case cft_system:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_lock(&MUTEX_SYSCALL)) != 0)
-          {
-          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-          }
-#endif
-
+       return &MUTEX_SYSCALL;
        break;
-
+       
    case cft_count:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_lock(&MUTEX_COUNT)) != 0)
-          {
-          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-          }
-#endif
-
+       return &MUTEX_COUNT;
        break;
-
-   case cft_lock:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_lock(&MUTEX_LOCK)) != 0)
-          {
-          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-          }
-#endif
-
-       break;
-
+       
    case cft_getaddr:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_lock(&MUTEX_GETADDR)) != 0)
-          {
-          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-          }
-#endif
+       return &MUTEX_GETADDR;
        break;
-
+       
+   case cft_lock:
+       return &MUTEX_LOCK;
+       break;
+       
    case cft_output:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_lock(&MUTEX_OUTPUT)) != 0)
-          {
-          CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-          }
-#endif
+       return &MUTEX_OUTPUT;
        break;
-
-
+       
+   case cft_dbhandle:
+       return &MUTEX_DBHANDLE;
+       break;
+       
+   case cft_policy:
+       return &MUTEX_POLICY;
+       break;
+       
+   case cft_db_lastseen:
+       return &MUTEX_DB_LASTSEEN;
+       break;
+       
    default:
+       CfOut(cf_error, "", "!! NameToThreadMutex supplied with unknown mutex name: %d", name);
+       FatalError("Internal software error\n");
        break;
-  }
+   }
 
-return (val == 0);
+return NULL;
+}
+
+#endif
+
+/************************************************************************/
+
+int ThreadLock(enum cf_thread_mutex name)
+
+{
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+pthread_mutex_t *mutex;
+
+mutex = NameToThreadMutex(name);
+
+if (pthread_mutex_lock(mutex) != 0)
+   {
+   CfOut(cf_error,"pthread_mutex_lock","!! Could not lock: %d", name);
+   return false;
+   }
+
+return true;
+
+#else  // NOT_HAVE_PTHREAD
+
+return true;
+
+#endif
+
 }
 
 /************************************************************************/
 
 int ThreadUnlock(enum cf_thread_mutex name)
 
-{ int val = 0;
+{
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+pthread_mutex_t *mutex;
 
-switch(name)
+mutex = NameToThreadMutex(name);
+
+if (pthread_mutex_unlock(mutex) != 0)
    {
-   case cft_system:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-       if ((val = pthread_mutex_unlock(&MUTEX_SYSCALL)) != 0)
-          {
-          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
-          }
-#endif
-       break;
-
-   case cft_count:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_unlock(&MUTEX_COUNT)) != 0)
-          {
-          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
-          }
-#endif
-   break;
-
-   case cft_lock:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_unlock(&MUTEX_LOCK)) != 0)
-          {
-          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
-          }
-#endif
-   break;
-
-   case cft_getaddr:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_unlock(&MUTEX_GETADDR)) != 0)
-          {
-          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
-          }
-#endif
-   break;
-
-   case cft_output:
-
-#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
-
-       if ((val = pthread_mutex_unlock(&MUTEX_OUTPUT)) != 0)
-          {
-          CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
-          }
-#endif
-       break;
-
-
+   CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
+   return false;
    }
 
-return (val == 0);
+return true;
+
+#else  // NOT_HAVE_PTHREAD 
+
+return true;
+
+#endif
+}
+
+/*****************************************************************************/
+
+void AssertThreadLocked(enum cf_thread_mutex name, char *fname)
+
+/* Verifies that a given lock is taken (not neccessary by the current thread) */
+
+{
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+pthread_mutex_t *mutex;
+int status;
+
+mutex = NameToThreadMutex(name);
+
+status = pthread_mutex_trylock(mutex);
+
+if (status != EBUSY && status != EDEADLK)
+   {
+   CfOut(cf_error, "", "!! The mutex %d was not locked in %s() -- status=%d", name, fname, status);
+   FatalError("Software assertion failure\n");
+   }
+
+#endif
 }
 
 /*****************************************************************************/

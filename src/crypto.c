@@ -41,7 +41,6 @@ void RandomSeed()
   char vbuff[CF_BUFSIZE];
   
 /* Use the system database as the entropy source for random numbers */
-
 Debug("RandomSeed() work directory is %s\n",CFWORKDIR);
 
 snprintf(vbuff,CF_BUFSIZE,"%s%crandseed",CFWORKDIR,FILE_SEPARATOR);
@@ -210,12 +209,16 @@ if ((fp = fopen(filename, "w")) == NULL )
    return;
    }
 
+ThreadLock(cft_system);
+
 if (!PEM_write_RSAPublicKey(fp,key))
    {
    err = ERR_get_error();
    CfOut(cf_error,"PEM_write","Error saving public key %s = %s\n",filename,ERR_reason_error_string(err));
    }
- 
+
+ThreadUnlock(cft_system);
+
 fclose(fp);
 }
 
@@ -259,16 +262,15 @@ EVP_DigestUpdate(&context,buffer,CF_BUFSIZE);
 
 snprintf(pscomm,CF_BUFSIZE,"%s %s",VPSCOMM[VSYSTEMHARDCLASS],VPSOPTS[VSYSTEMHARDCLASS]);
 
-if ((pp = cf_popen(pscomm,"r")) == NULL)
+if ((pp = cf_popen(pscomm,"r")) != NULL)
    {
    CfOut(cf_error,"cf_popen","Couldn't open the process list with command %s\n",pscomm);
-   return;
-   }
 
-while (!feof(pp))
-   {
-   CfReadLine(buffer,CF_BUFSIZE,pp);
-   EVP_DigestUpdate(&context,buffer,CF_BUFSIZE);
+   while (!feof(pp))
+      {
+      CfReadLine(buffer,CF_BUFSIZE,pp);
+      EVP_DigestUpdate(&context,buffer,CF_BUFSIZE);
+      }
    }
 
 uninitbuffer[99] = '\0';
@@ -293,11 +295,13 @@ EVP_EncryptInit(&ctx,CfengineCipher(type),key,iv);
 
 if (!EVP_EncryptUpdate(&ctx,out,&cipherlen,in,plainlen))
    {
+   EVP_CIPHER_CTX_cleanup(&ctx);
    return -1;
    }
  
 if (!EVP_EncryptFinal(&ctx,out+cipherlen,&tmplen))
    {
+   EVP_CIPHER_CTX_cleanup(&ctx);
    return -1;
    }
  
@@ -319,36 +323,49 @@ EVP_DecryptInit(&ctx,CfengineCipher(type),key,iv);
 
 if (!EVP_DecryptUpdate(&ctx,out,&plainlen,in,cipherlen))
    {
+   CfOut(cf_error, "", "!! Decrypt FAILED");
+   EVP_CIPHER_CTX_cleanup(&ctx);
    return -1;
    }
  
 if (!EVP_DecryptFinal(&ctx,out+plainlen,&tmplen))
    {
+   unsigned long err = ERR_get_error();
+   CfOut(cf_error,"","decryption FAILED at final of %d: %s\n",cipherlen,ERR_error_string(err,NULL));
+   EVP_CIPHER_CTX_cleanup(&ctx);
    return -1;
    }
  
 plainlen += tmplen;
 
 EVP_CIPHER_CTX_cleanup(&ctx);
+
 return plainlen; 
 }
 
 /*********************************************************************/
 
-void DebugBinOut(char *buffer,int len)
+void DebugBinOut(char *buffer,int len,char *comment)
 
-{ char *sp;
-  int check = 0;
+{ unsigned char *sp;
+  char buf[CF_BUFSIZE];
+  char hexStr[3];  // one byte as hex
 
-Debug("BinaryBuffer(%d)[",len);
- 
-for (sp = buffer; (sp < buffer+len); sp++)
+if (len >= (sizeof(buf) / 2))  // hex uses two chars per byte
    {
-   check++;
-   Debug("%x",*sp);
+   Debug("Debug binary print is too large (len=%d)", len);
+   return;
    }
- 
-Debug("] = %d\n",check); 
+
+memset(buf, 0, sizeof(buf));
+
+for (sp = buffer; sp < (unsigned char *)(buffer+len); sp++)
+   {
+   snprintf(hexStr, sizeof(hexStr), "%2.2x", (int)*sp);
+   strcat(buf, hexStr);
+   }
+
+CfOut(cf_verbose, "", "BinaryBuffer(%d bytes => %s) -> [%s]",len,comment,buf);
 }
 
 

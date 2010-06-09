@@ -16,7 +16,7 @@ dnl
 dnl The version in the next line is the only one to set
 dnl
 
-AM_INIT_AUTOMAKE(cfengine, 3.0.4)   dnl remember to set version
+AM_INIT_AUTOMAKE(cfengine, 3.0.5)   dnl remember to set version
 
 AM_CONFIG_HEADER(src/conf.h)
 
@@ -59,6 +59,7 @@ CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
 CPPFLAGS="$PTHREAD_CPPFLAGS $CPPFLAGS"
 LDFLAGS="$PTHREAD_LDFLAGS $LDFLAGS"
 
+
 dnl ######################################################################
 dnl Checks for programs.
 dnl ######################################################################
@@ -84,7 +85,7 @@ AC_CHECK_LIB(m,main)
 dnl Look for ldap
 
 AC_ARG_WITH(ldap,
-	AS_HELP_STRING(--without-ldap, [support some graphic functions]),with_ldap=no,
+	AS_HELP_STRING(--without-ldap, [support ldap functions]),with_ldap=no,
 	with_ldap=yes)
 
 if test "x$with_ldap" != xno; then
@@ -109,6 +110,12 @@ else
 fi
 
 if test $WITH_SQL = 1; then
+  case "$target_os" in
+     linux*)
+        if [ `which pg_config` ]; then
+          CPPFLAGS=-I`pg_config --includedir`
+        fi
+  esac
   AC_CHECK_LIB(mysqlclient,main)
   AC_CHECK_LIB(pq,main)
   AC_CHECK_HEADERS(mysql/mysql.h)
@@ -460,6 +467,24 @@ AC_SUBST(OPENSSL_LIB_LDFLAGS)
 AC_SUBST(OPENSSL_LIB_CPPFLAGS)
 AC_SUBST(OPENSSL_LIB_LIB)
 
+#
+# Others
+#
+
+AC_ARG_WITH(libvirt,
+	AS_HELP_STRING(--with-libvirt, [support virtual machine management]),with_virt=yes,
+	with_virt=no)
+
+if test "x$with_virt" = xyes; then
+   AC_MSG_CHECKING(for libvirt)
+   WITH_VIRT=1
+else
+   WITH_VIRT=0
+fi
+
+if test $WITH_VIRT = 1; then
+  AC_CHECK_LIB(virt,main, [], [AC_MSG_ERROR(Cannot find libvirt)])
+fi
 
 
 dnl ######################################################################
@@ -960,6 +985,65 @@ if test x"$GCC" = "xyes"; then
 else 
 	AC_MSG_RESULT(no)
 fi
+
+
+dnl ######################################################################
+dnl Summarize
+dnl ######################################################################
+
+AC_MSG_RESULT( )
+AC_MSG_RESULT(    Summary of options...)
+
+
+if test $ac_cv_lib_pcre_main = "yes"; then
+  AC_MSG_RESULT( -> Configured with PCRE libraries)
+else
+  AC_MSG_RESULT( -> No PCRE library support - reverting to POSIX builtins)
+fi
+
+if test $WITH_SQL = 1; then
+
+  if test $ac_cv_lib_mysqlclient_main = "yes"; then
+    AC_MSG_RESULT( -> Configured with MYSQL libraries)
+  fi
+
+  if test $ac_cv_lib_pq_main = "yes"; then
+    AC_MSG_RESULT( -> Configured with Postgres libraries)
+  fi
+
+else
+  AC_MSG_RESULT( -> No SQL library support for knowledge map)
+fi
+
+if test $WITH_GVC = 1; then
+ if test $ac_cv_lib_gvc_main = "yes"; then
+   AC_MSG_RESULT( -> Configured with Graphviz libraries)
+ fi
+else
+  AC_MSG_RESULT( -> No Graphviz libraries included)
+fi
+
+if test $ac_cv_lib_ldap_ldap_get_values_len = "yes"; then
+  AC_MSG_RESULT( -> Configured with LDAP libraries)
+else
+  AC_MSG_RESULT( -> No LDAP libraries included)
+fi
+
+if test $WITH_TOKYO = 1; then
+  AC_MSG_RESULT( -> Configured with Tokyo Cabinet)
+elif test $WITH_QDBM = 1; then
+  AC_MSG_RESULT( -> Configured with QDBM)
+else
+  AC_MSG_RESULT( -> Will look for BerkeleyDB in $BERKELEY_DB_DIR)
+fi
+
+if test $WITH_VIRT = 1; then
+  AC_MSG_RESULT( -> Configured with libvirt support)
+else
+  AC_MSG_RESULT( -> No libvirt support included)
+fi
+
+AC_MSG_RESULT( )
 
 dnl ######################################################################
 dnl Now make the Makefiles

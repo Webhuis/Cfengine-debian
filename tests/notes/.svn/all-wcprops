@@ -33,11 +33,11 @@ svn:wc:ra_dav:version-url
 V 66
 /projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_storage.cf
 END
-mod_extern.cf
+mod_varexp.cf
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_extern.cf
+/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_varexp.cf
 END
 cfbrain.cf
 K 25
@@ -45,11 +45,11 @@ svn:wc:ra_dav:version-url
 V 62
 /projects/cfengine-3/!svn/ver/852/trunk/tests/notes/cfbrain.cf
 END
-mod_varexp.cf
+mod_extern.cf
 K 25
 svn:wc:ra_dav:version-url
 V 65
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_varexp.cf
+/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_extern.cf
 END
 mod_files_edit.cf
 K 25
@@ -87,17 +87,17 @@ svn:wc:ra_dav:version-url
 V 63
 /projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_exec.cf
 END
-mod_routing.cf
-K 25
-svn:wc:ra_dav:version-url
-V 66
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_routing.cf
-END
 mod_monitor.cf
 K 25
 svn:wc:ra_dav:version-url
 V 66
 /projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_monitor.cf
+END
+mod_routing.cf
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_routing.cf
 END
 mod_execd.cf
 K 25

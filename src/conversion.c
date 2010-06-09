@@ -34,6 +34,73 @@
 
 /***************************************************************************/
 
+enum cfhypervisors Str2Hypervisors(char *s)
+
+{ static char *names[] = { "xen", "kvm", "esx", "test",
+                           "xen_net", "kvm_net", "esx_net", "test_net",
+                           "zone", "ec2", "eucalyptus", NULL };
+  int i;
+
+if (s == NULL)
+   {
+   return cfv_virt_test;
+   }
+  
+for (i = 0; names[i] != NULL; i++)
+   {
+   if (s && strcmp(s,names[i]) == 0)
+      {
+      return (enum cfhypervisors) i;
+      }
+   }
+
+return (enum cfhypervisors) i;
+}
+
+/***************************************************************************/
+
+enum cfenvironment_state Str2EnvState(char *s)
+
+{ static char *names[] = { "create", "delete", "running", "suspended", "down", NULL };
+  int i;
+ 
+if (s == NULL)
+   {
+   return cfvs_create;
+   }
+
+for (i = 0; names[i] != NULL; i++)
+   {
+   if (s && strcmp(s,names[i]) == 0)
+      {
+      return (enum cfenvironment_state) i;
+      }
+   }
+
+return (enum cfenvironment_state) i;
+}
+
+/***************************************************************************/
+
+enum insert_match String2InsertMatch(char *s)
+
+{ static char *names[] = { "ignore_leading","ignore_trailing","ignore_embedded",
+                           "exact_match", NULL };
+ int i;
+
+for (i = 0; names[i] != NULL; i++)
+   {
+   if (s && strcmp(s,names[i]) == 0)
+      {
+      return i;
+      }
+   }
+
+return cf_exact_match;
+}
+    
+/***************************************************************************/
+
 int SyslogPriority2Int(char *s)
 
 { int i;
@@ -733,7 +800,7 @@ enum cf_acl_method Str2AclMethod(char *string)
 
 { static char *text[3] = { "append", "overwrite", NULL };
   int i;
- 
+
 for (i = 0; i < 2; i++)
    {
    if (string && (strcmp(text[i],string) == 0))

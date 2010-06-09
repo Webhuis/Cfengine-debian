@@ -36,6 +36,79 @@ extern char *DAY_TEXT[];
 
 /*****************************************************************************/
 
+void ValidateClassSyntax(char *str)
+
+{ char *cp = str;
+  int pcount = 0;
+
+if (*cp == '&' || *cp == '|' || *cp == '.' || *cp == ')') 
+   {
+   yyerror("Illegal initial character for class specification");
+   return;
+   }
+
+for (; *cp; cp++)
+   {
+   if (*cp == '(')
+      {
+      if (*(cp-1) == ')')
+         {
+         yyerror("Illegal use of parenthesis - you have ')(' with no intervening operator in your class specification");
+         return;
+         }
+
+      pcount++;
+      }
+   else if (*cp == ')')
+      {
+      if (--pcount < 0)
+         {
+         yyerror("Unbalanced parenthesis - too many ')' in class specification");
+         return;
+         }
+      if (*(cp-1) == '(')
+         {
+         yyerror("Empty parenthesis '()' illegal in class specifications");
+         return;
+         }
+      }
+
+// Rule out x&|y, x&.y, etc (but allow x&!y)
+   else if (*cp == '.')
+      {
+      if (*(cp-1) == '|' || *(cp-1) == '&' || *(cp-1) == '!')
+         {
+         yyerror("Illegal operator combination");
+         return;
+         }
+      }
+   else if (*cp == '&')
+      {
+      if (*(cp-1) == '|' || *(cp-1) == '.' || *(cp-1) == '!')
+         {
+         yyerror("Illegal operator combination");
+         return;
+         }
+      }
+   else if (*cp == '|')
+      {
+      if (*(cp-1) == '&' || *(cp-1) == '.' || *(cp-1) == '!')
+         {
+         yyerror("Illegal operator combination");
+         return;
+         }
+      }
+   }
+
+if (pcount)
+   {
+   yyerror("Unbalanced parenthesis - too many '(' in class specification");
+   return;
+   }
+}
+
+/*****************************************************************************/
+
 void KeepClassContextPromise(struct Promise *pp)
 
 { struct Attributes a;
@@ -44,9 +117,8 @@ a = GetClassContextAttributes(pp);
 
 if (!FullTextMatch("[a-zA-Z0-9_]+",pp->promiser))
    {
-   CfOut(cf_error,""," !! Class identifier contains illegal characters");
-   PromiseRef(cf_error,pp);
-   return;
+   CfOut(cf_verbose,"","Class identifier \"%s\" contains illegal characters - canonifying",pp->promiser);
+   snprintf(pp->promiser, strlen(pp->promiser) + 1, "%s", CanonifyName(pp->promiser));
    }
 
 if (a.context.broken)
@@ -302,7 +374,7 @@ for (sp = local; *sp != '\0'; sp++)
       FatalError("cfengine: You cannot use -D to define a reserved class!");
       }
 
-   NewClass(CanonifyName(currentitem));
+   NewClass(currentitem);
    }
 }
 
@@ -367,7 +439,7 @@ for (sp = local; *sp != '\0'; sp++)
       FatalError("cfengine: You cannot use -D to define a reserved class!");
       }
 
-   NewClass(CanonifyName(pref));
+   NewClass(pref);
    }
 }
 
@@ -551,6 +623,16 @@ if (!IsDefinedClass(pp->classes))
    return false;
    }
 
+if (pp->done)
+   {
+   return false;
+   }
+
+if (IsDefinedClass(pp->promiser))
+   {
+   return false;
+   }
+
 switch (cp->type) 
    {
    case CF_FNCALL:
@@ -651,14 +733,15 @@ for (rp = (struct Rlist *)cp->rval; rp != NULL; rp = rp->next)
    result_or  = result_or || result;
    result_xor += result;
 
-   if (total > 0)
+   if (total > 0) // dist class
       {
       prob = ((double)Str2Int(rp->item))/((double)total);
       cum += prob;
-      
+
       if ((fluct < cum) || rp->next == NULL)
          {
          snprintf(buffer,CF_MAXVARSIZE-1,"%s_%s",pp->promiser,rp->item);
+         *(pp->donep) = true;
 
          if (strcmp(pp->bundletype,"common") == 0)
             {
@@ -695,10 +778,14 @@ return false;
 
 /*******************************************************************/
 
-void NewClass(char *class)
+void NewClass(char *oclass)
 
-{
-Chop(class);
+{ struct Item *ip;
+  char class[CF_MAXVARSIZE];
+
+Chop(oclass);
+strncpy(class,CanonifyName(oclass),CF_MAXVARSIZE);  
+
 Debug("NewClass(%s)\n",class);
 
 if (strlen(class) == 0)
@@ -724,6 +811,28 @@ if (IsItemIn(VHEAP,class))
    }
 
 AppendItem(&VHEAP,class,NULL);
+
+for (ip = ABORTHEAP; ip != NULL; ip = ip->next)
+   {
+   if (IsDefinedClass(ip->name))
+      {
+      CfOut(cf_error,"","cf-agent aborted on defined class \"%s\" defined in bundle %s\n",class,THIS_BUNDLE);
+      exit(1);
+      }
+   }
+
+if (!ABORTBUNDLE)
+   {
+   for (ip = ABORTBUNDLEHEAP; ip != NULL; ip = ip->next)
+      {
+      if (IsDefinedClass(ip->name))
+         {
+         CfOut(cf_error,""," -> Setting abort for \"%s\" when setting \"%s\"",ip->name,class);
+         ABORTBUNDLE = true;
+         break;
+         }
+      }
+   }
 }
 
 /*********************************************************************/
@@ -756,7 +865,7 @@ for (sp = local; *sp != '\0'; sp++)
       FatalError("cfengine: You cannot use -D to define a reserved class!");
       }
 
-   NewClass(CanonifyName(pref));
+   NewClass(pref);
    }
 }
 
@@ -774,6 +883,7 @@ DeleteItemLiteral(&VADDCLASSES,class);
 void NewBundleClass(char *class,char *bundle)
 
 { char copy[CF_BUFSIZE];
+  struct Item *ip;
 
 memset(copy,0,CF_BUFSIZE);
 strncpy(copy,class,CF_MAXVARSIZE);
@@ -809,6 +919,28 @@ if (IsItemIn(VADDCLASSES,copy))
    }
 
 AppendItem(&VADDCLASSES,copy,CONTEXTID);
+
+for (ip = ABORTHEAP; ip != NULL; ip = ip->next)
+   {
+   if (IsDefinedClass(ip->name))
+      {
+      CfOut(cf_error,"","cf-agent aborted on defined class \"%s\" defined in bundle %s\n",copy,bundle);
+      exit(1);
+      }
+   }
+
+if (!ABORTBUNDLE)
+   {
+   for (ip = ABORTBUNDLEHEAP; ip != NULL; ip = ip->next)
+      {
+      if (IsDefinedClass(ip->name))
+         {
+         CfOut(cf_error,""," -> Setting abort for \"%s\" when setting \"%s\"",ip->name,class);
+         ABORTBUNDLE = true;
+         break;
+         }
+      }
+   }
 }
 
 /*********************************************************************/
@@ -1160,13 +1292,15 @@ for (sp = class; *sp != '\0'; sp++)
       }
    }
 
-if (bracklevel != 0)
-   {
-   char output[CF_BUFSIZE];
-   snprintf(output,CF_BUFSIZE,"Bracket mismatch, in [class=\"%s\"], level = %d\n",class,bracklevel);
-   yyerror(output);
-   FatalError("Aborted");
-   }
+// This is checked in the lexer now, and so can be eliminated?
+//
+// if (bracklevel != 0)
+//    {
+//    char output[CF_BUFSIZE];
+//    snprintf(output,CF_BUFSIZE,"Bracket mismatch, in [class=\"%s\"], level = %d\n",class,bracklevel);
+//    yyerror(output);
+//    FatalError("Aborted");
+//    }
 
 return count+1;
 }

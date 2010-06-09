@@ -42,12 +42,13 @@ void LocateFilePromiserGroup(char *wildpath,struct Promise *pp,void (*fnptr)(cha
   int count = 0,lastnode = false, expandregex = false;
   uid_t agentuid = getuid();
   int create = GetBooleanConstraint("create",pp);
+  char *pathtype = GetConstraint("pathtype",pp,CF_SCALAR);
 
 Debug("LocateFilePromiserGroup(%s)\n",wildpath);
 
 /* Do a search for promiser objects matching wildpath */
 
-if (!IsPathRegex(wildpath))
+if (!IsPathRegex(wildpath) || (pathtype && (strcmp(pathtype,"literal") == 0)))
    {
    CfOut(cf_verbose,""," -> Using literal pathtype for %s\n",wildpath);
    (*fnptr)(wildpath,pp);
@@ -457,7 +458,7 @@ char *CanonifyName(char *str)
 
 { static char buffer[CF_BUFSIZE];
   char *sp;
-
+          
 memset(buffer,0,CF_BUFSIZE);
 strcpy(buffer,str);
 
@@ -678,6 +679,23 @@ return false;
 
 /*********************************************************************/
 
+int IsStrIn(char *str, char **strs)
+{
+  int i;
+
+  for(i = 0; strs[i] != NULL; i++)
+    {
+      if(strcmp(str, strs[i]) == 0)
+	{
+	return true;
+	}
+    }
+
+  return false;
+}
+
+/*********************************************************************/
+
 int IsAbsoluteFileName(char *f)
 
 {
@@ -854,10 +872,90 @@ return buffer;
 
 /*********************************************************************/
 
+int SubStrnCopyChr(char *to,char *from,int len,char sep)
+
+{ char *sp,*sto = to;
+  int count = 0;
+
+memset(to,0,len);
+
+if (from == NULL)
+   {
+   return 0;
+   }
+
+if (from && strlen(from) == 0)
+   {
+   return 0;
+   }
+
+for (sp = from; *sp != '\0'; sp++)
+   {
+   if (count > len-1)
+      {
+      break;
+      }
+
+   if (*sp == '\\' && *(sp+1) == sep)
+      {
+      *sto++ = *++sp;
+      }
+   else if (*sp == sep)
+      {
+      break;          
+      }
+   else
+      {
+      *sto++ = *sp;
+      }
+
+   count++;
+   }
+
+return count;
+}
+
+/*********************************************************************/
+
+int CountChar(char *string,char sep)
+
+{ char *sp;
+  int count = 0;
+
+if (string == NULL)
+   {
+   return 0;
+   }
+
+if (string && strlen(string) == 0)
+   {
+   return 0;
+   }
+
+for (sp = string; *sp != '\0'; sp++)
+   {
+   if (*sp == '\\' && *(sp+1) == sep)
+      {
+      ++sp;
+      }
+   else if (*sp == sep)
+      {
+      count++;
+      }
+   }
+
+return count;
+}
+
+/*********************************************************************/
+
 #if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+
 void *ThreadUniqueName(pthread_t tid)
+
 /* pthread_t is an integer on Unix, but a structure on Windows
  * Finds a unique name for a thread for both platforms. */
+
 {
 #ifdef MINGW
 return tid.p;  // pointer to thread structure

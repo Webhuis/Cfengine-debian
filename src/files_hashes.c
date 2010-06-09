@@ -243,7 +243,7 @@ void HashFile(char *filename,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhash
   unsigned char buffer[1024];
   const EVP_MD *md = NULL;
 
-Debug2("HashFile(%c,%s)\n",type,filename);
+Debug2("HashFile(%d,%s)\n",type,filename);
 
 if ((file = fopen(filename, "rb")) == NULL)
    {
@@ -371,7 +371,7 @@ return buffer;
 
 /***************************************************************/
 
-void PurgeHashes(struct Attributes attr,struct Promise *pp)
+void PurgeHashes(char *path,struct Attributes attr,struct Promise *pp)
 
 /* Go through the database and purge records about non-existent files */
 
@@ -384,6 +384,16 @@ void PurgeHashes(struct Attributes attr,struct Promise *pp)
 
 if (!OpenDB(HASHDB,&dbp))
    {
+   return;
+   }
+
+if (path)
+   {
+   if (cfstat(path,&statbuf) == -1)
+      {
+      DeleteDB(dbp,path);
+      }
+   
    return;
    }
 

@@ -105,6 +105,21 @@ return attr;
 
 /*******************************************************************/
 
+struct Attributes GetOutputsAttributes(struct Promise *pp)
+
+{ struct Attributes attr;
+memset(&attr,0,sizeof(attr));
+
+attr.transaction = GetTransactionConstraints(pp);
+attr.classes = GetClassDefinitionConstraints(pp);
+
+attr.output.promiser_type = GetConstraint("promiser_type",pp,CF_SCALAR);
+attr.output.level = GetConstraint("output_level",pp,CF_SCALAR);
+return attr;
+}
+
+/*******************************************************************/
+
 struct Attributes GetReportsAttributes(struct Promise *pp)
 
 { struct Attributes attr;
@@ -120,6 +135,21 @@ return attr;
 
 /*******************************************************************/
 
+struct Attributes GetEnvironmentsAttributes(struct Promise *pp)
+
+{ struct Attributes attr;
+
+memset(&attr,0,sizeof(attr));
+ 
+attr.transaction = GetTransactionConstraints(pp);
+attr.classes = GetClassDefinitionConstraints(pp);
+attr.env = GetEnvironmentsConstraints(pp);
+
+return attr;
+}
+
+/*******************************************************************/
+
 struct Attributes GetServicesAttributes(struct Promise *pp)
 
 { struct Attributes attr;
@@ -128,8 +158,8 @@ memset(&attr,0,sizeof(attr));
  
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
-
 attr.service = GetServicesConstraints(pp);
+
 return attr;
 }
 
@@ -370,6 +400,27 @@ return s;
 
 /*******************************************************************/
 
+struct CfEnvironments GetEnvironmentsConstraints(struct Promise *pp)
+
+{ struct CfEnvironments e;
+
+e.cpus = GetIntConstraint("env_cpus",pp);
+e.memory = GetIntConstraint("env_memory",pp);
+e.disk = GetIntConstraint("env_disk",pp);
+e.baseline = GetConstraint("env_baseline",pp,CF_SCALAR);
+e.specfile = GetConstraint("env_spec_file",pp,CF_SCALAR);
+e.host = GetConstraint("environment_host",pp,CF_SCALAR);
+
+e.addresses = GetListConstraint("env_addresses",pp);
+e.name = GetConstraint("env_name",pp,CF_SCALAR);
+e.type = GetConstraint("environment_type",pp,CF_SCALAR);
+e.state = Str2EnvState(GetConstraint("environment_state",pp,CF_SCALAR));
+
+return e;
+}
+
+/*******************************************************************/
+
 struct ExecContain GetExecContainConstraints(struct Promise *pp)
 
 { struct ExecContain e;
@@ -443,6 +494,9 @@ if (!ParseModeString(value,&p.plus,&p.minus))
    }
 
 list = GetListConstraint("bsdflags",pp);
+
+p.plus_flags = 0;
+p.minus_flags = 0;
 
 if (list && !ParseFlagString(list,&p.plus_flags,&p.minus_flags))
    {
@@ -911,6 +965,8 @@ else
 
 e.empty_before_use = GetBooleanConstraint("empty_file_before_editing",pp);
 
+e.joinlines = GetBooleanConstraint("recognize_join",pp);
+
 return e;
 }
 
@@ -994,6 +1050,7 @@ p.package_noverify_regex = (char *)GetConstraint("package_noverify_regex",pp,CF_
 p.package_noverify_returncode = GetIntConstraint("package_noverify_returncode",pp);
 
 p.package_name_convention = (char *)GetConstraint("package_name_convention",pp,CF_SCALAR);
+p.package_delete_convention = (char *)GetConstraint("package_delete_convention",pp,CF_SCALAR);
 
 p.package_multiline_start = (char *)GetConstraint("package_multiline_start",pp,CF_SCALAR);
 return p;
@@ -1161,6 +1218,7 @@ printf(".....................................................\n\n");
 struct Attributes GetInsertionAttributes(struct Promise *pp)
 
 { struct Attributes attr;
+  char *value;
 
 attr.havelocation = GetBooleanConstraint("location",pp);
 attr.location = GetLocationAttributes(pp);
@@ -1170,6 +1228,8 @@ attr.expandvars = GetBooleanConstraint("expand_scalars",pp);
 
 attr.haveinsertselect = GetBooleanConstraint("insert_select",pp);
 attr.line_select = GetInsertSelectConstraints(pp);
+
+attr.insert_match = GetListConstraint("whitespace_policy",pp);
 
 /* Common ("included") */
 
@@ -1291,7 +1351,8 @@ struct EditRegion GetRegionConstraints(struct Promise *pp)
 
 e.select_start = GetConstraint("select_start",pp,CF_SCALAR);
 e.select_end = GetConstraint("select_end",pp,CF_SCALAR);
- 
+e.include_start = GetBooleanConstraint("include_start_delimiter",pp);
+e.include_end = GetBooleanConstraint("include_end_delimiter",pp); 
 return e;
 }
 
@@ -1362,7 +1423,7 @@ struct StorageVolume GetVolumeConstraints(struct Promise *pp)
 v.check_foreign = GetBooleanConstraint("check_foreign",pp);
 value = GetConstraint("freespace",pp,CF_SCALAR);
 
-v.freespace = (int) Str2Int(value);
+v.freespace = (long) Str2Int(value);
 value = GetConstraint("sensible_size",pp,CF_SCALAR);
 v.sensible_size = (int) Str2Int(value);
 value = GetConstraint("sensible_count",pp,CF_SCALAR);

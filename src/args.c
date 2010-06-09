@@ -92,23 +92,20 @@ for (rpg = give, rpt = take; rpg != NULL && rpt != NULL; rpg=rpg->next,rpt=rpt->
 
           lval = (char *)rpt->item;
           rval = rpg->item;
-
           Debug("MapBodyArgs(SCALAR,%s,%s)\n",lval,rval);
           AddVariableHash(scopeid,lval,rval,CF_SCALAR,dtg,NULL,0);
           break;
 
       case CF_LIST:
+
           lval = (char *)rpt->item;
           rval = rpg->item;
-
           AddVariableHash(scopeid,lval,rval,CF_LIST,dtg,NULL,0);
-          
           break;
           
       case CF_FNCALL:
           fp = (struct FnCall *)rpt->item;
           dtg = FunctionReturnType(fp->name);
-
           // Should not happen in this context?
           break;
           
@@ -116,7 +113,6 @@ for (rpg = give, rpt = take; rpg != NULL && rpt != NULL; rpg=rpg->next,rpt=rpt->
           /* Nothing else should happen */
           FatalError("Software error: something not a scalar/function in argument literal");
       }
-   
    }
 
 Debug("MapBodyArgs(end)\n");
@@ -189,7 +185,7 @@ DeleteRvalItem(args,CF_LIST);
 
 /******************************************************************/
 
-void ArgTemplate(struct FnCall *fp,char **argtemplate, enum cfdatatype *argtypes,struct Rlist *realargs)
+void ArgTemplate(struct FnCall *fp,struct FnCallArg *argtemplate,struct Rlist *realargs)
 
 { int argnum,i;
   struct Rlist *rp = fp->args;
@@ -197,12 +193,12 @@ void ArgTemplate(struct FnCall *fp,char **argtemplate, enum cfdatatype *argtypes
 
 snprintf(id,CF_MAXVARSIZE,"built-in FnCall %s-arg",fp->name);
   
-for (argnum = 0; rp != NULL && argtemplate[argnum] != NULL; argnum++)
+for (argnum = 0; rp != NULL && argtemplate[argnum].pattern != NULL; argnum++)
     {
     if (rp->type != CF_FNCALL)
        {
        /* Nested functions will not match to lval so don't bother checking */
-       CheckConstraintTypeMatch(id,rp->item,rp->type,argtypes[argnum],argtemplate[argnum],1);
+       CheckConstraintTypeMatch(id,rp->item,rp->type,argtemplate[argnum].dtype,argtemplate[argnum].pattern,1);
        }
 
     rp = rp->next;
@@ -217,7 +213,7 @@ if (argnum != RlistLen(realargs))
 
    for (i = 0, rp = realargs; i < argnum; i++)
       {
-      printf("  arg[%d] range %s\t",i,argtemplate[i]);
+      printf("  arg[%d] range %s\t",i,argtemplate[i].pattern);
       if (rp != NULL)
          {
          ShowRval(stdout,rp->item,rp->type);

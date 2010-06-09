@@ -105,7 +105,7 @@ for (i = 0; i < CF3_MODULES; i++)
       {
       CfOut(cf_verbose,"","Dealing with chapter / bundle type %s\n",st->btype);
       fprintf(fout,"@c *****************************************************\n");
-     fprintf(fout,"@c * CHAPTER \n");
+      fprintf(fout,"@c * CHAPTER \n");
       fprintf(fout,"@c *****************************************************\n");
       
       if (strcmp(st->btype,"*") == 0)
@@ -347,7 +347,7 @@ for (j = 0; st[j].btype != NULL; j++)
 void TexinfoBodyParts(FILE *fout,struct BodySyntax *bs,char *context)
 
 { int i;
-  char filename[CF_BUFSIZE];
+ char filename[CF_BUFSIZE],*res;
   
 if (bs == NULL)
    {
@@ -371,6 +371,16 @@ for (i = 0; bs[i].lval != NULL; i++)
       {
       fprintf(fout,"\n\n@node %s in %s\n@subsection @code{%s}\n@noindent @b{Type}: %s\n\n",bs[i].lval,context,bs[i].lval,CF_DATATYPES[bs[i].dtype]);
       TexinfoShowRange(fout,(char *)bs[i].range,bs[i].dtype);
+
+      if (res = GetControlDefault(bs[i].lval))
+         {
+         fprintf(fout,"@noindent @b{Default value:} %s\n",res);
+         }
+      else if (res = GetBodyDefault(bs[i].lval))
+         {
+         fprintf(fout,"@noindent @b{Default value:} %s\n",res);
+         }
+
       fprintf(fout,"\n@noindent @b{Synopsis}: %s\n\n",bs[i].description);
       fprintf(fout,"\n@noindent @b{Example}:@*\n");
       snprintf(filename,CF_BUFSIZE-1,"bodypart_%s_example.texinfo",bs[i].lval);
@@ -483,7 +493,7 @@ else
 void TexinfoSubBodyParts(FILE *fout,struct BodySyntax *bs)
 
 { int i;
-  char filename[CF_BUFSIZE];
+ char filename[CF_BUFSIZE],*res;
   
 if (bs == NULL)
    {
@@ -508,6 +518,16 @@ for (i = 0; bs[i].lval != NULL; i++)
       fprintf(fout,"@item @code{%s}\n@b{Type}: %s\n\n",bs[i].lval,CF_DATATYPES[bs[i].dtype]);
       TexinfoShowRange(fout,(char *)bs[i].range,bs[i].dtype);
       fprintf(fout,"\n@noindent @b{Synopsis}: %s\n\n",bs[i].description);
+
+      if (res = GetControlDefault(bs[i].lval))
+         {
+         fprintf(fout,"\n@noindent @b{Default value:} %s\n",res);
+         }
+      else if (res = GetBodyDefault(bs[i].lval))
+         {
+         fprintf(fout,"\n@noindent @b{Default value:} %s\n",res);
+         }
+
       fprintf(fout,"\n@b{Example}:@*\n");
       snprintf(filename,CF_BUFSIZE-1,"bodypart_%s_example.texinfo",bs[i].lval);
       IncludeManualFile(fout,filename);
@@ -570,8 +590,30 @@ fprintf(fout,"\n");
 void TexinfoSpecialFunction(FILE *fout,struct FnCallType fn)
 
 { char filename[CF_BUFSIZE];
+  struct FnCallArg *args = fn.args;
+  int i;
  
-fprintf(fout,"\n@noindent @b{Synopsis}: %s(%d args) returns type %s\n\n",fn.name,fn.numargs,CF_DATATYPES[fn.dtype]);
+fprintf(fout,"\n@noindent @b{Synopsis}: %s(",fn.name);
+
+for (i = 0; args[i].pattern != NULL; i++)
+   {
+   fprintf(fout,"arg%d",i);
+
+   if (args[i+1].pattern != NULL)
+      {
+      fprintf(fout,",");
+      }
+   }
+
+fprintf(fout,") returns type @b{%s}\n\n@*\n",CF_DATATYPES[fn.dtype]);
+
+for (i = 0; args[i].pattern != NULL; i++)
+   {
+   fprintf(fout,"@noindent @code{  } @i{arg%d} : %s, @i{in the range} ",i,args[i].description);
+   PrintPattern(fout,args[i].pattern);
+   fprintf(fout,"\n@*\n");
+   }
+
 fprintf(fout,"\n@noindent %s\n\n",fn.description);
 fprintf(fout,"\n@noindent @b{Example}:@*\n");
 
@@ -581,4 +623,22 @@ IncludeManualFile(fout,filename);
 fprintf(fout,"\n@noindent @b{Notes}:@*\n");
 snprintf(filename,CF_BUFSIZE-1,"function_%s_notes.texinfo",fn.name);
 IncludeManualFile(fout,filename);
+}
+
+/*****************************************************************************/
+
+void PrintPattern(FILE *fout,char *pattern)
+
+{ char *sp;
+
+for (sp = pattern; *sp != '\0'; sp++)
+   {
+   switch (*sp)
+      {
+      case '@':
+          fputc((int)'@',fout);
+      default:
+          fputc((int)*sp,fout);
+      }
+   }
 }

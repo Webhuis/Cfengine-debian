@@ -86,6 +86,8 @@ libpromises_la_SOURCES =                                                \
         verify_reports.c                                                \
         verify_processes.c                                              \
         enterprise_stubs.c                                              \
+	mod_functions.c							\
+	mod_defaults.c							\
         mod_common.c                                                    \
         mod_access.c                                                    \
         mod_exec.c                                                      \
@@ -100,6 +102,8 @@ libpromises_la_SOURCES =                                                \
         mod_databases.c                                                 \
         mod_services.c                                                  \
         mod_process.c   			                        \
+	mod_environ.c							\
+	mod_outputs.c							\
         unix.c
 
 
@@ -124,6 +128,7 @@ cf_agent_SOURCES =                                                      \
         verify_packages.c                                               \
         verify_databases.c                                              \
 	verify_services.c						\
+	verify_environments.c						\
         agentdiagnostic.c
 
 cf_serverd_SOURCES =                                                    \

@@ -1,7 +1,7 @@
 K 25
 svn:wc:ra_dav:version-url
 V 58
-/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters
+/projects/cfengine-3/!svn/ver/955/trunk/tests/file_masters
 END
 failsafe.cf
 K 25
@@ -13,7 +13,7 @@ Makefile.in
 K 25
 svn:wc:ra_dav:version-url
 V 70
-/projects/cfengine-3/!svn/ver/677/trunk/tests/file_masters/Makefile.in
+/projects/cfengine-3/!svn/ver/955/trunk/tests/file_masters/Makefile.in
 END
 promises.cf
 K 25

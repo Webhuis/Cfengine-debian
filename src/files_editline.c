@@ -103,6 +103,7 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
          if (Abort())
             {
             THIS_BUNDLE = bp_stack;
+            DeleteScope("edit");
             return false;
             }         
          }
@@ -475,7 +476,20 @@ for (ip = start; ip != NULL; ip = ip->next)
       {
       if (beg == CF_UNDEFINED_ITEM && FullTextMatch(a.region.select_start,ip->name))
          {
-         beg = ip;
+         if (!a.region.include_start)
+            {
+            beg = ip->next;
+            
+            if (beg == NULL)
+               {
+               cfPS(cf_verbose,CF_INTERPT,"",pp,a," !! The promised start pattern (%s) found an empty region at the end of file %s",a.region.select_start,pp->this_server);
+               return false;
+               }
+            }
+         else
+            {
+            beg = ip;
+            }
          continue;
          }
       }
@@ -485,6 +499,12 @@ for (ip = start; ip != NULL; ip = ip->next)
       if (end == CF_UNDEFINED_ITEM && FullTextMatch(a.region.select_end,ip->name))
          {
          end = ip;
+
+         if (a.region.include_end && end != NULL)
+            {
+            end = end->next;
+            }
+         
          break;
          }
       }
@@ -498,13 +518,6 @@ for (ip = start; ip != NULL; ip = ip->next)
 if (beg == CF_UNDEFINED_ITEM && a.region.select_start)
    {
    cfPS(cf_verbose,CF_INTERPT,"",pp,a," !! The promised start pattern (%s) was not found when selecting edit region in %s",a.region.select_start,pp->this_server);
-   return false;
-   }
-
-if (end == CF_UNDEFINED_ITEM && a.region.select_end)
-   {
-   cfPS(cf_verbose,CF_INTERPT,"",pp,a," !! The promised end pattern (%s) was not found when selecting edit region in %s, abort edit",a.region.select_end,pp->this_server);
-   end = NULL; /* End of file is null ptr if nothing else specified */
    return false;
    }
 
@@ -527,7 +540,7 @@ int InsertMissingLinesToRegion(struct Item **start,struct Item *begin_ptr,struct
 
 /* find prev for region */
 
-if (IsItemInRegion(pp->promiser,begin_ptr,end_ptr))
+ if (IsItemInRegion(pp->promiser,begin_ptr,end_ptr,a,pp))
    {
    cfPS(cf_verbose,CF_NOP,"",pp,a," -> Promised line \"%s\" exists within selected region of %s (promise kept)",pp->promiser,pp->this_server);
    return false;
@@ -616,7 +629,7 @@ if (a.sourcetype && strcmp(a.sourcetype,"file") == 0)
          continue;
          }
       
-      if (IsItemInRegion(exp,begin_ptr,end_ptr))
+      if (IsItemInRegion(exp,begin_ptr,end_ptr,a,pp))
          {
          cfPS(cf_verbose,CF_NOP,"",pp,a," -> Promised file line \"%s\" exists within file %s (promise kept)",exp,pp->this_server);
          continue;
@@ -640,6 +653,9 @@ if (a.sourcetype && strcmp(a.sourcetype,"file") == 0)
    }
 else
    {
+   int multiline = a.sourcetype && strcmp(a.sourcetype,"preserve_block") == 0;
+   int need_insert = false;
+
    if (strchr(pp->promiser,'\n') != NULL) /* Multi-line string */
       {
       char *sp;
@@ -656,23 +672,35 @@ else
             continue;
             }
          
-         if (IsItemInRegion(buf,begin_ptr,end_ptr))
+         if (IsItemInRegion(buf,begin_ptr,end_ptr,a,pp))
             {
             cfPS(cf_verbose,CF_NOP,"",pp,a," -> Promised file line \"%s\" exists within file %s (promise kept)",buf,pp->this_server);
             continue;
             }
-         
-         retval |= InsertMissingLineAtLocation(buf,start,loc,prev,a,pp);
-         
-         if (prev && prev != CF_UNDEFINED_ITEM)
+
+         if (!multiline)
             {
-            prev = prev->next;
-            }
+            retval |= InsertMissingLineAtLocation(buf,start,loc,prev,a,pp);
          
-         if (loc)
-            {
-            loc = loc->next;
+            if (prev && prev != CF_UNDEFINED_ITEM)
+               {
+               prev = prev->next;
+               }
+            
+            if (loc)
+               {
+               loc = loc->next;
+               }
             }
+         else
+            {
+            need_insert = true;            
+            }
+         }
+
+      if (need_insert)
+         {
+         return InsertMissingLineAtLocation(pp->promiser,start,location,prev,a,pp);
          }
 
       return retval;
@@ -1078,7 +1106,7 @@ if (prev == CF_UNDEFINED_ITEM) /* Insert at first line */
  
 if (a.location.before_after == cfe_before)
    {
-   if (NeighbourItemMatches(*start,location,newline,cfe_before))
+   if (NeighbourItemMatches(*start,location,newline,cfe_before,a,pp))
       {
       cfPS(cf_verbose,CF_NOP,"",pp,a," -> Promised line \"%s\" exists before locator in (promise kept)",newline);
       return false;
@@ -1101,7 +1129,7 @@ if (a.location.before_after == cfe_before)
    }
 else
    {
-   if (NeighbourItemMatches(*start,location,newline,cfe_after))
+   if (NeighbourItemMatches(*start,location,newline,cfe_after,a,pp))
       {
       cfPS(cf_verbose,CF_NOP,"",pp,a," -> Promised line \"%s\" exists after locator (promise kept)",newline);
       return false;

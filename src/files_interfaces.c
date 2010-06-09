@@ -210,16 +210,11 @@ cf_closedir(dirh);
 void VerifyFilePromise(char *path,struct Promise *pp)
 
 { struct stat osb,oslb,dsb,dslb;
-  struct Attributes a,b;
+  struct Attributes a;
   struct CfLock thislock;
   int exists,success,rlevel = 0,isthere,save = true;
-  char filename[CF_BUFSIZE];
 
 a = GetFilesAttributes(pp);
-
-b = a;
-b.edits.backup = cfa_nobackup;
-b.edits.maxfilesize = 0;
 
 if (!FileSanityChecks(path,a,pp))
    {
@@ -235,12 +230,15 @@ if (thislock.lock == NULL)
 
 CF_NODES++;
 
+LoadSetuid(a,pp);
+
 if (lstat(path,&oslb) == -1)  /* Careful if the object is a link */
    {
    if (a.create||a.touch)
       {
       if (!CfCreateFile(path,pp,a))
          {
+         SaveSetuid(a,pp);
          YieldCurrentLock(thislock);
          return;
          }
@@ -272,6 +270,14 @@ if (!a.havedepthsearch)  /* if the search is trivial, make sure that we are in t
 
    Debug(" -> Direct file reference %s, no search implied\n",path);
    snprintf(basedir, sizeof(basedir), "%s", path);
+
+   if (strcmp(ReadLastNode(basedir),".") == 0)
+      {
+      // Handle /.  notation for deletion of directories
+      ChopLastNode(basedir);
+      ChopLastNode(path);
+      }
+
    ChopLastNode(basedir);
    chdir(basedir);
    }
@@ -280,6 +286,7 @@ if (exists && !VerifyFileLeaf(path,&oslb,a,pp))
    {
    if (!S_ISDIR(oslb.st_mode))
       {
+      SaveSetuid(a,pp);
       YieldCurrentLock(thislock);
       return;
       }
@@ -291,6 +298,7 @@ if (cfstat(path,&osb) == -1)
       {
       if (!CfCreateFile(path,pp,a))
          {
+         SaveSetuid(a,pp);
          YieldCurrentLock(thislock);
          return;
          }
@@ -311,6 +319,7 @@ else
       if (a.havedepthsearch)
          {
          CfOut(cf_error,"","Warning: depth_search (recursion) is promised for a base object %s that is not a directory",path);
+         SaveSetuid(a,pp);
          YieldCurrentLock(thislock);
          return;
          }
@@ -326,19 +335,11 @@ if (a.link.link_children)
       if (!S_ISDIR(dsb.st_mode))
          {
          CfOut(cf_error,"","Cannot promise to link the children of %s as it is not a directory!",a.link.source);
+         SaveSetuid(a,pp);
          YieldCurrentLock(thislock);
          return;
          }
       }
-   }
-
-snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
-MapName(filename);
-
-if (!LoadFileAsItemList(&VSETUIDLIST,filename,a,pp))
-   {
-   CfOut(cf_verbose,"","Did not find any previous setuid log %s, creating a new one",filename);
-   save = false;
    }
 
 /* Phase 1 - */
@@ -369,7 +370,14 @@ if (exists && (a.havedelete||a.haverename||a.haveperms||a.havechange||a.transfor
 
    if (a.change.report_changes == cfa_contentchange || a.change.report_changes == cfa_allchanges)
       {
-      PurgeHashes(a,pp);
+      if (a.havedepthsearch)
+         {
+         PurgeHashes(NULL,a,pp);
+         }
+      else
+         {
+         PurgeHashes(path,a,pp);
+         }
       }
    }
 
@@ -398,14 +406,7 @@ if (a.haveedit)
    ScheduleEditOperation(path,a,pp);
    }
 
-if (save && VSETUIDLIST && !CompareToFile(VSETUIDLIST,filename,a,pp))
-   {
-   SaveItemListAsFile(VSETUIDLIST,filename,b,pp);
-   }
-
-DeleteItemList(VSETUIDLIST);
-VSETUIDLIST = NULL;
-
+SaveSetuid(a,pp);
 YieldCurrentLock(thislock);
 }
 
@@ -545,12 +546,6 @@ if (strlen(localdir) < 2)
 
  /* If we purge with no authentication we wipe out EVERYTHING ! */ 
 
-if (pp->conn == NULL)
-   {
-   CfOut(cf_verbose,""," !! Not purge local files %s - no contact with a source\n",localdir);
-   return;
-   }
-
 if (pp->conn && !pp->conn->authenticated)
    {
    CfOut(cf_verbose,""," !! Not purge local files %s - no authenticated contact with a source\n",localdir);
@@ -631,7 +626,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
             }
          else if (unlink(filename) == -1)
             {
-            cfPS(cf_verbose,CF_CHG,"",pp,attr," !! Couldn't delete %s while purging\n",filename);
+            cfPS(cf_verbose,CF_FAIL,"",pp,attr," !! Couldn't delete %s while purging\n",filename);
             }
          }
       }
@@ -865,7 +860,7 @@ if (found == -1)
             return;
             }
 
-         cfPS(cf_error,CF_CHG,"mknod",pp,attr," -> Created special file/device `%s'",destfile);
+         cfPS(cf_inform,CF_CHG,"mknod",pp,attr," -> Created special file/device `%s'",destfile);
          }
 #endif  /* NOT MINGW */		 
       }
@@ -1315,6 +1310,51 @@ return true;
 }
 
 /*********************************************************************/
+
+void LoadSetuid(struct Attributes a,struct Promise *pp)
+
+{ struct Attributes b;
+  char filename[CF_BUFSIZE];
+
+b = a;
+b.edits.backup = cfa_nobackup;
+b.edits.maxfilesize = 1000000;
+
+snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
+MapName(filename);
+
+if (!LoadFileAsItemList(&VSETUIDLIST,filename,b,pp))
+   {
+   CfOut(cf_verbose,"","Did not find any previous setuid log %s, creating a new one",filename);
+   }
+}
+
+/*********************************************************************/
+
+void SaveSetuid(struct Attributes a,struct Promise *pp)
+
+{ struct Attributes b;
+  char filename[CF_BUFSIZE];
+
+b = a;
+b.edits.backup = cfa_nobackup;
+b.edits.maxfilesize = 1000000;
+
+snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
+MapName(filename);
+
+PurgeItemList(&VSETUIDLIST,"SETUID/SETGID");
+
+if (VSETUIDLIST && !CompareToFile(VSETUIDLIST,filename,a,pp))
+   {
+   SaveItemListAsFile(VSETUIDLIST,filename,b,pp);
+   }
+
+DeleteItemList(VSETUIDLIST);
+VSETUIDLIST = NULL;
+}
+
+/*********************************************************************/
 /* Level 4                                                           */
 /*********************************************************************/
 
@@ -1493,11 +1533,17 @@ if (status == CF_CHG || status == CF_NOP)
       }
    
    if (status == CF_CHG)
+      {
       cfPS(cf_inform,status,"",pp,attr," -> Created link %s", destfile);
+      }
    else if (status == CF_NOP)
-      ; /*cfPS(cf_inform,status,"",pp,attr," -> Link %s as promised", destfile);*/
+      {
+      cfPS(cf_inform,status,"",pp,attr," -> Link %s as promised", destfile);
+      }
    else
+      {
       cfPS(cf_inform,status,"",pp,attr," -> Unable to create link %s", destfile);
+      }
    }
 }
 #endif  /* NOT MINGW */
@@ -1554,7 +1600,7 @@ if (selinux_enabled)
    {
    dest_exists = cfstat(dest,&cur_dest);
    
-   if(dest_exists == 0)
+   if (dest_exists == 0)
       {
       /* get current security context of destination file */
       getfilecon(dest,&scontext);
@@ -1590,9 +1636,8 @@ if (attr.copy.servers != NULL && strcmp(attr.copy.servers->item,"localhost") != 
 
 #ifdef DARWIN
 if (strstr(dest, _PATH_RSRCFORKSPEC))
-   { /* Need to munge the "new" name */
+   {
    rsrcfork = 1;
-   
    tmpstr = malloc(CF_BUFSIZE);
    
    /* Drop _PATH_RSRCFORKSPEC */
@@ -1731,9 +1776,10 @@ if (lstat(new,&dstat) == -1)
    return false;
    }
 
-if (dstat.st_size != sstat.st_size)
+if (S_ISREG(dstat.st_mode) && dstat.st_size != sstat.st_size)
    {
    CfOut(cf_error,""," !! New file %s seems to have been corrupted in transit (dest %d and src %d), aborting!\n",new, (int) dstat.st_size, (int) sstat.st_size);
+
    if (backupok)
       {
       cf_rename(backup,dest); /* ignore failure */
@@ -1748,6 +1794,7 @@ if (attr.copy.verify)
    if (CompareFileHashes(source,new,&sstat,&dstat,attr,pp))
       {
       CfOut(cf_verbose,""," !! New file %s seems to have been corrupted in transit, aborting!\n",new);
+
       if (backupok)
          {
          cf_rename(backup,dest); /* ignore failure */
@@ -1799,13 +1846,13 @@ if (rsrcfork)
          }
       
       else if (rsrcbytesr == 0)
-         { /* Reached EOF */
+         {
+         /* Reached EOF */
          close(rsrcrd);
          close(rsrcwd);
          free(rsrcbuf);
          
-         unlink(new); /* Go ahead and unlink .cfnew */
-         
+         unlink(new); /* Go ahead and unlink .cfnew */         
          break;
          }
       

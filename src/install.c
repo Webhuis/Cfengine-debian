@@ -281,6 +281,14 @@ if ((strcmp(spe,"any") == 0) && (strcmp(type->name,"reports") == 0))
    {
    yyerror("reports promises may not be in class \'any\' - risk of a notification explosion");
    }
+
+if (strcmp(type->name,"classes") == 0 || strcmp(type->name,"vars") == 0)
+   {
+   if (isdigit(*promiser) && Str2Int(promiser) != CF_NOINT)
+      {
+      yyerror("Variable or class identifier is purely numerical, which is not allowed");
+      }
+   }
    
 if (type->promiselist == NULL)
    {
@@ -314,7 +322,7 @@ pp->inode_cache = NULL;
 pp->bundletype = bundletype;   /* cache agent,common,server etc*/
 pp->agentsubtype = type->name; /* Cache the typename */
 pp->ref = NULL;                /* cache a reference if given*/
-
+pp->ref_alloc = 'n';
 pp->next = NULL;
 return pp;
 }

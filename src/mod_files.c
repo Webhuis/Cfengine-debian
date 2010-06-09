@@ -98,6 +98,8 @@ struct BodySyntax CF_REPLACEWITH_BODY[] =
 
 struct BodySyntax CF_EDSCOPE_BODY[] =
    {
+   {"include_start_delimiter",cf_opts,CF_BOOL,"Whether to include the section delimiter"},
+   {"include_end_delimiter",cf_opts,CF_BOOL,"Whether to include the section delimiter"},
    {"select_start",cf_str,CF_ANYSTRING,"Regular expression matching start of edit region"},
    {"select_end",cf_str,CF_ANYSTRING,"Regular expression matches end of edit region from start"},
    {NULL,cf_notype,NULL,NULL}
@@ -134,9 +136,10 @@ struct BodySyntax CF_INSERTSELECT_BODY[] =
 struct BodySyntax CF_INSERTLINES_BODIES[] =
    {
    {"expand_scalars",cf_opts,CF_BOOL,"Expand any unexpanded variables"},
-   {"insert_type",cf_opts,"literal,string,file","Type of object the promiser string refers to (default literal)"},
+   {"insert_type",cf_opts,"literal,string,file,preserve_block","Type of object the promiser string refers to"},
    {"insert_select",cf_body,CF_INSERTSELECT_BODY,"Insert only if lines pass filter criteria"},
    {"location",cf_body,CF_LOCATION_BODY,"Specify where in a file an insertion will be made"},
+   {"whitespace_policy",cf_olist,"ignore_leading,ignore_trailing,ignore_embedded,ignore_embedded,exact_match","Criteria for matching and recognizing existing lines"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -221,6 +224,7 @@ struct BodySyntax CF_EDITS_BODY[] =
    {"edit_backup",cf_opts,"true,false,timestamp,rotate","Menu option for backup policy on edit changes"},
    {"empty_file_before_editing",cf_opts,CF_BOOL,"Baseline memory model of file to zero/empty before commencing promised edits"},
    {"max_file_size",cf_int,CF_VALRANGE,"Do not edit files bigger than this number of bytes"},
+   {"recognize_join",cf_opts,CF_BOOL,"Join together lines that end with a backslash, up to 4kB limit"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -344,7 +348,7 @@ struct BodySyntax CF_FILES_BODIES[] =
    {"file_select",cf_body,CF_FILEFILTER_BODY,"Choose which files select in a search"},
    {"link_from",cf_body,CF_LINKTO_BODY,"Criteria for linking file from a source"},
    {"move_obstructions",cf_opts,CF_BOOL,"true/false whether to move obstructions to file-object creation"},
-   {"pathtype",cf_opts,"literal,regex","Menu option for interpreting promiser file object"},
+   {"pathtype",cf_opts,"literal,regex,guess","Menu option for interpreting promiser file object"},
    {"perms",cf_body,CF_ACCESS_BODIES,"Criteria for setting permissions on a file"},
    {"rename",cf_body,CF_RENAME_BODY,"Criteria for renaming files"},
    {"repository",cf_str,CF_PATHRANGE,"Name of a repository for versioning"},
@@ -364,7 +368,8 @@ struct SubTypeSyntax CF_FILES_SUBTYPES[] =
   {"agent","files",CF_FILES_BODIES},
 
   /* Body lists belonging to th edit_line sub-bundle of files: */
-     
+
+  {"edit_line","*",CF_COMMON_EDITBODIES},   
   {"edit_line","delete_lines",CF_DELETELINES_BODIES},
   {"edit_line","insert_lines",CF_INSERTLINES_BODIES},
   {"edit_line","field_edits",CF_COLUMN_BODIES},

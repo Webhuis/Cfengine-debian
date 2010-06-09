@@ -257,7 +257,7 @@ else
 
    if (conn == NULL)
       {
-      cfPS(cf_inform,CF_FAIL,"",pp,attr,"No suitable server responded to hail\n");
+      cfPS(cf_inform,CF_FAIL,"",pp,attr," -> No suitable server responded to hail\n");
       PromiseRef(cf_inform,pp);
       return false;
       }
@@ -444,7 +444,7 @@ if (a.haveeditline)
       PushPrivateClassContext();
       retval = ScheduleEditLineOperations(filename,bp,a,pp);
       PopPrivateClassContext();
-      DeleteFromScope(bp->name,bp->args);
+      DeleteScope(bp->name);
       }
    }
 
@@ -683,14 +683,16 @@ if (attr.rename.newname)
       }
    else
       {
-      cfPS(cf_inform,CF_CHG,"",pp,attr," -> Renaming file %s to %s\n",path,attr.rename.newname);
-
       if (!IsItemIn(VREPOSLIST,attr.rename.newname))
          {
          if (cf_rename(path,attr.rename.newname) == -1)
             {
             cfPS(cf_error,CF_FAIL,"cf_rename",pp,attr," !! Error occurred while renaming %s\n",path);
             return;
+            }
+         else
+            {
+            cfPS(cf_inform,CF_CHG,"",pp,attr," -> Renaming file %s to %s\n",path,attr.rename.newname);
             }
          }
       else
@@ -787,8 +789,7 @@ if (attr.rename.disable)
       }
    else
       {
-      cf_chmod(path,newperm);
-      cfPS(cf_inform,CF_CHG,"",pp,attr," -> Disabling/renaming file %s to %s with mode %o\n",path,newname,newperm);
+      cf_chmod(path,newperm);      
 
       if (!IsItemIn(VREPOSLIST,newname))
          {
@@ -796,6 +797,10 @@ if (attr.rename.disable)
             {
             cfPS(cf_error,CF_FAIL,"cf_rename",pp,attr,"Error occurred while renaming %s\n",path);
             return;
+            }
+         else
+            {
+            cfPS(cf_inform,CF_CHG,"",pp,attr," -> Disabling/renaming file %s to %s with mode %o\n",path,newname,newperm);
             }
 
          if (ArchiveToRepository(newname,attr,pp))
@@ -847,8 +852,9 @@ if (attr.rename.rotate > 0)
 void VerifyDelete(char *path,struct stat *sb,struct Attributes attr,struct Promise *pp)
 
 { char *lastnode = ReadLastNode(path);
+  char buf[CF_MAXVARSIZE];
 
-Debug(" -> Verifying file deletions for %s\n",path);
+CfOut(cf_verbose,""," -> Verifying file deletions for %s\n",path);
 
 if (DONTDO)
    {
@@ -864,7 +870,7 @@ else
           break;
           
       case cfa_fix:
-	
+
           if (!S_ISDIR(sb->st_mode))
              {
              if (unlink(lastnode) == -1)
@@ -876,7 +882,7 @@ else
                 cfPS(cf_inform,CF_CHG,"",pp,attr," -> Deleted file %s\n",path);
                 }
              }
-          else
+          else  // directory
              {
              if (!attr.delete.rmdirs)
                 {
@@ -884,15 +890,29 @@ else
                 return;
                 }
              
-             if (strcmp(path,pp->promiser) == 0)
+             if (attr.havedepthsearch && strcmp(path,pp->promiser) == 0)
                 {
                 /* This is the parent and we cannot delete it from here - must delete separately*/
                 return;
                 }
-             
-             if (rmdir(lastnode) == -1)
+
+
+
+	     // use the full path if we are to delete the current dir
+	     if((strcmp(lastnode, ".") == 0) && strlen(path) > 2)
+	       {
+               snprintf(buf, sizeof(buf), "%s", path); 
+	       buf[strlen(path) - 1] = '\0';
+	       buf[strlen(path) - 2] = '\0';
+	       }
+	     else
+	       {
+               snprintf(buf, sizeof(buf), "%s", lastnode);
+	       }
+
+             if (rmdir(buf) == -1)
                 {
-                cfPS(cf_verbose,CF_FAIL,"rmdir",pp,attr," !! Delete directory %s failed (node called %s)\n",path,lastnode);
+                cfPS(cf_verbose,CF_FAIL,"rmdir",pp,attr," !! Delete directory %s failed (cannot delete node called \"%s\")\n",path,buf);
                 }
              else
                 {
@@ -1130,7 +1150,7 @@ int TransformFile(char *file,struct Attributes attr,struct Promise *pp)
 { char comm[CF_EXPANDSIZE],line[CF_BUFSIZE];
   FILE *pop;
 
-if (attr.transformer == NULL)
+if (attr.transformer == NULL || file == NULL)
    {
    return false;
    }
@@ -1569,7 +1589,7 @@ if (!IsPrivileged())
    amroot = false;
    }
 
-if (dstat->st_uid == 0 && (dstat->st_mode & S_ISUID))
+if ((dstat->st_uid == 0) && (dstat->st_mode & S_ISUID))
    {
    if (newperm & S_ISUID)
       {
@@ -1577,7 +1597,7 @@ if (dstat->st_uid == 0 && (dstat->st_mode & S_ISUID))
          {
          if (amroot)
             {
-            cfPS(cf_inform,CF_WARN,"",pp,attr,"NEW SETUID root PROGRAM %s\n",file);
+            cfPS(cf_error,CF_WARN,"",pp,attr,"NEW SETUID root PROGRAM %s\n",file);
             }
 
          PrependItem(&VSETUIDLIST,file,NULL);
@@ -1985,7 +2005,6 @@ void Unix_VerifyFileAttributes(char *file,struct stat *dstat,struct Attributes a
   u_long newflags;
 #endif
 
-
 maskvalue = umask(0);                 /* This makes the DEFAULT modes absolute */
 
 newperm = (dstat->st_mode & 07777);
@@ -2058,6 +2077,8 @@ if (attr.acl.acl_entries)
    {
    VerifyACL(file,attr,pp);
    }
+
+VerifySetUidGid(file,dstat,dstat->st_mode,pp,attr);
 
 if ((newperm & 07777) == (dstat->st_mode & 07777))            /* file okay */
    {
@@ -2187,6 +2208,9 @@ if (attr.copy.preserve)
 
    newplus = (sstat->st_mode & 07777) | attr.perms.plus;
    newminus = ~(newplus & ~(attr.perms.minus)) & 07777;
+   attr.perms.plus = newplus;
+   attr.perms.minus = newminus;
+   VerifyFileAttributes(file,dstat,attr,pp);
    }
 else
    {
@@ -2202,14 +2226,15 @@ else
       (attr.perms.groups)->gid = dstat->st_gid;
       }
 
-   newplus = (dstat->st_mode & 07777) | attr.perms.plus;
-   newminus = ~(newplus & ~(attr.perms.minus)) & 07777;
+   if (attr.haveperms)
+      {      
+      newplus = (dstat->st_mode & 07777) | attr.perms.plus;
+      newminus = ~(newplus & ~(attr.perms.minus)) & 07777;
+      attr.perms.plus = newplus;
+      attr.perms.minus = newminus;   
+      VerifyFileAttributes(file,dstat,attr,pp);
+      }
    }
-
-attr.perms.plus = newplus;
-attr.perms.minus = newminus;
-
-VerifyFileAttributes(file,dstat,attr,pp);
 
 (attr.perms.owners)->uid = save_uid;
 (attr.perms.groups)->gid = save_gid;

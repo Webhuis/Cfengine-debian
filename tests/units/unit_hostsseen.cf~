@@ -1,5 +1,0 @@
-
-body common control
-{
-bundlesequence => { "" };
-}

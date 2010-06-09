@@ -121,9 +121,10 @@ VFQNAME[0] = VUQNAME[0] = '\0';
 
 if (uname(&VSYSNAME) == -1)
    {
-   perror("uname ");
-   FatalError("Uname couldn't get kernel name info!!\n");
+   CfOut(cf_error, "uname", "!!! Couldn't get kernel name info!");
+   memset(&VSYSNAME, 0, sizeof(VSYSNAME));
    }
+
 
 #ifdef AIX
 snprintf(real_version,_SYS_NMLN,"%.80s.%.80s", VSYSNAME.version, VSYSNAME.release);
@@ -196,15 +197,15 @@ FindDomainName(VSYSNAME.nodename);
 if (!StrStr(VSYSNAME.nodename,VDOMAIN))
    {
    snprintf(VFQNAME,CF_BUFSIZE,"%s.%s",VSYSNAME.nodename,ToLowerStr(VDOMAIN));
-   NewClass(CanonifyName(VFQNAME));
+   NewClass(VFQNAME);
    strcpy(VUQNAME,VSYSNAME.nodename);
-   NewClass(CanonifyName(VUQNAME));
+   NewClass(VUQNAME);
    }
 else
    {
    int n = 0;
    strcpy(VFQNAME,VSYSNAME.nodename);
-   NewClass(CanonifyName(VFQNAME));
+   NewClass(VFQNAME);
 
    while(VSYSNAME.nodename[n++] != '.' && VSYSNAME.nodename[n] != '\0')
       {
@@ -221,7 +222,7 @@ else
       VUQNAME[n] = '\0';
       }
 
-   NewClass(CanonifyName(VUQNAME));
+   NewClass(VUQNAME);
    }
 
 if ((tloc = time((time_t *)NULL)) == -1)
@@ -264,6 +265,10 @@ NewScalar("sys","resolv",VRESOLVCONF[VSYSTEMHARDCLASS],cf_str);
 NewScalar("sys","maildir",VMAILDIR[VSYSTEMHARDCLASS],cf_str);
 NewScalar("sys","exports",VEXPORTS[VSYSTEMHARDCLASS],cf_str);
 NewScalar("sys","expires",EXPIRY,cf_str);
+NewScalar("sys","cf_version",VERSION,cf_str);
+#ifdef HAVE_LIBCFNOVA
+NewScalar("sys","nova_version",Nova_GetVersion(),cf_str);
+#endif
 
 for (i = 0; components[i] != NULL; i++)
    {
@@ -378,25 +383,25 @@ NewClass(workbuf);
 CfOut(cf_verbose,"","Additional hard class defined as: %s\n",CanonifyName(workbuf));
 
 snprintf(workbuf,CF_BUFSIZE,"%s_%s",VSYSNAME.sysname,VSYSNAME.release);
-NewClass(CanonifyName(workbuf));
+NewClass(workbuf);
 
 #ifdef IRIX
 /* Get something like `irix64_6_5_19m' defined as well as
    `irix64_6_5'.  Just copying the latter into VSYSNAME.release
    wouldn't be backwards-compatible.  */
 snprintf(workbuf,CF_BUFSIZE,"%s_%s",VSYSNAME.sysname,real_version);
-NewClass(CanonifyName(workbuf));
+NewClass(workbuf);
 #endif
 
-NewClass(CanonifyName(VSYSNAME.machine));
+NewClass(VSYSNAME.machine);
 CfOut(cf_verbose,"","Additional hard class defined as: %s\n",CanonifyName(workbuf));
 
 snprintf(workbuf,CF_BUFSIZE,"%s_%s",VSYSNAME.sysname,VSYSNAME.machine);
-NewClass(CanonifyName(workbuf));
+NewClass(workbuf);
 CfOut(cf_verbose,"","Additional hard class defined as: %s\n",CanonifyName(workbuf));
 
 snprintf(workbuf,CF_BUFSIZE,"%s_%s_%s",VSYSNAME.sysname,VSYSNAME.machine,VSYSNAME.release);
-NewClass(CanonifyName(workbuf));
+NewClass(workbuf);
 CfOut(cf_verbose,"","Additional hard class defined as: %s\n",CanonifyName(workbuf));
 
 #ifdef HAVE_SYSINFO
@@ -408,7 +413,7 @@ if (sz == -1)
   }
 else
   {
-  NewClass(CanonifyName(workbuf));
+  NewClass(workbuf);
   CfOut(cf_verbose,"","Additional hard class defined as: %s\n",workbuf);
   }
 #endif
@@ -420,7 +425,7 @@ if (sz == -1)
   }
 else
   {
-  NewClass(CanonifyName(workbuf));
+  NewClass(workbuf);
   CfOut(cf_verbose,"","Additional hard class defined as: %s\n",workbuf);
   }
 #endif
@@ -451,7 +456,7 @@ if (! found)
 
 strcpy(workbuf,"compiled_on_");
 strcat(workbuf,CanonifyName(AUTOCONF_SYSNAME));
-NewClass(CanonifyName(workbuf));
+NewClass(workbuf);
 CfOut(cf_verbose,"","GNU autoconf class from compile time: %s",workbuf);
 
 /* Get IP address from nameserver */
@@ -471,7 +476,7 @@ else
    for (i = 0; hp->h_aliases[i]!= NULL; i++)
       {
       Debug("Adding alias %s..\n",hp->h_aliases[i]);
-      NewClass(CanonifyName(hp->h_aliases[i]));
+      NewClass(hp->h_aliases[i]);
       }
    }
 }
@@ -548,9 +553,13 @@ while (!feof(fp))
    if (strstr(class,"="))
       {
       sscanf(class,"%255[^=]=%255[^\n]",name,value);
-      DeleteVariable("mon",name);
-      NewScalar("mon",name,value,cf_str);
-      Debug(" -> Setting new monitoring scalar %s => %s",name,value);
+
+      if (THIS_AGENT_TYPE != cf_executor)
+         {
+         DeleteVariable("mon",name);
+         NewScalar("mon",name,value,cf_str);         
+         Debug(" -> Setting new monitoring scalar %s => %s",name,value);
+         }
       }
    else
       {
@@ -614,8 +623,8 @@ if (strstr(VFQNAME,".") == 0)
    }
 
 strcpy(buffer,VFQNAME);
-NewClass(CanonifyName(buffer));
-NewClass(CanonifyName(ToLowerStr(buffer)));
+NewClass(buffer);
+NewClass(ToLowerStr(buffer));
 
 if (strstr(VFQNAME,"."))
    {
@@ -641,7 +650,7 @@ if (strstr(VFQNAME,"."))
          if (*(ptr+1) != '\0')
             {
             Debug("Defining domain #%s#\n",(ptr+1));
-            NewClass(CanonifyName(ptr+1));
+            NewClass(ptr+1);
             }
          else
             {
@@ -651,7 +660,7 @@ if (strstr(VFQNAME,"."))
       }
    }
 
-NewClass(CanonifyName(VDOMAIN));
+NewClass(VDOMAIN);
 }
 
 /*******************************************************************/
@@ -873,8 +882,8 @@ NewScalar("sys","crontab","",cf_str);
 #endif  /* CFCYG */
 
 #ifdef MINGW
-NewClass(CanonifyName(VSYSNAME.version));  // code name - e.g. Windows Vista
-NewClass(CanonifyName(VSYSNAME.release));  // service pack number - e.g. Service Pack 3
+NewClass(VSYSNAME.version);  // code name - e.g. Windows Vista
+NewClass(VSYSNAME.release);  // service pack number - e.g. Service Pack 3
 
 if (strstr(VSYSNAME.sysname, "workstation"))
    {
@@ -1555,7 +1564,6 @@ int Lsb_Version(void)
 if ((ret = Lsb_Release("--id")) != NULL)
    {
    strncpy(distrib,ret,CF_MAXVARSIZE);
-   NewClass(classname);
    snprintf(classname, CF_MAXVARSIZE, "%s",ret);
    NewClass(classname);
 
@@ -1611,17 +1619,17 @@ if ((fp = fopen("/proc/vmware/version","r")) != NULL)
    if (sscanf(buffer,"VMware ESX Server %d.%d.%d",&major,&minor,&bug) > 0)
       {
       snprintf(classbuf,CF_BUFSIZE,"VMware ESX Server %d",major);
-      NewClass(CanonifyName(classbuf));
+      NewClass(classbuf);
       snprintf(classbuf,CF_BUFSIZE,"VMware ESX Server %d.%d",major,minor);
-      NewClass(CanonifyName(classbuf));
+      NewClass(classbuf);
       snprintf(classbuf,CF_BUFSIZE,"VMware ESX Server %d.%d.%d",major,minor,bug);
-      NewClass(CanonifyName(classbuf));
+      NewClass(classbuf);
       sufficient = 1;
       }
    else if (sscanf(buffer,"VMware ESX Server %s",version) > 0)
       {
       snprintf(classbuf,CF_BUFSIZE,"VMware ESX Server %s",version);
-      NewClass(CanonifyName(classbuf));
+      NewClass(classbuf);
       sufficient = 1;
       }
    fclose(fp);
@@ -1634,14 +1642,14 @@ if (sufficient < 1 && ((fp = fopen("/etc/vmware-release","r")) != NULL) ||
    {
    CfReadLine(buffer,CF_BUFSIZE,fp);
    Chop(buffer);
-   NewClass(CanonifyName(buffer));
+   NewClass(buffer);
 
    /* Strip off the release code name e.g. "(Dali)" */
    if ((sp = strchr(buffer,'(')) != NULL)
       {
       *sp = 0;
       Chop(buffer);
-      NewClass(CanonifyName(buffer));
+      NewClass(buffer);
       }
    sufficient = 1;
    fclose(fp);
@@ -1739,8 +1747,17 @@ void *Lsb_Release(char *key)
 { char vbuff[CF_BUFSIZE];
   char info[CF_MAXVARSIZE];
   FILE *pp;
+  struct stat sb;
 
-snprintf(vbuff, CF_BUFSIZE, "/usr/bin/lsb_release %s",key);
+snprintf(vbuff,CF_BUFSIZE, "/usr/bin/lsb_release");
+
+if (cfstat(vbuff,&sb) == -1)
+   {
+   CfOut(cf_verbose,"","LSB probe \"%s\" doesn't exist",vbuff);
+   return NULL;
+   }
+
+snprintf(vbuff,CF_BUFSIZE, "/usr/bin/lsb_release %s",key);
 
 if ((pp = cf_popen(vbuff, "r")) == NULL)
    {
@@ -1774,9 +1791,8 @@ return Unix_GetCurrentUserName(userName, userNameLen);
 #ifndef MINGW
 
 void Unix_GetInterfaceInfo(enum cfagenttype ag)
-{ 
 
-  int fd,len,i,j,first_address,ipdefault = false;
+{ int fd,len,i,j,first_address = false,ipdefault = false;
   struct ifreq ifbuf[CF_IFREQ],ifr, *ifp;
   struct ifconf list;
   struct sockaddr_in *sin;
@@ -1787,8 +1803,6 @@ void Unix_GetInterfaceInfo(enum cfagenttype ag)
   char last_name[CF_BUFSIZE];
 
 Debug("Unix_GetInterfaceInfo()\n");
-
-//NewScalar("sys","interface",VIFDEV[VSYSTEMHARDCLASS],cf_str);
 
 last_name[0] = '\0';
 
@@ -1841,6 +1855,13 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
       {
       CfOut(cf_verbose,"","Interface %d: %s\n",j+1,ifp->ifr_name);
       }
+
+   // Ignore the loopback
+   
+   if (strcmp(ifp->ifr_name,"lo") == 0)
+      {
+      continue;
+      }
    
    if (strncmp(last_name,ifp->ifr_name,sizeof(ifp->ifr_name)) == 0)
       {
@@ -1848,10 +1869,14 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
       }
    else
       {
-      first_address = true;
-      }
+      strncpy(last_name,ifp->ifr_name,sizeof(ifp->ifr_name));
 
-   strncpy(last_name,ifp->ifr_name,sizeof(ifp->ifr_name));
+      if (!first_address)
+         {
+         NewScalar("sys","interface",last_name,cf_str);
+         first_address = true;
+         }
+      }
 
    if (UNDERSCORE_CLASSES)
       {
@@ -1871,15 +1896,16 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
       if (ioctl(fd,SIOCGIFFLAGS,&ifr) == -1)
          {
          CfOut(cf_error,"ioctl","No such network device");
-         close(fd);
-         return;
+         //close(fd);
+         //return;
+         continue;
          }
 
       if ((ifr.ifr_flags & IFF_BROADCAST) && !(ifr.ifr_flags & IFF_LOOPBACK))
          {
          sin=(struct sockaddr_in *)&ifp->ifr_addr;
          Debug("Adding hostip %s..\n",inet_ntoa(sin->sin_addr));
-         NewClass(CanonifyName(inet_ntoa(sin->sin_addr)));
+         NewClass(inet_ntoa(sin->sin_addr));
 
          if ((hp = gethostbyaddr((char *)&(sin->sin_addr.s_addr),sizeof(sin->sin_addr.s_addr),AF_INET)) == NULL)
             {
@@ -1890,14 +1916,14 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
             if (hp->h_name != NULL)
                {
                Debug("Adding hostname %s..\n",hp->h_name);
-               NewClass(CanonifyName(hp->h_name));
+               NewClass(hp->h_name);
 
                if (hp->h_aliases != NULL)
                   {
                   for (i=0; hp->h_aliases[i] != NULL; i++)
                      {
                      CfOut(cf_verbose,"","Adding alias %s..\n",hp->h_aliases[i]);
-                     NewClass(CanonifyName(hp->h_aliases[i]));
+                     NewClass(hp->h_aliases[i]);
                      }
                   }
                }
@@ -1916,7 +1942,7 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
                if (*sp == '.')
                   {
                   *sp = '\0';
-                  NewClass(CanonifyName(ip));
+                  NewClass(ip);
                   }
                }
 
@@ -1932,13 +1958,14 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
                   NewScalar("sys",name,ip,cf_str);
                   }
                }
-            close(fd);
-            return;
+            //close(fd);
+            //return;
+            continue;
             }
 
          strncpy(ip,"ipv4_",CF_MAXVARSIZE);
          strncat(ip,inet_ntoa(sin->sin_addr),CF_MAXVARSIZE-6);
-         NewClass(CanonifyName(ip));
+         NewClass(ip);         
 
          if (!ipdefault)
             {
@@ -1955,7 +1982,7 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
             if (*sp == '.')
                {
                *sp = '\0';
-               NewClass(CanonifyName(ip));
+               NewClass(ip);
                }
             }
 
@@ -1995,7 +2022,6 @@ for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*if
          }
       }
    }
-
 
 close(fd);
 }
@@ -2096,7 +2122,7 @@ while (!feof(pp))
             {
             CfOut(cf_verbose,"","Found IPv6 address %s\n",ip->name);
             AppendItem(&IPADDRESSES,ip->name,"");
-            NewClass(CanonifyName(ip->name));
+            NewClass(ip->name);
             }
          }
 
