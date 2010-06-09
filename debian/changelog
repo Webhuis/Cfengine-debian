@@ -1,3 +1,10 @@
+cfengine3 (3.0.5+dfsg-1) unstable; urgency=low
+
+  * New upstream release
+  * debian/watch: modified again to catch the newest versions
+
+ -- Antonio Radici <antonio@dyne.org>  Wed, 09 Jun 2010 23:14:56 +0100
+
 cfengine3 (3.0.4+dfsg-1) unstable; urgency=low
 
    * debian/watch: modified to catch the newest versions
