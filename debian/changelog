@@ -2,8 +2,11 @@ cfengine3 (3.0.5+dfsg-1) unstable; urgency=low
 
   * New upstream release
   * debian/watch: modified again to catch the newest versions
+  * debian/patches:
+    + all patches: refreshed
+    + cf-monitor-pid: removed, it is upstream
 
- -- Antonio Radici <antonio@dyne.org>  Wed, 09 Jun 2010 23:14:56 +0100
+ -- Antonio Radici <antonio@debian.org>  Wed, 09 Jun 2010 23:14:56 +0100
 
 cfengine3 (3.0.4+dfsg-1) unstable; urgency=low
 

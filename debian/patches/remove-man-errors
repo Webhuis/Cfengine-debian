@@ -3,7 +3,7 @@ file; I'm removing all the man errors from here
 
 --- a/src/generic_agent.c
 +++ b/src/generic_agent.c
-@@ -1527,7 +1527,7 @@
+@@ -1538,7 +1538,7 @@
     {
     if (options[i].has_arg)
        {
@@ -12,7 +12,7 @@ file; I'm removing all the man errors from here
        }
     else
        {
-@@ -1555,12 +1555,12 @@
+@@ -1566,12 +1566,12 @@
  printf(".SH SYNOPSIS:\n\n %s [options]\n\n.SH DESCRIPTION:\n\n%s\n",GetArg0(component),id);
  
  printf(".B cfengine\n"
@@ -27,7 +27,7 @@ file; I'm removing all the man errors from here
         ".B cfengine\n"
         "is to create a one or more sets of configuration files which will"
         "classify and describe the setup of every host in a network.\n");
-@@ -1571,7 +1571,7 @@
+@@ -1582,7 +1582,7 @@
     {
     if (options[i].has_arg)
        {
@@ -36,18 +36,18 @@ file; I'm removing all the man errors from here
        }
     else
        {
-@@ -1584,10 +1584,10 @@
+@@ -1595,10 +1595,10 @@
         ".SH INFORMATION\n");
  
  printf("\nBug reports: bug-cfengine@cfengine.org\n");
 -printf(".pp\nCommunity help: help-cfengine@cfengine.org\n");
 -printf(".pp\nCommunity info: http://www.cfengine.org\n");
 -printf(".pp\nSupport services: http://www.cfengine.com\n");
--printf(".pp\nThis software is (C) 2008- Cfengine AS.\n");
+-printf(".pp\nThis software is Copyright (C) 2008- Cfengine AS.\n");
 +printf(".PP\nCommunity help: help-cfengine@cfengine.org\n");
 +printf(".PP\nCommunity info: http://www.cfengine.org\n");
 +printf(".PP\nSupport services: http://www.cfengine.com\n");
-+printf(".PP\nThis software is (C) 2008- Cfengine AS.\n");
++printf(".PP\nThis software is Copyright (C) 2008- Cfengine AS.\n");
  }
  
  /*******************************************************************/

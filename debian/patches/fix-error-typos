@@ -1,16 +1,5 @@
 to fix a small typo in cf-agent
 
---- a/src/agent.c
-+++ b/src/agent.c
-@@ -1008,7 +1008,7 @@
- {
- if (putenv(s) != 0)
-    {
--   CfOut(cf_inform,"putenv","Failed to set environement %s",s);
-+   CfOut(cf_inform,"putenv","Failed to set environment %s",s);
-    }
- }
- 
 --- a/src/client_code.c
 +++ b/src/client_code.c
 @@ -146,7 +146,7 @@
@@ -24,7 +13,7 @@ to fix a small typo in cf-agent
        {
 --- a/src/reporting.c
 +++ b/src/reporting.c
-@@ -570,7 +570,7 @@
+@@ -542,7 +542,7 @@
        {
        if (rp->type != CF_SCALAR)
           {

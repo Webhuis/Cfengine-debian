@@ -8,7 +8,7 @@ actual creation of the inputs dir any cf-* binary will fail
 
 --- a/src/generic_agent.c
 +++ b/src/generic_agent.c
-@@ -392,9 +392,10 @@
+@@ -396,9 +396,10 @@
     CfOut(cf_verbose,"","Work directory is %s\n",CFWORKDIR);
  
     snprintf(HASHDB,CF_BUFSIZE-1,"%s%c%s",CFWORKDIR,FILE_SEPARATOR,CF_CHKDB);
@@ -20,16 +20,16 @@ actual creation of the inputs dir any cf-* binary will fail
     snprintf(vbuff,CF_BUFSIZE,"%s%cbin%ccf-agent -D from_cfexecd",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
     MakeParentDirectory(vbuff,force);
     snprintf(vbuff,CF_BUFSIZE,"%s%coutputs%cspooled_reports",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
-@@ -1047,7 +1048,7 @@
-    FatalError("Uname couldn't get kernel name info!!\n");
+@@ -1055,7 +1056,7 @@
+    }
+ else
+    {
+-   snprintf(LOGFILE,CF_BUFSIZE,"%s%ccfagent.%s.log",CFWORKDIR,FILE_SEPARATOR,VSYSNAME.nodename);
++   snprintf(LOGFILE,CF_BUFSIZE,"/var/log/cfagent.%s.log",VSYSNAME.nodename);
+    VSETUIDLOG = strdup(LOGFILE);
     }
  
--snprintf(LOGFILE,CF_BUFSIZE,"%s%ccfagent.%s.log",CFWORKDIR,FILE_SEPARATOR,VSYSNAME.nodename);
-+snprintf(LOGFILE,CF_BUFSIZE,"/var/log/cfagent.%s.log",VSYSNAME.nodename);
- VSETUIDLOG = strdup(LOGFILE);
- 
- snprintf(vbuff,CF_BUFSIZE,"%s%c.",CFWORKDIR,FILE_SEPARATOR);
-@@ -1605,7 +1606,7 @@
+@@ -1616,7 +1617,7 @@
  
  { FILE *fp;
  
@@ -40,7 +40,7 @@ actual creation of the inputs dir any cf-* binary will fail
     {
 --- a/src/agent.c
 +++ b/src/agent.c
-@@ -331,7 +331,7 @@
+@@ -339,7 +339,7 @@
    status which we need for setting returns
  */
  
@@ -51,15 +51,15 @@ actual creation of the inputs dir any cf-* binary will fail
     {
 --- a/src/files_interfaces.c
 +++ b/src/files_interfaces.c
-@@ -332,7 +332,7 @@
-       }
-    }
+@@ -1320,7 +1320,7 @@
+ b.edits.backup = cfa_nobackup;
+ b.edits.maxfilesize = 1000000;
  
 -snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
 +snprintf(filename,CF_BUFSIZE,"/var/log/cfagent.%s.log",VSYSNAME.nodename);
  MapName(filename);
  
- if (!LoadFileAsItemList(&VSETUIDLIST,filename,a,pp))
+ if (!LoadFileAsItemList(&VSETUIDLIST,filename,b,pp))
 --- a/src/transaction.c
 +++ b/src/transaction.c
 @@ -156,7 +156,7 @@

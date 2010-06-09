@@ -1,6 +1,4 @@
 remove-man-errors
-cf-monitor-pid
 fhs-compliance
 fix-examples-paths
 fix-error-typos
-debian-changes-3.0.4+dfsg-1
