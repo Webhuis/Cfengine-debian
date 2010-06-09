@@ -1,3 +1,38 @@
+3.0.5
+        Encryption problems fixed - client key buffer was uninitialized.
+
+        Classes-promisers are now automatically canonified when class
+	strings are defined, to simplifying the use of variables in classes.
+
+        New scalars sys.cf_version and sys.nova_version that hold Cfengine version information.
+
+        Attribute package_delete_convention added, to allow customizable
+	package name in delete command during update.
+
+	package_list_update_ifelapsed limit added
+	
+	Private variable $(firstrepo) is available in package_name_convention
+        and package_delete_convention in order to expand the full path to 
+	a package, which is required by some managers.
+
+	Some of the threading code is rewritten and made more robust. This includes
+     	synchronizing access to the lastseen database from the server.
+
+        Bad initialization of BSD flags fixed
+	Multiple variable expansion issues in control fixed for server and agent
+	Allow ignore_missing_bundles to affect methods: bundles too
+	Run agent trust dialogue fixed
+
+	Bug in CPU monitoring, increasing time scale caused linear decay
+	of CPU measurement.
+
+	Bug in Setuid log storage, fix.
+	
+	Hooks added for new Nova virtualization promises.
+
+	Multithreading mutex failed to collide during cfservd leading to dropped authentication under heavy load.
+	
+	
 3.0.4
 	Class cancellation in promises to create better class feedback,
 	allows emulation of switch/case semantics etc

@@ -61,7 +61,6 @@ if (a.edits.empty_before_use)
    }
 
 EDIT_MODEL = true;
-
 return ec;
 }
 
@@ -93,7 +92,6 @@ else if (ec && ec->num_edits > 0)
       }
    else
       {
-      cfPS(cf_inform,CF_CHG,"",pp,a," -> Saving edit changes to file %s",ec->filename);
       SaveItemListAsFile(ec->file_start,ec->filename,a,pp);
       }
    }
@@ -125,7 +123,8 @@ int LoadFileAsItemList(struct Item **liststart,char *file,struct Attributes a,st
 
 { FILE *fp;
   struct stat statbuf;
-  char line[CF_BUFSIZE];
+  char line[CF_BUFSIZE],concat[CF_BUFSIZE];
+  int join = false;
   
 if (cfstat(file,&statbuf) == -1)
    {
@@ -151,15 +150,38 @@ if ((fp = fopen(file,"r")) == NULL)
    return false;
    }
 
-memset(line,0,CF_BUFSIZE); 
+memset(line,0,CF_BUFSIZE);
+memset(concat,0,CF_BUFSIZE); 
 
 while(!feof(fp))
    {
    CfReadLine(line,CF_BUFSIZE-1,fp);
 
-   if (!feof(fp) || (strlen(line) != 0))
+   if (a.edits.joinlines && *(line+strlen(line)-1) == '\\')
       {
-      AppendItem(liststart,line,NULL);
+      join = true;
+      }
+   else
+      {
+      join = false;
+      }
+
+   if (join)
+      {
+      *(line+strlen(line)-1) = '\0';
+      JoinSuffix(concat,line);
+      }
+   else
+      {
+      JoinSuffix(concat,line);
+      
+      if (!feof(fp) || (strlen(concat) != 0))
+         {
+         AppendItem(liststart,concat,NULL);
+         }
+
+      concat[0] = '\0';
+      join = false;
       }
    
    line[0] = '\0';
@@ -186,6 +208,7 @@ int SaveItemListAsFile(struct Item *liststart,char *file,struct Attributes a,str
   security_context_t scontext=NULL;
 
 selinux_enabled = (is_selinux_enabled() > 0);
+
 if (selinux_enabled)
    {
    /* get current security context */

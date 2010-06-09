@@ -282,6 +282,7 @@ void ThisAgentInit()
 {
 NewScope("remote_access");
 umask(077);
+CFDSTARTTIME = time(NULL);
 }
 
 /*******************************************************************/
@@ -409,7 +410,9 @@ while (true)
    if ((sd_reply = accept(sd,(struct sockaddr *)&cin,&addrlen)) != -1)
       {
       memset(ipaddr,0,CF_MAXVARSIZE);
+      ThreadLock(cft_getaddr);
       snprintf(ipaddr,CF_MAXVARSIZE-1,"%s",sockaddr_ntop((struct sockaddr *)&cin));
+      ThreadUnlock(cft_getaddr);
       
       Debug("Obtained IP address of %s on socket %d from accept\n",ipaddr,sd_reply);
       
@@ -438,7 +441,7 @@ while (true)
          {
          if (IsItemIn(CONNECTIONLIST,MapAddress(ipaddr)))
             {
-            CfOut(cf_error,"","Denying repeated connection from %s\n",ipaddr);
+            CfOut(cf_error,"","Denying repeated connection from \"%s\"\n",ipaddr);
             cf_closesocket(sd_reply);
             continue;
             }
@@ -446,7 +449,7 @@ while (true)
       
       if (LOGCONNS)
          {
-         CfOut(cf_inform,"","Accepting connection from %s\n",ipaddr);
+         CfOut(cf_inform,"","Accepting connection from \"%s\"\n",ipaddr);
          }
       
       snprintf(intime,63,"%d",(int)now);
@@ -572,9 +575,14 @@ for (ap = response ; ap != NULL; ap=ap->ai_next)
 
    if (bind(sd,ap->ai_addr,ap->ai_addrlen) == 0)
       {
-      Debug("Bound to address %s on %s=%d\n",sockaddr_ntop(ap->ai_addr),CLASSTEXT[VSYSTEMHARDCLASS],VSYSTEMHARDCLASS);
-
-      if (VSYSTEMHARDCLASS == openbsd || VSYSTEMHARDCLASS == freebsd || VSYSTEMHARDCLASS == netbsd || VSYSTEMHARDCLASS == dragonfly)
+      if (DEBUG)
+         {
+         ThreadLock(cft_getaddr);
+         printf("Bound to address %s on %s=%d\n",sockaddr_ntop(ap->ai_addr),CLASSTEXT[VSYSTEMHARDCLASS],VSYSTEMHARDCLASS);
+         ThreadUnlock(cft_getaddr);
+         }
+      
+      if (VSYSTEMHARDCLASS == mingw || VSYSTEMHARDCLASS == openbsd || VSYSTEMHARDCLASS == freebsd || VSYSTEMHARDCLASS == netbsd || VSYSTEMHARDCLASS == dragonfly)
          {
          continue;  /* *bsd doesn't map ipv6 addresses */
          }
@@ -1093,9 +1101,9 @@ switch (GetCommand(recvbuffer))
           RefuseAccess(conn,sendbuffer,0,recvbuffer);
           return false;
           }
-       
+
        plainlen = DecryptString(conn->encryption_type,recvbuffer+CF_PROTO_OFFSET,buffer,conn->session_key,len);
-       
+
        cfscanf(buffer,strlen("GET"),strlen("dummykey"),check,sendbuffer,filename);
        
        if (strcmp(check,"GET") != 0)
@@ -1216,7 +1224,6 @@ switch (GetCommand(recvbuffer))
        CfOpenDirectory(conn,sendbuffer,filename);
        return true;
        
-       
    case cfd_ssynch:
 
        memset(buffer,0,CF_BUFSIZE);
@@ -1240,7 +1247,13 @@ switch (GetCommand(recvbuffer))
 
        plainlen = DecryptString(conn->encryption_type,out,recvbuffer,conn->session_key,len);
 
-       if (strncmp(recvbuffer,"SYNCH",5) !=0)
+       if (plainlen < 0)
+          {
+          DebugBinOut(conn->session_key,32,"Session key");
+          CfOut(cf_error, "", "!! Bad decrypt (%d)",len);
+          }
+
+       if (strncmp(recvbuffer,"SYNCH",5) != 0)
           {
           CfOut(cf_inform,"","No synch\n");
           RefuseAccess(conn,sendbuffer,0,recvbuffer);
@@ -1352,7 +1365,7 @@ switch (GetCommand(recvbuffer))
        if (strncmp(recvbuffer,"VAR",3) !=0)
           {
           CfOut(cf_inform,"","VAR protocol defect\n");
-          RefuseAccess(conn,sendbuffer,0,"decyption failre");
+          RefuseAccess(conn,sendbuffer,0,"decryption failure");
           return false;
           }
 
@@ -1580,7 +1593,7 @@ else
 
 CfOut(cf_inform,"","Executing command %s\n",ebuff);
  
-if ((pp = cf_popen_sh(ebuff,"r")) == NULL)
+if ((pp = cf_popen(ebuff,"r")) == NULL)
    {
    CfOut(cf_error,"pipe","Couldn't open pipe to command %s\n",ebuff);
    snprintf(sendbuffer,CF_BUFSIZE,"Unable to run %s\n",ebuff);
@@ -1685,6 +1698,12 @@ ThreadLock(cft_system);
 strncpy(dns_assert,ToLowerStr(fqname),CF_MAXVARSIZE-1);
 strncpy(ip_assert,ipstring,CF_MAXVARSIZE-1);
 
+if (strcmp(ip_assert,MapAddress(conn->ipaddr)) != 0)
+   {
+   CfOut(cf_verbose,"","IP address mismatch between client's assertion (%s) and socket (%s) - untrustworthy connection\n",ip_assert,conn->ipaddr);
+   return false;
+   }
+
 ThreadUnlock(cft_system);
 
 /* It only makes sense to check DNS by reverse lookup if the key had to be accepted
@@ -1700,10 +1719,10 @@ if ((conn->trust == false) || IsMatchItemIn(SKIPVERIFY,MapAddress(conn->ipaddr))
    strncpy(conn->username,username,CF_MAXVARSIZE);
 
 #ifdef MINGW  /* NT uses security identifier instead of uid */
-   if(!NovaWin_UserNameToSid(username, (SID *)conn->sid, CF_MAXSIDSIZE, false))
-     {
-     memset(conn->sid, 0, CF_MAXSIDSIZE);  /* is invalid sid - discarded */
-     }
+   if (!NovaWin_UserNameToSid(username, (SID *)conn->sid, CF_MAXSIDSIZE, false))
+      {
+      memset(conn->sid, 0, CF_MAXSIDSIZE);  /* is invalid sid - discarded */
+      }
    
 #else  /* NOT MINGW */
    if ((pw=getpwnam(username)) == NULL) /* Keep this inside mutex */
@@ -1715,17 +1734,11 @@ if ((conn->trust == false) || IsMatchItemIn(SKIPVERIFY,MapAddress(conn->ipaddr))
       conn->uid = pw->pw_uid;
       }
 #endif  /* NOT MINGW */
-
+   
    LastSaw(dns_assert,cf_accept);
    return true;
    }
  
-if (strcmp(ip_assert,MapAddress(conn->ipaddr)) != 0)
-   {
-   CfOut(cf_verbose,"","IP address mismatch between client's assertion (%s) and socket (%s) - untrustworthy connection\n",ip_assert,conn->ipaddr);
-   return false;
-   }
-
 if (strlen(dns_assert) == 0)
    {
    CfOut(cf_verbose,"","DNS asserted name was empty - untrustworthy connection\n");
@@ -1764,13 +1777,15 @@ if ((err=getaddrinfo(dns_assert,NULL,&query,&response)) != 0)
  
 for (ap = response; ap != NULL; ap = ap->ai_next)
    {
-   Debug("CMP: %s %s\n",MapAddress(conn->ipaddr),sockaddr_ntop(ap->ai_addr));
+   ThreadLock(cft_getaddr);
    
    if (strcmp(MapAddress(conn->ipaddr),sockaddr_ntop(ap->ai_addr)) == 0)
       {
       Debug("Found match\n");
       matched = true;
       }
+
+   ThreadUnlock(cft_getaddr);
    }
 
 if (response != NULL)
@@ -1844,26 +1859,25 @@ else
       }   
    }
  
- 
+ThreadUnlock(cft_getaddr); 
+  
 #ifdef MINGW  /* NT uses security identifier instead of uid */
- if(!NovaWin_UserNameToSid(username, (SID *)conn->sid, CF_MAXSIDSIZE, false))
+if (!NovaWin_UserNameToSid(username, (SID *)conn->sid, CF_MAXSIDSIZE, false))
    {
    memset(conn->sid, 0, CF_MAXSIDSIZE);  /* is invalid sid - discarded */
    }
 	 
 #else  /* NOT MINGW */
- if ((pw=getpwnam(username)) == NULL) /* Keep this inside mutex */
-    {      
-    conn->uid = -2;
-    }
- else
-    {
-    conn->uid = pw->pw_uid;
-    }
+if ((pw=getpwnam(username)) == NULL) /* Keep this inside mutex */
+   {      
+   conn->uid = -2;
+   }
+else
+   {
+   conn->uid = pw->pw_uid;
+   }
 #endif  /* NOT MINGW */
 
-ThreadUnlock(cft_getaddr); 
- 
 #endif
 
 if (!matched)
@@ -2668,11 +2682,6 @@ if (keylen > CF_BUFSIZE/2)
    CfOut(cf_inform,"","Session key length received from %s is too long",conn->ipaddr);
    return false;
    }
-else
-   {
-   Debug("Got encryption size %d\n",keylen);
-   DebugBinOut(in,keylen);
-   }
 
 ThreadLock(cft_system);
 
@@ -2687,6 +2696,10 @@ if (conn->session_key == NULL)
    RSA_free(newkey); 
    return false;
    }
+
+ CfOut(cf_verbose,""," -> Receiving session key from client (size=%d)...", keylen);
+
+ Debug("keylen=%d, session_size=%d\n", keylen, session_size);
 
 if (keylen == CF_BLOWFISHSIZE) /* Support the old non-ecnrypted for upgrade */
    {
@@ -2709,8 +2722,7 @@ else
 
 ThreadUnlock(cft_system);
 
-Debug("Got a session key...\n"); 
-DebugBinOut(conn->session_key,16);
+//DebugBinOut(conn->session_key,session_size,"Session key received");
 
 BN_free(counter_challenge);
 free(out);
@@ -3011,13 +3023,13 @@ void CfEncryptGetFile(struct cfd_get_arg *args)
     
 { int sd,fd,n_read,total=0,cipherlen,sendlen=0,count = 0,finlen,cnt = 0;
   char sendbuffer[CF_BUFSIZE+256],out[CF_BUFSIZE],filename[CF_BUFSIZE];
-  struct stat sb;
   unsigned char iv[32] = {1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8};
   int blocksize = CF_BUFSIZE - 4*CF_INBAND_OFFSET;
-  uid_t uid;
-  char *key,enctype;
-  int savedlen;
   EVP_CIPHER_CTX ctx;
+  char *key,enctype;
+  struct stat sb;
+  int savedlen;
+  uid_t uid;
 
 sd         = (args->connect)->sd_reply;
 key        = (args->connect)->session_key;
@@ -3295,15 +3307,17 @@ Debug("CfSecOpenDirectory(%s)\n",dirname);
 if (!IsAbsoluteFileName(dirname))
    {
    sprintf(sendbuffer,"BAD: request to access a non-absolute filename\n");
-   SendTransaction(conn->sd_reply,sendbuffer,0,CF_DONE);
+   cipherlen = EncryptString(conn->encryption_type,sendbuffer,out,conn->session_key,strlen(sendbuffer)+1);
+   SendTransaction(conn->sd_reply,out,0,CF_DONE);
    return -1;
    }
 
 if ((dirh = opendir(dirname)) == NULL)
    {
-   Debug("cfengine, couldn't open dir %s\n",dirname);
+   CfOut(cf_verbose,"","Couldn't open dir %s\n",dirname);
    snprintf(sendbuffer,CF_BUFSIZE,"BAD: cfengine, couldn't open dir %s\n",dirname);
-   SendTransaction(conn->sd_reply,sendbuffer,0,CF_DONE);
+   cipherlen = EncryptString(conn->encryption_type,sendbuffer,out,conn->session_key,strlen(sendbuffer)+1);
+   SendTransaction(conn->sd_reply,out,0,CF_DONE);
    return -1;
    }
 
@@ -3330,6 +3344,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
    }
 
 strcpy(sendbuffer+offset,CFD_TERMINATOR);
+
 cipherlen = EncryptString(conn->encryption_type,sendbuffer,out,conn->session_key,offset+2+strlen(CFD_TERMINATOR));
 SendTransaction(conn->sd_reply,out,cipherlen,CF_DONE);
 Debug("END CfSecOpenDirectory(%s)\n",dirname);
@@ -3773,7 +3788,6 @@ SavePublicKey(keyname,newkey);
 
 CloseDB(dbp);
 cf_chmod(keydb,0644); 
- 
 return trust; 
 }
 
@@ -3865,7 +3879,7 @@ if (conn->ipaddr != NULL)
       }
    }
  
-free ((char *)conn);
+free((char *)conn);
 }
 
 /***************************************************************/

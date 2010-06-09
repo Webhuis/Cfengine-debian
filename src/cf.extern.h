@@ -37,7 +37,10 @@ extern pthread_mutex_t MUTEX_LOCK;
 extern pthread_attr_t PTHREADDEFAULTS;
 extern pthread_mutex_t MUTEX_COUNT;
 extern pthread_mutex_t MUTEX_OUTPUT;
+extern pthread_mutex_t MUTEX_DBHANDLE;
+extern pthread_mutex_t MUTEX_POLICY;
 extern pthread_mutex_t MUTEX_GETADDR;
+extern pthread_mutex_t MUTEX_DB_LASTSEEN;
 # endif
 
 extern pid_t ALARM_PID;
@@ -458,9 +461,6 @@ extern char XDEV;
 extern char RXDIRS;
 extern char TYPECHECK;
 extern char SCAN;
-
-extern enum actions ACTION;
-extern enum vnames CONTROLVAR;
 
 extern mode_t PLUSMASK;
 extern mode_t MINUSMASK;

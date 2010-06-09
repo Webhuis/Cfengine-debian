@@ -35,6 +35,45 @@
 
 /*********************************************************************/
 
+void PurgeItemList(struct Item **list,char *name)
+
+{ struct Item *ip;
+  struct stat sb;
+ 
+for (ip = *list; ip != NULL; ip=ip->next)
+   {
+   if (cfstat(ip->name,&sb) == -1)
+      {
+      CfOut(cf_verbose,""," -> Purging file \"%s\" from %s list as it no longer exists",ip->name,name);
+      DeleteItem(list,ip);
+      }
+   }
+}
+
+/*********************************************************************/
+
+struct Item *ReturnItemIn(struct Item *list,char *item)
+
+{ struct Item *ptr; 
+
+if ((item == NULL) || (strlen(item) == 0))
+   {
+   return NULL;
+   }
+ 
+for (ptr = list; ptr != NULL; ptr=ptr->next)
+   {
+   if (strcmp(ptr->name,item) == 0)
+      {
+      return ptr;
+      }
+   }
+ 
+return NULL;
+}
+
+/*********************************************************************/
+
 int IsItemIn(struct Item *list,char *item)
 
 { struct Item *ptr; 
@@ -71,13 +110,13 @@ return prev;
 
 /*********************************************************************/
 
-int IsItemInRegion(char *item,struct Item *begin_ptr,struct Item *end_ptr)
+int IsItemInRegion(char *item,struct Item *begin_ptr,struct Item *end_ptr,struct Attributes a,struct Promise *pp)
 
 { struct Item *ip;
  
 for (ip = begin_ptr; (ip != end_ptr && ip != NULL); ip = ip->next)
    {
-   if (strcmp(ip->name,item) == 0)
+   if (MatchPolicy(item,ip->name,a,pp))
       {
       return true;
       }
@@ -771,7 +810,7 @@ ip->classes = NULL;
 
 /*********************************************************************/
 
-int NeighbourItemMatches(struct Item *file_start,struct Item *location,char *string,enum cfeditorder pos)
+int NeighbourItemMatches(struct Item *file_start,struct Item *location,char *string,enum cfeditorder pos,struct Attributes a,struct Promise *pp)
 
 { struct Item *ip;
 
@@ -783,7 +822,7 @@ for (ip = file_start; ip != NULL; ip = ip->next)
       {
       if (ip->next && ip->next == location)
          {
-         if (strcmp(ip->name,string) == 0)
+         if (MatchPolicy(string,ip->name,a,pp))
             {
             return true;
             }
@@ -798,7 +837,7 @@ for (ip = file_start; ip != NULL; ip = ip->next)
       {
       if (ip == location)
          {
-         if (ip->next && strcmp(ip->next->name,string) == 0)
+         if (ip->next && MatchPolicy(string,ip->next->name,a,pp))
             {
             return true;
             }

@@ -40,6 +40,7 @@ enum typesequence
    {
    kp_vars,
    kp_classes,
+   kp_outputs,
    kp_interfaces,
    kp_processes,
    kp_storage,
@@ -49,6 +50,7 @@ enum typesequence
    kp_files,
    kp_databases,
    kp_services,
+   kp_environments,
    kp_reports,
    kp_none
    };
@@ -57,6 +59,7 @@ char *TYPESEQUENCE[] =
    {
    "vars",
    "classes",    /* Maelstrom order 2 */
+   "outputs",
    "interfaces",
    "processes",
    "storage",
@@ -66,6 +69,7 @@ char *TYPESEQUENCE[] =
    "files",
    "databases",
    "services",
+   "environments",
    "reports",
    NULL
    };
@@ -81,6 +85,10 @@ void SetEnvironment(char *s);
 
 extern struct BodySyntax CFA_CONTROLBODY[];
 extern struct Rlist *SERVERLIST;
+
+#ifdef HAVE_LIBVIRT
+extern virConnectPtr CFVC[];
+#endif
 
 /*******************************************************************/
 /* Command line options                                            */
@@ -505,7 +513,7 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_childlibpath].lval) == 0)
       {
       char output[CF_BUFSIZE];
-      snprintf(output,CF_BUFSIZE,"LD_LIBRARY_PATH=%s",retval);
+      snprintf(output,CF_BUFSIZE,"LD_LIBRARY_PATH=%s",(char *)retval);
       if (putenv(strdup(output)) == 0)
          {
          CfOut(cf_verbose,"","Setting %s\n",output);
@@ -565,7 +573,7 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_skipidentify].lval) == 0)
       {
       SKIPIDENTIFY = GetBoolean(retval);
-      CfOut(cf_verbose,"","SET skipidentify = %c\n",SKIPIDENTIFY);
+      CfOut(cf_verbose,"","SET skipidentify = %d\n",SKIPIDENTIFY);
       continue;
       }
 
@@ -603,6 +611,13 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
       CfOut(cf_verbose,"","SET ifelapsed = %d\n",VEXPIREAFTER);
       continue;
       }
+
+   if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_timeout].lval) == 0)
+      {
+      CF_TIMEOUT = Str2Int(retval);
+      CfOut(cf_verbose,"","SET timeout = %d\n",CF_TIMEOUT);
+      continue;
+      }
    
    if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_max_children].lval) == 0)
       {
@@ -635,13 +650,6 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
       
       continue;
       }
-
-   if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_lastseen].lval) == 0)
-      {
-      LASTSEEN = GetBoolean(retval);
-      CfOut(cf_verbose,"","SET lastseen to %d",LASTSEEN);
-      continue;
-      }
    }
 
 if (GetVariable("control_common",CFG_CONTROLBODY[cfg_lastseenexpireafter].lval,&retval,&rettype) != cf_notype)
@@ -660,7 +668,6 @@ if (GetVariable("control_common",CFG_CONTROLBODY[cfg_syslog_host].lval,&retval,&
    strncpy(SYSLOGHOST,Hostname2IPString(retval),CF_MAXVARSIZE-1);
    CfOut(cf_verbose,"","SET syslog_host to %s",SYSLOGHOST);
    }
-
 }
 
 /*********************************************************************/
@@ -755,14 +762,16 @@ for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
           params = NULL;
           break;
       }
-   
+
    if ((bp = GetBundle(name,"agent")) || (bp = GetBundle(name,"common")))
       {
+      SetBundleOutputs(bp->name);
       AugmentScope(bp->name,bp->args,params);
       BannerBundle(bp,params);
       THIS_BUNDLE = bp->name;
       DeletePrivateClassContext(); // Each time we change bundle
       ScheduleAgentOperations(bp);
+      ResetBundleOutputs(bp->name);
       }
    }
 }
@@ -783,15 +792,10 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
    for (type = 0; TYPESEQUENCE[type] != NULL; type++)
       {
       ClassBanner(type);
-      
+
       if ((sp = GetSubTypeForBundle(TYPESEQUENCE[type],bp)) == NULL)
          {
          continue;      
-         }
-
-      if (pass > 1 && type == kp_vars)
-         {
-         continue;
          }
 
       BannerSubType(bp->name,sp->name,pass);
@@ -919,11 +923,25 @@ if (VarClassExcluded(pp,&sp))
 
 CF_EDGES++;
 
+if (strcmp("vars",pp->agentsubtype) == 0)
+   {
+   ConvergeVarHashPromise(pp->bundle,pp,true);
+   return;
+   }
+
 if (strcmp("classes",pp->agentsubtype) == 0)
    {
    KeepClassContextPromise(pp);
    return;
    }
+
+if (strcmp("outputs",pp->agentsubtype) == 0)
+   {
+   VerifyOutputsPromise(pp);
+   return;
+   }
+
+SetPromiseOutputs(pp);
 
 if (strcmp("interfaces",pp->agentsubtype) == 0)
    {
@@ -994,6 +1012,13 @@ if (strcmp("services",pp->agentsubtype) == 0)
    return;
    }
 
+if (strcmp("environments",pp->agentsubtype) == 0)
+   {
+   VerifyEnvironmentsPromise(pp);
+   EndMeasurePromise(start,pp);
+   return;
+   }
+
 if (strcmp("reports",pp->agentsubtype) == 0)
    {
    VerifyReportPromise(pp);
@@ -1008,7 +1033,7 @@ void SetEnvironment(char *s)
 {
 if (putenv(s) != 0)
    {
-   CfOut(cf_inform,"putenv","Failed to set environement %s",s);
+   CfOut(cf_inform,"putenv","Failed to set environment %s",s);
    }
 }
 
@@ -1026,10 +1051,18 @@ int NewTypeContext(enum typesequence type)
 
 switch(type)
    {
+   case kp_environments:
+
+#ifdef HAVE_LIBVIRT
+       for (i = 0; i < cfv_none; i++)
+          {
+          CFVC[i] = NULL;
+          }
+#endif
+       break;
+       
    case kp_files:
-       
-       /* Prepare shared connection array for non-threaded remote copies */
-       
+
        SERVERLIST = NULL;
        break;
 
@@ -1069,9 +1102,24 @@ void DeleteTypeContext(enum typesequence type)
 { struct Rlist *rp;
   struct ServerItem *svp;
   struct Attributes a;
+  int i;
  
 switch(type)
    {
+   case kp_environments:
+
+#ifdef HAVE_LIBVIRT
+       for (i = 0; i < cfv_none; i++)
+          {
+          if (CFVC[i] != NULL)
+             {
+             virConnectClose(CFVC[i]);
+             CFVC[i] = NULL;
+             }
+          }
+#endif
+       break;
+
    case kp_files:
 
        /* Cleanup shared connection array for non-threaded remote copies */

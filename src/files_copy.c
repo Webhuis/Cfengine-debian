@@ -120,6 +120,11 @@ void CheckForFileHoles(struct stat *sstat,struct Promise *pp)
 /* Use a public member in struct Image                   */
 
 {
+if (pp == NULL)
+   {
+   return;
+   }
+
 #if !defined(IRIX) && !defined(MINGW)
 if (sstat->st_size > sstat->st_blocks * DEV_BSIZE)
 #else
@@ -157,7 +162,7 @@ unlink(new);  /* To avoid link attacks */
  
 if ((dd = open(new,O_WRONLY|O_CREAT|O_TRUNC|O_EXCL|O_BINARY, 0600)) == -1)
    {
-   cfPS(cf_inform,CF_FAIL,"open",pp,attr,"Copy %s:%s possible security violation (race) or permission denied (Not copied)\n",pp->this_server,new);
+   cfPS(cf_inform,CF_FAIL,"open",pp,attr,"Copy %s possible security violation (race) or permission denied (Not copied)\n",new);
    close(sd);
    unlink(new);
    return false;
@@ -190,7 +195,7 @@ while (true)
 
    intp = 0;
 
-   if (pp->makeholes)
+   if (pp && pp->makeholes)
       {
       buf[n_read] = 1;                    /* Sentinel to stop loop.  */
 
@@ -284,7 +289,7 @@ int FSWrite(char *new,int dd,char *buf,int towrite,int *last_write_made_hole,int
  
 intp = 0;
  
-if (pp->makeholes)
+if (pp && pp->makeholes)
    {
    buf[n_read] = 1;                    /* Sentinel to stop loop.  */
    

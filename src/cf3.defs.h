@@ -99,7 +99,7 @@
 #define CF_DEFINECLASSES "classes"
 #define CF_TRANSACTION   "action"
 
-#define CF3_MODULES 13 /* This value needs to be incremented when adding modules */
+#define CF3_MODULES 15 /* This value needs to be incremented when adding modules */
 
 /*************************************************************************/
 
@@ -262,11 +262,9 @@ enum cfacontrol
    cfa_expireafter,
    cfa_fsinglecopy,
    cfa_fautodefine,
-   cfa_fullencryption,
    cfa_hostnamekeys,
    cfa_ifelapsed,
    cfa_inform,
-   cfa_lastseen,
    cfa_intermittency,
    cfa_max_children,
    cfa_maxconnections,
@@ -356,24 +354,25 @@ enum cfscontrol
 
 enum cfkcontrol
    {
-   cfk_tm_prefix,
    cfk_builddir,
+   cfk_genman,
+   cfk_graph_dir,
+   cfk_graph_output,
+   cfk_htmlbanner,
+   cfk_htmlfooter,
+   cfk_tm_prefix,
+   cfk_mandir,
+   cfk_query_engine,   
+   cfk_query_output,
    cfk_sql_type,
    cfk_sql_database,
    cfk_sql_owner,
    cfk_sql_passwd,
    cfk_sql_server,
    cfk_sql_connect_db,
-   cfk_query_output,
-   cfk_query_engine,
    cfk_stylesheet,
-   cfk_htmlbanner,
-   cfk_htmlfooter,
-   cfk_graph_output,
-   cfk_graph_dir,
-   cfk_genman,
-   cfk_mandir,
    cfk_views,
+   cfk_view_projection,
    cfk_notype
    };
 
@@ -479,6 +478,12 @@ struct BodySyntax
    char *description;
    };
 
+struct BodyDefault
+   {
+   char *lval;
+   char *rval;
+   };
+
 /*************************************************************************/
 
 struct SubTypeSyntax
@@ -495,6 +500,14 @@ struct FnCallType
    char *name;
    enum cfdatatype dtype;
    int numargs;
+   struct FnCallArg *args;
+   char *description;
+   };
+
+struct FnCallArg
+   {
+   char *pattern;
+   enum cfdatatype dtype;
    char *description;
    };
 
@@ -625,6 +638,7 @@ struct Promise
    {
    char *classes;
    char *ref;                   /* comment */
+   char ref_alloc;
    char *promiser;
    void *promisee;              /* Can be a general rval */
    char  petype;                /* rtype of promisee - list or scalar recipient? */
@@ -909,6 +923,10 @@ enum action_policy
   };
 
 enum cf_thread_mutex
+/* Adding:
+ *) Add enum here
+ *) Add mutex in cf3globals.c and cf.extern.h
+ *) Add enum -> mutex in NameToThreadMutex() */
   {
   cft_system,
   cft_count,
@@ -916,6 +934,8 @@ enum cf_thread_mutex
   cft_lock,
   cft_output,
   cft_dbhandle,
+  cft_policy,       // protects structs for refreshing policy files
+  cft_db_lastseen,  // lastseen dbs (in cf-serverd)
   cft_no_tpolicy
   };
 
@@ -968,6 +988,13 @@ typedef enum
   INHERIT_ACCESS_AND_DEFAULT
   }inherit_t;
 
+enum insert_match
+   {
+   cf_ignore_leading,
+   cf_ignore_trailing,
+   cf_ignore_embedded,
+   cf_exact_match
+   };
 
 /*************************************************************************/
 /* Runtime constraint structures                                         */
@@ -1373,6 +1400,7 @@ struct EditDefaults
    enum cfbackupoptions backup;
    int empty_before_use;
    int maxfilesize;
+   int joinlines;
    };
 
 /*************************************************************************/
@@ -1398,6 +1426,8 @@ struct EditRegion
    {
    char *select_start;
    char *select_end;
+   int include_start;
+   int include_end;
    };
 
 struct EditColumn
@@ -1432,7 +1462,7 @@ struct StorageMount
 struct StorageVolume
    {
    int check_foreign;
-   int freespace;
+   long freespace;
    int sensible_size;
    int sensible_count;
    int scan_arrivals;
@@ -1491,6 +1521,7 @@ struct Packages
    char *package_verify_command;
    char *package_noverify_regex;
    char *package_name_convention;
+   char *package_delete_convention;
 
    char *package_multiline_start;
       
@@ -1558,11 +1589,62 @@ struct CfServices
 
 /*************************************************************************/
 
+struct Outputs
+   {
+   char *level;
+   char *promiser_type;
+   };
+
+/*************************************************************************/
+
+enum cfhypervisors
+   {
+   cfv_virt_xen,
+   cfv_virt_kvm,
+   cfv_virt_esx,
+   cfv_virt_test,
+   cfv_virt_xen_net,
+   cfv_virt_kvm_net,
+   cfv_virt_esx_net,
+   cfv_virt_test_net,
+   cfv_zone,
+   cfv_ec2,
+   cfv_eucalyptus,
+   cfv_none
+   };
+
+enum cfenvironment_state
+   {
+   cfvs_create,
+   cfvs_delete,
+   cfvs_running,
+   cfvs_suspended,
+   cfvs_down,
+   cfvs_none
+   };
+
+struct CfEnvironments
+   {
+   int cpus;
+   int memory;
+   int disk;
+   char *baseline;
+   char *specfile;
+   struct Rlist *addresses;
+   char *name;
+   char *host;
+   char *type;
+   enum cfenvironment_state state;
+   };
+
+/*************************************************************************/
+
  /* This is huge, but the simplification of logic is huge too
     so we leave it to the compiler to optimize */
 
 struct Attributes
    {
+   struct Outputs output;
    struct FileSelect select;
    struct FilePerms perms;
    struct FileCopy copy;
@@ -1577,6 +1659,7 @@ struct Attributes
    struct CfACL acl;
    struct CfDatabase database;
    struct CfServices service;
+   struct CfEnvironments env;
    char *transformer;
    char *pathtype;
    char *repository;
@@ -1591,7 +1674,6 @@ struct Attributes
    struct ExecContain contain;
    char *args;
    int module;
-   int exec_timeout;
 
    struct Rlist *signals;
    char *process_stop;
@@ -1641,6 +1723,7 @@ struct Attributes
    char *sourcetype;
    int expandvars;
    int not_matching;
+   struct Rlist *insert_match;
 
       /* knowledge */
 

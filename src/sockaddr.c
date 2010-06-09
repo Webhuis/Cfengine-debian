@@ -35,6 +35,7 @@
 /*****************************************************************************/
 /* TOOLKIT                                                                   */
 /* INET independent address/struct conversion routines                       */
+/* Note these functions are not thread safe                                  */
 /*****************************************************************************/
 
 char *sockaddr_ntop(struct sockaddr *sa)
@@ -47,7 +48,7 @@ char *sockaddr_ntop(struct sockaddr *sa)
  static char addrbuf[20];
  struct in_addr addr;
 #endif
- 
+
 switch (sa->sa_family)
    {
    case AF_INET:
@@ -101,7 +102,7 @@ void *sockaddr_pton(int af,void *src)
   static struct sockaddr_in6 adr6;
 #endif
   static struct sockaddr_in adr; 
-  
+
 switch (af)
    {
    case AF_INET:

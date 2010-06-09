@@ -51,11 +51,12 @@ char VMAILSERVER[CF_BUFSIZE];
 struct Item *SCHEDULE = NULL;
 
 pid_t MYTWIN = 0;
-int   MAXLINES = 30;
-int   SPLAYTIME = 0;
+int MAXLINES = 30;
+int SPLAYTIME = 0;
 const int INF_LINES = -2;
 int NOSPLAY = false;
 int NOWINSERVICE = false;
+int THREADS = 0;
 
 extern struct BodySyntax CFEX_CONTROLBODY[];
 
@@ -70,6 +71,7 @@ int CompareResult(char *filename,char *prev_file);
 void MailResult(char *file,char *to);
 int Dialogue(int sd,char *s);
 void Apoptosis(void);
+void DebugExecMemory(char *ref);
 
 /*******************************************************************/
 /* Command line options                                            */
@@ -427,7 +429,6 @@ if (!NO_FORK)
    
 #endif  /* NOT MINGW */
 
-   
 if (!ONCE)
    {
    MYTWIN = StartTwin(argc,argv);
@@ -475,7 +476,7 @@ else
    while (true)
       {
       time_to_run = ScheduleRun();
-      
+
       if (time_to_run)
          {
          CfOut(cf_verbose,"","Sleeping for splaytime %d seconds\n\n",SPLAYTIME);
@@ -505,14 +506,22 @@ else
 #ifdef HAVE_PTHREAD_ATTR_SETSTACKSIZE
          pthread_attr_setstacksize(&PTHREADDEFAULTS,(size_t)2048*1024);
 #endif
-         
+
+         DebugExecMemory("Before thread");
+
          if (pthread_create(&tid,&PTHREADDEFAULTS,LocalExec,(void *)1) != 0)
             {
             CfOut(cf_inform,"pthread_create","Can't create thread!");
             LocalExec((void *)1);
             }
-         
+
+         DebugExecMemory("after-thread-before-free");
+
+         ThreadLock(cft_system);
          pthread_attr_destroy(&PTHREADDEFAULTS);
+         ThreadUnlock(cft_system);
+         
+         DebugExecMemory("After free");
 #else
          LocalExec((void *)1);  
 #endif
@@ -612,35 +621,48 @@ int ScheduleRun()
   char timekey[64];
   struct Item *ip;
   
-CfOut(cf_verbose,"","Sleeping...\n");
+DebugExecMemory("Run 0.1");
 
 SignalTwin();
+DebugExecMemory("Run 0.2");
 
+CfOut(cf_verbose,"","Sleeping...\n");
 sleep(CFPULSETIME);                /* 1 Minute resolution is enough */ 
-
 now = time(NULL);
 
 // recheck license (in case of license updates or expiry)
 
+DebugExecMemory("0.3");
+
+/*
 if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR)) 
   {
   CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
   exit(1);
   }
+*/
 
+DebugExecMemory("Run 1");
+
+ThreadLock(cft_system);
+DeleteItemList(VHEAP);
+VHEAP = NULL;
+DeleteItemList(VADDCLASSES);
+VADDCLASSES = NULL;
+DeleteItemList(IPADDRESSES);
+IPADDRESSES = NULL;
 DeleteScope("this");
 DeleteScope("mon");
 DeleteScope("sys");
-NewScope("this");
-NewScope("mon");
-
 CfGetInterfaceInfo(cf_executor);
 Get3Environment();
 OSClasses();
-
 SetReferenceTime(true);
 snprintf(timekey,63,"%s",cf_ctime(&now)); 
 AddTimeClass(timekey); 
+ThreadUnlock(cft_system);
+
+DebugExecMemory("Run 1.1");
 
 for (ip = SCHEDULE; ip != NULL; ip = ip->next)
    {
@@ -649,18 +671,12 @@ for (ip = SCHEDULE; ip != NULL; ip = ip->next)
    if (IsDefinedClass(ip->name))
       {
       CfOut(cf_verbose,"","Waking up the agent at %s ~ %s \n",timekey,ip->name);
-      DeleteItemList(VHEAP);
-      VHEAP = NULL;
-      DeleteItemList(VADDCLASSES);
-      VADDCLASSES = NULL;
+      DebugExecMemory("Run schedules");
       return true;
       }
    }
 
-DeleteItemList(VHEAP);
-VHEAP = NULL;
-DeleteItemList(VADDCLASSES);
-VADDCLASSES = NULL;
+DebugExecMemory("Run - unscheduled");
 return false;
 }
 
@@ -709,6 +725,8 @@ CfOut(cf_verbose,"","-----------------------------------------------------------
 CfOut(cf_verbose,"","  LocalExec(%sscheduled) at %s\n", scheduled_run ? "" : "not ", cf_ctime(&starttime));
 CfOut(cf_verbose,"","------------------------------------------------------------------\n"); 
 
+DebugExecMemory("LocalExec 1");
+
 /* Need to make sure we have LD_LIBRARY_PATH here or children will die  */
 
 if (strlen(EXECCOMMAND) > 0)
@@ -722,13 +740,22 @@ if (strlen(EXECCOMMAND) > 0)
    }
 else
    {
+   struct stat sb;
+   int twin_exists = false;
+      
    // twin is bin-twin\cf-agent.exe on windows, bin/cf-twin on Unix
+
    if (VSYSTEMHARDCLASS == mingw || VSYSTEMHARDCLASS == cfnt)
       {
       snprintf(cmd,CF_BUFSIZE-1,"%s/bin-twin/cf-agent.exe",CFWORKDIR);
       MapName(cmd);
+
+      if (stat(cmd,&sb) == 0)
+         {
+         twin_exists = true;
+         }
       
-      if (IsExecutable(cmd))
+      if (twin_exists && IsExecutable(cmd))
 	 {
          snprintf(cmd,CF_BUFSIZE-1,"\"%s/bin-twin/cf-agent.exe\" -f failsafe.cf && \"%s/bin/cf-agent.exe%s\" -Dfrom_cfexecd%s",
                   CFWORKDIR,
@@ -748,6 +775,11 @@ else
    else
       {
       snprintf(cmd,CF_BUFSIZE-1,"%s/bin/cf-twin",CFWORKDIR);
+
+      if (stat(cmd,&sb) == 0)
+         {
+         twin_exists = true;
+         }
       
       if (IsExecutable(cmd))
 	 {
@@ -767,6 +799,8 @@ else
 	 }
       }   
    }
+
+DebugExecMemory("LocalExec 2");
 
 strncpy(esc_command,MapName(cmd),CF_BUFSIZE-1);
    
@@ -838,6 +872,8 @@ cf_pclose(pp);
 Debug("Closing fp\n");
 fclose(fp);
 
+DebugExecMemory("LocalExec 3");
+
 if (ONCE)
    {
    Cf3CloseLog();
@@ -856,6 +892,7 @@ else
    unlink(filename);
    }
 
+DebugExecMemory("LocalExec 4");
 return NULL; 
 }
 
@@ -1058,7 +1095,7 @@ while (!feof(fp))
 
 fclose(fp);
  
-if ((fp=fopen(file,"r")) == NULL)
+if ((fp = fopen(file,"r")) == NULL)
    {
    CfOut(cf_inform,"fopen","Couldn't open file %s",file);
    return;
@@ -1159,7 +1196,7 @@ else
    Debug("%s",vbuff);
    }
  
-sent=send(sd,vbuff,strlen(vbuff),0);
+sent = send(sd,vbuff,strlen(vbuff),0);
 
 #if defined LINUX || defined NETBSD || defined FREEBSD || defined OPENBSD
 strftime(vbuff,CF_BUFSIZE,"Date: %a, %d %b %Y %H:%M:%S %z\r\n",localtime(&now));
@@ -1177,11 +1214,11 @@ sent=send(sd,vbuff,strlen(vbuff),0);
     Debug("%s",vbuff);    
     }
  
-sent=send(sd,vbuff,strlen(vbuff),0);
+sent = send(sd,vbuff,strlen(vbuff),0);
 
 sprintf(vbuff,"To: %s\r\n\r\n",to); 
 Debug("%s",vbuff);
-sent=send(sd,vbuff,strlen(vbuff),0);
+sent = send(sd,vbuff,strlen(vbuff),0);
 
 while(!feof(fp))
    {
@@ -1194,13 +1231,13 @@ while(!feof(fp))
       vbuff[strlen(vbuff)-1] = '\r';
       strcat(vbuff, "\n");
       count++;
-      sent=send(sd,vbuff,strlen(vbuff),0);
+      sent = send(sd,vbuff,strlen(vbuff),0);
       }
    
    if ((MAXLINES != INF_LINES) && (count > MAXLINES))
       {
       sprintf(vbuff,"\r\n[Mail truncated by cfengine. File is at %s on %s]\r\n",file,VFQNAME);
-      sent=send(sd,vbuff,strlen(vbuff),0);
+      sent = send(sd,vbuff,strlen(vbuff),0);
       break;
       }
    } 
@@ -1236,7 +1273,7 @@ int Dialogue(int sd,char *s)
 
 if ((s != NULL) && (*s != '\0'))
    {
-   sent=send(sd,s,strlen(s),0);
+   sent = send(sd,s,strlen(s),0);
    Debug("SENT(%d)->%s",sent,s);
    }
 else
@@ -1276,7 +1313,52 @@ while (recv(sd,&ch,1,0))
 return ((f == '2') || (f == '3')); /* return code 200 or 300 from smtp*/
 }
 
+/******************************************************************/
 
+void DebugExecMemory(char *ref)
+
+{ char buffer[CF_EXPANDSIZE],line[CF_BUFSIZE],*sp;
+ static int size = 0, mem;
+
+if (DEBUG)
+   {
+   sleep(1);
+
+   GetExecOutput("/bin/ps waux | grep cf-execd",buffer,true);
+   
+   strcpy(line,"(empty)");
+   
+   for (sp = buffer; sp < buffer + strlen(buffer); sp += strlen(line)+1)
+      {
+      sscanf(sp,"%[^\n]\n",line);
+      
+      if (strstr(line,"grep") || strstr(line,"sh") || strstr(line,"gdb"))
+         {
+         continue;
+         }
+      
+      mem = 0;
+      sscanf(line,"%*s%*s%*s%*s%*s%d",&mem);
+      
+      if (mem > size)
+         {
+         printf("MEMORY DEBUG> resident increased from %d to %d (delta %d) at checkpoint(%s)\n",size,mem,mem-size,ref);
+         size = mem;
+         
+         struct Scope *ptr;
+         
+         for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
+            {
+            printf(" -- active SCOPE %s\n",ptr->scope);
+            }
+         }
+      else
+         {
+         //printf("MEMORY DEBUG> stat at checkpoint(%s): %d\n",ref,mem);
+         }
+      }
+   }
+}
 
 /* EOF */
 

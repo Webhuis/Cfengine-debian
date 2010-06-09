@@ -205,9 +205,9 @@ void ScanScalar(char *scopeid,struct Rlist **scal,struct Rlist **its,char *strin
 { struct Rlist *rp;
   char *sp,rtype;
   void *rval;
-  char var[CF_BUFSIZE],exp[CF_EXPANDSIZE],temp[CF_BUFSIZE];
+  char v[CF_BUFSIZE],var[CF_EXPANDSIZE],exp[CF_EXPANDSIZE],temp[CF_BUFSIZE];
   
-Debug("ScanScalar([%s])\n",string);
+Debug("ScanScalar(\"%s\")\n",string);
 
 if (string == NULL)
    {
@@ -216,28 +216,31 @@ if (string == NULL)
 
 for (sp = string; (*sp != '\0') ; sp++)
    {
+   v[0] = '\0';
    var[0] = '\0';
    exp[0] = '\0';
-   
+
    if (*sp == '$')
       {
-      if (ExtractInnerCf3VarString(sp,var))
+      if (ExtractInnerCf3VarString(sp,v))
          {
          char absscope[CF_MAXVARSIZE];
-         
-         if (strstr(var,"."))
+
+         if (strstr(v,"."))
             {
             strncpy(temp,var,CF_BUFSIZE-1);  
             absscope[0] = '\0';
-            sscanf(temp,"%[^.].%s",absscope,var);
+            sscanf(temp,"%[^.].%s",absscope,v);
             }
          else
             {
             strncpy(absscope,scopeid,CF_MAXVARSIZE-1);  
             }
 
+         ExpandPrivateScalar(absscope,v,var); 
+
          RegisterBundleDependence(absscope,pp);
-         
+
          if (GetVariable(absscope,var,&rval,&rtype) != cf_notype)
             {
             if (rtype == CF_LIST)
@@ -285,7 +288,7 @@ for (sp = string; (*sp != '\0') ; sp++)
 int ExpandScalar(char *string,char buffer[CF_EXPANDSIZE])
 
 {
-Debug("\nExpandScalar(context=%s,id=%s)\n",CONTEXTID,string);
+Debug("ExpandScalar(context=%s,id=%s)\n",CONTEXTID,string);
 return ExpandPrivateScalar(CONTEXTID,string,buffer); 
 }
 
@@ -444,7 +447,7 @@ for (sp = string; /* No exit */ ; sp++)       /* check for varitems */
       }
 
    memset(currentitem,0,CF_EXPANDSIZE);
-   
+
    sscanf(sp,"%[^$]",currentitem);
    
    if (ExpandOverflow(buffer,currentitem))
@@ -455,7 +458,7 @@ for (sp = string; /* No exit */ ; sp++)       /* check for varitems */
    strcat(buffer,currentitem);
    sp += strlen(currentitem);
 
-   Debug("  Add |%s| to str, waiting at |%s|\n",buffer,sp);
+   Debug("  Aggregate result |%s|, scanning at \"%s\" (current delta %s)\n",buffer,sp,currentitem);
    
    if (*sp == '\0')
       {
@@ -467,17 +470,28 @@ for (sp = string; /* No exit */ ; sp++)       /* check for varitems */
       switch (*(sp+1))
          {
          case '(':
-                   ExtractOuterCf3VarString(sp,var);
-                   varstring = ')';
-                   break;
-         case '{':
-                   ExtractOuterCf3VarString(sp,var);
-                   varstring = '}';
-                   break;
+             ExtractOuterCf3VarString(sp,var);
+             varstring = ')';
+             if (strlen(var) == 0)
+                {
+                strcat(buffer,"$");
+                continue;
+                }
+             break;
 
+         case '{':
+             ExtractOuterCf3VarString(sp,var);
+             varstring = '}';
+             if (strlen(var) == 0)
+                {
+                strcat(buffer,"$");
+                continue;
+                }
+             break;
+         
          default: 
-                   strcat(buffer,"$");
-                   continue;
+             strcat(buffer,"$");
+             continue;
          }
       }
 
@@ -486,13 +500,14 @@ for (sp = string; /* No exit */ ; sp++)       /* check for varitems */
    temp[0] = '\0';
    ExtractInnerCf3VarString(sp,temp);
    
-   if (strstr(temp,"$"))
+   if (IsCf3VarString(temp))
       {
       Debug("  Nested variables - %s\n",temp);
       ExpandPrivateScalar(scopeid,temp,currentitem);
       }
    else
       {
+      Debug("  Delta - %s\n",temp);
       strncpy(currentitem,temp,CF_BUFSIZE-1);
       }
 
@@ -536,7 +551,7 @@ for (sp = string; /* No exit */ ; sp++)       /* check for varitems */
           return false;
 
       }
-   
+
    sp += increment;
    currentitem[0] = '\0';
    }
@@ -583,13 +598,12 @@ do
       {
       NewScalar("this","handle",PromiseID(pp),cf_str);
       }
-   
+
    pexp = ExpandDeRefPromise("this",pp);
-     
+   
    switch (agent)
       {
       case cf_common:
-
           ShowPromise(pexp,6);
           ReCheckAllConstraints(pexp);
           break;
@@ -957,8 +971,8 @@ cp = cp_save;
 
 if (cp == NULL)
    {
-   CfOut(cf_error,"","Variable body for \"%s\" is incomplete",pp->promiser);
-   PromiseRef(cf_error,pp);
+   CfOut(cf_inform,"","Warning: Variable body for \"%s\" seems incomplete",pp->promiser);
+   PromiseRef(cf_inform,pp);
    return;
    }
 
@@ -1052,7 +1066,7 @@ if (rval != NULL)
          last = rp;
          }
       }
-   
+
    if (!AddVariableHash(scope,pp->promiser,rval,cp->type,Typename2Datatype(cp->lval),cp->audit->filename,cp->lineno))
       {
       CfOut(cf_verbose,"","Unable to converge %s.%s value (possibly empty or infinite regression)\n",scope,pp->promiser);

@@ -51,7 +51,7 @@ NewScalar("const","endl","\n",cf_str);
 
 void ForceScalar(char *lval,char *rval)
 
-{ char rtype,retval[CF_MAXVARSIZE];
+{ char rtype,*retval;
 
 if (THIS_AGENT_TYPE != cf_agent && THIS_AGENT_TYPE != cf_know)
    {
@@ -71,23 +71,18 @@ Debug("Setting local variable \"match.%s\" context; $(%s) = %s\n",lval,lval,rval
 
 void NewScalar(char *scope,char *lval,char *rval,enum cfdatatype dt)
 
-{ char *sp1,*sp2;
-  struct Rval rvald;
-   
-Debug("NewScalar(%s,%s,%s)\n",scope,lval,rval);
+{ struct Rval rvald;
 
-//sp1 = strdup(lval);
-//sp2 = strdup((char *)rval);
+  Debug("NewScalar(%s,%s,%s)\n",scope,lval,rval);
+
+// Newscalar allocates memory through NewAssoc
 
 if (GetVariable(scope,lval,&rvald.item,&rvald.rtype) != cf_notype)
    {
    DeleteScalar(scope,lval);
    }
 
-sp1 = lval;
-sp2 = rval;
-
-AddVariableHash(scope,sp1,sp2,CF_SCALAR,dt,NULL,0);
+AddVariableHash(scope,lval,rval,CF_SCALAR,dt,NULL,0);
 }
 
 /*******************************************************************/
@@ -104,10 +99,7 @@ if (GetVariable(scope,lval,&rvald.item,&rvald.rtype) != cf_notype)
    return;
    }
 
-sp1 = strdup(lval);
-sp2 = strdup((char *)rval);
-
-AddVariableHash(scope,sp1,sp2,CF_SCALAR,dt,NULL,0);
+AddVariableHash(scope,lval,rval,CF_SCALAR,dt,NULL,0);
 }
 
 /*******************************************************************/
@@ -164,6 +156,13 @@ enum cfdatatype GetVariable(char *scope,char *lval,void **returnv, char *rtype)
   char expbuf[CF_EXPANDSIZE];
   
 Debug("\nGetVariable(%s,%s) type=(to be determined)\n",scope,lval);
+
+if (lval == NULL)
+   {
+   *returnv = lval;
+   *rtype   = CF_SCALAR;
+   return cf_notype;
+   }
 
 if (!IsExpandable(lval))
    {
@@ -226,7 +225,7 @@ if (CompareVariable(vlval,ptr->hashtable[slot]) != 0)
       {
       i++;
 
-      if (i >= CF_HASHTABLESIZE-1)
+      if (i >= CF_HASHTABLESIZE)
          {
          i = 0;
          }
@@ -278,6 +277,7 @@ void DeleteVariable(char *scope,char *id)
   struct Scope *ptr;
   
 i = slot = GetHash(id);
+
 ptr = GetScope(scope);
 
 if (ptr == NULL)
@@ -293,27 +293,27 @@ if (CompareVariable(id,ptr->hashtable[slot]) != 0)
       
       if (i == slot)
          {
-         Debug("No variable matched\n");
+         Debug("No variable matched %s\n",id);
          break;
          }
       
-      if (i >= CF_HASHTABLESIZE-1)
+      if (i >= CF_HASHTABLESIZE)
          {
          i = 0;
          }
       
       if (CompareVariable(id,ptr->hashtable[i]) == 0)
          {
-         free(ptr->hashtable[i]);
+         DeleteAssoc(ptr->hashtable[i]);
          ptr->hashtable[i] = NULL;
          }
       }
    }
- else
-    {
-    free(ptr->hashtable[i]);
-    ptr->hashtable[i] = NULL;
-    }   
+else
+   {
+   DeleteAssoc(ptr->hashtable[i]);
+   ptr->hashtable[i] = NULL;
+   }   
 }
 
 /*******************************************************************/
@@ -694,6 +694,11 @@ char *ExtractInnerCf3VarString(char *str,char *substr)
 
 Debug("ExtractInnerVarString( %s ) - syntax verify\n",str);
 
+if (str == NULL || strlen(str) == 0)
+   {
+   return NULL;
+   }
+
 memset(substr,0,CF_BUFSIZE);
 
 if (*(str+1) != '(' && *(str+1) != '{')
@@ -757,7 +762,7 @@ char *ExtractOuterCf3VarString(char *str,char *substr)
   int bracks = 0, onebrack = false;
   int nobracks = true;
 
-Debug("ExtractOuterVarString(%s) - syntax verify\n",str);
+Debug("ExtractOuterVarString(\"%s\") - syntax verify\n",str);
 
 memset(substr,0,CF_BUFSIZE);
  

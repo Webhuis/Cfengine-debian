@@ -59,6 +59,7 @@ void MagnifyNow(void);
 void OpenMagnifyFiles(void);
 void CloseMagnifyFiles(void);
 void EraseAverages(void);
+void RemoveHostSeen(char *hosts);
 
 extern struct BodySyntax CFRE_CONTROLBODY[];
 
@@ -87,6 +88,7 @@ double AGE;
 static struct Averages ENTRY,MAX,MIN,DET;
 
 char OUTPUTDIR[CF_BUFSIZE],*sp;
+char REMOVEHOSTS[CF_BUFSIZE];
 
 FILE *FPAV=NULL,*FPVAR=NULL, *FPNOW=NULL;
 FILE *FPE[CF_OBSERVABLES],*FPQ[CF_OBSERVABLES];
@@ -104,7 +106,7 @@ struct Rlist *CSVLIST = NULL;
             "data stored in cfengine's embedded databases in human\n"
             "readable form.";
 
- struct option OPTIONS[21] =
+ struct option OPTIONS[22] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -126,10 +128,11 @@ struct Rlist *CSVLIST = NULL;
       { "no-error-bars",no_argument,0,'e'},
       { "no-scaling",no_argument,0,'n'},
       { "verbose",no_argument,0,'v'},
+      { "remove-hosts",required_argument,0,'r'},
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[21] =
+ char *HINTS[22] =
       {
       "Print the help message",
       "Set debugging level 0,1,2,3",
@@ -151,6 +154,7 @@ struct Rlist *CSVLIST = NULL;
       "Do not add error bars to the printed graphs",
       "Do not automatically scale the axes",
       "Generate verbose output",
+      "Remove comma separated list of IP address entries from the hosts-seen database",
       NULL
       };
 
@@ -329,6 +333,10 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:",OPTIONS,&optindex)) !
       case 'R': HIRES = true;
          break;
 
+      case 'r':
+          strncpy(REMOVEHOSTS,optarg,CF_BUFSIZE-1);
+          break;         
+
       case 'e': ERRORBARS = false;
           break;
 
@@ -401,6 +409,7 @@ snprintf(VINPUTFILE,CF_MAXVARSIZE,"%s/state/%s",CFWORKDIR,CF_AVDB_FILE);
 MapName(VINPUTFILE);
 
 InitMeasurements();
+RemoveHostSeen(REMOVEHOSTS);
 }
 
 /*****************************************************************************/
@@ -540,6 +549,11 @@ for (cp = ControlBodyConstraints(cf_report); cp != NULL; cp=cp->next)
       continue;
       }
    }
+
+if (GetVariable("control_common",CFG_CONTROLBODY[cfg_lastseenexpireafter].lval,&retval,&rettype) != cf_notype)
+   {
+   LASTSEENEXPIREAFTER = Str2Int(retval);
+   }
 }
 
 /*****************************************************************************/
@@ -603,7 +617,7 @@ for (rp  = REPORTS; rp != NULL; rp = rp->next)
       ShowLocks(CF_ACTIVE);
       }
 
-   if (all || strcmp("hashes",rp->item) == 0)
+   if (strcmp("hashes",rp->item) == 0)
       {
       CfOut(cf_verbose,""," -> Creating file-hash report...\n");
       ShowChecksums();
@@ -718,6 +732,38 @@ GrandSummary();
 /* Level 2                                                           */
 /*********************************************************************/
 
+void RemoveHostSeen(char *hosts)
+
+{ CF_DB *dbp;
+  CF_DBC *dbcp;
+  char *key,name[CF_BUFSIZE];
+  void *value;
+  struct Item *ip,*list = SplitStringAsItemList(hosts,',');
+
+snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
+MapName(name);
+
+if (!OpenDB(name,&dbp))
+   {
+   return;
+   }
+
+for (ip = list; ip != NULL; ip=ip->next)
+   {
+   snprintf(name,CF_MAXVARSIZE,"+%s",ip->name);
+   DeleteDB(dbp,name);
+   CfOut(cf_inform,""," -> Deleting requested host-seen entry for %s\n",name);
+   snprintf(name,CF_MAXVARSIZE,"-%s",ip->name);
+   DeleteDB(dbp,name);
+   CfOut(cf_inform,""," -> Deleting requested host-seen entry for %s\n",name);
+   }
+
+CloseDB(dbp);
+DeleteItemList(list);
+}
+
+/*********************************************************************/
+
 void ShowLastSeen()
 
 { CF_DB *dbp;
@@ -767,10 +813,8 @@ if (HTML && !EMBEDDED)
    {
    snprintf(name,CF_BUFSIZE,"Peers as last seen by %s",VFQNAME);
    CfHtmlHeader(fout,name,STYLESHEET,WEBDRIVER,BANNER);
-   fprintf(fout,"<div id=\"primary\"><div id=\"reporttext\">\n");
-
+   fprintf(fout,"<div id=\"reporttext\">\n");
    fprintf(fout,"<h4>This report was last updated at %s</h4>",cf_ctime(&tid));
-
    fprintf(fout,"<table class=border cellpadding=5>\n");
    }
 else if (XML)
@@ -813,7 +857,7 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
       continue;
       }
 
-   if (now - then > CF_WEEK)
+   if (now - then > (double)LASTSEENEXPIREAFTER)
       {
       DeleteDB(dbp,key);
       CfOut(cf_inform,""," -> Deleting expired entry for %s\n",hostname);
@@ -891,7 +935,7 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
 
 if (HTML && !EMBEDDED)
    {
-   fprintf(fout,"</table></div></div>\n");
+   fprintf(fout,"</table></div>\n");
    CfHtmlFooter(fout,FOOTER);
    }
 
@@ -968,7 +1012,7 @@ if (HTML && !EMBEDDED)
    {
    snprintf(name,CF_BUFSIZE,"Promises last kept by %s",VFQNAME);
    CfHtmlHeader(fout,name,STYLESHEET,WEBDRIVER,BANNER);
-   fprintf(fout,"<div id=\"primary\"><div id=\"reporttext\">\n");
+   fprintf(fout,"<div id=\"reporttext\">\n");
    fprintf(fout,"<table class=border cellpadding=5>\n");
    }
 
@@ -1057,7 +1101,7 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
 if (HTML && !EMBEDDED)
    {
    fprintf(fout,"</table>");
-   fprintf(fout,"</div></div>\n");
+   fprintf(fout,"</div>\n");
    CfHtmlFooter(fout,FOOTER);
    }
 
@@ -1137,7 +1181,7 @@ if (HTML && !EMBEDDED)
    time_t now = time(NULL);
    snprintf(name,CF_BUFSIZE,"Classes last observed on %s at %s",VFQNAME,cf_ctime(&now));
    CfHtmlHeader(fout,name,STYLESHEET,WEBDRIVER,BANNER);
-   fprintf(fout,"<div id=\"primary\"><div id=\"reporttext\">\n");
+   fprintf(fout,"<div id=\"reporttext\">\n");
 
    fprintf(fout,"<h4>Soft classes</h4>");
    fprintf(fout,"<table class=\"border\" cellpadding=\"5\">\n");
@@ -1299,7 +1343,7 @@ for (ip = VHEAP; ip != NULL; ip=ip->next)
 if (HTML && !EMBEDDED)
    {
    fprintf(fout,"</table>");
-   fprintf(fout,"</div></div>\n");
+   fprintf(fout,"</div>\n");
    CfHtmlFooter(fout,FOOTER);
    }
 
@@ -1361,7 +1405,7 @@ if ((fout = fopen(name,"w")) == NULL)
 if (HTML && !EMBEDDED)
    {
    CfHtmlHeader(fout,"File hashes",STYLESHEET,WEBDRIVER,BANNER);
-   fprintf(fout,"<div id=\"primary\"><div id=\"reporttext\">\n");
+   fprintf(fout,"<div id=\"reporttext\">\n");
    fprintf(fout,"<table class=border cellpadding=5>\n");
    }
 
@@ -1426,7 +1470,7 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
 if (HTML && !EMBEDDED)
    {
    fprintf(fout,"</table>");
-   fprintf(fout,"</div></div>\n");
+   fprintf(fout,"</div>\n");
    CfHtmlFooter(fout,FOOTER);
    }
 
@@ -1498,7 +1542,7 @@ if (HTML && !EMBEDDED)
    time_t now = time(NULL);
    snprintf(name,CF_BUFSIZE,"%s lock data observed on %s at %s",lockdb,VFQNAME,cf_ctime(&now));
    CfHtmlHeader(fout,name,STYLESHEET,WEBDRIVER,BANNER);
-   fprintf(fout,"<div id=\"primary\"><div id=\"reporttext\">\n");
+   fprintf(fout,"<div id=\"reporttext\">\n");
    fprintf(fout,"<table class=border cellpadding=5>\n");
    }
 
@@ -1584,7 +1628,7 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
 if (HTML && !EMBEDDED)
    {
    fprintf(fout,"</table>");
-   fprintf(fout,"</div></div>\n");
+   fprintf(fout,"</div>\n");
    CfHtmlFooter(fout,FOOTER);
    }
 

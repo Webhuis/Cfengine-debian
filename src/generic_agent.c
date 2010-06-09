@@ -78,7 +78,7 @@ LoadPersistentContext();
 LoadSystemConstants();
 
 strcpy(THIS_AGENT,CF_AGENTTYPES[ag]);
-NewClass(CanonifyName(THIS_AGENT));
+NewClass(THIS_AGENT);
 THIS_AGENT_TYPE = ag;
 
 snprintf(vbuff,CF_BUFSIZE,"control_%s",THIS_AGENT);
@@ -190,6 +190,8 @@ if (ag == cf_keygen)
    return;
    }
 
+DeleteAllPromiseIds(); // in case we are re-reading, delete old handles
+
 /* Parse the files*/
 
 Cf3ParseFiles();
@@ -219,12 +221,14 @@ if (strchr(retval,':'))
    CfOut(cf_error,""," !! The version string may not contain the \":\" character");
    }
 
-snprintf(vbuff,CF_BUFSIZE-1,"<h1>Expanded promises for %s</h1>",agents);
+snprintf(vbuff,CF_BUFSIZE-1,"Expanded promises for %s",agents);
 CfHtmlHeader(FREPORT_HTML,vbuff,STYLESHEET,WEBDRIVER,BANNER);
 
 fprintf(FREPORT_TXT,"Expanded promise list for %s component\n\n",agents);
 
 ShowContext();
+
+fprintf(FREPORT_HTML,"<div id=\"reporttext\">\n");
 fprintf(FREPORT_HTML,"%s",CFH[cfx_promise][cfb]);
 
 VerifyPromises(cf_common);
@@ -236,8 +240,8 @@ if (ag != cf_common)
    ShowScopedVariables();
    }
 
+fprintf(FREPORT_HTML,"</div>\n");
 CfHtmlFooter(FREPORT_HTML,FOOTER);
-
 CloseReports(agents);
 }
 
@@ -502,7 +506,6 @@ if (BOOTSTRAP)
       strncpy(VINPUTFILE,vbuff,CF_BUFSIZE-1);
       }
    }
-
 }
 
 /*******************************************************************/
@@ -551,10 +554,14 @@ if (VINPUTLIST != NULL)
                 break;
             }
          }
+
+      HashVariables();
+      HashControls();
       }
    }
 
 HashVariables();
+
 PARSING = false;
 }
 
@@ -1043,12 +1050,15 @@ Debug("CheckWorkingDirectories()\n");
 
 if (uname(&VSYSNAME) == -1)
    {
-   perror("uname ");
-   FatalError("Uname couldn't get kernel name info!!\n");
+   CfOut(cf_error, "uname", "!!! Couldn't get kernel name info!");
+   memset(&VSYSNAME, 0, sizeof(VSYSNAME));
+   }
+else
+   {
+   snprintf(LOGFILE,CF_BUFSIZE,"%s%ccfagent.%s.log",CFWORKDIR,FILE_SEPARATOR,VSYSNAME.nodename);
+   VSETUIDLOG = strdup(LOGFILE);
    }
 
-snprintf(LOGFILE,CF_BUFSIZE,"%s%ccfagent.%s.log",CFWORKDIR,FILE_SEPARATOR,VSYSNAME.nodename);
-VSETUIDLOG = strdup(LOGFILE);
 
 snprintf(vbuff,CF_BUFSIZE,"%s%c.",CFWORKDIR,FILE_SEPARATOR);
 MakeParentDirectory(vbuff,false);
@@ -1268,7 +1278,8 @@ for (rp = SUBBUNDLES; rp != NULL; rp=rp->next)
    switch (rp->type)
       {
       case CF_SCALAR:
-          if (!IsBundle(BUNDLES,(char *)rp->item))
+          
+          if (!IGNORE_MISSING_BUNDLES && !IsBundle(BUNDLES,(char *)rp->item))
              {
              CfOut(cf_error,"","Undeclared promise bundle \"%s()\" was referenced in a promise\n",(char *)rp->item);
              ERRORCOUNT++;
@@ -1276,9 +1287,10 @@ for (rp = SUBBUNDLES; rp != NULL; rp=rp->next)
           break;
 
       case CF_FNCALL:
+
           fp = (struct FnCall *)rp->item;
 
-          if (!IsBundle(BUNDLES,fp->name))
+          if (!IGNORE_MISSING_BUNDLES && !IsBundle(BUNDLES,fp->name))
              {
              CfOut(cf_error,"","Undeclared promise bundle \"%s()\" was referenced in a promise\n",fp->name);
              ERRORCOUNT++;
@@ -1308,7 +1320,6 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
          }
       }
    }
-
 
 HashVariables();
 HashControls();
@@ -1376,7 +1387,7 @@ CfOut(cf_verbose,""," -> Checking common class promises...\n");
 
 for (pp = classlist; pp != NULL; pp=pp->next)
    {
-   KeepClassContextPromise(pp);
+   ExpandPromise(cf_agent,THIS_BUNDLE,pp,KeepClassContextPromise);
    }
 }
 
@@ -1468,7 +1479,7 @@ for (cp = controllist; cp != NULL; cp=cp->next)
       NewScalar("sys","fqhost",VFQNAME,cf_str);
       NewScalar("sys","domain",VDOMAIN,cf_str);
       DeleteClass("undefined_domain");
-      NewClass(CanonifyName(VDOMAIN));
+      NewClass(VDOMAIN);
       }
 
    if (strcmp(cp->lval,CFG_CONTROLBODY[cfg_ignore_missing_inputs].lval) == 0)
@@ -1540,7 +1551,7 @@ printf("\nBug reports: bug-cfengine@cfengine.org, ");
 printf("Community help: help-cfengine@cfengine.org\n");
 printf("Community info: http://www.cfengine.org, ");
 printf("Support services: http://www.cfengine.com\n\n");
-printf("This software is (C) 2008 Cfengine AS.\n");
+printf("This software is Copyright (C) 2008-present Cfengine AS.\n");
 }
 
 /*******************************************************************/
@@ -1587,7 +1598,7 @@ printf("\nBug reports: bug-cfengine@cfengine.org\n");
 printf(".pp\nCommunity help: help-cfengine@cfengine.org\n");
 printf(".pp\nCommunity info: http://www.cfengine.org\n");
 printf(".pp\nSupport services: http://www.cfengine.com\n");
-printf(".pp\nThis software is (C) 2008- Cfengine AS.\n");
+printf(".pp\nThis software is Copyright (C) 2008- Cfengine AS.\n");
 }
 
 /*******************************************************************/
@@ -1595,7 +1606,7 @@ printf(".pp\nThis software is (C) 2008- Cfengine AS.\n");
 void Version(char *component)
 
 {
-printf("This comprises %s core community version %s - %s%s\n",component,VERSION,CF3COPYRIGHT,VYEAR);
+printf("This comprises %s core community version %s - Copyright %s%s\n",component,VERSION,CF3COPYRIGHT,VYEAR);
 EnterpriseVersion();
 }
 
@@ -1642,7 +1653,7 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
 
       // We must also set global classes here?
 
-      if (strcmp(bp->type,"common") == 0&&  strcmp(sp->name,"classes") == 0)
+      if (strcmp(bp->type,"common") == 0 && strcmp(sp->name,"classes") == 0)
          {
          CheckCommonClassPromises(sp->promiselist);
          }
@@ -1661,13 +1672,13 @@ void HashControls()
 
 /* Only control bodies need to be hashed like variables */
 
-CfOut(cf_verbose,"","Initiate control variable convergence...\n");
-
 for (bdp = BODIES; bdp != NULL; bdp = bdp->next) /* get schedule */
    {
    if (strcmp(bdp->name,"control") == 0)
       {
       snprintf(buf,CF_BUFSIZE,"%s_%s",bdp->name,bdp->type);
+      Debug("Initiate control variable convergence...%s\n",buf);
+      DeleteScope(buf);
       SetNewScope(buf);
       CheckControlPromises(buf,bdp->type,bdp->conlist);
       }

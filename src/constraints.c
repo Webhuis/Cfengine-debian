@@ -34,8 +34,6 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
-struct Item *EDIT_ANCHORS = NULL;
-
 /*******************************************************************/
 
 struct Constraint *AppendConstraint(struct Constraint **conlist,char *lval, void *rval, char type,char *classes,int body)
@@ -105,6 +103,28 @@ cp->type = type;  /* literal, bodyname, builtin function */
 cp->isbody = body;
 cp->next = NULL;
 return cp;
+}
+
+/*****************************************************************************/
+
+void EditScalarConstraint(struct Constraint *conlist,char *lval,char *rval)
+
+{ struct Constraint *cp;
+ 
+for (cp = conlist; cp != NULL; cp = cp->next)
+   {
+   if (strcmp(lval,cp->lval) == 0)
+      {
+      if (cp->rval)
+         {
+         DeleteRvalItem(cp->rval,cp->type);
+         }      
+
+      cp->rval = strdup(rval);
+      cp->type = CF_SCALAR;
+      return;
+      }
+   }
 }
 
 /*****************************************************************************/
@@ -529,6 +549,11 @@ void *GetConstraint(char *lval,struct Promise *pp,char rtype)
 { struct Constraint *cp;
   void *retval = NULL;
 
+if (pp == NULL)
+   {
+   return NULL;
+   }
+  
 if (!VerifyConstraintName(lval))
    {
    CfOut(cf_error,""," !! Self-diagnostic: Constraint type \"%s\" is not a registered type\n",lval);
@@ -566,9 +591,16 @@ void ReCheckAllConstraints(struct Promise *pp)
 { struct Constraint *cp;
   char *sp,*handle = GetConstraint("handle",pp,CF_SCALAR);
   struct PromiseIdent *prid;
+  struct Item *ptr;
 
 if (handle)
    {
+   if (!ThreadLock(cft_policy))
+      {
+      CfOut(cf_error, "", "!! Could not lock cft_policy in ReCheckAllConstraints() -- aborting");
+      return;
+      }
+   
    if (prid = PromiseIdExists(handle))
       {
       if ((strcmp(prid->filename,pp->audit->filename) != 0) || (prid->lineno != pp->lineno))
@@ -579,13 +611,17 @@ if (handle)
       }
    else
       {
-      prid = NewPromiseId(handle,pp);
+      NewPromiseId(handle,pp);
       }
+   
+   
+   prid = NULL; // we can't access this after unlocking
+   ThreadUnlock(cft_policy);
    }
 
 if (REQUIRE_COMMENTS == true)
    {
-   if (pp->ref == NULL)
+   if (pp->ref == NULL && strcmp(pp->agentsubtype,"vars") != 0)
       {
       CfOut(cf_error,""," !! Un-commented promise found, but comments have been required by policy\n");
       PromiseRef(cf_error,pp);
@@ -615,14 +651,17 @@ if (strcmp(pp->agentsubtype,"insert_lines") == 0)
    
    if (sp = GetConstraint("select_line_matching",pp,CF_SCALAR))
       {
-      if (IsItemIn(EDIT_ANCHORS,sp))
+      if (ptr = ReturnItemIn(EDIT_ANCHORS,sp))
          {
-         CfOut(cf_error,""," !! insert_lines promise uses the same select_line_matching anchor as another promise. This will lead to non-convergent behaviour.");
-         PromiseRef(cf_error,pp);
+         if (strcmp(ptr->classes,pp->bundle) == 0)
+            {
+            CfOut(cf_error,""," !! insert_lines promise uses the same select_line_matching anchor (\"%s\") as another promise. This will lead to non-convergent behaviour.",sp);
+            PromiseRef(cf_error,pp);
+            }
          }
       else
          {
-         PrependItem(&EDIT_ANCHORS,sp,"");
+         PrependItem(&EDIT_ANCHORS,sp,pp->bundle);
          }
       }
    }
@@ -784,9 +823,13 @@ return false;
 /* Level                                                                     */
 /*****************************************************************************/
 
+// NOTE: PROMISE_ID_LIST must be thread-safe here (locked by caller)
+
 struct PromiseIdent *NewPromiseId(char *handle,struct Promise *pp)
 
 { struct PromiseIdent *ptr;
+
+AssertThreadLocked(cft_policy,"NewPromiseId");
 
 if ((ptr = malloc(sizeof(struct PromiseIdent))) == NULL)
    {
@@ -803,10 +846,49 @@ return ptr;
 
 /*****************************************************************************/
 
+void DeleteAllPromiseIdsRecurse(struct PromiseIdent *key)
+
+{
+AssertThreadLocked(cft_policy, "DeleteAllPromiseIdsRecurse");
+
+if (key->next != NULL)
+   {
+   DeleteAllPromiseIdsRecurse(key->next);
+   }
+
+free(key->filename);
+free(key->handle);
+free(key);
+}
+
+/*****************************************************************************/
+
+void DeleteAllPromiseIds()
+
+{
+if (!ThreadLock(cft_policy))
+   {
+   CfOut(cf_error, "", "!! Could not lock cft_policy in DelteAllPromiseIds() -- aborting");
+   return;
+   }
+
+if (PROMISE_ID_LIST)
+   {
+   DeleteAllPromiseIdsRecurse(PROMISE_ID_LIST);
+   PROMISE_ID_LIST = NULL;
+   }
+
+ThreadUnlock(cft_policy);
+}
+
+/*****************************************************************************/
+
 struct PromiseIdent *PromiseIdExists(char *handle)
 
 { struct PromiseIdent *key;
- 
+
+AssertThreadLocked(cft_policy, "PromiseIdExists");
+
 for (key = PROMISE_ID_LIST; key != NULL; key=key->next)
    {
    if (strcmp(handle,key->handle) == 0)
