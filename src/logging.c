@@ -31,7 +31,6 @@
 
 #include "cf3.defs.h"
 #include "cf3.extern.h"
-#include "cf3.server.h"
 
 /*****************************************************************************/
 
@@ -40,10 +39,15 @@ void BeginAudit()
 { struct Promise dummyp;
   struct Attributes dummyattr;
 
+if (THIS_AGENT_TYPE != cf_agent)
+   {
+   return;
+   }
+  
 memset(&dummyp,0,sizeof(dummyp));
 memset(&dummyattr,0,sizeof(dummyattr));
 
-ClassAuditLog(&dummyp,dummyattr,"Cfagent starting",CF_NOP);
+ClassAuditLog(&dummyp,dummyattr,"Cfagent starting",CF_NOP,"");
 }
 
 /*****************************************************************************/
@@ -55,6 +59,11 @@ void EndAudit()
   void *retval;
   struct Promise dummyp;
   struct Attributes dummyattr;
+
+if (THIS_AGENT_TYPE != cf_agent)
+   {
+   return;
+   }
 
 memset(&dummyp,0,sizeof(dummyp));
 memset(&dummyattr,0,sizeof(dummyattr));
@@ -101,7 +110,7 @@ if (total == 0)
    }
 else
    {   
-   snprintf(string,CF_BUFSIZE,"Outcome of version %s (%s-%d): Promises observed to be kept %.0f%%, Promises repaired %.0f%%, Promises not repaired %.0f\%%\n",
+   snprintf(string,CF_BUFSIZE,"Outcome of version %s (%s-%d): Promises observed to be kept %.0f%%, Promises repaired %.0f%%, Promises not repaired %.0f\%%",
             sp,
             THIS_AGENT,
             CFA_BACKGROUND,
@@ -115,15 +124,15 @@ else
 
 if (strlen(string) > 0)
    {
-   ClassAuditLog(&dummyp,dummyattr,string,CF_REPORT);
+   ClassAuditLog(&dummyp,dummyattr,string,CF_REPORT,"");
    }
 
-ClassAuditLog(&dummyp,dummyattr,"Cfagent closing",CF_NOP);
+ClassAuditLog(&dummyp,dummyattr,"Cfagent closing",CF_NOP,"");
 }
 
 /*****************************************************************************/
 
-void ClassAuditLog(struct Promise *pp,struct Attributes attr,char *str,char status)
+void ClassAuditLog(struct Promise *pp,struct Attributes attr,char *str,char status,char *reason)
 
 { time_t now = time(NULL);
   char date[CF_BUFSIZE],lock[CF_BUFSIZE],key[CF_BUFSIZE],operator[CF_BUFSIZE],id[CF_MAXVARSIZE];
@@ -149,7 +158,7 @@ switch(status)
 
        AddAllClasses(attr.classes.change,attr.classes.persist,attr.classes.timer);
        DeleteAllClasses(attr.classes.del_change);
-       NotePromiseCompliance(pp,0.5,cfn_repaired);
+       NotePromiseCompliance(pp,0.5,cfn_repaired,reason);
        SummarizeTransaction(attr,pp,attr.transaction.log_repaired);
        break;
        
@@ -157,7 +166,7 @@ switch(status)
 
        PR_NOTKEPT++;
        VAL_NOTKEPT += attr.transaction.value_notkept;
-       NotePromiseCompliance(pp,1.0,cfn_notkept);
+       NotePromiseCompliance(pp,1.0,cfn_notkept,reason);
        break;
        
    case CF_TIMEX:
@@ -166,7 +175,7 @@ switch(status)
        VAL_NOTKEPT += attr.transaction.value_notkept;
        AddAllClasses(attr.classes.timeout,attr.classes.persist,attr.classes.timer);
        DeleteAllClasses(attr.classes.del_notkept);
-       NotePromiseCompliance(pp,0.0,cfn_notkept);
+       NotePromiseCompliance(pp,0.0,cfn_notkept,reason);
        SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
 
@@ -176,7 +185,7 @@ switch(status)
        VAL_NOTKEPT += attr.transaction.value_notkept;
        AddAllClasses(attr.classes.failure,attr.classes.persist,attr.classes.timer);
        DeleteAllClasses(attr.classes.del_notkept);
-       NotePromiseCompliance(pp,0.0,cfn_notkept);
+       NotePromiseCompliance(pp,0.0,cfn_notkept,reason);
        SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
        
@@ -186,7 +195,7 @@ switch(status)
        VAL_NOTKEPT += attr.transaction.value_notkept;
        AddAllClasses(attr.classes.denied,attr.classes.persist,attr.classes.timer);
        DeleteAllClasses(attr.classes.del_notkept);
-       NotePromiseCompliance(pp,0.0,cfn_notkept);
+       NotePromiseCompliance(pp,0.0,cfn_notkept,reason);
        SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
        
@@ -196,7 +205,7 @@ switch(status)
        VAL_NOTKEPT += attr.transaction.value_notkept;
        AddAllClasses(attr.classes.interrupt,attr.classes.persist,attr.classes.timer);
        DeleteAllClasses(attr.classes.del_notkept);
-       NotePromiseCompliance(pp,0.0,cfn_notkept);
+       NotePromiseCompliance(pp,0.0,cfn_notkept,reason);
        SummarizeTransaction(attr,pp,attr.transaction.log_failed);
        break;
 
@@ -205,7 +214,7 @@ switch(status)
 
        AddAllClasses(attr.classes.kept,attr.classes.persist,attr.classes.timer);
        DeleteAllClasses(attr.classes.del_kept);
-       NotePromiseCompliance(pp,1.0,cfn_nop);
+       NotePromiseCompliance(pp,1.0,cfn_nop,reason);
        SummarizeTransaction(attr,pp,attr.transaction.log_kept);              
        PR_KEPT++;
        VAL_KEPT += attr.transaction.value_kept;
@@ -424,10 +433,15 @@ op[i] = '\0';
 void PromiseLog(char *s)
 
 { char filename[CF_BUFSIZE],start[CF_BUFSIZE],end[CF_BUFSIZE];
-  FILE *fout;
   time_t now = time(NULL);
+  FILE *fout;
 
-snprintf(filename,CF_BUFSIZE,"%s/promise.log",CFWORKDIR);
+if (s == NULL || strlen(s) ==  0)
+   {
+   return;
+   }
+  
+snprintf(filename,CF_BUFSIZE,"%s/%s",CFWORKDIR,CF_PROMISE_LOG);
 
 if ((fout = fopen(filename,"a")) == NULL)
    {
@@ -435,12 +449,7 @@ if ((fout = fopen(filename,"a")) == NULL)
    return;
    }
 
-strcpy(start,cf_ctime(&CFSTARTTIME));
-Chop(start);
-strcpy(end,cf_ctime(&now));
-Chop(end);
-
-fprintf(fout,"%s -> %s: %s",start,end,s);
+fprintf(fout,"%ld,%ld: %s\n",CFSTARTTIME,now,s);
 fclose(fout);
 }
 

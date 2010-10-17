@@ -30,19 +30,26 @@
 
 extern struct PromiseParser P;
 extern int REQUIRE_COMMENTS;
+extern int FIPS_MODE;
 extern char POLICY_SERVER[CF_BUFSIZE];
 extern int VIEWS;
 extern int LICENSES;
 extern char EXPIRY[32];
+extern char LICENSE_COMPANY[CF_SMALLBUF];
 extern int IGNORE_MISSING_INPUTS;
 extern int IGNORE_MISSING_BUNDLES;
 extern char WEBDRIVER[CF_MAXVARSIZE];
+extern char DOCROOT[CF_MAXVARSIZE];
 extern char BANNER[2*CF_BUFSIZE];
 extern char FOOTER[CF_BUFSIZE];
 extern char STYLESHEET[CF_BUFSIZE];
 extern int CF_NODES;
 extern int CF_EDGES;
-
+extern int KEYTTL;
+extern struct Rlist *SERVER_KEYSEEN;
+extern unsigned int CFTEST_CLASS;
+extern enum cfhashes CF_DEFAULT_DIGEST;
+extern int CF_DEFAULT_DIGEST_LEN;
 extern struct Item *EDIT_ANCHORS;
 
 extern struct Bundle *BUNDLES;
@@ -123,6 +130,13 @@ extern time_t DATESTAMPS[CF_OBSERVABLES];
 extern char AGGREGATION[CF_BUFSIZE];
 extern char *UNITS[CF_OBSERVABLES];
 
+extern char SQL_DATABASE[CF_MAXVARSIZE];
+extern char SQL_OWNER[CF_MAXVARSIZE];
+extern char SQL_PASSWD[CF_MAXVARSIZE];
+extern char SQL_SERVER[CF_MAXVARSIZE];
+extern char SQL_CONNECT_NAME[CF_MAXVARSIZE];
+extern enum cfdbtype SQL_TYPE;
+
 extern double VAL_KEPT;
 extern double VAL_REPAIRED;
 extern double VAL_NOTKEPT;
@@ -144,6 +158,7 @@ extern struct BodySyntax CF_BODY_TRANSACTION[];
 extern struct BodySyntax CF_VARBODY[];
 extern struct BodySyntax CF_CLASSBODY[];
 extern struct BodySyntax CFG_CONTROLBODY[];
+extern struct BodySyntax CFH_CONTROLBODY[];
 extern struct BodySyntax CFA_CONTROLBODY[];
 extern struct BodySyntax CFS_CONTROLBODY[];
 extern struct BodySyntax CFE_CONTROLBODY[];

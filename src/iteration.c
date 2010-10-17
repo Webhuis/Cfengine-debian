@@ -36,12 +36,13 @@
 
 struct Rlist *NewIterationContext(char *scopeid,struct Rlist *namelist)
 
-{ struct Rlist *this,*rp,*deref_listoflists = NULL;
+{ struct Rlist *this,*rp,*rps,*deref_listoflists = NULL;
   char *lval,rtype;
   void *returnval;
   enum cfdatatype dtype;
   struct Scope *ptr = NULL;
   struct CfAssoc *new;
+  struct Rval newret;
 
 Debug("\n*\nNewIterationContext(from %s)\n*\n",scopeid);
 
@@ -57,7 +58,7 @@ if (namelist == NULL)
 for (rp = namelist; rp != NULL; rp = rp->next)
    {
    dtype = GetVariable(scopeid,rp->item,&returnval,&rtype);
-
+   
    if (dtype == cf_notype)
       {
       CfOut(cf_error,""," !! Couldn't locate variable %s apparently in %s\n",rp->item,scopeid);
@@ -67,10 +68,31 @@ for (rp = namelist; rp != NULL; rp = rp->next)
    
    /* Make a copy of list references in scope only, without the names */
 
+   if (rtype == CF_LIST)
+      {
+      for (rps = (struct Rlist *)returnval; rps != NULL; rps=rps->next)
+         {
+         if (rps->type == CF_FNCALL)
+            {
+            struct FnCall *fp = (struct FnCall *)rps->item;
+            newret = EvaluateFunctionCall(fp,NULL);
+            DeleteFnCall(fp);
+            rps->item = newret.item;
+            rps->type = newret.rtype;
+            }
+         }
+      }
+   
    if (new = NewAssoc(rp->item,returnval,rtype,dtype))
       {
       this = OrthogAppendRlist(&deref_listoflists,new,CF_LIST);
       rp->state_ptr = new->rval;
+      
+      while (rp->state_ptr && strcmp(rp->state_ptr->item,CF_NULL_VALUE) == 0)
+         {
+         rp->state_ptr = rp->state_ptr->next;         
+         }
+
       Debug("SETTING state to %s\n",rp->state_ptr->item);
       }
    }
@@ -147,7 +169,14 @@ else
    {
    /* Update the current wheel */
    iterator->state_ptr = state->next;
+
    Debug(" <- Incrementing wheel (%s) to \"%s\"\n",cp->lval,iterator->state_ptr->item);
+
+   while (iterator->state_ptr && strcmp(iterator->state_ptr->item,CF_NULL_VALUE) == 0)
+      {
+      iterator->state_ptr = iterator->state_ptr->next;
+      }
+   
    return true;
    }
 }
@@ -168,7 +197,12 @@ if (iterator == NULL)
 for (rp = iterator; rp != NULL; rp = rp->next)
    {
    state = rp->state_ptr;
-   
+
+   if (state == NULL)
+      {
+      break;
+      }
+
    if (state->next != NULL)
       {
       return false;
@@ -176,6 +210,32 @@ for (rp = iterator; rp != NULL; rp = rp->next)
    }
 
 return true;
+}
+
+/*****************************************************************************/
+
+int NullIterators(struct Rlist *iterator)
+
+{ struct Rlist *rp,*state;
+
+if (iterator == NULL)
+   {
+   return false;
+   }
+
+/* When all the wheels are at NULL, we have reached the end*/
+
+for (rp = iterator; rp != NULL; rp = rp->next)
+   {
+   state = rp->state_ptr;
+
+   if (state && strcmp(state->item,CF_NULL_VALUE) == 0)
+      {
+      return true;
+      }
+   }
+
+return false;
 }
 
 /*******************************************************************/

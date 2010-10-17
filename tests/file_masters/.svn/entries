@@ -1,16 +1,16 @@
 10
 
 dir
-1043
+1412
 https://svn.iu.hio.no/projects/cfengine-3/trunk/tests/file_masters
 https://svn.iu.hio.no/projects/cfengine-3
 
 
 
-2010-04-24T09:41:24.055872Z
-955
+2010-08-28T07:17:25.369339Z
+1239
 mark
-
+has-props
 
 
 
@@ -66,10 +66,10 @@ file
 
 
 
-2010-06-06T16:31:49.081622Z
+2010-08-31T08:25:24.174257Z
 5dc81553174dbd39a39e53d9257aad9e
-2010-04-24T09:41:24.055872Z
-955
+2010-08-28T07:17:25.369339Z
+1239
 mark
 
 

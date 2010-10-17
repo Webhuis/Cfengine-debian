@@ -43,6 +43,10 @@ NewScalar("const","r","\r",cf_str);
 NewScalar("const","t","\t",cf_str);
 NewScalar("const","endl","\n",cf_str);
 /* NewScalar("const","0","\0",cf_str);  - this cannot work */
+
+#ifdef HAVE_LIBCFNOVA
+Nova_EnterpriseDiscovery();
+#endif
 }
 
 /*******************************************************************/
@@ -215,7 +219,7 @@ if (ptr == NULL || ptr->hashtable == NULL)
    return cf_notype;
    }
 
-Debug("GetVariable(%s,%s): using scope '%s' for variable '%s'\n",scopeid,vlval,ptr->scope,vlval);
+Debug("GetVariable(%s,%s): using scope '%s' for variable '%s' (slot =%d)\n",scopeid,vlval,ptr->scope,vlval,slot);
 
 if (CompareVariable(vlval,ptr->hashtable[slot]) != 0)
    {
@@ -229,7 +233,7 @@ if (CompareVariable(vlval,ptr->hashtable[slot]) != 0)
          {
          i = 0;
          }
-
+      
       if (CompareVariable(vlval,ptr->hashtable[i]) == 0)
          {
          found = true;
@@ -238,7 +242,7 @@ if (CompareVariable(vlval,ptr->hashtable[slot]) != 0)
 
       /* Removed autolookup in Unix environment variables -
          implement as getenv() fn instead */
-
+      
       if (i == slot)
          {
          found = false;
@@ -248,7 +252,7 @@ if (CompareVariable(vlval,ptr->hashtable[slot]) != 0)
 
    if (!found)
       {
-      Debug("No such variable found %s.%s\n",scope,lval);
+      Debug("No such variable found %s.%s\n\n",scopeid,lval);
       *returnv = lval;
       *rtype   = CF_SCALAR;
       return cf_notype;
@@ -556,7 +560,7 @@ for (sp = str; *sp != '\0' ; sp++)       /* check for varitems */
 if (dollar && (bracks != 0))
    {
    char output[CF_BUFSIZE];
-   snprintf(output,CF_BUFSIZE,"Broken variable syntax or bracket mismatch in (%s)",str);
+   snprintf(output,CF_BUFSIZE,"Broken variable syntax or bracket mismatch in string (%s)",str);
    yyerror(output);
    return false;
    }
@@ -638,7 +642,7 @@ for (sp = str; *sp != '\0' ; sp++)       /* check for varitems */
 if (dollar && (bracks != 0))
    {
    char output[CF_BUFSIZE];
-   snprintf(output,CF_BUFSIZE,"Broken variable syntax or bracket mismatch in (%s)",str);
+   snprintf(output,CF_BUFSIZE,"Broken scalar variable syntax or bracket mismatch in \"%s\"",str);
    yyerror(output);
    return false;
    }
@@ -743,8 +747,11 @@ for (sp = str+2; *sp != '\0' ; sp++)       /* check for varitems */
 if (bracks != 0)
    {
    char output[CF_BUFSIZE];
-   snprintf(output,CF_BUFSIZE,"Broken variable syntax or bracket mismatch - inner (%s/%s)",str,substr);
-   yyerror(output);
+   if (strlen(substr) > 0)
+      {
+      snprintf(output,CF_BUFSIZE,"Broken variable syntax or bracket mismatch - inner (%s/%s)",str,substr);
+      yyerror(output);
+      }
    return NULL;
    }
 
@@ -850,4 +857,24 @@ for (sp = var; *sp != '\0'; sp++)
 
 return false;
 }
+
+/*********************************************************************/
+
+int IsCfList(char *type)
+{
+  char *listTypes[] = { "sl", "il", "rl", "ml", NULL };
+  int i;
+  
+
+  for(i = 0; listTypes[i] != NULL; i++)
+    {
+      if(strcmp(type, listTypes[i]) == 0)
+	{
+	  return true;
+	}
+    }
+
+  return false;
+}
+
 

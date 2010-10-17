@@ -131,7 +131,7 @@ struct FnCall *ExpandFnCall(char *contextid,struct FnCall *f,int expandnaked)
 
 {
 //return NewFnCall(f->name,ExpandList(contextid,f->args,expandnaked));
- return NewFnCall(f->name,ExpandList(contextid,f->args,false));
+return NewFnCall(f->name,ExpandList(contextid,f->args,false));
 }
 
 /*******************************************************************/
@@ -139,7 +139,7 @@ struct FnCall *ExpandFnCall(char *contextid,struct FnCall *f,int expandnaked)
 void PrintFunctions()
 
 { struct FnCall *fp;
- int i;
+  int i;
 
  for (i = 0; i < 3; i++)
     {
@@ -152,6 +152,42 @@ void PrintFunctions()
     } 
 }
 
+/*******************************************************************/
+
+int PrintFnCall(char *buffer, int bufsize,struct FnCall *fp)
+    
+{ struct Rlist *rp;
+  char work[CF_MAXVARSIZE];
+
+snprintf(buffer,bufsize,"%s(",fp->name);
+
+for (rp = fp->args; rp != NULL; rp=rp->next)
+   {
+   switch (rp->type)
+      {
+      case CF_SCALAR:
+          Join(buffer,(char *)rp->item,bufsize);
+          break;
+
+      case CF_FNCALL:
+          PrintFnCall(work,CF_MAXVARSIZE,(struct FnCall *)rp->item);
+          Join(buffer,work,bufsize);
+          break;
+
+      default:
+          break;
+      }
+   
+   if (rp->next != NULL)
+      {
+      strcat(buffer,",");
+      }
+   }
+
+ strcat(buffer, ")");
+
+return strlen(buffer);
+}
 
 /*******************************************************************/
 
@@ -346,6 +382,9 @@ switch (this)
    case cfn_isdir:
        rval = FnCallStatInfo(fp,expargs,this);
        break;
+   case cfn_isexecutable:
+       rval = FnCallStatInfo(fp,expargs,this);
+       break;
    case cfn_islink:
        rval = FnCallStatInfo(fp,expargs,this);
        break;
@@ -421,6 +460,9 @@ switch (this)
    case cfn_userexists:
        rval = FnCallUserExists(fp,expargs);
        break;
+   case cfn_getusers:
+       rval = FnCallGetUsers(fp,expargs);
+       break;
    case cfn_groupexists:
        rval = FnCallGroupExists(fp,expargs);
        break;
@@ -437,13 +479,16 @@ switch (this)
        rval = FnCallReadStringList(fp,expargs,cf_real);
        break;
    case cfn_readstringarray:
-       rval = FnCallReadStringArray(fp,expargs,cf_str);
+       rval = FnCallReadStringArray(fp,expargs,cf_str,false);
+       break;
+   case cfn_readstringarrayidx:
+       rval = FnCallReadStringArray(fp,expargs,cf_str,true);
        break;
    case cfn_readintarray:
-       rval = FnCallReadStringArray(fp,expargs,cf_int);
+       rval = FnCallReadStringArray(fp,expargs,cf_int,false);
        break;
    case cfn_readrealarray:
-       rval = FnCallReadStringArray(fp,expargs,cf_real);
+       rval = FnCallReadStringArray(fp,expargs,cf_real,false);
        break;
    case cfn_irange:
        rval = FnCallIRange(fp,expargs);
@@ -454,6 +499,9 @@ switch (this)
    case cfn_remotescalar:
        rval = FnCallRemoteScalar(fp,expargs);
        break;
+   case cfn_hubknowledge:
+       rval = FnCallHubKnowledge(fp,expargs);
+       break;
    case cfn_remoteclassesmatching:
        rval = FnCallRemoteClasses(fp,expargs);
        break;
@@ -462,6 +510,15 @@ switch (this)
        break;
    case cfn_ago:
        rval = FnCallAgoDate(fp,expargs);
+       break;
+   case cfn_laterthan:
+       rval = FnCallLaterThan(fp,expargs);
+       break;
+   case cfn_sum:
+       rval = FnCallSum(fp,expargs);
+       break;
+   case cfn_product:
+       rval = FnCallProduct(fp,expargs);
        break;
    case cfn_accum:
        rval = FnCallAccumulatedDate(fp,expargs);

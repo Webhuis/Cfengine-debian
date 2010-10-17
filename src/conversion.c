@@ -32,6 +32,77 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+/*****************************************************************************/
+
+void IPString2KeyDigest(char *ipv4,char *result)
+
+{ CF_DB *dbp;
+  CF_DBC *dbcp;
+  char *key;
+  char name[CF_BUFSIZE];
+  void *value;
+  struct CfKeyHostSeen entry;
+  int ret,ksize,vsize, ok = false;
+
+snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
+MapName(name);
+
+result[0] = '\0';
+
+if (!OpenDB(name,&dbp))
+   {
+   return;
+   }
+
+if (!NewDBCursor(dbp,&dbcp))
+   {
+   CfOut(cf_inform,""," !! Unable to scan last-seen database");
+   return;
+   }
+
+ /* Initialize the key/data return pair. */
+
+memset(&entry, 0, sizeof(entry));
+
+ /* Walk through the database and print out the key/data pairs. */
+
+while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
+   {
+   if (value != NULL)
+      {
+      memcpy(&entry,value,sizeof(entry));
+
+      // Warning this is not 1:1
+      
+      if (strncmp(ipv4,MapAddress((char *)entry.address),strlen(ipv4)) == 0)
+         {
+         CfOut(cf_verbose,""," -> Matched IP %s to key %s",ipv4,key+1);
+         strncpy(result,key+1,CF_MAXVARSIZE-1);
+         break;
+         }
+      }
+   }
+
+DeleteDBCursor(dbp,dbcp);
+CloseDB(dbp);
+}
+
+/***************************************************************/
+
+char *MapAddress(char *unspec_address)
+
+{ /* Is the address a mapped ipv4 over ipv6 address */
+
+if (strncmp(unspec_address,"::ffff:",7) == 0)
+   {
+   return (char *)(unspec_address+7);
+   }
+else
+   {
+   return unspec_address;
+   }
+}
+
 /***************************************************************************/
 
 enum cfhypervisors Str2Hypervisors(char *s)
@@ -141,7 +212,7 @@ return cfd_notype;
 enum package_actions Str2PackageAction(char *s)
 
 { int i;
-  static char *types[] = { "add","delete","reinstall","update","patch","verify", NULL };
+  static char *types[] = { "add","delete","reinstall","update","addupdate","patch","verify", NULL };
     
 for (i = 0; types[i] != NULL; i++)
    {
@@ -490,9 +561,11 @@ remainder[0] = '\0';
 
 sscanf(s,"%ld%c%s",&a,&c,remainder);
 
-if (a == CF_NOINT || strlen(remainder) > 0)
+// Test whether remainder is space only
+
+if (a == CF_NOINT || !IsSpace(remainder))
    {
-   snprintf(output,CF_BUFSIZE,"Error reading assumed integer value \"%s\"\n",s);
+   snprintf(output,CF_BUFSIZE,"Error reading assumed integer value \"%s\" => \"%d\" (found remainder \"%s\")\n",s,a,remainder);
    ReportError(output);
    }
 else
@@ -529,6 +602,10 @@ else
              a = -a;
              }
           break;
+
+      case ' ':
+          break;
+          
       default:          
           break;
       }
@@ -727,11 +804,12 @@ return (mode_t)a;
 
 /****************************************************************************/
 
-int Str2Double(char *s)
+double Str2Double(char *s)
 
 { double a = CF_NODOUBLE;
   char remainder[CF_BUFSIZE];
   char output[CF_BUFSIZE];
+  char c = 'X';
   
 if (s == NULL)
    {
@@ -740,12 +818,54 @@ if (s == NULL)
 
 remainder[0] = '\0';
 
-sscanf(s,"%lf%s",&a,remainder);
- 
-if (a == CF_NODOUBLE || strlen(remainder) > 0)
+sscanf(s,"%lf%c%s",&a,&c,remainder);
+
+if (a == CF_NODOUBLE || !IsSpace(remainder))
    {
-   snprintf(output,CF_BUFSIZE,"Error reading assumed real value %s\n",s);
+   snprintf(output,CF_BUFSIZE,"Error reading assumed real value %s (anomalous remainder %s)\n",s,remainder);
    ReportError(output);
+   }
+else
+   {
+   switch (c)
+      {
+      case 'k':
+          a = 1000 * a;
+          break;
+      case 'K':
+          a = 1024 * a;
+          break;          
+      case 'm':
+          a = 1000 * 1000 * a;
+          break;
+      case 'M':
+          a = 1024 * 1024 * a;
+          break;          
+      case 'g':
+          a = 1000 * 1000 * 1000 * a;
+          break;
+      case 'G':
+          a = 1024 * 1024 * 1024 * a;
+          break;          
+      case '%':
+          if (a < 0 || a > 100)
+             {
+             CfOut(cf_error,"","Percentage out of range (%d)",a);
+             return CF_NOINT;
+             }
+          else
+             {
+             /* Represent percentages internally as negative numbers */
+             a = -a;
+             }
+          break;
+
+      case ' ':
+          break;
+          
+      default:          
+          break;
+      }
    }
 
 return a;
@@ -873,6 +993,14 @@ return cfsrv_nostatus;
 
 int Month2Int(char *string)
 
+{
+return MonthLen2Int(string,10);  // no month names longer than 10 chars
+}
+
+/*************************************************************/
+
+int MonthLen2Int(char *string, int len)
+
 { int i;
 
 if (string == NULL)
@@ -892,7 +1020,65 @@ for (i = 0; i < 12; i++)
 return -1;
 }
 
+/*********************************************************************/
+
+void TimeToDateStr(time_t t, char *outStr, int outStrSz)
+/**
+ * Formats a time as "30 Sep 2010".
+ */
+{
+char month[CF_SMALLBUF],day[CF_SMALLBUF],year[CF_SMALLBUF];
+char tmp[CF_SMALLBUF];
+
+snprintf(tmp,sizeof(tmp),"%s",cf_ctime(&t));
+sscanf(tmp,"%*s %5s %3s %*s %5s",month,day,year);
+snprintf(outStr,outStrSz,"%s %s %s",day,month,year);
+}
+
+/*********************************************************************/
+
+void DateStrToTime(char *inStr, time_t *t)
+/**
+ * Takes a time str as "30 Sep 2010" and returns a time_t struct in
+ * that day.
+ */
+{
+  char monthStr[CF_SMALLBUF] = {0};
+  int day = 0, month = 0, year = 0;
+  struct tm tmTime = {0};
+  time_t tTime = 0;
+  
+  sscanf(inStr,"%d %3s %d",&day,monthStr,&year);
+
+  month = MonthLen2Int(monthStr,3);
+
+  if(month == -1)
+    {
+    CfOut(cf_error, "", "!! Could not convert month to int in DateStrToTime()");
+    *t = 0;
+    return;
+    }
+
+  tmTime.tm_mday = day;
+  tmTime.tm_mon = month - 1;
+  tmTime.tm_year = year - 1900;
+  tmTime.tm_isdst = -1;
+
+  tTime = mktime(&tmTime);
+
+  if(tTime == -1)
+    {
+    CfOut(cf_error, "mktime", "!! Could not convert \"%s\" from string to time_t", inStr);
+    *t = 0;
+    }
+  else
+    {
+    *t = tTime;
+    }
+}
+
 /*************************************************************/
+
 
 char *GetArg0(char *execstr)
 
@@ -995,6 +1181,39 @@ char *Item2String(struct Item *ip)
   return buf;
 }
 
+/*******************************************************************/
+
+int IsSpace(char *remainder)
+
+{ char *sp;
+
+for (sp = remainder; *sp != '\0'; sp++)
+    {
+    if (!isspace(*sp))
+       {
+       return false;
+       }    
+    }
+
+return true;
+}
+
+/*******************************************************************/
+
+int IsNumber(char *s)
+
+{ char *sp;
+
+for (sp = s; *sp != '\0'; sp++)
+    {
+    if (!isdigit(*sp))
+       {
+       return false;
+       }    
+    }
+
+return true;
+}
 
 /*******************************************************************/
 /* Unix-only functions                                             */

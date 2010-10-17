@@ -44,15 +44,27 @@ void GenericInitialize(int argc,char **argv,char *agents)
   char vbuff[CF_BUFSIZE];
   int ok;
 
+#ifdef HAVE_LIBCFNOVA
+CF_DEFAULT_DIGEST = cf_sha256;
+CF_DEFAULT_DIGEST_LEN = CF_SHA256_LEN;
+#else
+CF_DEFAULT_DIGEST = cf_md5;
+CF_DEFAULT_DIGEST_LEN = CF_MD5_LEN;
+#endif
+ 
 InitializeGA(argc,argv);
 
 SetReferenceTime(true);
 SetStartTime(false);
 SetSignals();
 
-// See cf3.defs.h for these settings
+strcpy(THIS_AGENT,CF_AGENTTYPES[ag]);
+NewClass(THIS_AGENT);
+THIS_AGENT_TYPE = ag;
 
-if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR)) 
+snprintf(vbuff,CF_BUFSIZE,"control_%s",THIS_AGENT);
+
+if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY)) 
    {
    CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
    exit(1);
@@ -77,21 +89,27 @@ if (!NOHARDCLASSES)
 LoadPersistentContext();
 LoadSystemConstants();
 
-strcpy(THIS_AGENT,CF_AGENTTYPES[ag]);
-NewClass(THIS_AGENT);
-THIS_AGENT_TYPE = ag;
-
-snprintf(vbuff,CF_BUFSIZE,"control_%s",THIS_AGENT);
-
 SetNewScope(vbuff);
 NewScope("this");
 NewScope("match");
 
 if (BOOTSTRAP)
    {
-   SetPolicyServer(POLICY_SERVER);
    CheckAutoBootstrap();
    }
+else
+   {
+   if (strlen(POLICY_SERVER) > 0)
+      {
+      CfOut(cf_verbose,""," -> Found a policy server (hub) on %s",POLICY_SERVER);
+      }
+   else
+      {
+      CfOut(cf_verbose,""," -> No policy server (hub) watch yet registered");
+      }
+   }
+
+SetPolicyServer(POLICY_SERVER);
 
 ok = BOOTSTRAP || CheckPromises(ag);
 
@@ -106,7 +124,7 @@ else
    ReadPromises(ag,agents);
    }
 
-if (SHOWREPORTS || ERRORCOUNT)
+if (SHOWREPORTS)
    {
    CompilationReport(VINPUTFILE);
    }
@@ -412,7 +430,7 @@ if (!LOOKUP) /* cf-know should not do this in lookup mode */
 
    if (cfstat(vbuff,&sb) == -1)
       {
-      FatalError(" !!! No access to workspace");
+      FatalError(" !!! No access to WORKSPACE/inputs dir");
       }
    else
       {
@@ -423,7 +441,7 @@ if (!LOOKUP) /* cf-know should not do this in lookup mode */
 
    if (cfstat(vbuff,&sb) == -1)
       {
-      FatalError(" !!! No access to workspace");
+      FatalError(" !!! No access to WORKSPACE/outputs dir");
       }
    else
       {
@@ -454,11 +472,6 @@ if (!LOOKUP) /* cf-know should not do this in lookup mode */
    }
 
 OpenNetwork();
-
-// cleanup db file from v. 3.0.2 (can be removed later)
-char oldLockDb[CF_BUFSIZE];
-snprintf(oldLockDb, sizeof(oldLockDb), "%s/cfengine_lock_db", CFWORKDIR);
-unlink(oldLockDb);
 
 /* Init crypto stuff */
 
@@ -498,7 +511,7 @@ if (BOOTSTRAP)
    if (!IsEnterprise() && cfstat(vbuff,&statbuf) == -1)
       {
       CfOut(cf_inform,"","Didn't find established file %s, so looking for one in current directory\n",vbuff);
-          snprintf(VINPUTFILE,CF_BUFSIZE-1,".%cfailsafe.cf",FILE_SEPARATOR);
+      snprintf(VINPUTFILE,CF_BUFSIZE-1,".%cfailsafe.cf",FILE_SEPARATOR);
       }
    else
       {
@@ -525,7 +538,7 @@ Cf3ParseFile(VINPUTFILE);
 
 // Expand any lists in this list now
 
-HashVariables();
+HashVariables(NULL);
 HashControls();
 
 if (VINPUTLIST != NULL)
@@ -555,12 +568,12 @@ if (VINPUTLIST != NULL)
             }
          }
 
-      HashVariables();
+      HashVariables(NULL);
       HashControls();
       }
    }
 
-HashVariables();
+HashVariables(NULL);
 
 PARSING = false;
 }
@@ -719,17 +732,24 @@ void CloseReports(char *agents)
 
 { char name[CF_BUFSIZE];
 
+#ifndef HAVE_LIBCFNOVA 
 if (SHOWREPORTS)
    {
-   CfOut(cf_cmdout,"","Wrote compilation report %s%creports%cpromise_output_%s.txt",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
-   CfOut(cf_cmdout,"","Wrote compilation report %s%creports%cpromise_output_%s.html",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
-   CfOut(cf_cmdout,"","Wrote knowledge map %s%cpromise_knowledge.cf",CFWORKDIR,FILE_SEPARATOR,agents);
+   CfOut(cf_verbose,"","Wrote compilation report %s%creports%cpromise_output_%s.txt",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
+   CfOut(cf_verbose,"","Wrote compilation report %s%creports%cpromise_output_%s.html",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
+   CfOut(cf_verbose,"","Wrote knowledge map %s%cpromise_knowledge.cf",CFWORKDIR,FILE_SEPARATOR,agents);
    }
+#endif
 
 fprintf(FKNOW,"}\n");
 fclose(FKNOW);
 fclose(FREPORT_HTML);
 fclose(FREPORT_TXT);
+
+// Make the knowledge readable in situ
+
+snprintf(name,CF_BUFSIZE,"%s%cpromise_knowledge.cf",CFWORKDIR,FILE_SEPARATOR);
+chmod(name,0644);
 }
 
 /*******************************************************************/
@@ -957,6 +977,7 @@ else
 
 CfOut(cf_verbose,"","*****************************************************************\n");
 CfOut(cf_verbose,"","\n");
+LastSawBundle(bp->name);
 }
 
 /**************************************************************/
@@ -984,6 +1005,7 @@ else
    }
 CfOut(cf_verbose,"","      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n");
 CfOut(cf_verbose,"","\n");
+LastSawBundle(bp->name);
 }
 
 /**************************************************************/
@@ -1189,8 +1211,26 @@ void CompilationReport(char *fname)
 
 { char filename[CF_BUFSIZE],output[CF_BUFSIZE];
 
+if (THIS_AGENT_TYPE != cf_common)
+   {
+   return;
+   }
+
+#if defined(HAVE_LIBCFNOVA) && defined(HAVE_LIBMONGOC)
+if ((FREPORT_TXT = fopen(NULLFILE,"w")) == NULL)
+   {
+   snprintf(output,CF_BUFSIZE,"Could not write output log to %s",filename);
+   FatalError(output);
+   }
+
+if ((FREPORT_HTML = fopen(NULLFILE,"w")) == NULL)
+   {
+   snprintf(output,CF_BUFSIZE,"Could not write output log to %s",filename);
+   FatalError(output);
+   }
+#else
 snprintf(filename,CF_BUFSIZE-1,"%s.txt",fname);
-printf("Summarizing promises as text to %s\n",filename);
+CfOut(cf_inform,"","Summarizing promises as text to %s\n",filename);
 
 if ((FREPORT_TXT = fopen(filename,"w")) == NULL)
    {
@@ -1199,13 +1239,14 @@ if ((FREPORT_TXT = fopen(filename,"w")) == NULL)
    }
 
 snprintf(filename,CF_BUFSIZE-1,"%s.html",fname);
-printf("Summarizing promises as html to %s\n",filename);
+CfOut(cf_inform,"","Summarizing promises as html to %s\n",filename);
 
 if ((FREPORT_HTML = fopen(filename,"w")) == NULL)
    {
    snprintf(output,CF_BUFSIZE,"Could not write output log to %s",filename);
    FatalError(output);
    }
+#endif
 
 if ((FKNOW = fopen(NULLFILE,"w")) == NULL)
    {
@@ -1279,7 +1320,7 @@ for (rp = SUBBUNDLES; rp != NULL; rp=rp->next)
       {
       case CF_SCALAR:
           
-          if (!IGNORE_MISSING_BUNDLES && !IsBundle(BUNDLES,(char *)rp->item))
+          if (!IGNORE_MISSING_BUNDLES && !IsCf3VarString(rp->item) && !IsBundle(BUNDLES,(char *)rp->item))
              {
              CfOut(cf_error,"","Undeclared promise bundle \"%s()\" was referenced in a promise\n",(char *)rp->item);
              ERRORCOUNT++;
@@ -1290,7 +1331,7 @@ for (rp = SUBBUNDLES; rp != NULL; rp=rp->next)
 
           fp = (struct FnCall *)rp->item;
 
-          if (!IGNORE_MISSING_BUNDLES && !IsBundle(BUNDLES,fp->name))
+          if (!IGNORE_MISSING_BUNDLES && !IsCf3VarString(fp->name) && !IsBundle(BUNDLES,fp->name))
              {
              CfOut(cf_error,"","Undeclared promise bundle \"%s()\" was referenced in a promise\n",fp->name);
              ERRORCOUNT++;
@@ -1321,7 +1362,7 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
       }
    }
 
-HashVariables();
+HashVariables(NULL);
 HashControls();
 
 /* Now look once through the sequences bundles themselves */
@@ -1349,7 +1390,7 @@ if (cfstat(file,&statbuf) == -1)
    return;
    }
 
-HashFile(file,AUDITPTR->digest,cf_md5);
+HashFile(file,AUDITPTR->digest,CF_DEFAULT_DIGEST);
 
 AUDITPTR->next = VAUDIT;
 AUDITPTR->filename = strdup(file);
@@ -1546,12 +1587,11 @@ for (i=0; options[i].name != NULL; i++)
       }
    }
 
-
 printf("\nBug reports: bug-cfengine@cfengine.org, ");
 printf("Community help: help-cfengine@cfengine.org\n");
 printf("Community info: http://www.cfengine.org, ");
 printf("Support services: http://www.cfengine.com\n\n");
-printf("This software is Copyright (C) 2008-present Cfengine AS.\n");
+printf("This software is Copyright (C) 2008,2010-present Cfengine AS.\n");
 }
 
 /*******************************************************************/
@@ -1606,7 +1646,18 @@ printf(".pp\nThis software is Copyright (C) 2008- Cfengine AS.\n");
 void Version(char *component)
 
 {
-printf("This comprises %s core community version %s - Copyright %s%s\n",component,VERSION,CF3COPYRIGHT,VYEAR);
+char vStr[CF_SMALLBUF];
+
+if(INFORM || VERBOSE)
+  {
+  snprintf(vStr,sizeof(vStr),"%s (%s)",VERSION,CF3_REVISION);
+  }
+else
+  {
+  snprintf(vStr,sizeof(vStr),"%s",VERSION);
+  }
+
+printf("This comprises %s core community version %s - Copyright %s%s\n",component,vStr,CF3COPYRIGHT,VYEAR);
 EnterpriseVersion();
 }
 
@@ -1631,16 +1682,21 @@ fclose(fp);
 
 /*******************************************************************/
 
-void HashVariables()
+void HashVariables(char *name)
 
 { struct Bundle *bp,*bundles;
   struct SubType *sp;
   struct Scope *ptr;
 
 CfOut(cf_verbose,"","Initiate variable convergence...\n");
-
+    
 for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
    {
+   if (name && strcmp(name,bp->name) != 0)
+      {
+      continue;
+      }
+   
    SetNewScope(bp->name);
    THIS_BUNDLE = bp->name;
 
@@ -1707,7 +1763,9 @@ int BadBundleSequence(enum cfagenttype agent)
   int ok = true;
   struct FnCall *fp;
 
-if (THIS_AGENT_TYPE != cf_agent && THIS_AGENT_TYPE != cf_know && THIS_AGENT_TYPE != cf_common)
+if ((THIS_AGENT_TYPE != cf_agent) && 
+    (THIS_AGENT_TYPE != cf_know) && 
+    (THIS_AGENT_TYPE != cf_common))
    {
    return false;
    }
@@ -1736,7 +1794,7 @@ if (rettype != CF_LIST)
    FatalError("Promised bundlesequence was not a list");
    }
 
-if (agent == cf_agent || agent == cf_common)
+if ((agent == cf_agent) || (agent == cf_common))
    {
    for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
       {
@@ -1762,6 +1820,11 @@ if (agent == cf_agent || agent == cf_common)
              ok = false;
              break;
          }
+
+      if (strcmp(name,CF_NULL_VALUE) == 0)
+         {
+         continue;
+         }             
 
       if (!IGNORE_MISSING_BUNDLES && !GetBundle(name,NULL))
          {

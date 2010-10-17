@@ -274,7 +274,10 @@ attr.havemount = GetBooleanConstraint("mount",pp);
 
 /* Common ("included") */
 
-attr.edits.maxfilesize = EDITFILESIZE;
+if (attr.edits.maxfilesize <= 0)
+   {
+   attr.edits.maxfilesize = EDITFILESIZE;
+   }
 
 attr.havetrans = GetBooleanConstraint(CF_TRANSACTION,pp);
 attr.transaction = GetTransactionConstraints(pp);
@@ -484,8 +487,8 @@ struct FilePerms GetPermissionConstraints(struct Promise *pp)
                 
 value = (char *)GetConstraint("mode",pp,CF_SCALAR);
 
-p.plus = 0;
-p.minus = 0;
+p.plus = CF_SAMEMODE;
+p.minus = CF_SAMEMODE;
 
 if (!ParseModeString(value,&p.plus,&p.minus))
    {
@@ -784,15 +787,35 @@ value = (char *)GetConstraint("hash",pp,CF_SCALAR);
 
 if (value && strcmp(value,"best") == 0)
    {
+#ifdef HAVE_LIBCFNOVA
+   c.hash = cf_sha512;
+#else
    c.hash = cf_besthash;
+#endif   
+   }
+else if (value && strcmp(value,"md5") == 0)
+   {
+   c.hash = cf_md5;
    }
 else if (value && strcmp(value,"sha1") == 0)
    {
    c.hash = cf_sha1;
    }
+else if (value && strcmp(value,"sha256") == 0)
+   {
+   c.hash = cf_sha256;
+   }
+else if (value && strcmp(value,"sha384") == 0)
+   {
+   c.hash = cf_sha384;
+   }
+else if (value && strcmp(value,"sha512") == 0)
+   {
+   c.hash = cf_sha512;
+   }
 else
    {
-   c.hash = cf_md5;
+   c.hash = CF_DEFAULT_DIGEST;
    }
 
 value = (char *)GetConstraint("report_changes",pp,CF_SCALAR);
@@ -851,6 +874,7 @@ value = (char *)GetConstraint("link_type",pp,CF_SCALAR);
 f.link_type = String2LinkType(value);
 f.servers = GetListConstraint("servers",pp);
 f.portnumber = (short)GetIntConstraint("portnumber",pp);
+f.timeout = (short)GetIntConstraint("timeout",pp);
 f.link_instead = GetListConstraint("linkcopy_patterns",pp);
 f.copy_links = GetListConstraint("copylink_patterns",pp);
 
@@ -1377,6 +1401,12 @@ struct EditColumn GetColumnConstraints(struct Promise *pp)
 
 c.column_separator = GetConstraint("field_separator",pp,CF_SCALAR);
 c.select_column = GetIntConstraint("select_field",pp);
+
+if (c.select_column != CF_NOINT && GetBooleanConstraint("start_fields_from_zero",pp))
+   {
+   c.select_column++;
+   }
+
 value = GetConstraint("value_separator",pp,CF_SCALAR);
 
 if (value)
@@ -1429,6 +1459,18 @@ v.sensible_size = (int) Str2Int(value);
 value = GetConstraint("sensible_count",pp,CF_SCALAR);
 v.sensible_count = (int) Str2Int(value);
 v.scan_arrivals = GetBooleanConstraint("scan_arrivals",pp);
+
+// defaults
+ if(v.sensible_size == CF_NOINT)
+   {
+     v.sensible_size = 1000;
+   }
+ 
+ if(v.sensible_count == CF_NOINT)
+   {
+     v.sensible_count = 2;
+   }
+
 
 return v;
 }

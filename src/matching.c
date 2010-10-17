@@ -49,7 +49,7 @@ rex = CompileRegExp(regexp);
 
 if (rex.failed)
    {
-   CfOut(cf_error, "CompileRegExp", "!! Could not parse regular expression '%s'", regexp);
+   CfOut(cf_error,"","!! Could not parse regular expression '%s'", regexp);
    return false;
    }
 
@@ -337,18 +337,25 @@ return(false);
 
 /*********************************************************************/
 
-int MatchPolicy(char *needle,char *haystack,struct Attributes a,struct Promise *pp)
+int MatchPolicy(char *camel,char *haystack,struct Attributes a,struct Promise *pp)
 
 { struct Rlist *rp;
   char *sp,*spto;
   enum insert_match opt;
-  char work[CF_BUFSIZE],final[CF_BUFSIZE];
+  char work[CF_BUFSIZE],final[CF_BUFSIZE],needle[CF_BUFSIZE];
 
 /* First construct the matching policy */
 
+if (a.insert_match == NULL)
+   {
+   return (strcmp(camel,haystack) == 0);
+   }
+  
+EscapeSpecialChars(camel,needle,CF_BUFSIZE-1," ");
+
 memset(final,0,CF_BUFSIZE);
 strncpy(final,needle,CF_BUFSIZE-1);
-  
+
 for (rp = a.insert_match; rp != NULL; rp=rp->next)
    {
    opt = String2InsertMatch(rp->item);
@@ -455,7 +462,7 @@ struct CfRegEx CompileRegExp(char *regexp)
 
 memset(&this,0,sizeof(struct CfRegEx)); 
 
-rx = pcre_compile(regexp,0,&errorstr,&erroffset,NULL);
+rx = pcre_compile(regexp,PCRE_MULTILINE,&errorstr,&erroffset,NULL);
 
 if (rx == NULL)
    {
@@ -509,7 +516,7 @@ struct CfRegEx CaseCompileRegExp(char *regexp)
  int erroffset;
 
 memset(&this,0,sizeof(struct CfRegEx)); 
-rx = pcre_compile(regexp,PCRE_CASELESS,&errorstr,&erroffset,NULL);
+rx = pcre_compile(regexp,PCRE_CASELESS|PCRE_MULTILINE,&errorstr,&erroffset,NULL);
 
 if (rx == NULL)
    {
@@ -566,11 +573,8 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
    *start = ovector[0];
    *end = ovector[1];
 
-   if (rc > 1)
-      {
-      DeleteScope("match");
-      NewScope("match");
-      }
+   DeleteScope("match");
+   NewScope("match");
    
    for (i = 0; i < rc; i++) /* make backref vars $(1),$(2) etc */
       {
@@ -671,11 +675,8 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
    match_start = teststring + ovector[0];
    match_len = ovector[1] - ovector[0];
 
-   if (rc > 1)
-      {
-      DeleteScope("match");
-      NewScope("match");
-      }
+   DeleteScope("match");
+   NewScope("match");
    
    for (i = 0; i < rc; i++) /* make backref vars $(1),$(2) etc */
       {
@@ -1380,13 +1381,58 @@ for (sp = str; (*sp != '\0') && (strEscPos < strEscSz - 2); sp++)
       sp += strlen(noEsc);
       }
    
-   if (!isalnum(*sp))
+   if (*sp != '\0' && !isalnum(*sp))
       {
       strEsc[strEscPos++] = '\\';
       }
    
    strEsc[strEscPos++] = *sp;
    }
+}
+
+/*********************************************************************/
+
+char *EscapeChar(char *str, int strSz, char esc)
+/* Escapes characters esc in the string str of size strSz  */
+{
+  char strDup[CF_BUFSIZE];
+  int strPos, strDupPos;
+  
+  if(sizeof(strDup) < strSz)
+    {
+      FatalError("Too large string passed to EscapeCharInplace()\n");
+    }
+  
+  snprintf(strDup, sizeof(strDup), "%s", str);
+  memset(str, 0, strSz);
+  
+  for(strPos = 0, strDupPos = 0; strPos < strSz - 2; strPos++, strDupPos++)
+    {
+      if(strDup[strDupPos] == esc)
+	{
+	  str[strPos] = '\\';
+	  strPos++;
+	}
+
+      str[strPos] = strDup[strDupPos];
+    }
+  
+  return str;
+}
+
+/*********************************************************************/
+
+void AnchorRegex(char *regex, char *out, int outSz)
+{
+
+if(EMPTY(regex))
+  {
+  memset(out,0,outSz);
+  }
+else
+  {
+  snprintf(out,outSz,"^(%s)$",regex);
+  }
 }
 
 

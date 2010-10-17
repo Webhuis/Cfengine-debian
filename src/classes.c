@@ -179,9 +179,9 @@ char *VPSOPTS[CF_CLASSATTR] =
    "auxw",   /* sun4 */
    "auxw",   /* ultrix */
    "-ef",    /* hpux */
-   "-ef",    /* aix */
+   "auxw",    /* aix */
    "auxw",   /* linux */
-   "-elf",   /* solaris */
+   "-elyf",   /* solaris */
    "-ef",    /* osf1 */
    "auxw",   /* digital */   
    "auxw",   /* sun3 */
@@ -189,14 +189,14 @@ char *VPSOPTS[CF_CLASSATTR] =
    "-ef",    /* irix */
    "-ef",    /* irix64 */
    "auxw",   /* freebsd */
-   "-elf",   /* solarisx86 */
+   "-elyf",   /* solarisx86 */
    "-ax",    /* bsd 4.3 */
    "auxw",   /* newsos4 */
    "auxw",   /* netbsd */
    "auxw",   /* AOS */
    "auxw",   /* BSDI */
    "auxw",   /* nextstep */
-   "-ef",    /* cray */
+   "-elyf",    /* cray */
    "auxw",   /* gnu */
    "-aW",    /* NT */
    "-ef",    /* Unixware */
@@ -204,7 +204,7 @@ char *VPSOPTS[CF_CLASSATTR] =
    "-ef",    /* sco */
    "auxw",   /* darwin */
    "-ef",    /* ux4800 */
-   "-ef",    /* qnx */
+   "-elyf",    /* qnx */
    "auxw",   /* dragonfly */
    "mingw-invalid", /* mingw */
    "?",      /* vmware*/

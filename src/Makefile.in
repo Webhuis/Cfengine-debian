@@ -40,7 +40,7 @@ target_triplet = @target@
 sbin_PROGRAMS = cf-know$(EXEEXT) cf-promises$(EXEEXT) \
 	cf-agent$(EXEEXT) cf-monitord$(EXEEXT) cf-serverd$(EXEEXT) \
 	cf-execd$(EXEEXT) cf-runagent$(EXEEXT) cf-key$(EXEEXT) \
-	cf-report$(EXEEXT)
+	cf-report$(EXEEXT) cf-hub$(EXEEXT)
 subdir = src
 DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/cf3lex.l.in \
@@ -112,12 +112,13 @@ am_libpromises_la_OBJECTS = libpromises_la-cf3parse.lo \
 	libpromises_la-matching.lo libpromises_la-selfdiagnostic.lo \
 	libpromises_la-instrumentation.lo libpromises_la-granules.lo \
 	libpromises_la-timeout.lo libpromises_la-promises.lo \
-	libpromises_la-constraints.lo libpromises_la-iteration.lo \
-	libpromises_la-rlist.lo libpromises_la-syntax.lo \
-	libpromises_la-logging.lo libpromises_la-signals.lo \
-	libpromises_la-transaction.lo libpromises_la-cfstream.lo \
-	libpromises_la-pipes.lo libpromises_la-html.lo \
-	libpromises_la-interfaces.lo libpromises_la-storage_tools.lo \
+	libpromises_la-ontology.lo libpromises_la-constraints.lo \
+	libpromises_la-iteration.lo libpromises_la-rlist.lo \
+	libpromises_la-syntax.lo libpromises_la-logging.lo \
+	libpromises_la-signals.lo libpromises_la-transaction.lo \
+	libpromises_la-cfstream.lo libpromises_la-pipes.lo \
+	libpromises_la-html.lo libpromises_la-interfaces.lo \
+	libpromises_la-storage_tools.lo \
 	libpromises_la-verify_reports.lo \
 	libpromises_la-verify_processes.lo \
 	libpromises_la-enterprise_stubs.lo \
@@ -150,12 +151,15 @@ am_cf_execd_OBJECTS = exec.$(OBJEXT)
 cf_execd_OBJECTS = $(am_cf_execd_OBJECTS)
 cf_execd_LDADD = $(LDADD)
 cf_execd_DEPENDENCIES = libpromises.la
+am_cf_hub_OBJECTS = hub.$(OBJEXT)
+cf_hub_OBJECTS = $(am_cf_hub_OBJECTS)
+cf_hub_LDADD = $(LDADD)
+cf_hub_DEPENDENCIES = libpromises.la
 am_cf_key_OBJECTS = cfkey.$(OBJEXT)
 cf_key_OBJECTS = $(am_cf_key_OBJECTS)
 cf_key_LDADD = $(LDADD)
 cf_key_DEPENDENCIES = libpromises.la
-am_cf_know_OBJECTS = cfknow.$(OBJEXT) graph.$(OBJEXT) manual.$(OBJEXT) \
-	ontology.$(OBJEXT)
+am_cf_know_OBJECTS = cfknow.$(OBJEXT) graph.$(OBJEXT) manual.$(OBJEXT)
 cf_know_OBJECTS = $(am_cf_know_OBJECTS)
 cf_know_LDADD = $(LDADD)
 cf_know_DEPENDENCIES = libpromises.la
@@ -201,15 +205,15 @@ YACCCOMPILE = $(YACC) $(YFLAGS) $(AM_YFLAGS)
 LTYACCCOMPILE = $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=compile $(YACC) $(YFLAGS) $(AM_YFLAGS)
 SOURCES = $(libpromises_la_SOURCES) $(cf_agent_SOURCES) \
-	$(cf_execd_SOURCES) $(cf_key_SOURCES) $(cf_know_SOURCES) \
-	$(cf_monitord_SOURCES) $(cf_promises_SOURCES) \
-	$(cf_report_SOURCES) $(cf_runagent_SOURCES) \
-	$(cf_serverd_SOURCES)
+	$(cf_execd_SOURCES) $(cf_hub_SOURCES) $(cf_key_SOURCES) \
+	$(cf_know_SOURCES) $(cf_monitord_SOURCES) \
+	$(cf_promises_SOURCES) $(cf_report_SOURCES) \
+	$(cf_runagent_SOURCES) $(cf_serverd_SOURCES)
 DIST_SOURCES = $(libpromises_la_SOURCES) $(cf_agent_SOURCES) \
-	$(cf_execd_SOURCES) $(cf_key_SOURCES) $(cf_know_SOURCES) \
-	$(cf_monitord_SOURCES) $(cf_promises_SOURCES) \
-	$(cf_report_SOURCES) $(cf_runagent_SOURCES) \
-	$(cf_serverd_SOURCES)
+	$(cf_execd_SOURCES) $(cf_hub_SOURCES) $(cf_key_SOURCES) \
+	$(cf_know_SOURCES) $(cf_monitord_SOURCES) \
+	$(cf_promises_SOURCES) $(cf_report_SOURCES) \
+	$(cf_runagent_SOURCES) $(cf_serverd_SOURCES)
 HEADERS = $(noinst_HEADERS)
 ETAGS = etags
 CTAGS = ctags
@@ -422,6 +426,7 @@ libpromises_la_SOURCES = \
         granules.c                                                      \
         timeout.c                                                       \
         promises.c                                                      \
+        ontology.c							\
         constraints.c                                                   \
         iteration.c                                                     \
         rlist.c                                                         \
@@ -491,14 +496,16 @@ cf_monitord_SOURCES = \
 cf_execd_SOURCES = \
         exec.c
 
+cf_hub_SOURCES = \
+        hub.c
+
 cf_runagent_SOURCES = \
         runagent.c
 
 cf_know_SOURCES = \
         cfknow.c                                                        \
         graph.c                                                         \
-        manual.c                                                        \
-        ontology.c
+        manual.c  
 
 EXTRA_DIST = cf3lex.c cf3parse.c
 
@@ -681,6 +688,9 @@ cf-agent$(EXEEXT): $(cf_agent_OBJECTS) $(cf_agent_DEPENDENCIES)
 cf-execd$(EXEEXT): $(cf_execd_OBJECTS) $(cf_execd_DEPENDENCIES) 
 	@rm -f cf-execd$(EXEEXT)
 	$(LINK) $(cf_execd_OBJECTS) $(cf_execd_LDADD) $(LIBS)
+cf-hub$(EXEEXT): $(cf_hub_OBJECTS) $(cf_hub_DEPENDENCIES) 
+	@rm -f cf-hub$(EXEEXT)
+	$(LINK) $(cf_hub_OBJECTS) $(cf_hub_LDADD) $(LIBS)
 cf-key$(EXEEXT): $(cf_key_OBJECTS) $(cf_key_DEPENDENCIES) 
 	@rm -f cf-key$(EXEEXT)
 	$(LINK) $(cf_key_OBJECTS) $(cf_key_LDADD) $(LIBS)
@@ -718,6 +728,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/env_monitor.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/exec.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/graph.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hub.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-args.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-assoc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-attributes.Plo@am__quote@
@@ -789,6 +800,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-modes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-net.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-nfs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-ontology.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-patches.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-pipes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-processes_select.Plo@am__quote@
@@ -811,7 +823,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpromises_la-verify_reports.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ontology.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/runagent.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/server_transform.Po@am__quote@
@@ -1245,6 +1256,13 @@ libpromises_la-promises.lo: promises.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='promises.c' object='libpromises_la-promises.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-promises.lo `test -f 'promises.c' || echo '$(srcdir)/'`promises.c
+
+libpromises_la-ontology.lo: ontology.c
+@am__fastdepCC_TRUE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-ontology.lo -MD -MP -MF $(DEPDIR)/libpromises_la-ontology.Tpo -c -o libpromises_la-ontology.lo `test -f 'ontology.c' || echo '$(srcdir)/'`ontology.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/libpromises_la-ontology.Tpo $(DEPDIR)/libpromises_la-ontology.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='ontology.c' object='libpromises_la-ontology.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -c -o libpromises_la-ontology.lo `test -f 'ontology.c' || echo '$(srcdir)/'`ontology.c
 
 libpromises_la-constraints.lo: constraints.c
 @am__fastdepCC_TRUE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpromises_la_CFLAGS) $(CFLAGS) -MT libpromises_la-constraints.lo -MD -MP -MF $(DEPDIR)/libpromises_la-constraints.Tpo -c -o libpromises_la-constraints.lo `test -f 'constraints.c' || echo '$(srcdir)/'`constraints.c

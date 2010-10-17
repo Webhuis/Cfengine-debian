@@ -94,7 +94,7 @@ int VerifyFileLeaf(char *path,struct stat *sb,struct Attributes attr,struct Prom
 
 {
 /* Here we can assume that we are in the parent directory of the leaf */
-
+ 
 if (!SelectLeaf(path,sb,attr,pp))
    {
    Debug("Skipping non-selected file %s\n",path);
@@ -185,11 +185,17 @@ int CfCreateFile(char *file,struct Promise *pp,struct Attributes attr)
 
 // attr.move_obstructions for MakeParentDirectory
 
+if (!IsAbsoluteFileName(file))
+   {
+   cfPS(cf_inform,CF_FAIL,"creat",pp,attr," !! Cannot create a relative filename %s - has no invariant meaning\n",file);
+   return false;
+   }
+ 
 if (strcmp(".",ReadLastNode(file)) == 0)
    {
    Debug("File object \"%s \"seems to be a directory\n",file);
 
-   if (!DONTDO)
+   if (!DONTDO && attr.transaction.action != cfa_warn)
       {
       if (!MakeParentDirectory(file,attr.move_obstructions))
          {
@@ -199,10 +205,15 @@ if (strcmp(".",ReadLastNode(file)) == 0)
 
       cfPS(cf_inform,CF_CHG,"",pp,attr," -> Created directory %s\n",file);
       }
+   else
+      {
+      CfOut(cf_error,""," !! Warning promised, need to create directory %s",file);
+      return false;
+      }
    }
 else
    {
-   if (!DONTDO)
+   if (!DONTDO && attr.transaction.action != cfa_warn)
       {
       mode_t saveumask = umask(0);
       mode_t filemode = 0600;  /* Decide the mode for filecreation */
@@ -232,6 +243,11 @@ else
          close(fd);
          umask(saveumask);
          }
+      }
+   else
+      {
+      CfOut(cf_error,""," !! Warning promised, need to create file %s\n",file);
+      return false;
       }
    }
 
@@ -400,9 +416,18 @@ int ScheduleEditOperation(char *filename,struct Attributes a,struct Promise *pp)
 { struct Bundle *bp;
   void *vp;
   struct FnCall *fp;
-  char *edit_bundle_name = NULL;
+  char *edit_bundle_name = NULL,lockname[CF_BUFSIZE];
   struct Rlist *params;
   int retval = false;
+  struct CfLock thislock;
+
+snprintf(lockname,CF_BUFSIZE-1,"fileedit-%s",pp->promiser);
+thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
+
+if (thislock.lock == NULL)
+   {
+   return false;
+   }
 
 pp->edcontext = NewEditContext(filename,a,pp);
 
@@ -410,6 +435,7 @@ if (pp->edcontext == NULL)
    {
    CfOut(cf_error,"","File %s was marked for editing but could not be opened\n",filename);
    FinishEditContext(pp->edcontext,a,pp);
+   YieldCurrentLock(thislock);
    return false;
    }
 
@@ -429,6 +455,7 @@ if (a.haveeditline)
    else
       {
       FinishEditContext(pp->edcontext,a,pp);
+      YieldCurrentLock(thislock);
       return false;
       }
 
@@ -449,6 +476,7 @@ if (a.haveeditline)
    }
 
 FinishEditContext(pp->edcontext,a,pp);
+YieldCurrentLock(thislock);
 return retval;
 }
 
@@ -1108,7 +1136,7 @@ if (cmpsb.st_dev != sb->st_dev)
 
 if (cmpsb.st_ino != sb->st_ino)
    {
-   CfOut(cf_error,"","ALERT: inode for %s changed %d -> %d",file,cmpsb.st_ino,sb->st_ino);
+   CfOut(cf_error,"","ALERT: inode for %s changed %lu -> %lu",file,cmpsb.st_ino,sb->st_ino);
    }
 
 if (cmpsb.st_mtime != sb->st_mtime)
@@ -1148,7 +1176,7 @@ CloseDB(dbp);
 int TransformFile(char *file,struct Attributes attr,struct Promise *pp)
 
 { char comm[CF_EXPANDSIZE],line[CF_BUFSIZE];
-  FILE *pop;
+  FILE *pop = NULL;
 
 if (attr.transformer == NULL || file == NULL)
    {
@@ -1158,21 +1186,34 @@ if (attr.transformer == NULL || file == NULL)
 ExpandScalar(attr.transformer,comm);
 CfOut(cf_inform,"","Transforming: %s ",comm);
 
-if ((pop = cf_popen(comm,"r")) == NULL)
+if (!IsExecutable(GetArg0(comm)))
    {
    cfPS(cf_inform,CF_FAIL,"",pp,attr,"Transformer %s %s failed",attr.transformer,file);
    return false;
    }
 
-while (!feof(pop))
+if (!DONTDO)
    {
-   CfReadLine(line,CF_BUFSIZE,pop);
-   CfOut(cf_inform,"",line);
+   if ((pop = cf_popen(comm,"r")) == NULL)
+      {
+      cfPS(cf_inform,CF_FAIL,"",pp,attr,"Transformer %s %s failed",attr.transformer,file);
+      return false;
+      }
+   
+   while (!feof(pop))
+      {
+      CfReadLine(line,CF_BUFSIZE,pop);
+      CfOut(cf_inform,"",line);
+      }
+   
+   cf_pclose(pop);
+   cfPS(cf_inform,CF_CHG,"",pp,attr,"Transformer %s => %s seemed to work ok",file,comm);   
    }
-
-cf_pclose(pop);
-
-cfPS(cf_inform,CF_CHG,"",pp,attr,"Transformer %s => %s seemed ok",file,comm);
+else
+   {
+   CfOut(cf_error,""," -> Need to transform file \"%s\" with \"%s\"",file,comm);
+   }
+       
 return true;
 }
 
@@ -1392,10 +1433,21 @@ void LogHashChange(char *file)
   time_t now = time(NULL);
   struct stat sb;
   mode_t perm = 0600;
+  static char prevFile[CF_MAXVARSIZE] = {0};
+
+
+  // we might get called twice..
+  if(strcmp(file,prevFile) == 0)
+    {
+    return;
+    }
+  
+  snprintf(prevFile,sizeof(prevFile),file);
+
 
 /* This is inefficient but we don't want to lose any data */
 
-snprintf(fname,CF_BUFSIZE,"%s/state/file_hash_event_history",CFWORKDIR);
+snprintf(fname,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_FILECHANGE);
 MapName(fname);
 
 #ifndef MINGW
@@ -1414,9 +1466,7 @@ if ((fp = fopen(fname,"a")) == NULL)
    return;
    }
 
-snprintf(timebuf,CF_MAXVARSIZE-1,"%s",cf_ctime(&now));
-Chop(timebuf);
-fprintf(fp,"%s,%s\n",timebuf,file);
+fprintf(fp,"%ld,%s\n",(long)now,file);
 fclose(fp);
 
 cf_chmod(fname,perm);
@@ -2008,37 +2058,41 @@ void Unix_VerifyFileAttributes(char *file,struct stat *dstat,struct Attributes a
 maskvalue = umask(0);                 /* This makes the DEFAULT modes absolute */
 
 newperm = (dstat->st_mode & 07777);
-newperm |= attr.perms.plus;
-newperm &= ~(attr.perms.minus);
 
-Debug("Unix_VerifyFileAttributes(%s -> %o)\n",file,newperm);
-
- /* directories must have x set if r set, regardless  */
-
-if (S_ISDIR(dstat->st_mode))
+if ((attr.perms.plus != CF_SAMEMODE) && (attr.perms.minus != CF_SAMEMODE))
    {
-   if (attr.perms.rxdirs)
+   newperm |= attr.perms.plus;
+   newperm &= ~(attr.perms.minus);
+
+   Debug("Unix_VerifyFileAttributes(%s -> %o)\n",file,newperm);
+   
+   /* directories must have x set if r set, regardless  */
+   
+   if (S_ISDIR(dstat->st_mode))
       {
-      Debug("Directory...fixing x bits\n");
-
-      if (newperm & S_IRUSR)
+      if (attr.perms.rxdirs)
          {
-         newperm  |= S_IXUSR;
+         Debug("Directory...fixing x bits\n");
+         
+         if (newperm & S_IRUSR)
+            {
+            newperm  |= S_IXUSR;
+            }
+         
+         if (newperm & S_IRGRP)
+            {
+            newperm |= S_IXGRP;
+            }
+         
+         if (newperm & S_IROTH)
+            {
+            newperm |= S_IXOTH;
+            }
          }
-
-      if (newperm & S_IRGRP)
+      else
          {
-         newperm |= S_IXGRP;
+         CfOut(cf_verbose,"","NB: rxdirs is set to false - x for r bits not checked\n");
          }
-
-      if (newperm & S_IROTH)
-         {
-         newperm |= S_IXOTH;
-         }
-      }
-   else
-      {
-      CfOut(cf_verbose,"","NB: rxdirs is set to false - x for r bits not checked\n");
       }
    }
 
@@ -2214,8 +2268,6 @@ if (attr.copy.preserve)
    }
 else
    {
-   CfOut(cf_verbose,""," -> Not attempting to preserve file permissions from the source");
-   
    if ((attr.perms.owners)->uid == CF_SAME_OWNER)          /* Preserve uid and gid  */
       {
       (attr.perms.owners)->uid = dstat->st_uid;

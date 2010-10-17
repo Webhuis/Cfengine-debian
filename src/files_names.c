@@ -179,7 +179,7 @@ if (expandregex) /* Expand one regex link and hand down */
 
             if (!FullTextMatch(pp->promiser,nextbuffer))
                {
-               CfOut(cf_error,"","Error recomputing references");
+               Debug("Error recomputing references for \"%s\" in: %s",pp->promiser,nextbuffer);
                }
 
             /* If there were back references there could still be match.x vars to expand */
@@ -300,6 +300,22 @@ DeleteSlash(path);
 if ((strlen(path)+len) > (CF_BUFSIZE - CF_BUFFERMARGIN))
    {
    CfOut(cf_error,"","Buffer overflow constructing string. Tried to add %s to %s\n",leaf,path);
+   return NULL;
+   }
+
+strcat(path,leaf);
+return path;
+}
+
+/*********************************************************************/
+
+char *Join(char *path,char *leaf,int bufsize)
+
+{ int len = strlen(leaf);
+
+if ((strlen(path)+len) > (bufsize - CF_BUFFERMARGIN))
+   {
+   CfOut(cf_error,"","Buffer overflow constructing string, len = %d > %d.\n",(strlen(path)+len),(bufsize - CF_BUFFERMARGIN));
    return NULL;
    }
 
@@ -588,7 +604,7 @@ if (strlen(str) > CF_EXPANDSIZE)
    return;
    }
 
-for (i = strlen(str)-1; isspace((int)str[i]); i--)
+for (i = strlen(str)-1; isspace((int)str[i]) && i >= 0; i--)
    {
    str[i] = '\0';
    }
@@ -680,18 +696,38 @@ return false;
 /*********************************************************************/
 
 int IsStrIn(char *str, char **strs)
-{
-  int i;
 
-  for(i = 0; strs[i] != NULL; i++)
-    {
-      if(strcmp(str, strs[i]) == 0)
-	{
-	return true;
-	}
-    }
+{ int i;
 
-  return false;
+for (i = 0; strs[i] != NULL; i++)
+   {
+   if (strcmp(str,strs[i]) == 0)
+      {
+      return true;
+      }
+   }
+
+return false;
+}
+
+/*********************************************************************/
+
+void FreeStringArray(char **strs)
+
+{ int i;
+
+if (strs == NULL)
+   {
+   return;
+   }
+
+for(i = 0; strs[i] != NULL; i++)
+   {
+   free(strs[i]);
+   }
+
+free(strs);
+strs = NULL;
 }
 
 /*********************************************************************/
@@ -872,6 +908,33 @@ return buffer;
 
 /*********************************************************************/
 
+char *Titleize (char *str)
+
+{ static char buffer[CF_BUFSIZE];
+  int i;
+
+if (str == NULL)
+   {
+   return NULL;
+   }
+  
+strcpy(buffer,str);
+
+if (strlen(buffer) > 1)
+   {
+   for (i = 1; buffer[i] != '\0'; i++)
+      {  
+      buffer[i] = ToLower(str[i]);
+      }
+   }
+
+*buffer = ToUpper(*buffer);
+
+return buffer;
+}
+
+/*********************************************************************/
+
 int SubStrnCopyChr(char *to,char *from,int len,char sep)
 
 { char *sp,*sto = to;
@@ -945,6 +1008,32 @@ for (sp = string; *sp != '\0'; sp++)
    }
 
 return count;
+}
+
+/*********************************************************************/
+
+void ReplaceChar(char *in, char *out, int outSz, char from, char to)
+
+/* Replaces all occurences of 'from' to 'to' in preallocated
+ * string 'out'. */
+{
+  int len;
+  int i;
+
+memset(out,0,outSz);
+len = strlen(in);
+  
+for(i = 0; (i < len) && (i < outSz - 1); i++)
+   {
+   if (in[i] == from)
+      {
+      out[i] = to;
+      }
+   else
+      {
+      out[i] = in[i];
+      }
+   }
 }
 
 /*********************************************************************/

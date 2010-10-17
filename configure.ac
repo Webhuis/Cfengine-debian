@@ -16,7 +16,7 @@ dnl
 dnl The version in the next line is the only one to set
 dnl
 
-AM_INIT_AUTOMAKE(cfengine, 3.0.5)   dnl remember to set version
+AM_INIT_AUTOMAKE(cfengine, 3.1.0b2)   dnl remember to set version
 
 AM_CONFIG_HEADER(src/conf.h)
 
@@ -26,7 +26,7 @@ AM_CONFIG_HEADER(src/conf.h)
 # Don't add if cross-compiling (setting host), to avoid using native libs.
 #
 if test "x$host" = "x"; then
-  for x in /usr/lib64 /usr/local/gnu/lib /usr/local/gnulib /opt/dce/lib /sw/lib 
+  for x in /usr/lib64 /usr/local/gnu/lib /usr/local/gnulib /opt/dce/lib /sw/lib /usr/pkg/lib /usr/X11R7/lib
   do
     if test -d "$x"; then
       y=`expr " $LDFLAGS " : ".* -L$x "`
@@ -42,7 +42,7 @@ fi
 # Don't add if cross-compiling (setting host), to avoid using native libs.
 # 
 if test "x$host" = "x"; then
-  for x in /usr/local/gnu/include /opt/dce/include /sw/include
+  for x in /usr/local/include /usr/local/gnu/include /opt/dce/include /sw/include /usr/pkg/include /usr/X11R7/include	
   do 
     if test -d "$x"; then
       y=`expr " $CPPFLAGS " : ".* -I$x "`
@@ -81,6 +81,15 @@ dnl Checks for libraries.
 dnl ######################################################################
 
 AC_CHECK_LIB(m,main)
+
+AC_ARG_WITH(diagnostics,
+	AS_HELP_STRING(--with-diagnostics, [support test suite]),with_diagnostics=yes,
+	with_diagnostics=no)
+
+if test "x$with_diagnostics" != xno; then
+   AC_DEFINE(BUILD_TESTSUITE, 1, [Build Test suite])
+fi
+
 
 dnl Look for ldap
 
@@ -216,8 +225,8 @@ if test $WITH_QDBM = 0 -a $WITH_TOKYO = 0; then
     AC_MSG_ERROR(This release of cfengine requires a version of BerkeleyDB 4.4 or later)
   else
     if test "x$BERKELEY_DB_DIR" = "xdefault" ; then
-        for v in BerkeleyDB.4.2 BerkeleyDB.4.3 BerkeleyDB.4.4 BerkeleyDB.4.5 BerkeleyDB.4.6 BerkeleyDB.4.7; do
-            for d in $prefix /opt /usr/local /usr; do
+        for v in BerkeleyDB.4.2 BerkeleyDB.4.3 BerkeleyDB.4.4 BerkeleyDB.4.5 BerkeleyDB.4.6 BerkeleyDB.4.7 BerkeleyDB.4.8; do
+            for d in $prefix /opt /usr/local /usr/pkg /usr; do
                 test -d "$d/$v" && BERKELEY_DB_DIR="$d/$v"
             done
         done
@@ -242,7 +251,7 @@ if test $WITH_QDBM = 0 -a $WITH_TOKYO = 0; then
 			CFLAGS="$CFLAGS $BERKELEY_DB_CFLAGS"
 			LDFLAGS="$LDFLAGS $BERKELEY_DB_LDFLAGS"
 			AC_SEARCH_LIBS(db_create, 
-				[db-4 db4 db-4.7 db-4.6 db-4.5 db-4.4 db-4.3 db-4.2 db-4.1 db-4.0], 
+				[db-4 db4 db-4.8 db-4.7 db-4.6 db-4.5 db-4.4 db-4.3 db-4.2 db-4.1 db-4.0], 
 				[BERKELEY_DB_LIB=$ac_cv_search_db_create])
 			CFLAGS="$save_CFLAGS"
 			LDFLAGS="$save_LDFLAGS"
@@ -292,7 +301,7 @@ if test $WITH_QDBM = 0 -a $WITH_TOKYO = 0; then
     elif test -d "$BERKELEY_DB_DIR"; then
 
         BERKELEY_DB_CFLAGS="-I$BERKELEY_DB_DIR/include"
-        for v in . db47 db46 db45 db44 db43 db42 db41 db40 db4 db33 db32 db3 db; do
+        for v in . db48 db47 db46 db45 db44 db43 db42 db41 db40 db4 db33 db32 db3 db; do
             if test -f "$BERKELEY_DB_DIR/include/$v/db.h"; then
                 BERKELEY_DB_CFLAGS="-I$BERKELEY_DB_DIR/include/$v"
 		break
@@ -300,7 +309,7 @@ if test $WITH_QDBM = 0 -a $WITH_TOKYO = 0; then
         done
 
         BERKELEY_DB_LIB="-ldb"
-        for v in db-4.7 db4.7 db47 db-4.6 db4.6 db46 db-4.5 db4.5 db45 db-4.4 db4.4 db44; do
+        for v in db-4.8 db48 db-4.7 db4.7 db47 db-4.6 db4.6 db46 db-4.5 db4.5 db45 db-4.4 db4.4 db44; do
             if test -f "$BERKELEY_DB_DIR/lib/lib$v.so"; then
                 BERKELEY_DB_LIB="-l$v"
 		break
@@ -470,6 +479,30 @@ AC_SUBST(OPENSSL_LIB_LIB)
 #
 # Others
 #
+
+#
+# Report database driver - MongoDB C interface
+#
+
+AC_ARG_WITH(mongo,
+	AS_HELP_STRING(--with-mongo, [support client MongoDB report aggregation database]),with_mongo=yes,
+	with_mongo=no)
+
+if test "x$with_mongo" = xyes; then
+   AC_MSG_CHECKING(for libmongoc)
+   WITH_MONGO=1
+else
+   WITH_MONGO=0
+fi
+
+if test $WITH_MONGO = 1; then
+  AC_CHECK_HEADERS(mongo.h)
+  AC_CHECK_HEADERS(mongo_except.h)
+  AC_CHECK_HEADERS(bson.h)
+  AC_CHECK_HEADERS(platform_hacks.h)
+  AC_CHECK_LIB(mongoc,main)
+fi
+
 
 AC_ARG_WITH(libvirt,
 	AS_HELP_STRING(--with-libvirt, [support virtual machine management]),with_virt=yes,
@@ -708,14 +741,13 @@ AC_ARG_ENABLE(DCE,[  --enable-DCE            support for DCE and ACLs],[
 dnl ######################################################################
 dnl Give the chance to enable SELINUX
 dnl ######################################################################
-dnl 
-AC_ARG_ENABLE(selinux, dnl 
+
+AC_ARG_ENABLE(selinux,
                [  --enable-selinux              Enable use of the SELINUX libraries],
                [AC_DEFINE(WITH_SELINUX, 1, [Define if you want to use SELINUX])
                LIB_SELINUX="-lselinux"
                LIBS="$LIBS $LIB_SELINUX"
                AC_SUBST(LIB_SELINUX)])
-
 
 dnl ######################################################################
 dnl OS specific stuff
@@ -946,7 +978,7 @@ if test x"$GCC" = "xyes"; then
 	
 dnl # -Wformat - to be considered
 
-	GCC_CFLAG="-g -O2 -Wreturn-type -Wmissing-prototypes -Wuninitialized"		
+	GCC_CFLAG="-g -Wreturn-type -Wmissing-prototypes -Wuninitialized"		
 	AC_MSG_RESULT(yes)
 	AC_SUBST(GCC_CFLAG)
 else 
@@ -1043,7 +1075,15 @@ else
   AC_MSG_RESULT( -> No libvirt support included)
 fi
 
+if test $WITH_MONGO = 1; then
+   AC_MSG_RESULT( -> Configured with libmongoc support)
+else
+   AC_MSG_RESULT( -> No libmongoc support included)
+fi
+
 AC_MSG_RESULT( )
+
+
 
 dnl ######################################################################
 dnl Now make the Makefiles

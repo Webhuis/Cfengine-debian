@@ -68,14 +68,119 @@ while (!RAND_status())
    }
 }
 
+/*****************************************************************************/
+
+void KeepKeyPromises()
+
+{ unsigned long err;
+  RSA *pair;
+  FILE *fp;
+  struct stat statbuf;
+  int fd;
+  static char *passphrase = "Cfengine passphrase";
+  const EVP_CIPHER *cipher;
+  char vbuff[CF_BUFSIZE];
+
+NewScope("common");
+  
+cipher = EVP_des_ede3_cbc();
+
+if (cfstat(CFPUBKEYFILE,&statbuf) != -1)
+   {
+   CfOut(cf_cmdout,"","A key file already exists at %s\n",CFPUBKEYFILE);
+   return;
+   }
+
+if (cfstat(CFPRIVKEYFILE,&statbuf) != -1)
+   {
+   CfOut(cf_cmdout,"","A key file already exists at %s\n",CFPRIVKEYFILE);
+   return;
+   }
+
+printf("Making a key pair for cfengine, please wait, this could take a minute...\n"); 
+
+pair = RSA_generate_key(2048,35,NULL,NULL);
+
+if (pair == NULL)
+   {
+   err = ERR_get_error();
+   CfOut(cf_error,"","Unable to generate key: %s\n",ERR_reason_error_string(err));
+   return;
+   }
+
+if (DEBUG)
+   {
+   RSA_print_fp(stdout,pair,0);
+   }
+ 
+fd = open(CFPRIVKEYFILE,O_WRONLY | O_CREAT | O_TRUNC, 0600);
+
+if (fd < 0)
+   {
+   CfOut(cf_error,"open","Open %s failed: %s.",CFPRIVKEYFILE,strerror(errno));
+   return;
+   }
+ 
+if ((fp = fdopen(fd, "w")) == NULL )
+   {
+   CfOut(cf_error,"fdopen","Couldn't open private key %s.",CFPRIVKEYFILE);
+   close(fd);
+   return;
+   }
+
+CfOut(cf_verbose,"","Writing private key to %s\n",CFPRIVKEYFILE);
+ 
+if (!PEM_write_RSAPrivateKey(fp,pair,cipher,passphrase,strlen(passphrase),NULL,NULL))
+   {
+   err = ERR_get_error();
+   CfOut(cf_error,"","Couldn't write private key: %s\n",ERR_reason_error_string(err));
+   return;
+   }
+
+fclose(fp);
+ 
+fd = open(CFPUBKEYFILE,O_WRONLY | O_CREAT | O_TRUNC, 0600);
+
+if (fd < 0)
+   {
+   CfOut(cf_error,"open","Unable to open public key %s.",CFPUBKEYFILE);
+   return;
+   }
+ 
+if ((fp = fdopen(fd, "w")) == NULL )
+   {
+   CfOut(cf_error,"fdopen","Open %s failed.",CFPUBKEYFILE);
+   close(fd);
+   return;
+   }
+
+CfOut(cf_verbose,"","Writing public key to %s\n",CFPUBKEYFILE);
+ 
+if (!PEM_write_RSAPublicKey(fp,pair))
+   {
+   err = ERR_get_error();
+   CfOut(cf_error,"","Unable to write public key: %s\n",ERR_reason_error_string(err));
+   return;
+   }
+
+fclose(fp);
+ 
+snprintf(vbuff,CF_BUFSIZE,"%s/randseed",CFWORKDIR);
+RAND_write_file(vbuff);
+cf_chmod(vbuff,0644); 
+}
+
 /*********************************************************************/
 
 void LoadSecretKeys()
 
 { FILE *fp;
-  static char *passphrase = "Cfengine passphrase";
+  static char *passphrase = "Cfengine passphrase",name[CF_BUFSIZE],source[CF_BUFSIZE];
+  char guard[CF_MAXVARSIZE];
+  unsigned char digest[EVP_MAX_MD_SIZE+1];
   unsigned long err;
-  
+  struct stat sb;
+
 if ((fp = fopen(CFPRIVKEYFILE,"r")) == NULL)
    {
    CfOut(cf_inform,"fopen","Couldn't find a private key (%s) - use cf-key to get one",CFPRIVKEYFILE);
@@ -93,7 +198,7 @@ if ((PRIVKEY = PEM_read_RSAPrivateKey(fp,(RSA **)NULL,NULL,passphrase)) == NULL)
 
 fclose(fp);
 
-CfOut(cf_verbose,"","Loaded %s\n",CFPRIVKEYFILE); 
+CfOut(cf_verbose,""," -> Loaded private key %s\n",CFPRIVKEYFILE); 
 
 if ((fp = fopen(CFPUBKEYFILE,"r")) == NULL)
    {
@@ -110,7 +215,7 @@ if ((PUBKEY = PEM_read_RSAPublicKey(fp,NULL,NULL,passphrase)) == NULL)
    return;
    }
 
-CfOut(cf_verbose,"","Loaded %s\n",CFPUBKEYFILE);  
+CfOut(cf_verbose,""," -> Loaded public key %s\n",CFPUBKEYFILE);  
 fclose(fp);
 
 if (BN_num_bits(PUBKEY->e) < 2 || !BN_is_odd(PUBKEY->e))
@@ -118,82 +223,143 @@ if (BN_num_bits(PUBKEY->e) < 2 || !BN_is_odd(PUBKEY->e))
    FatalError("RSA Exponent too small or not odd");
    }
 
+snprintf(name,CF_MAXVARSIZE-1,"%s%cpolicy_server.dat",CFWORKDIR,FILE_SEPARATOR);
+
+if ((fp = fopen(name,"r")) != NULL)
+   {
+   fscanf(fp,"%s",POLICY_SERVER);
+   fclose(fp);
+   }
+
+
+/* Check that we have our own SHA key form of the key in the IP on the hub */
+
+HashPubKey(PUBKEY,digest,CF_DEFAULT_DIGEST);
+snprintf(name,CF_MAXVARSIZE,"%s/ppkeys/%s-%s.pub",CFWORKDIR,"root",HashPrint(CF_DEFAULT_DIGEST,digest));
+MapName(name);
+
+snprintf(source,CF_MAXVARSIZE,"%s/ppkeys/localhost.pub",CFWORKDIR);
+MapName(source);
+
+// During bootstrap we need the pre-registered IP/hash pair on the hub
+
+snprintf(guard,sizeof(guard),"%s/state/am_policy_hub",CFWORKDIR);
+MapName(guard);
+
+// need to use cf_stat
+
+if (stat(name,&sb) == -1 && stat(guard,&sb) != -1)
+   {
+   LastSaw("root",POLICY_SERVER,digest,cf_connect);
+   UpdateLastSeen();
+
+   if (!LinkOrCopy(source,name,false))
+      {
+      CfOut(cf_error,""," -> Unable to clone server's key file as %s\n",name);
+      }
+   }
+
 }
 
 /*********************************************************************/
 
-RSA *HavePublicKey(char *name)
+RSA *HavePublicKeyByIP(char *username,char *ipaddress)
 
-{ char filename[CF_BUFSIZE],*sp;
+{ char hash[CF_MAXVARSIZE];
+ 
+IPString2KeyDigest(ipaddress,hash);
+
+return HavePublicKey(username,ipaddress,hash);
+}
+
+/*********************************************************************/
+
+RSA *HavePublicKey(char *username,char *ipaddress,char *digest)
+
+{ char keyname[CF_MAXVARSIZE],newname[CF_BUFSIZE],oldname[CF_BUFSIZE],*sp;
   struct stat statbuf; 
   static char *passphrase = "public";
   unsigned long err;
   FILE *fp;
   RSA *newkey = NULL;
 
-Debug("HavePublickey(%s)\n",name);
+snprintf(keyname,CF_MAXVARSIZE,"%s-%s",username,digest);  
+
+Debug("HavePublickey(%s)\n",keyname);
   
-if (!IsPrivileged())
-   {
-   if ((sp = getenv("HOME")) == NULL)
-      {
-      FatalError("You do not have a HOME variable pointing to your home directory");
-      }  
+snprintf(newname,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,keyname);   
+MapName(newname);
 
-   snprintf(filename,CF_BUFSIZE,"%s/.cfagent/ppkeys/%s.pub",sp,name);
-   }
-else
-   {
-   snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,name);
-   }
-   
-MapName(filename);
- 
-if (cfstat(filename,&statbuf) == -1)
-   {
-   Debug("Did not have key %s\n",name);
-   return NULL;
-   }
-else
-   {
-   if ((fp = fopen(filename,"r")) == NULL)
-      {
-      CfOut(cf_error,"fopen","Couldn't find a public key (%s) - use cf-key to get one",filename);
-      return NULL;
-      }
-   
-   if ((newkey = PEM_read_RSAPublicKey(fp,NULL,NULL,passphrase)) == NULL)
-      {
-      err = ERR_get_error();
-      CfOut(cf_error,"PEM_read","Error reading Private Key = %s\n",ERR_reason_error_string(err));
-      fclose(fp);
-      return NULL;
-      }
-   
-   CfOut(cf_verbose,"","Loaded %s\n",filename);  
-   fclose(fp);
-   
-   if (BN_num_bits(newkey->e) < 2 || !BN_is_odd(newkey->e))
-      {
-      FatalError("RSA Exponent too small or not odd");
-      }
+// Check memory cache rlist
 
+if (newkey = SelectKeyRing(keyname))
+   {
+   CfOut(cf_verbose,""," -> Retrieved %s from cache",keyname);
    return newkey;
    }
+else if (cfstat(newname,&statbuf) == -1)
+   {
+   CfOut(cf_verbose,""," -> Did not find new key format %s",newname);
+   strcpy(newname,newname);
+   snprintf(oldname,CF_BUFSIZE,"%s/ppkeys/%s-%s.pub",CFWORKDIR,username,ipaddress);   
+   MapName(oldname);
+
+   CfOut(cf_verbose,""," -> Trying old style %s",oldname);
+      
+   if (cfstat(oldname,&statbuf) == -1)
+      {      
+      Debug("Did not have old-style key %s\n",oldname);
+      return NULL;
+      }
+
+   if (strlen(keyname) > 0)
+      {
+      CfOut(cf_inform,""," -> Renaming old key from %s to %s",oldname,newname);
+      rename(oldname,newname);
+      }
+   }
+
+if ((fp = fopen(newname,"r")) == NULL)
+   {
+   CfOut(cf_error,"fopen","Couldn't find a public key (%s)",newname);
+   return NULL;
+   }
+
+if ((newkey = PEM_read_RSAPublicKey(fp,NULL,NULL,passphrase)) == NULL)
+   {
+   err = ERR_get_error();
+   CfOut(cf_error,"PEM_read","Error reading Private Key = %s\n",ERR_reason_error_string(err));
+   fclose(fp);
+   return NULL;
+   }
+
+fclose(fp);
+
+if (BN_num_bits(newkey->e) < 2 || !BN_is_odd(newkey->e))
+   {
+   FatalError("RSA Exponent too small or not odd");
+   }
+
+IdempAddToKeyRing(keyname,newkey);
+return newkey;
 }
 
 /*********************************************************************/
 
-void SavePublicKey(char *name,RSA *key)
+void SavePublicKey(char *user,char *ipaddress,char *digest,RSA *key)
 
-{ char filename[CF_BUFSIZE],*sp;
+{ char keyname[CF_MAXVARSIZE],filename[CF_BUFSIZE],*sp;
   struct stat statbuf;
   FILE *fp;
   int err;
 
-Debug("SavePublicKey %s\n",name); 
+Debug("SavePublicKey %s\n",ipaddress); 
 
-snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,name);
+snprintf(keyname,CF_MAXVARSIZE,"%s-%s",user,digest);
+
+IdempAddToKeyRing(keyname,key);
+
+snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,keyname);
 MapName(filename);
 
 if (cfstat(filename,&statbuf) != -1)
@@ -218,19 +384,21 @@ if (!PEM_write_RSAPublicKey(fp,key))
    }
 
 ThreadUnlock(cft_system);
-
 fclose(fp);
 }
 
 /*********************************************************************/
 
-void DeletePublicKey(name)
-
-char *name;
+void DeletePublicKey(char *user,char *ipaddress,char *digest)
 
 { char filename[CF_BUFSIZE],*sp;
 
-snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,name);
+snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s-%s.pub",CFWORKDIR,user,ipaddress);
+MapName(filename);
+unlink(filename);
+
+snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s-%s.pub",CFWORKDIR,user,digest);
+MapName(filename);
 unlink(filename);
 }
 
@@ -251,7 +419,12 @@ void MD5Random(unsigned char digest[EVP_MAX_MD_SIZE+1])
  
 CfOut(cf_verbose,"","Looking for a random number seed...\n");
 
+#ifdef HAVE_LIBCFNOVA
+md = EVP_get_digestbyname("sha256");
+#else
 md = EVP_get_digestbyname("md5");
+#endif
+
 EVP_DigestInit(&context,md);
 
 CfOut(cf_verbose,"","...\n");
@@ -381,6 +554,6 @@ for (i = 0; i < EVP_MAX_MD_SIZE+1; i++)
    digest[i] = 0;
    }
  
-HashString((char *)pubkey,sizeof(BIGNUM)-4,digest,cf_md5);
-return HashPrint(cf_md5,digest);
+HashString((char *)pubkey,sizeof(BIGNUM)-4,digest,CF_DEFAULT_DIGEST);
+return HashPrint(CF_DEFAULT_DIGEST,digest);
 }

@@ -31,7 +31,9 @@
 
 #include "cf3.defs.h"
 #include "cf3.extern.h"
+#ifndef HAVE_SERV_H
 #include "cf3.server.h"
+#endif
 
 int main (int argc,char *argv[]);
 void StartServer (int argc, char **argv);
@@ -56,6 +58,7 @@ void CfGetFile (struct cfd_get_arg *args);
 void CfEncryptGetFile(struct cfd_get_arg *args);
 void CompareLocalHash(struct cfd_connection *conn, char *sendbuffer, char *recvbuffer);
 void GetServerLiteral(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer,int encrypted);
+int GetServerQuery(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer);
 int CfOpenDirectory (struct cfd_connection *conn, char *sendbuffer, char *oldDirname);
 int CfSecOpenDirectory (struct cfd_connection *conn, char *sendbuffer, char *dirname);
 void Terminate (int sd);
@@ -72,7 +75,6 @@ time_t SecondsTillAuto (void);
 void SetAuto (int seconds);
 int cfscanf (char *in, int len1, int len2, char *out1, char *out2, char *out3);
 int AuthenticationDialogue (struct cfd_connection *conn,char *buffer, int buffersize);
-char *MapAddress (char *addr);
 int IsKnownHost (RSA *oldkey,RSA *newkey,char *addr,char *user);
 void AddToKeyDB (RSA *key,char *addr);
 int SafeOpen (char *filename);
@@ -187,7 +189,7 @@ void CheckOpts(int argc,char **argv)
   int optindex = 0;
   int c;
   
-while ((c=getopt_long(argc,argv,"d:vIf:D:N:VSxLFM",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"d:vIKf:D:N:VSxLFM",OPTIONS,&optindex)) != EOF)
   {
   switch ((char) c)
       {
@@ -270,6 +272,7 @@ while ((c=getopt_long(argc,argv,"d:vIf:D:N:VSxLFM",OPTIONS,&optindex)) != EOF)
 if (argv[optind] != NULL)
    {
    CfOut(cf_error,"","Unexpected argument with no preceding option: %s\n",argv[optind]);
+   FatalError("Aborted");
    }
 
 Debug("Set debugging\n");
@@ -283,6 +286,7 @@ void ThisAgentInit()
 NewScope("remote_access");
 umask(077);
 CFDSTARTTIME = time(NULL);
+KEYTTL = 24;
 }
 
 /*******************************************************************/
@@ -376,6 +380,8 @@ while (true)
    if (ACTIVE_THREADS == 0)
       {
       CheckFileChanges(argc,argv,sd);
+      PurgeKeyRing();
+      UpdateLastSeen();
       }
    
    FD_ZERO(&rset);
@@ -384,7 +390,7 @@ while (true)
    timeout.tv_sec = 10;  /* Set a 10 second timeout for select */
    timeout.tv_usec = 0;
 
-   CfOut(cf_verbose,""," -> Waiting at incoming select...\n");
+   Debug(" -> Waiting at incoming select...\n");
    
    ret_val = select((sd+1),&rset,NULL,NULL,&timeout);
 
@@ -710,7 +716,7 @@ conn = NewConn(sd_reply);
 
 strncpy(conn->ipaddr,ipaddr,CF_MAX_IP_LEN-1);
 
-CfOut(cf_verbose,"","New connection...(from %s/%d)\n",conn->ipaddr,sd_reply);
+CfOut(cf_verbose,"","New connection...(from %s:sd %d)\n",conn->ipaddr,sd_reply);
  
 #if defined HAVE_LIBPTHREAD || defined BUILTIN_GCC_THREAD
 
@@ -819,6 +825,7 @@ if (NewPromiseProposals())
       NewScope("control_common");
       NewScope("mon");
       NewScope("remote_access");
+      NewScalar("sys","policy_hub",POLICY_SERVER,cf_str);
       GetNameInfo3();
       CfGetInterfaceInfo(cf_server);
       Get3Environment();
@@ -838,7 +845,7 @@ if (NewPromiseProposals())
    }
 else
    {
-   CfOut(cf_verbose,""," -> No new promises found\n");
+   Debug(" -> No new promises found\n");
    }
 }
 
@@ -958,13 +965,13 @@ if (strlen(recvbuffer) == 0)
    return false;
    }
   
-CfOut(cf_verbose,"","Received: [%s] on socket %d\n",recvbuffer,conn->sd_reply);
+Debug("Received: [%s] on socket %d\n",recvbuffer,conn->sd_reply);
 
 switch (GetCommand(recvbuffer))
    {
    case cfd_exec:
        memset(args,0,CF_BUFSIZE);
-       sscanf(recvbuffer,"EXEC %[^\n]",args);
+       sscanf(recvbuffer,"EXEC %255[^\n]",args);
        
        if (!conn->id_verified)
           {
@@ -1433,6 +1440,45 @@ switch (GetCommand(recvbuffer))
        ReplyServerContext(conn,sendbuffer,recvbuffer,encrypted,classes);
        return true;
 
+   case cfd_squery:
+
+       sscanf(recvbuffer,"SQUERY %u",&len);
+
+       if (len >= sizeof(out) || received != len+CF_PROTO_OFFSET)
+          {
+          CfOut(cf_inform,"","Decrypt error SQUERY\n");
+          RefuseAccess(conn,sendbuffer,0,"decrypt error SVAR");
+          return true;
+          }
+
+       memcpy(out,recvbuffer+CF_PROTO_OFFSET,len);
+       plainlen = DecryptString(conn->encryption_type,out,recvbuffer,conn->session_key,len);
+       
+       if (strncmp(recvbuffer,"QUERY",3) !=0)
+          {
+          CfOut(cf_inform,"","QUERY protocol defect\n");
+          RefuseAccess(conn,sendbuffer,0,"decryption failure");
+          return false;
+          }
+
+       if (! conn->id_verified)
+          {
+          CfOut(cf_inform,"","ID not verified\n");
+          RefuseAccess(conn,sendbuffer,0,recvbuffer);
+          return true;
+          }
+       
+       if (!LiteralAccessControl(recvbuffer,conn,true,VARADMIT,VARDENY))
+          {
+          CfOut(cf_inform,"","Query access failure\n");
+          RefuseAccess(conn,sendbuffer,0,recvbuffer);
+          return false;   
+          }       
+
+       if (GetServerQuery(conn,sendbuffer,recvbuffer))
+          {
+          return true;
+          }
    }
  
 sprintf (sendbuffer,"BAD: Request denied\n");
@@ -1593,7 +1639,7 @@ else
 
 CfOut(cf_inform,"","Executing command %s\n",ebuff);
  
-if ((pp = cf_popen(ebuff,"r")) == NULL)
+if ((pp = cf_popen_sh(ebuff,"r")) == NULL)
    {
    CfOut(cf_error,"pipe","Couldn't open pipe to command %s\n",ebuff);
    snprintf(sendbuffer,CF_BUFSIZE,"Unable to run %s\n",ebuff);
@@ -1698,12 +1744,6 @@ ThreadLock(cft_system);
 strncpy(dns_assert,ToLowerStr(fqname),CF_MAXVARSIZE-1);
 strncpy(ip_assert,ipstring,CF_MAXVARSIZE-1);
 
-if (strcmp(ip_assert,MapAddress(conn->ipaddr)) != 0)
-   {
-   CfOut(cf_verbose,"","IP address mismatch between client's assertion (%s) and socket (%s) - untrustworthy connection\n",ip_assert,conn->ipaddr);
-   return false;
-   }
-
 ThreadUnlock(cft_system);
 
 /* It only makes sense to check DNS by reverse lookup if the key had to be accepted
@@ -1719,12 +1759,14 @@ if ((conn->trust == false) || IsMatchItemIn(SKIPVERIFY,MapAddress(conn->ipaddr))
    strncpy(conn->username,username,CF_MAXVARSIZE);
 
 #ifdef MINGW  /* NT uses security identifier instead of uid */
+
    if (!NovaWin_UserNameToSid(username, (SID *)conn->sid, CF_MAXSIDSIZE, false))
       {
       memset(conn->sid, 0, CF_MAXSIDSIZE);  /* is invalid sid - discarded */
       }
    
 #else  /* NOT MINGW */
+
    if ((pw=getpwnam(username)) == NULL) /* Keep this inside mutex */
       {      
       conn->uid = -2;
@@ -1733,12 +1775,17 @@ if ((conn->trust == false) || IsMatchItemIn(SKIPVERIFY,MapAddress(conn->ipaddr))
       {
       conn->uid = pw->pw_uid;
       }
+
 #endif  /* NOT MINGW */
-   
-   LastSaw(dns_assert,cf_accept);
    return true;
    }
- 
+
+if (strcmp(ip_assert,MapAddress(conn->ipaddr)) != 0)
+   {
+   CfOut(cf_verbose,"","IP address mismatch between client's assertion (%s) and socket (%s) - untrustworthy connection\n",ip_assert,conn->ipaddr);
+   return false;
+   }
+
 if (strlen(dns_assert) == 0)
    {
    CfOut(cf_verbose,"","DNS asserted name was empty - untrustworthy connection\n");
@@ -1832,9 +1879,11 @@ else
    if (hp->h_addr_list[0] != NULL)
       {
       CfOut(cf_verbose,"","Checking address number %d for non-canonical names (aliases)\n",i);
+
       for (j = 0; hp->h_aliases[j] != NULL; j++)
          {
          CfOut(cf_verbose,"","Comparing [%s][%s]\n",hp->h_aliases[j],ip_assert);
+
          if (strcmp(hp->h_aliases[j],ip_assert) == 0)
             {
             CfOut(cf_verbose,"","Non-canonical name (alias) matched host's assertion - id confirmed as %s\n",dns_assert);
@@ -1889,7 +1938,6 @@ if (!matched)
  
 CfOut(cf_verbose,"","Host ID is %s\n",dns_assert);
 strncpy(conn->hostname,dns_assert,CF_MAXVARSIZE-1);
-LastSaw(dns_assert,cf_accept); 
  
 CfOut(cf_verbose,"","User ID seems to be %s\n",username); 
 strncpy(conn->username,username,CF_MAXVARSIZE-1);
@@ -1923,7 +1971,7 @@ int AccessControl(char *oldFilename,struct cfd_connection *conn,int encrypt,stru
   char transrequest[CF_BUFSIZE],transpath[CF_BUFSIZE];
   struct stat statbuf;
 
-TranslatePath(filename, oldFilename);
+TranslatePath(filename,oldFilename);
 
 Debug("AccessControl(%s)\n",filename);
 
@@ -1952,19 +2000,22 @@ CompressPath(realname,path);
 AddSlash(realname);
 strcat(realname,lastnode);
 
-ThreadLock(cft_system);
-
 strncpy(transrequest,MapName(realname),CF_BUFSIZE-1);
+
 #ifdef MINGW
 // NT has case-insensitive path names
 int i;
+
+ThreadLock(cft_system);
+
 for (i = 0; i < strlen(transrequest); i++)
    {
    transrequest[i] = ToLower(transrequest[i]);
    }
-#endif  /* MINGW */
 
 ThreadUnlock(cft_system);
+
+#endif  /* MINGW */
 
 if (lstat(transrequest,&statbuf) == -1)
    {
@@ -1987,10 +2038,8 @@ for (ap = vadmit; ap != NULL; ap=ap->next)
    int res = false;
    Debug("Examining rule in access list (%s,%s)?\n",realname,ap->path);
 
-   ThreadLock(cft_system);
    strncpy(transpath,ap->path,CF_BUFSIZE-1);
    MapName(transpath);
-   ThreadUnlock(cft_system);
 
    if ((strlen(transrequest) > strlen(transpath)) && strncmp(transpath,transrequest,strlen(transpath)) == 0 && transrequest[strlen(transpath)] == FILE_SEPARATOR)
       {
@@ -2096,8 +2145,17 @@ int LiteralAccessControl(char *in,struct cfd_connection *conn,int encrypt,struct
   char *sp;
   struct stat statbuf;
   char name[CF_BUFSIZE];
- 
-sscanf(in,"VAR %[^\n]",name);
+
+name[0] = '\0';
+
+if (strncmp(in,"VAR",3) == 0)
+   {
+   sscanf(in,"VAR %255[^\n]",name);
+   }
+else
+   {
+   sscanf(in,"QUERY %128s",name);
+   }
 
 Debug("\n\nLiteralAccessControl(%s)\n",name);
 
@@ -2106,7 +2164,7 @@ conn->maproot = false;
 for (ap = vadmit; ap != NULL; ap=ap->next)
    {
    int res = false;
-   Debug("Examining rule in access list (%s,%s)?\n",name,ap->path);
+   CfOut(cf_verbose,"","Examining rule in access list (%s,%s)?\n",name,ap->path);
       
    if (strcmp(ap->path,name) == 0)
       {
@@ -2119,7 +2177,7 @@ for (ap = vadmit; ap != NULL; ap=ap->next)
 
       if (ap->literal == false)
          {
-         CfOut(cf_error,"","Variable %s requires a literal server item...cannot set variable directly by path\n",ap->path);
+         CfOut(cf_error,"","Variable/query \"%s\" requires a literal server item...cannot set variable directly by path\n",ap->path);
          access = false;
          break;
          }
@@ -2210,7 +2268,7 @@ struct Item *ContextAccessControl(char *in,struct cfd_connection *conn,int encry
   struct Item *ip,*matches = NULL, *candidates = NULL;
   char filename[CF_BUFSIZE];
 
-sscanf(in,"CONTEXT %[^\n]",client_regex);
+sscanf(in,"CONTEXT %255[^\n]",client_regex);
 
 Debug("\n\nContextAccessControl(%s)\n",client_regex);
 
@@ -2268,7 +2326,7 @@ for (ip = candidates; ip != NULL; ip=ip->next)
          
          if (ap->classpattern == false)
             {
-            CfOut(cf_error,"","Variable %s requires a literal server item...cannot set variable directly by path\n",ap->path);
+            CfOut(cf_error,"","Context %s requires a literal server item...cannot set variable directly by path\n",ap->path);
             access = false;
             continue;
             }
@@ -2421,7 +2479,7 @@ int AuthenticationDialogue(struct cfd_connection *conn,char *recvbuffer, int rec
   unsigned char digest[EVP_MAX_MD_SIZE+1];
   unsigned int crypt_len, nonce_len = 0,encrypted_len = 0;
   char sauth[10], iscrypt ='n',enterprise_field = 'c';
-  int len = 0,keylen, session_size;
+  int len_n = 0,len_e = 0,keylen, session_size;
   unsigned long err;
   RSA *newkey;
 
@@ -2506,9 +2564,17 @@ else
 
 ThreadUnlock(cft_system);
 
-/* Client's ID is now established by key or trusted, reply with md5 */
+/* Client's ID is now established by key or trusted, reply with digest */
 
-HashString(decrypted_nonce,nonce_len,digest,cf_md5);
+if (FIPS_MODE)
+   {
+   HashString(decrypted_nonce,nonce_len,digest,CF_DEFAULT_DIGEST);
+   }
+else
+   {
+   HashString(decrypted_nonce,nonce_len,digest,cf_md5);
+   }
+
 free(decrypted_nonce);
 
 /* Get the public key from the client */
@@ -2518,21 +2584,21 @@ newkey = RSA_new();
 ThreadUnlock(cft_system);
 
 /* proposition C2 */ 
-if ((len = ReceiveTransaction(conn->sd_reply,recvbuffer,NULL)) == -1)
+if ((len_n = ReceiveTransaction(conn->sd_reply,recvbuffer,NULL)) == -1)
    {
    CfOut(cf_inform,"","Protocol error 1 in RSA authentation from IP %s\n",conn->hostname);
    RSA_free(newkey);
    return false;
    }
 
-if (len == 0)
+if (len_n == 0)
    {
    CfOut(cf_inform,"","Protocol error 2 in RSA authentation from IP %s\n",conn->hostname);
    RSA_free(newkey);
    return false;
    }
 
-if ((newkey->n = BN_mpi2bn(recvbuffer,len,NULL)) == NULL)
+if ((newkey->n = BN_mpi2bn(recvbuffer,len_n,NULL)) == NULL)
    {
    err = ERR_get_error();
    CfOut(cf_error,"","Private decrypt failed = %s\n",ERR_reason_error_string(err));
@@ -2542,21 +2608,21 @@ if ((newkey->n = BN_mpi2bn(recvbuffer,len,NULL)) == NULL)
 
 /* proposition C3 */ 
 
-if ((len=ReceiveTransaction(conn->sd_reply,recvbuffer,NULL)) == -1)
+if ((len_e = ReceiveTransaction(conn->sd_reply,recvbuffer,NULL)) == -1)
    {
    CfOut(cf_inform,"","Protocol error 3 in RSA authentation from IP %s\n",conn->hostname);
    RSA_free(newkey);
    return false;
    }
 
-if (len == 0)
+if (len_e == 0)
    {
    CfOut(cf_inform,"","Protocol error 4 in RSA authentation from IP %s\n",conn->hostname);
    RSA_free(newkey);
    return false;
    }
 
-if ((newkey->e = BN_mpi2bn(recvbuffer,len,NULL)) == NULL)
+if ((newkey->e = BN_mpi2bn(recvbuffer,len_e,NULL)) == NULL)
    {
    err = ERR_get_error();
    CfOut(cf_error,"","Private decrypt failed = %s\n",ERR_reason_error_string(err));
@@ -2569,6 +2635,17 @@ if (DEBUG||D2)
    RSA_print_fp(stdout,newkey,0);
    }
 
+HashPubKey(newkey,conn->digest,CF_DEFAULT_DIGEST);
+
+if (VERBOSE)
+   {
+   ThreadLock(cft_output);
+   CfOut(cf_verbose,""," -> Public key identity of host \"%s\" is \"%s\"",conn->ipaddr,HashPrint(CF_DEFAULT_DIGEST,conn->digest));
+   ThreadUnlock(cft_output);
+   }
+
+LastSaw(conn->username,conn->ipaddr,conn->digest,cf_accept);
+   
 if (!CheckStoreKey(conn,newkey))    /* conceals proposition S1 */
    {
    if (!conn->trust)
@@ -2578,19 +2655,38 @@ if (!CheckStoreKey(conn,newkey))    /* conceals proposition S1 */
       }
    }
 
-/* Reply with md5 of original challenge */
+/* Reply with digest of original challenge */
 
-/* proposition S2 */ 
-SendTransaction(conn->sd_reply,digest,16,CF_DONE);
+/* proposition S2 */
+
+if (FIPS_MODE)
+   {
+   SendTransaction(conn->sd_reply,digest,CF_DEFAULT_DIGEST_LEN,CF_DONE);
+   }
+else
+   {
+   SendTransaction(conn->sd_reply,digest,CF_MD5_LEN,CF_DONE);
+   }
 
 /* Send counter challenge to be sure this is a live session */
 
 ThreadLock(cft_system);
 
 counter_challenge = BN_new();
-BN_rand(counter_challenge,256,0,0);
+BN_rand(counter_challenge,CF_NONCELEN,0,0);
 nonce_len = BN_bn2mpi(counter_challenge,in);
-HashString(in,nonce_len,digest,cf_md5);
+
+// hash the challenge from the client
+
+if (FIPS_MODE)
+   {
+   HashString(in,nonce_len,digest,CF_DEFAULT_DIGEST);
+   }
+else
+   {
+   HashString(in,nonce_len,digest,cf_md5);
+   }
+
 encrypted_len = RSA_size(newkey);         /* encryption buffer is always the same size as n */ 
 
 if ((out = malloc(encrypted_len+1)) == NULL)
@@ -2618,13 +2714,13 @@ if (iscrypt != 'y')
    {
    /* proposition S4  - conditional */
    memset(in,0,CF_BUFSIZE); 
-   len = BN_bn2mpi(PUBKEY->n,in);
-   SendTransaction(conn->sd_reply,in,len,CF_DONE);
+   len_n = BN_bn2mpi(PUBKEY->n,in);
+   SendTransaction(conn->sd_reply,in,len_n,CF_DONE);
 
    /* proposition S5  - conditional */
    memset(in,0,CF_BUFSIZE);  
-   len = BN_bn2mpi(PUBKEY->e,in); 
-   SendTransaction(conn->sd_reply,in,len,CF_DONE); 
+   len_e = BN_bn2mpi(PUBKEY->e,in); 
+   SendTransaction(conn->sd_reply,in,len_e,CF_DONE); 
    }
 
 /* Receive reply to counter_challenge */
@@ -2640,7 +2736,18 @@ if (ReceiveTransaction(conn->sd_reply,in,NULL) == -1)
    return false;
    }
  
-if (!HashesMatch(digest,in,cf_md5))  /* replay / piggy in the middle attack ? */
+if (HashesMatch(digest,in,CF_DEFAULT_DIGEST) || HashesMatch(digest,in,cf_md5))  /* replay / piggy in the middle attack ? */
+   {
+   if (!conn->trust)
+      {
+      CfOut(cf_verbose,""," -> Strong authentication of client %s/%s achieved",conn->hostname,conn->ipaddr);
+      }
+   else
+      {
+      CfOut(cf_verbose,""," -> Weak authentication of trusted client %s/%s (key accepted on trust).\n",conn->hostname,conn->ipaddr);
+      }
+   }
+else
    {
    BN_free(counter_challenge);
    free(out);
@@ -2648,19 +2755,8 @@ if (!HashesMatch(digest,in,cf_md5))  /* replay / piggy in the middle attack ? */
    CfOut(cf_inform,"","Challenge response from client %s was incorrect - ID false?",conn->ipaddr);
    return false; 
    }
-else
-   {
-   if (!conn->trust)
-      {
-      CfOut(cf_verbose,"","Strong authentication of client %s/%s achieved",conn->hostname,conn->ipaddr);
-      }
-   else
-      {
-      CfOut(cf_verbose,"","Weak authentication of trusted client %s/%s (key accepted on trust).\n",conn->hostname,conn->ipaddr);
-      }
-   }
 
-/* Receive random session key, blowfish style ... */ 
+/* Receive random session key,... */ 
 
 /* proposition C5 */
 
@@ -2697,9 +2793,9 @@ if (conn->session_key == NULL)
    return false;
    }
 
- CfOut(cf_verbose,""," -> Receiving session key from client (size=%d)...", keylen);
+CfOut(cf_verbose,""," -> Receiving session key from client (size=%d)...", keylen);
 
- Debug("keylen=%d, session_size=%d\n", keylen, session_size);
+Debug("keylen=%d, session_size=%d\n", keylen, session_size);
 
 if (keylen == CF_BLOWFISHSIZE) /* Support the old non-ecnrypted for upgrade */
    {
@@ -2728,7 +2824,6 @@ BN_free(counter_challenge);
 free(out);
 RSA_free(newkey); 
 conn->rsa_auth = true;
-
 return true; 
 }
 
@@ -3136,17 +3231,17 @@ close(fd);
 void CompareLocalHash(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer)
 
 { unsigned char digest1[EVP_MAX_MD_SIZE+1],digest2[EVP_MAX_MD_SIZE+1];
- char filename[CF_BUFSIZE],rfilename[CF_BUFSIZE];
+  char filename[CF_BUFSIZE],rfilename[CF_BUFSIZE];
   char *sp;
   int i;
 
-/* TODO - when safe change this to sha2 */
+/* TODO - when safe change this proto string to sha2 */
   
-sscanf(recvbuffer,"MD5 %[^\n]",rfilename);
+sscanf(recvbuffer,"MD5 %255[^\n]",rfilename);
 
 sp = recvbuffer + strlen(recvbuffer) + CF_SMALL_OFFSET;
  
-for (i = 0; i < CF_MD5_LEN; i++)
+for (i = 0; i < CF_DEFAULT_DIGEST_LEN; i++)
    {
    digest1[i] = *sp++;
    }
@@ -3155,18 +3250,18 @@ memset(sendbuffer,0,CF_BUFSIZE);
 
 TranslatePath(filename,rfilename);
 
-HashFile(filename,digest2,cf_md5);
+HashFile(filename,digest2,CF_DEFAULT_DIGEST);
 
-if (!HashesMatch(digest1,digest2,cf_md5))
+if (HashesMatch(digest1,digest2,CF_DEFAULT_DIGEST) || HashesMatch(digest1,digest2,cf_md5))
    {
-   sprintf(sendbuffer,"%s",CFD_TRUE);
-   Debug("Hashes didn't match\n");
+   sprintf(sendbuffer,"%s",CFD_FALSE);
+   Debug("Hashes matched ok\n");
    SendTransaction(conn->sd_reply,sendbuffer,0,CF_DONE);
    }
 else
    {
-   sprintf(sendbuffer,"%s",CFD_FALSE);
-   Debug("Hashes matched ok\n");
+   sprintf(sendbuffer,"%s",CFD_TRUE);
+   Debug("Hashes didn't match\n");
    SendTransaction(conn->sd_reply,sendbuffer,0,CF_DONE);
    }
 }
@@ -3176,8 +3271,10 @@ else
 void GetServerLiteral(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer,int encrypted)
 
 { char handle[CF_BUFSIZE],out[CF_BUFSIZE];
- int cipherlen, ok = false;
+  int cipherlen, ok = false;
 
+sscanf(recvbuffer,"VAR %255[^\n]",handle);
+ 
 if (ok = ReturnLiteralData(handle,out))
    {
    memset(sendbuffer,0,CF_BUFSIZE);
@@ -3189,8 +3286,6 @@ else
    snprintf(sendbuffer,CF_BUFSIZE-1,"BAD: Not found");
    }
 
-sscanf(recvbuffer,"VAR %[^\n]",handle);
-
 if (encrypted)
    {
    cipherlen = EncryptString(conn->encryption_type,sendbuffer,out,conn->session_key,strlen(sendbuffer)+1);
@@ -3200,6 +3295,28 @@ else
    {
    SendTransaction(conn->sd_reply,sendbuffer,0,CF_DONE);
    }
+}
+
+/********************************************************************/
+
+int GetServerQuery(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer)
+
+{ char query[CF_BUFSIZE],out[CF_BUFSIZE];
+  int cipherlen, ok = false;
+
+query[0] = '\0';
+sscanf(recvbuffer,"QUERY %255[^\n]",query);
+
+if (strlen(query) == 0)
+   {
+   return false;
+   }
+
+#ifdef HAVE_LIBCFNOVA
+return Nova_ReturnQueryData(conn,query,sendbuffer);
+#else
+return false;
+#endif
 }
 
 /**************************************************************/
@@ -3602,40 +3719,19 @@ if (SendTransaction(conn->sd_reply,buffer,0,CF_DONE) == -1)
 
 /***************************************************************/
 
-char *MapAddress(char *unspec_address)
-
-{ /* Is the address a mapped ipv4 over ipv6 address */
-
-if (strncmp(unspec_address,"::ffff:",7) == 0)
-   {
-   return (char *)(unspec_address+7);
-   }
-else
-   {
-   return unspec_address;
-   }
-}
-
-/***************************************************************/
-
 int CheckStoreKey(struct cfd_connection *conn,RSA *key)
 
 { RSA *savedkey;
- char keyname[CF_MAXVARSIZE];
+  char udigest[CF_MAXVARSIZE];
 
-if (BooleanControl("control_server","hostnamekeys"))
-   {
-   snprintf(keyname,CF_MAXVARSIZE,"%s-%s",conn->username,conn->hostname);
-   }
-else
-   {
-   snprintf(keyname,CF_MAXVARSIZE,"%s-%s",conn->username,MapAddress(conn->ipaddr));
-   }
- 
-if (savedkey = HavePublicKey(keyname))
+ThreadLock(cft_output);  
+snprintf(udigest,CF_MAXVARSIZE-1,"%s",HashPrint(CF_DEFAULT_DIGEST,conn->digest));
+ThreadUnlock(cft_output);
+
+if (savedkey = HavePublicKey(conn->username,MapAddress(conn->ipaddr),udigest))
    {
    CfOut(cf_verbose,"","A public key was already known from %s/%s - no trust required\n",conn->hostname,conn->ipaddr);
-
+   
    CfOut(cf_verbose,"","Adding IP %s to SkipVerify - no need to check this if we have a key\n",conn->ipaddr);
    PrependItem(&SKIPVERIFY,MapAddress(conn->ipaddr),NULL);
    
@@ -3645,55 +3741,6 @@ if (savedkey = HavePublicKey(keyname))
       SendTransaction(conn->sd_reply,"OK: key accepted",0,CF_DONE);
       RSA_free(savedkey);
       return true;
-      }
-   else
-      {
-      /* If we find a key, but it doesn't match, see if we permit dynamical IP addressing */
-      
-      if ((DHCPLIST != NULL) && IsMatchItemIn(DHCPLIST,MapAddress(conn->ipaddr)))
-         {
-         int result;
-         result = IsKnownHost(savedkey,key,MapAddress(conn->ipaddr),conn->username);
-         RSA_free(savedkey);
-         if (result)
-            {
-            SendTransaction(conn->sd_reply,"OK: key accepted",0,CF_DONE);
-            }
-         else
-            {
-            SendTransaction(conn->sd_reply,"BAD: keys did not match",0,CF_DONE);
-            }
-         return result;
-         }
-      else /* if not, reject it */
-         {
-         CfOut(cf_verbose,"","The new public key does not match the old one! Spoofing attempt!\n");
-         SendTransaction(conn->sd_reply,"BAD: keys did not match",0,CF_DONE);
-         RSA_free(savedkey);
-         return false;
-         }
-      }
-   
-   return true;
-   }
-else if ((DHCPLIST != NULL) && IsMatchItemIn(DHCPLIST,MapAddress(conn->ipaddr)))
-   {
-   /* If the host is expected to have a dynamic address, check for the key */
-   
-   if ((DHCPLIST != NULL) && IsMatchItemIn(DHCPLIST,MapAddress(conn->ipaddr)))
-      {
-      int result;
-      result = IsKnownHost(savedkey,key,MapAddress(conn->ipaddr),conn->username);
-      RSA_free(savedkey);
-      if (result)
-         {
-         SendTransaction(conn->sd_reply,"OK: key accepted",0,CF_DONE);
-         }
-      else
-         {
-         SendTransaction(conn->sd_reply,"BAD: keys did not match",0,CF_DONE);
-         }
-      return result;
       }
    }
 
@@ -3705,8 +3752,7 @@ if ((TRUSTKEYLIST != NULL) && IsMatchItemIn(TRUSTKEYLIST,MapAddress(conn->ipaddr
    conn->trust = true;
    /* conn->maproot = false; ?? */
    SendTransaction(conn->sd_reply,"OK: unknown key was accepted on trust",0,CF_DONE);
-   SavePublicKey(keyname,key);
-   AddToKeyDB(key,MapAddress(conn->ipaddr));
+   SavePublicKey(conn->username,MapAddress(conn->ipaddr),udigest,key);
    return true;
    }
 else
@@ -3714,104 +3760,6 @@ else
    CfOut(cf_verbose,"","No previous key found, and unable to accept this one on trust\n");
    SendTransaction(conn->sd_reply,"BAD: key could not be accepted on trust",0,CF_DONE);
    return false; 
-   }
-}
-
-/***************************************************************/
-
-int IsKnownHost(RSA *oldkey,RSA *newkey,char *mipaddr,char *username)
-
-/* This builds security from trust only gradually with DHCP - takes time!
-   But what else are we going to do? ssh doesn't have this problem - it
-   just asks the user interactively. We can't do that ... */
-
-{ CF_DB *dbp;
-  int trust = false;
-  char keyname[CF_MAXVARSIZE];
-  char keydb[CF_MAXVARSIZE];
-  char vbuff[CF_BUFSIZE];
-  void *value;
-
-snprintf(keyname,CF_MAXVARSIZE,"%s-%s",username,mipaddr);
-snprintf(keydb,CF_MAXVARSIZE,"%s/ppkeys/dynamic",CFWORKDIR); 
-
-Debug("The key does not match a known key but the host could have a dynamic IP...\n"); 
- 
-if ((TRUSTKEYLIST != NULL) && IsMatchItemIn(TRUSTKEYLIST,MapAddress(mipaddr)))
-   {
-   Debug("We will accept a new key for this IP on trust\n");
-   trust = true;
-   }
-else
-   {
-   Debug("Will not accept this key, unless we have seen it before\n");
-   }
-
-/* If the host is allowed to have a variable IP range, we can accept
-   the new key on trust for the given IP address provided we have seen
-   the key before.  Check for it in a database .. */
-
-Debug("Checking to see if we have seen the key before..\n"); 
-
-if (!OpenDB(keydb,&dbp))
-   {
-   return false;
-   }
-
-if (!ReadComplexKeyDB(dbp,(char *)newkey,sizeof(RSA),&value,CF_BUFSIZE))
-   {
-   Debug("The new key is not previously known, so we need to use policy for trusting the host %s\n",mipaddr);
- 
-   if (trust)
-      {
-      Debug("Policy says to trust the changed key from %s and note that it could vary in future\n",mipaddr);
-      WriteComplexKeyDB(dbp,(char *)newkey,sizeof(RSA),mipaddr,strlen(mipaddr)+1);
-      DeletePublicKey(keyname);
-      }
-   else
-      {
-      Debug("Found no grounds for trusting this new from %s\n",mipaddr);
-      }
-   }
-else
-   {
-   CfOut(cf_verbose,"","Public key was previously owned by %s now by %s - updating\n",value,mipaddr);
-   Debug("Now trusting this new key, because we have seen it before\n");
-   DeletePublicKey(keyname);
-   trust = true;
-   }
-
-/* save this new key in the database, for future reference, regardless
-   of whether we accept, but only change IP if trusted  */ 
-
-SavePublicKey(keyname,newkey);
-
-CloseDB(dbp);
-cf_chmod(keydb,0644); 
-return trust; 
-}
-
-/***************************************************************/
-
-void AddToKeyDB(RSA *newkey,char *mipaddr)
-
-{ CF_DB *dbp;
-  char keydb[CF_MAXVARSIZE];
-
-snprintf(keydb,CF_MAXVARSIZE,"%s/ppkeys/dynamic",CFWORKDIR); 
-  
-if ((DHCPLIST != NULL) && IsMatchItemIn(DHCPLIST,MapAddress(mipaddr)))
-   {
-   /* Cache keys in the db as we see them is there are dynamical addresses */
-
-   if (!OpenDB(keydb,&dbp))
-      {
-      return;
-      }
-
-   WriteComplexKeyDB(dbp,(char *)newkey,sizeof(RSA),mipaddr,strlen(mipaddr)+1);
-   CloseDB(dbp);
-   cf_chmod(keydb,0644); 
    }
 }
 

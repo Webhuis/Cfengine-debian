@@ -122,18 +122,22 @@ if (ReadHash(dbp,type,filename,dbdigest))
          
          if (attr.change.update)
             {
-            CfOut(cf_verbose,""," -> Updating cryptohash for %s to %s\n",filename,HashPrint(type,digest));
+	    cfPS(warnlevel,CF_CHG,"",pp,attr," -> Updating hash for %s to %s",filename,HashPrint(type,digest));
             
             DeleteHash(dbp,type,filename);
             WriteHash(dbp,type,filename,digest);
             }
+	 else
+	   {
+	   cfPS(warnlevel,CF_FAIL,"",pp,attr,"!! Hash for file %s changed from %s to %s",filename,HashPrint(type,dbdigest),HashPrint(type,digest));
+	   }
          
 	 CloseDB(dbp);
-         return true;                        /* Checksum updated but was changed */
+         return true;
          }
       }
    
-   Debug("Found checksum for %s in database and it matched\n",filename);
+   cfPS(cf_verbose,CF_NOP,"",pp,attr," -> File hash for %s is correct",filename);
    CloseDB(dbp);
    return false;
    }
@@ -166,8 +170,8 @@ if (sstat->st_size != dstat->st_size)
   
 if (attr.copy.servers == NULL || strcmp(attr.copy.servers->item,"localhost") == 0)
    {
-   HashFile(file1,digest1,cf_md5);
-   HashFile(file2,digest2,cf_md5);
+   HashFile(file1,digest1,CF_DEFAULT_DIGEST);
+   HashFile(file2,digest2,CF_DEFAULT_DIGEST);
 
    for (i = 0; i < EVP_MAX_MD_SIZE; i++)
       {
@@ -228,7 +232,7 @@ if (attr.copy.servers == NULL || strcmp(attr.copy.servers->item,"localhost") == 
    }
 else
    {
-   Debug("Using network md5 checksum instead\n");
+   Debug("Using network checksum instead\n");
    return CompareHashNet(file1,file2,attr,pp); /* client.c */
    }
 }
@@ -307,7 +311,7 @@ Debug2("HashString(%c)\n",type);
 switch (type)
    {
    case cf_crypt:
-       CfOut(cf_error,"","The crypt support is not presently implemented, please use md5 instead");
+       CfOut(cf_error,"","The crypt support is not presently implemented, please use sha256 instead");
        break;
        
    default:
@@ -319,7 +323,7 @@ switch (type)
           }
        
        EVP_DigestInit(&context,md); 
-       EVP_DigestUpdate(&context,(unsigned char*)buffer,len);
+       EVP_DigestUpdate(&context,(unsigned char*)buffer,(size_t)len);
        EVP_DigestFinal(&context,digest,&md_len);
        break;
    }
@@ -327,11 +331,77 @@ switch (type)
 
 /*******************************************************************/
 
+void HashPubKey(RSA *key,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhashes type)
+
+{ EVP_MD_CTX context;
+  const EVP_MD *md = NULL;
+  char *file_buffer;
+  int md_len,i,buf_len, actlen;
+  unsigned char *buffer;
+
+Debug("HashPubKey(%d)\n",type);
+
+//RSA_print_fp(stdout,key,0);
+
+if (key->n)
+   {
+   buf_len = (size_t)BN_num_bytes(key->n);
+   }
+else
+   {
+   buf_len = 0;
+   }
+
+if (key->e)
+   {
+   if (buf_len < (i = (size_t)BN_num_bytes(key->e)))
+      {
+      buf_len = i;
+      }
+   }
+
+if ((buffer = malloc(buf_len+10)) == NULL)
+   {
+   FatalError("Memory alloc in HashPubKey");
+   }
+
+switch (type)
+   {
+   case cf_crypt:
+       CfOut(cf_error,"","The crypt support is not presently implemented, please use sha256 instead");
+       break;
+       
+   default:
+       md = EVP_get_digestbyname(FileHashName(type));
+
+       if (md == NULL)
+          {
+          CfOut(cf_inform,""," !! Digest type %s not supported by OpenSSL library",CF_DIGEST_TYPES[type][0]);
+          }
+       
+       EVP_DigestInit(&context,md); 
+
+       actlen = BN_bn2bin(key->n,buffer);
+       EVP_DigestUpdate(&context,buffer,actlen);
+       actlen = BN_bn2bin(key->e,buffer);
+       EVP_DigestUpdate(&context,buffer,actlen);
+       EVP_DigestFinal(&context,digest,&md_len);
+       break;
+   }
+
+free(buffer);
+}
+
+/*******************************************************************/
+
 int HashesMatch(unsigned char digest1[EVP_MAX_MD_SIZE+1],unsigned char digest2[EVP_MAX_MD_SIZE+1],enum cfhashes type)
 
 { int i,size = EVP_MAX_MD_SIZE;
- 
+
 size = FileHashSize(type);
+
+Debug("1. CHECKING DIGEST type %d - size %d (%s)\n",type,size,HashPrint(type,digest1));
+Debug("2. CHECKING DIGEST type %d - size %d (%s)\n",type,size,HashPrint(type,digest2));
 
 for (i = 0; i < size; i++)
    {
@@ -393,7 +463,7 @@ if (path)
       {
       DeleteDB(dbp,path);
       }
-   
+   CloseDB(dbp);
    return;
    }
 
@@ -402,6 +472,7 @@ if (path)
 if (!NewDBCursor(dbp,&dbcp))
    {
    CfOut(cf_inform,""," !! Unable to scan hash database");
+   CloseDB(dbp);
    return;
    }
 
