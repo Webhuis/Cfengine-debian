@@ -7,6 +7,8 @@ cfengine3 (3.1.0~b2+dfsg-1) experimental; urgency=low
     + all patches refreshed
     + fix-error-typos removed, integrated upstream
     + fhs-compliance to create the workdir (Closes: 597552)
+  * debian/source/include-binaries:
+    + docs/ContributorStatement.pdf added
 
  -- Antonio Radici <antonio@dyne.org>  Sun, 17 Oct 2010 21:55:10 +0100
 
