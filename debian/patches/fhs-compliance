@@ -8,7 +8,7 @@ actual creation of the inputs dir any cf-* binary will fail
 
 --- a/src/generic_agent.c
 +++ b/src/generic_agent.c
-@@ -396,9 +396,10 @@
+@@ -414,9 +414,10 @@
     CfOut(cf_verbose,"","Work directory is %s\n",CFWORKDIR);
  
     snprintf(HASHDB,CF_BUFSIZE-1,"%s%c%s",CFWORKDIR,FILE_SEPARATOR,CF_CHKDB);
@@ -20,7 +20,7 @@ actual creation of the inputs dir any cf-* binary will fail
     snprintf(vbuff,CF_BUFSIZE,"%s%cbin%ccf-agent -D from_cfexecd",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
     MakeParentDirectory(vbuff,force);
     snprintf(vbuff,CF_BUFSIZE,"%s%coutputs%cspooled_reports",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
-@@ -1055,7 +1056,7 @@
+@@ -1077,7 +1078,7 @@
     }
  else
     {
@@ -29,7 +29,7 @@ actual creation of the inputs dir any cf-* binary will fail
     VSETUIDLOG = strdup(LOGFILE);
     }
  
-@@ -1616,7 +1617,7 @@
+@@ -1667,7 +1668,7 @@
  
  { FILE *fp;
  
@@ -40,7 +40,7 @@ actual creation of the inputs dir any cf-* binary will fail
     {
 --- a/src/agent.c
 +++ b/src/agent.c
-@@ -339,7 +339,7 @@
+@@ -341,7 +341,7 @@
    status which we need for setting returns
  */
  
@@ -51,7 +51,7 @@ actual creation of the inputs dir any cf-* binary will fail
     {
 --- a/src/files_interfaces.c
 +++ b/src/files_interfaces.c
-@@ -1320,7 +1320,7 @@
+@@ -1329,7 +1329,7 @@
  b.edits.backup = cfa_nobackup;
  b.edits.maxfilesize = 1000000;
  
@@ -62,7 +62,7 @@ actual creation of the inputs dir any cf-* binary will fail
  if (!LoadFileAsItemList(&VSETUIDLIST,filename,b,pp))
 --- a/src/transaction.c
 +++ b/src/transaction.c
-@@ -156,7 +156,7 @@
+@@ -158,7 +158,7 @@
     sum = (CF_MACROALPHABET * sum + cc_operand[i]) % CF_HASHTABLESIZE;
     }
  

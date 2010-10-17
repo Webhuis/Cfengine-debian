@@ -3,7 +3,7 @@ file; I'm removing all the man errors from here
 
 --- a/src/generic_agent.c
 +++ b/src/generic_agent.c
-@@ -1538,7 +1538,7 @@
+@@ -1579,7 +1579,7 @@
     {
     if (options[i].has_arg)
        {
@@ -12,7 +12,7 @@ file; I'm removing all the man errors from here
        }
     else
        {
-@@ -1566,12 +1566,12 @@
+@@ -1606,12 +1606,12 @@
  printf(".SH SYNOPSIS:\n\n %s [options]\n\n.SH DESCRIPTION:\n\n%s\n",GetArg0(component),id);
  
  printf(".B cfengine\n"
@@ -27,7 +27,7 @@ file; I'm removing all the man errors from here
         ".B cfengine\n"
         "is to create a one or more sets of configuration files which will"
         "classify and describe the setup of every host in a network.\n");
-@@ -1582,7 +1582,7 @@
+@@ -1622,7 +1622,7 @@
     {
     if (options[i].has_arg)
        {
@@ -36,7 +36,7 @@ file; I'm removing all the man errors from here
        }
     else
        {
-@@ -1595,10 +1595,10 @@
+@@ -1635,10 +1635,10 @@
         ".SH INFORMATION\n");
  
  printf("\nBug reports: bug-cfengine@cfengine.org\n");
