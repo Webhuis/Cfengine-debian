@@ -141,14 +141,15 @@ void DeleteHashes(struct CfAssoc **hashtable)
 
 { int i;
 
-/* Involved no memory copying, as this is just pointers */
-
-for (i = 0; i < CF_HASHTABLESIZE; i++)
+if (hashtable)
    {
-   if (hashtable[i] != NULL)
+   for (i = 0; i < CF_HASHTABLESIZE; i++)
       {
-      DeleteAssoc(hashtable[i]);
-      hashtable[i] = NULL;
+      if (hashtable[i] != NULL)
+         {
+         DeleteAssoc(hashtable[i]);
+         hashtable[i] = NULL;
+         }
       }
    }
 }
@@ -211,7 +212,7 @@ int AddVariableHash(char *scope,char *lval,void *rval,char rtype,enum cfdatatype
 { struct Scope *ptr;
   struct CfAssoc *ap;
   struct Rlist *rp;
-  int slot;
+  int slot,sslot;
 
 if (rtype == CF_SCALAR)
    {
@@ -300,6 +301,8 @@ if (THIS_AGENT_TYPE == cf_common)
       }
    }
 
+sslot = slot;
+
 while (ptr->hashtable[slot])
    {
    Debug("Hash table Collision! - slot %d = (%s|%s)\n",slot,lval,ptr->hashtable[slot]->lval);
@@ -337,11 +340,17 @@ while (ptr->hashtable[slot])
       }
    else
       {
-      Debug("Recover from collision\n");
+      struct CfAssoc *ap2 = ptr->hashtable[slot];
 
       if (++slot >= CF_HASHTABLESIZE-1)
          {
          slot = 0;
+         }
+
+      if (slot == sslot)
+         {
+         CfOut(cf_error,""," !! Out of variable allocation in context \"%s\"",scope);
+         return false;
          }
       }
    }
@@ -371,7 +380,6 @@ if (len == 0)
    {
    return;
    }
-
 
 for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
    {
@@ -405,7 +413,7 @@ for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
                   
                      cphash->rval = rp->state_ptr->item;
                      }
-                                    
+
                   switch(cphash->dtype)
                      {
                      case cf_slist:
@@ -430,3 +438,5 @@ for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
       }
    }
 }
+
+

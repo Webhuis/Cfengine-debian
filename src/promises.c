@@ -135,6 +135,7 @@ pcopy->lineno = pp->lineno;
 pcopy->petype = pp->petype;      /* rtype of promisee - list or scalar recipient? */
 pcopy->bundle = strdup(pp->bundle);
 pcopy->ref = pp->ref;
+pcopy->ref_alloc = pp->ref_alloc;
 pcopy->agentsubtype = pp->agentsubtype;
 pcopy->done = pp->done;
 pcopy->conlist = NULL;
@@ -147,8 +148,6 @@ pcopy->conn = pp->conn;
 pcopy->edcontext = pp->edcontext;
 
 Debug("Copying promise constraints\n\n");
-
-
 
 /* No further type checking should be necessary here, already done by CheckConstraintTypeMatch */
 
@@ -232,7 +231,7 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
 
          if (fp != NULL)
             {
-            CfOut(cf_error,"","body \"%s()\" was undeclared, but used in a promise near line %d of %s",bodyname,pp->lineno,(pp->audit)->filename);
+            CfOut(cf_error,"","An apparent body \"%s()\" was undeclared, but used in a promise near line %d of %s (possible unquoted literal value)",bodyname,pp->lineno,(pp->audit)->filename);
             }
          else
             {
@@ -247,6 +246,11 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
       }
    else
       {
+      if (cp->isbody && !IsBundle(BUNDLES,bodyname))
+         {
+         CfOut(cf_error,"","Apparent body \"%s()\" was undeclared, but used in a promise near line %d of %s (possible unquoted literal value)",bodyname,pp->lineno,(pp->audit)->filename);
+         }
+      
       rnew = CopyRvalItem(cp->rval,cp->type);
       scp = AppendConstraint(&(pcopy->conlist),cp->lval,rnew,cp->type,cp->classes,false);
       }
@@ -310,7 +314,7 @@ pcopy->audit = pp->audit;
 pcopy->lineno = pp->lineno;
 pcopy->bundle = strdup(pp->bundle);
 pcopy->ref = pp->ref;
-
+pcopy->ref_alloc = pp->ref_alloc;
 pcopy->agentsubtype = pp->agentsubtype;
 pcopy->conlist = NULL;
 pcopy->next = NULL;
@@ -355,11 +359,8 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
             {
             DereferenceComment(pcopy);
             }
-         
-
          }
       }
-
    }
 
 return pcopy;
@@ -418,6 +419,7 @@ pcopy->audit = pp->audit;
 pcopy->lineno = pp->lineno;
 pcopy->bundle = strdup(pp->bundle);
 pcopy->ref = pp->ref;
+pcopy->ref_alloc = pp->ref_alloc;
 pcopy->agentsubtype = pp->agentsubtype;
 pcopy->conlist = NULL;
 pcopy->next = NULL;
@@ -651,6 +653,7 @@ pp->cache = NULL;
 pp->bundletype = NULL;
 pp->agentsubtype = typename;   /* cache this, not copy strdup(typename);*/
 pp->ref = NULL;                /* cache a reference if given*/
+pp->ref_alloc = 'n';
 pp->next = NULL;
 return pp;
 }
@@ -776,7 +779,11 @@ md = EVP_get_digestbyname(FileHashName(type));
    
 EVP_DigestInit(&context,md);
 
-EVP_DigestUpdate(&context,pp->promiser,strlen(pp->promiser));
+// multiple packages (promisers) may share same package_list_update_ifelapsed lock
+if(!(salt && (strncmp(salt, PACK_UPIFELAPSED_SALT, sizeof(PACK_UPIFELAPSED_SALT) - 1) == 0)))
+   {
+   EVP_DigestUpdate(&context,pp->promiser,strlen(pp->promiser));
+   }
 
 if (pp->ref)
    {

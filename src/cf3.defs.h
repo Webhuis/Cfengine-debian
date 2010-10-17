@@ -33,6 +33,8 @@
 #undef VERSION
 #undef Verbose
 
+#define CF3_REVISION "$Rev: 1396 $"
+
 #include "conf.h"
 
 #ifdef HAVE_PCRE_H
@@ -52,12 +54,12 @@
 /* Fundamental (meta) types                                              */
 /*************************************************************************/
 
-#define CF3COPYRIGHT "(C) Cfengine AS 2008-"
+#define CF3COPYRIGHT "Copyright (C) Cfengine AS 2008,2010-"
 
-
-#define LIC_DAY "1"
-#define LIC_MONTH "July"
-#define LIC_YEAR "2000"
+#define LIC_DAY "15"
+#define LIC_MONTH "December"
+#define LIC_YEAR "2001"
+#define LIC_COMPANY "PARTNER TEST LICENSE - NOT FOR PRODUCTION"
 
 #define CF_SCALAR 's'
 #define CF_LIST   'l'
@@ -77,6 +79,7 @@
 #define CF_INBUNDLE 2
 
 #define CF_MAX_NESTING 3
+#define CF_MAX_REPLACE 20
 #define CF_DONEPASSES  4
 
 #define CF_TIME_SIZE 32
@@ -204,6 +207,7 @@ enum cfx_format
 #define CF_RUNC     "runagent"
 #define CF_REPORTC  "reporter"
 #define CF_KEYGEN   "keygenerator"
+#define CF_HUBC     "hub"
 
 enum cfagenttype
    {
@@ -216,6 +220,7 @@ enum cfagenttype
    cf_know,
    cf_report,
    cf_keygen,
+   cf_hub,
    cf_noagent
    };
 
@@ -235,6 +240,7 @@ enum cfgcontrol
    cfg_licenses,
    cfg_syslog_host,
    cfg_syslog_port,
+   cfg_fips_mode,
    cfg_noagent
    };
     
@@ -323,6 +329,7 @@ enum cfrcontrol
    cfr_background,
    cfr_maxchild,
    cfr_output_to_file,
+   cfr_timeout,
    cfr_notype
    };
 
@@ -347,6 +354,7 @@ enum cfscontrol
    cfs_bindtointerface,
    cfs_serverfacility,
    cfs_portnumber,
+   cfs_keyttl,
    cfs_notype,
    };
 
@@ -355,6 +363,7 @@ enum cfscontrol
 enum cfkcontrol
    {
    cfk_builddir,
+   cfk_docroot,
    cfk_genman,
    cfk_graph_dir,
    cfk_graph_output,
@@ -394,6 +403,14 @@ enum cfrecontrol
    cfre_stylesheet,
    cfre_timestamps,
    cfre_notype
+   };
+
+/*************************************************************************/
+
+enum cfhcontrol
+   {
+   cfh_export_zenoss,
+   cfh_schedule
    };
 
 /*************************************************************************/
@@ -453,6 +470,7 @@ enum cfeditorder
 #define CF_INTRANGE  "-99999999999,9999999999"
 #define CF_REALRANGE "-9.99999E100,9.99999E100"
 #define CF_CHARRANGE "^.$"
+#define CF_NULL_VALUE "cf_null"
 
 #define CF_MODERANGE   "[0-7augorwxst,+-]+"
 #define CF_BSDFLAGRANGE "[+-]*[(arch|archived|nodump|opaque|sappnd|sappend|schg|schange|simmutable|sunlnk|sunlink|uappnd|uappend|uchg|uchange|uimmutable|uunlnk|uunlink)]+"
@@ -529,11 +547,12 @@ enum fncalltype
    cfn_execresult,
    cfn_fileexists,
    cfn_filesexist,
-   cfn_getfields,
-   cfn_getindices,
    cfn_getenv,
+   cfn_getfields,
    cfn_getgid,
+   cfn_getindices,
    cfn_getuid,
+   cfn_getusers,
    cfn_grep,
    cfn_groupexists,
    cfn_hash,
@@ -542,9 +561,11 @@ enum fncalltype
    cfn_hostinnetgroup,
    cfn_hostrange,
    cfn_hostsseen,
+   cfn_hubknowledge,
    cfn_iprange,
    cfn_irange,
    cfn_isdir,
+   cfn_isexecutable,
    cfn_isgreaterthan,
    cfn_islessthan,
    cfn_islink,
@@ -553,6 +574,7 @@ enum fncalltype
    cfn_isvariable,
    cfn_join,
    cfn_lastnode,
+   cfn_laterthan,
    cfn_ldaparray,
    cfn_ldaplist,
    cfn_ldapvalue,
@@ -561,6 +583,7 @@ enum fncalltype
    cfn_peers,
    cfn_peerleader,
    cfn_peerleaders,
+   cfn_product,
    cfn_randomint,
    cfn_readfile,
    cfn_readintarray,
@@ -568,6 +591,7 @@ enum fncalltype
    cfn_readrealarray,
    cfn_readreallist,
    cfn_readstringarray,
+   cfn_readstringarrayidx,
    cfn_readstringlist,   
    cfn_readtcp,
    cfn_regarray,
@@ -585,6 +609,7 @@ enum fncalltype
    cfn_splayclass,
    cfn_splitstring,
    cfn_strcmp,
+   cfn_sum,
    cfn_translatepath,
    cfn_usemodule,
    cfn_userexists,
@@ -630,6 +655,7 @@ struct edit_context
    struct Item *file_start;
    struct Item *file_classes;
    int num_edits;
+   int empty_first;
    };
 
 /*************************************************************************/
@@ -899,6 +925,7 @@ enum package_actions
   cfa_deletepack,
   cfa_reinstall,
   cfa_update,
+  cfa_addupdate,
   cfa_patch,
   cfa_verifypack,
   cfa_pa_none
@@ -936,13 +963,15 @@ enum cf_thread_mutex
   cft_dbhandle,
   cft_policy,       // protects structs for refreshing policy files
   cft_db_lastseen,  // lastseen dbs (in cf-serverd)
-  cft_no_tpolicy
+  cft_no_tpolicy,
+  cft_report
   };
 
 enum cf_status
   {
   cfn_repaired,
   cfn_notkept,
+  cfn_kept,
   cfn_nop
   };
 
@@ -986,7 +1015,8 @@ typedef enum
   INHERIT_ACCESS_ONLY,
   INHERIT_DEFAULT_ONLY,
   INHERIT_ACCESS_AND_DEFAULT
-  }inherit_t;
+  }
+inherit_t;
 
 enum insert_match
    {
@@ -995,6 +1025,42 @@ enum insert_match
    cf_ignore_embedded,
    cf_exact_match
    };
+
+enum monitord_rep
+   {
+   mon_rep_mag,
+   mon_rep_week,
+   mon_rep_yr
+   };
+
+enum software_rep
+   {
+   sw_rep_installed,
+   sw_rep_patch_avail,
+   sw_rep_patch_installed
+   };
+
+enum promiselog_rep
+   {
+   plog_repaired,
+   plog_notkept
+   };
+
+/*************************************************************************/
+
+// Special Purpose Policy types
+typedef enum spp_report
+{
+  spp_acls,
+  spp_commands,
+  spp_filechanges,
+  spp_filediffs,
+  spp_registry,
+  spp_services,
+  spp_unknown
+}spp_t;
+
+
 
 /*************************************************************************/
 /* Runtime constraint structures                                         */
@@ -1014,6 +1080,24 @@ struct CfRegEx
    int failed;
    char *regexp;
 };
+
+/*******************************************************************/
+
+struct CfKeyBinding
+   {
+   char *name;
+   RSA *key;
+   char *address;
+   time_t timestamp;
+   };
+
+/*************************************************************************/
+
+struct CfKeyHostSeen
+   {
+   char address[CF_ADDRSIZE];
+   struct QPoint Q;   
+   };
 
 /*************************************************************************/
 
@@ -1094,6 +1178,7 @@ struct DefineClasses
 
 struct Topic
    {
+   int id;
    char *topic_type;
    char *topic_name;
    char *topic_comment;
@@ -1157,8 +1242,8 @@ typedef struct
    int connected;
    int result;
    int row;
-   int maxcolumns;
-   int maxrows;
+   unsigned int maxcolumns;
+   unsigned int maxrows;
    int column;
    char **rowdata;
    char *blank;
@@ -1232,6 +1317,7 @@ struct FileCopy
    int verify;
    int purge;
    short portnumber;
+   short timeout;
    };
 
 struct ServerItem
@@ -1741,12 +1827,46 @@ enum cf_meter
 meter_compliance_week,
 meter_compliance_day,
 meter_compliance_hour,
-meter_patch_day,
-meter_soft_day,
+meter_perf_day,
+meter_other_day,
 meter_comms_hour,
 meter_anomalies_day,
 meter_endmark
 };
+
+/*************************************************************************/
+/* definitions for test suite                                            */
+/*************************************************************************/
+
+// Classes: 601 - 650
+#define CF_CLASS_ALL 0
+#define CF_CLASS_REPORT 2
+#define CF_CLASS_VARS 4
+#define CF_CLASS_SLIST 8
+#define CF_CLASS_STRING 16
+#define CF_CLASS_PROCESS 32
+#define CF_CLASS_FILE 64
+#define CF_CLASS_DIR 128
+#define CF_CLASS_CMD 256
+#define CF_CLASS_OTHER 512
+#define CF_CLASS_TOP10 1024
+
+/*************************************************************************/
+/* common macros                                                         */
+/*************************************************************************/
+
+#define EMPTY(str) ((str == NULL) || (strlen(str) == 0))
+
+// classes not interesting in reports
+#define IGNORECLASS(c)                                                         \
+ (strncmp(c,"Min",3) == 0 || strncmp(c,"Hr",2) == 0 || strcmp(c,"Q1") == 0     \
+  || strcmp(c,"Q2") == 0 || strcmp(c,"Q3") == 0 || strcmp(c,"Q4") == 0         \
+  || strncmp(c,"GMT_Hr",6) == 0  || strncmp(c,"Yr",2) == 0                     \
+  || strncmp(c,"Day",3) == 0 || strcmp(c,"Morning") == 0                       \
+  || strcmp(c,"Afternoon") == 0 || strcmp(c,"Evening") == 0                    \
+  || strcmp(c,"Night") == 0 || strcmp(c,"license_expired") == 0                \
+  || strcmp(c,"unlabelled_promise") == 0)
+
 
 #include "prototypes3.h"
 

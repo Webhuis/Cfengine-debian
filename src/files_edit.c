@@ -38,6 +38,12 @@ struct edit_context *NewEditContext(char *filename,struct Attributes a,struct Pr
 
 { struct edit_context *ec;
 
+if (!IsAbsoluteFileName(filename))
+   {
+   CfOut(cf_error,"","Relative file name %s was marked for editing but has no invariant meaning\n",filename);
+   return NULL;
+   }
+ 
 if ((ec = malloc(sizeof(struct edit_context))) == NULL)
    {
    return NULL;
@@ -47,6 +53,7 @@ ec->filename = filename;
 ec->file_start = NULL;
 ec->file_classes = NULL;
 ec->num_edits = 0;
+ec->empty_first = a.edits.empty_before_use;
 
 if (!LoadFileAsItemList(&(ec->file_start),filename,a,pp))
    {
@@ -134,7 +141,7 @@ if (cfstat(file,&statbuf) == -1)
 
 if (a.edits.maxfilesize != 0 && statbuf.st_size > a.edits.maxfilesize)
    {
-   CfOut(cf_inform,""," !! File %s is bigger than the limit edit.max_file_size = %d bytes\n",file,a.edits.maxfilesize);
+   CfOut(cf_inform,""," !! File %s is bigger than the limit edit.max_file_size = %d > %d bytes\n",file,statbuf.st_size,a.edits.maxfilesize);
    return(false);
    }
 

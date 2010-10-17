@@ -26,7 +26,7 @@
 
 /*****************************************************************************/
 /*                                                                           */
-/* File: files_protocol.c                                                    */
+/* File: client_protocol.c                                                   */
 /*                                                                           */
 /*****************************************************************************/
 
@@ -173,8 +173,8 @@ int AuthenticateAgent(struct cfagent_connection *conn,struct Attributes attr,str
   BIGNUM *nonce_challenge, *bn = NULL;
   unsigned long err;
   unsigned char digest[EVP_MAX_MD_SIZE];
-  int encrypted_len,nonce_len = 0,len,session_size;;
-  char dont_implicitly_trust_server, keyname[CF_BUFSIZE], enterprise_field = 'c';
+  int encrypted_len,nonce_len = 0,len_n,len_e,len,session_size;
+  char dont_implicitly_trust_server,enterprise_field = 'c';
   RSA *server_pubkey = NULL;
 
 if (PUBKEY == NULL || PRIVKEY == NULL) 
@@ -190,24 +190,20 @@ session_size = CfSessionKeySize(enterprise_field);
  
 nonce_challenge = BN_new();
 BN_rand(nonce_challenge,CF_NONCELEN,0,0);
-
 nonce_len = BN_bn2mpi(nonce_challenge,in);
-HashString(in,nonce_len,digest,cf_md5);
 
-/* We assume that the server bound to the remote socket is the official one i.e. = root's */
-
-if (BooleanControl("control_agent","hostnamekeys"))
+if (FIPS_MODE)
    {
-   snprintf(keyname,CF_BUFSIZE,"root-%s",pp->this_server); 
-   Debug("AuthenticateAgent(with hostname key %s)\n",keyname);
+   HashString(in,nonce_len,digest,CF_DEFAULT_DIGEST);
    }
 else
    {
-   snprintf(keyname,CF_BUFSIZE,"root-%s",conn->remoteip); 
-   Debug("AuthenticateAgent(with IP keyname %s)\n",keyname);
+   HashString(in,nonce_len,digest,cf_md5);
    }
 
-if (server_pubkey = HavePublicKey(keyname))
+/* We assume that the server bound to the remote socket is the official one i.e. = root's */
+
+if (server_pubkey = HavePublicKeyByIP(conn->username,conn->remoteip))
    {
    dont_implicitly_trust_server = 'y';
    encrypted_len = RSA_size(server_pubkey);
@@ -217,6 +213,8 @@ else
    dont_implicitly_trust_server = 'n';        /* have to trust server, since we can't verify id */
    encrypted_len = nonce_len;
    }
+
+// Server pubkey is what we want to has as a unique ID
 
 snprintf(sendbuffer,CF_BUFSIZE,"SAUTH %c %d %d %c",dont_implicitly_trust_server,encrypted_len,nonce_len,enterprise_field);
  
@@ -274,7 +272,7 @@ memset(in,0,CF_BUFSIZE);
 
 if (ReceiveTransaction(conn->sd,in,NULL) == -1)
    {
-   cfPS(cf_error,CF_INTERPT,"recv",pp,attr,"Protocol transaction broken off");
+   cfPS(cf_error,CF_INTERPT,"recv",pp,attr,"Protocol transaction broken off (1)");
    return false;
    }
 
@@ -284,23 +282,18 @@ if (BadProtoReply(in))
    return false;
    }
 
-/* Get challenge response - should be md5 of challenge */
+/* Get challenge response - should be CF_DEFAULT_DIGEST of challenge */
 
 /* proposition S2 */   
 memset(in,0,CF_BUFSIZE);  
 
 if (ReceiveTransaction(conn->sd,in,NULL) == -1)
    {
-   cfPS(cf_error,CF_INTERPT,"recv",pp,attr,"Protocol transaction broken off");
+   cfPS(cf_error,CF_INTERPT,"recv",pp,attr,"Protocol transaction broken off (2)");
    return false;   
    }
 
-if (!HashesMatch(digest,in,cf_md5)) 
-   {
-   cfPS(cf_error,CF_INTERPT,"",pp,attr,"Challenge response from server %s/%s was incorrect!",pp->this_server,conn->remoteip);
-   return false;
-   }
-else
+if (HashesMatch(digest,in,CF_DEFAULT_DIGEST) || HashesMatch(digest,in,cf_md5)) // Legacy
    {
    if (dont_implicitly_trust_server == 'y')  /* challenge reply was correct */ 
       {
@@ -311,7 +304,7 @@ else
       {
       if (attr.copy.trustkey)
          {
-         CfOut(cf_cmdout,""," -> Trusting server identity, promise to accept key from %s=%s",pp->this_server,conn->remoteip);
+         CfOut(cf_verbose,""," -> Trusting server identity, promise to accept key from %s=%s",pp->this_server,conn->remoteip);
          }
       else
          {
@@ -321,6 +314,12 @@ else
          }
       }
    }
+else
+   {
+   cfPS(cf_error,CF_INTERPT,"",pp,attr,"Challenge response from server %s/%s was incorrect!",pp->this_server,conn->remoteip);
+   return false;
+   }
+
 
 /* Receive counter challenge from server */ 
 
@@ -348,20 +347,36 @@ if (RSA_private_decrypt(encrypted_len,in,decrypted_cchall,PRIVKEY,RSA_PKCS1_PADD
    return false;
    }
 
-/* proposition C4 */   
-HashString(decrypted_cchall,nonce_len,digest,cf_md5);
-Debug("Replying to counter challenge with md5\n"); 
-SendTransaction(conn->sd,digest,16,CF_DONE);
+/* proposition C4 */
+if (FIPS_MODE)
+   {
+   HashString(decrypted_cchall,nonce_len,digest,CF_DEFAULT_DIGEST);
+   }
+else
+   {
+   HashString(decrypted_cchall,nonce_len,digest,cf_md5);
+   }
+
+Debug("Replying to counter challenge with hash\n"); 
+
+if (FIPS_MODE)
+   {
+   SendTransaction(conn->sd,digest,CF_DEFAULT_DIGEST_LEN,CF_DONE);
+   }
+else
+   {
+   SendTransaction(conn->sd,digest,CF_MD5_LEN,CF_DONE);
+   }
+
 free(decrypted_cchall); 
 
 /* If we don't have the server's public key, it will be sent */
-
 
 if (server_pubkey == NULL)
    {
    RSA *newkey = RSA_new();
 
-   Debug("Collecting public key from server!\n"); 
+   CfOut(cf_verbose,""," -> Collecting public key from server!\n"); 
 
    /* proposition S4 - conditional */  
    if ((len = ReceiveTransaction(conn->sd,in,NULL)) <= 0)
@@ -373,7 +388,7 @@ if (server_pubkey == NULL)
    if ((newkey->n = BN_mpi2bn(in,len,NULL)) == NULL)
       {
       err = ERR_get_error();
-      cfPS(cf_error,CF_INTERPT,"",pp,attr,"Private decrypt failed = %s\n",ERR_reason_error_string(err));
+      cfPS(cf_error,CF_INTERPT,"",pp,attr,"Private key decrypt failed = %s\n",ERR_reason_error_string(err));
       RSA_free(newkey);
       return false;
       }
@@ -390,12 +405,11 @@ if (server_pubkey == NULL)
    if ((newkey->e = BN_mpi2bn(in,len,NULL)) == NULL)
       {
       err = ERR_get_error();
-      cfPS(cf_error,CF_INTERPT,"",pp,attr,"Private decrypt failed = %s\n",ERR_reason_error_string(err));
+      cfPS(cf_error,CF_INTERPT,"",pp,attr,"Public key decrypt failed = %s\n",ERR_reason_error_string(err));
       RSA_free(newkey);
       return false;
       }
 
-   SavePublicKey(keyname,newkey);
    server_pubkey = RSAPublicKey_dup(newkey);
    RSA_free(newkey);
    }
@@ -431,6 +445,10 @@ SendTransaction(conn->sd,out,encrypted_len,CF_DONE);
 
 if (server_pubkey != NULL)
    {
+   HashPubKey(server_pubkey,conn->digest,CF_DEFAULT_DIGEST);
+   CfOut(cf_verbose,""," -> Public key identity of host \"%s\" is \"%s\"",conn->remoteip,HashPrint(CF_DEFAULT_DIGEST,conn->digest));
+   SavePublicKey(conn->username,conn->remoteip,HashPrint(CF_DEFAULT_DIGEST,conn->digest),server_pubkey);  // FIXME: username is local
+   LastSaw(conn->username,conn->remoteip,conn->digest,cf_connect);
    RSA_free(server_pubkey);
    }
 

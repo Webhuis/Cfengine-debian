@@ -924,14 +924,19 @@ YY_RULE_SETUP
                          yyless(less);    
                          }
 
-                      P.currentstring = strdup(tmp);                      
+                      P.currentstring = strdup(tmp);
+                      if (THIS_AGENT_TYPE == cf_common)
+                         {
+                         IsCf3VarString(tmp);
+                         }
+
                       free(tmp);
                       return QSTRING;
                       }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 164 "cf3lex.l"
+#line 169 "cf3lex.l"
 {
                       P.line_pos += strlen(yytext);
                       P.currentstring = strdup(yytext);                      
@@ -940,20 +945,20 @@ YY_RULE_SETUP
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 171 "cf3lex.l"
+#line 176 "cf3lex.l"
 {
                       P.line_pos += strlen(yytext);
                       }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 175 "cf3lex.l"
+#line 180 "cf3lex.l"
 {
                       }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 179 "cf3lex.l"
+#line 184 "cf3lex.l"
 {
                       P.line_pos++;
                       return yytext[0];
@@ -961,10 +966,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 185 "cf3lex.l"
+#line 190 "cf3lex.l"
 ECHO;
 	YY_BREAK
-#line 968 "lex.yy.c"
+#line 973 "lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1962,7 +1967,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 185 "cf3lex.l"
+#line 190 "cf3lex.l"
 
 
 

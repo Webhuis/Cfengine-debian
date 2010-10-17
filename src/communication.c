@@ -310,7 +310,7 @@ memset(hostbuffer,0,MAXHOSTNAMELEN);
 if ((err = getaddrinfo(ipaddress,NULL,&query,&response)) != 0)
    {
    CfOut(cf_inform,"","Unable to lookup IP address (%s): %s",ipaddress,gai_strerror(err));
-   snprintf(hostbuffer,MAXHOSTNAMELEN-1,ipaddress); 
+   snprintf(hostbuffer,MAXHOSTNAMELEN,ipaddress); 
    return hostbuffer;
    }
 
@@ -318,7 +318,7 @@ for (ap = response; ap != NULL; ap = ap->ai_next)
    {   
    if ((err = getnameinfo(ap->ai_addr,ap->ai_addrlen,hostbuffer,MAXHOSTNAMELEN,0,0,0)) != 0)
       {
-      snprintf(hostbuffer,MAXHOSTNAMELEN-1,ipaddress);
+      snprintf(hostbuffer,MAXHOSTNAMELEN,ipaddress);
       freeaddrinfo(response);
       return hostbuffer;
       }
@@ -386,29 +386,29 @@ return hostbuffer;
 /*****************************************************************************/
 
 int GetMyHostInfo(char nameBuf[MAXHOSTNAMELEN], char ipBuf[MAXIP4CHARLEN])
-{
-  char *ip;
+
+{ char *ip;
   struct hostent *hostinfo;
 
-  if(gethostname(nameBuf, MAXHOSTNAMELEN) == 0)
-    {
-      if((hostinfo = gethostbyname(nameBuf)) != NULL)
-	{
-	  ip = inet_ntoa(*(struct in_addr *)*hostinfo->h_addr_list);
-	  strncpy(ipBuf, ip, MAXIP4CHARLEN - 1);
-	  ipBuf[MAXIP4CHARLEN - 1] = '\0';
-	  return true;
-	}
-      else
-	{
-	  CfOut(cf_error, "gethostbyname", "!! Could not get host entry for local host");
-	}
-    }
-  else
-    {
-      CfOut(cf_error, "gethostname", "!! Could not get host name");
-    }
+if (gethostname(nameBuf, MAXHOSTNAMELEN) == 0)
+   {
+   if ((hostinfo = gethostbyname(nameBuf)) != NULL)
+      {
+      ip = inet_ntoa(*(struct in_addr *)*hostinfo->h_addr_list);
+      strncpy(ipBuf, ip, MAXIP4CHARLEN - 1);
+      ipBuf[MAXIP4CHARLEN - 1] = '\0';
+      return true;
+      }
+   else
+      {
+      CfOut(cf_error, "gethostbyname", "!! Could not get host entry for local host");
+      }
+   }
+else
+   {
+   CfOut(cf_error, "gethostname", "!! Could not get host name");
+   }
 
-  return false;
+return false;
 }
 

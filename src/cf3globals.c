@@ -53,6 +53,9 @@ int LOOKUP = false;
 int VIEWS = true;
 int IGNORE_MISSING_INPUTS = false;
 int IGNORE_MISSING_BUNDLES = false;
+int FIPS_MODE = false;
+
+unsigned int CFTEST_CLASS = 0;
 
 struct utsname VSYSNAME;
 
@@ -78,8 +81,10 @@ int FACILITY = 0;
 time_t PROMISETIME;
 
 int LICENSES = 0;
-char EXPIRY[32];
+char EXPIRY[CF_SMALLBUF];
+char LICENSE_COMPANY[CF_SMALLBUF];
 int INSTALL_SKIP = false;
+int KEYTTL = 0;
 
 // These are used to measure graph complexity in know/agent
 
@@ -97,6 +102,7 @@ struct Item *FSTABLIST = NULL;
 struct Item *ABORTBUNDLEHEAP = NULL;
 struct Item *DONELIST = NULL;
 struct Rlist *CBUNDLESEQUENCE = NULL;
+struct Rlist *SERVER_KEYSEEN = NULL;
 
 #ifdef HAVE_LIBVIRT
 virConnectPtr CFVC[cfv_none];
@@ -152,10 +158,18 @@ struct Topic *TOPIC_MAP = NULL;
 char POLICY_SERVER[CF_BUFSIZE];
 
 char WEBDRIVER[CF_MAXVARSIZE];
+char DOCROOT[CF_MAXVARSIZE];
 char BANNER[2*CF_BUFSIZE];
 char FOOTER[CF_BUFSIZE];
 char STYLESHEET[CF_BUFSIZE];
 char AGGREGATION[CF_BUFSIZE];
+
+char SQL_DATABASE[CF_MAXVARSIZE];
+char SQL_OWNER[CF_MAXVARSIZE];
+char SQL_PASSWD[CF_MAXVARSIZE];
+char SQL_SERVER[CF_MAXVARSIZE];
+char SQL_CONNECT_NAME[CF_MAXVARSIZE];
+enum cfdbtype SQL_TYPE = cfd_notype;
 
 /*****************************************************************************/
 /* Windows version constants                                                 */
@@ -246,6 +260,7 @@ char *CF_AGENTTYPES[] = /* see enum cfagenttype */
    CF_KNOWC,
    CF_REPORTC,
    CF_KEYGEN,
+   CF_HUBC,
    "<notype>",
    };
 
@@ -305,6 +320,7 @@ pthread_mutex_t MUTEX_DBHANDLE = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 pthread_mutex_t MUTEX_POLICY = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 pthread_mutex_t MUTEX_GETADDR = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 pthread_mutex_t MUTEX_DB_LASTSEEN = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+pthread_mutex_t MUTEX_DB_REPORT = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 #else
 # if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
 pthread_mutex_t MUTEX_SYSCALL = PTHREAD_MUTEX_INITIALIZER;
@@ -315,12 +331,12 @@ pthread_mutex_t MUTEX_DBHANDLE = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_POLICY = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_GETADDR = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t MUTEX_DB_LASTSEEN = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t MUTEX_DB_REPORT = PTHREAD_MUTEX_INITIALIZER;
 # endif
 #endif
 
 unsigned short PORTNUMBER = 0;
 char VIPADDRESS[18];
-int  CF_TIMEOUT = 10;
 int  CFSIGNATURE = 0;
 
 char *PROTOCOL[] =
@@ -343,6 +359,7 @@ char *PROTOCOL[] =
    "SVAR",
    "CONTEXT",
    "SCONTEXT",
+   "SQUERY",
    NULL
    };
 
@@ -401,6 +418,9 @@ int CF_DIGEST_SIZES[10] =
      0
      };
 
+enum cfhashes CF_DEFAULT_DIGEST;
+int CF_DEFAULT_DIGEST_LEN;
+
 /***********************************************************/
 
 struct Audit *AUDITPTR;
@@ -424,10 +444,9 @@ time_t CFINITSTARTTIME;
 dev_t ROOTDEVICE = 0;
 char  STR_CFENGINEPORT[16];
 unsigned short SHORT_CFENGINEPORT;
-int RPCTIMEOUT = 60;          /* seconds */
+time_t CONNTIMEOUT = 10;	   /* seconds */
+int RPCTIMEOUT = 60;			/* seconds */
 pid_t ALARM_PID = -1;
-int SENSIBLEFILECOUNT = 2;
-int SENSIBLEFSSIZE = 1000;
 int SKIPIDENTIFY = false;
 int ALL_SINGLECOPY = false;
 int FULLENCRYPT = false;
@@ -497,9 +516,9 @@ char *TCPNAMES[CF_NETATTR] =
 
 char *OBS[CF_OBSERVABLES][2] =
     {
-    "users","Users logged in",
-    "rootprocs","Privileged system processes",
-    "otherprocs","Non-privileged process",
+    "users","Users with active processes",
+    "rootprocs","Sum privileged system processes",
+    "otherprocs","Sum non-privileged process",
     "diskfree","Free disk on / partition",
     "loadavg","% kernel load utilization",
     "netbiosns_in","netbios name lookups (in)",

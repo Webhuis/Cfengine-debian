@@ -161,7 +161,7 @@ for (rpl = lvals, rpr=rvals; rpl != NULL; rpl = rpl->next,rpr = rpr->next)
       else
          {
          CfOut(cf_error,"","List parameter \"%s\" not found while constructing scope \"%s\" - use @(scope.variable) in calling reference",naked,scope);
-         NewScalar(scope,lval,rpr->item,cf_str);         
+         NewScalar(scope,lval,rpr->item,cf_str);
          }
       }
    else
@@ -217,7 +217,8 @@ VSCOPE = NULL;
 void DeleteScope(char *name)
 
 { struct Scope *ptr, *prev = NULL;
-  
+  int found = false;
+ 
 Debug1("Deleting scope %s\n", name);
 
 for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
@@ -225,13 +226,16 @@ for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
    if (strcmp(ptr->scope,name) == 0)
       {
       Debug("Object %s exists\n",name);
+      found = true;
       break;
       }
-   
-   prev = ptr;
+   else
+      {
+      prev = ptr;
+      }
    }
 
-if (ptr == NULL)
+if (!found)
    {
    Debug("No such scope to delete\n");
    return;
@@ -246,7 +250,11 @@ else
    prev->next = ptr->next;
    }
 
-DeleteHashes(ptr->hashtable);
+if (ptr->hashtable)
+   {
+   DeleteHashes(ptr->hashtable);
+   }
+
 free(ptr->scope);
 free((char *)ptr);
 }

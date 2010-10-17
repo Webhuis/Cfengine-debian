@@ -219,6 +219,8 @@ cfdb->rowdata = NULL;
 cfdb->maxcolumns = 0;
 cfdb->maxrows = 0;
 
+Debug("Before Query succeeded: %s - %d,%d\n",query,cfdb->maxrows,cfdb->maxcolumns);
+
 switch (cfdb->type)
    {
    case cfd_mysql:
@@ -237,6 +239,7 @@ switch (cfdb->type)
              {
              cfdb->maxcolumns = mysql_num_fields(cfdb->my_res);
              cfdb->maxrows = mysql_num_rows(cfdb->my_res);
+             Debug("Mysql query succeeded: (%s) %d,%d\n",query,cfdb->maxrows,cfdb->maxcolumns);
              }
 
           cfdb->result = true;
@@ -267,6 +270,8 @@ switch (cfdb->type)
        CfOut(cf_verbose,"","There is no SQL database selected");
        break;
    }
+
+Debug("Query succeeded: (%s) %d,%d\n",query,cfdb->maxrows,cfdb->maxcolumns);
 }
 
 /*****************************************************************************/
@@ -427,6 +432,27 @@ switch (cfdb->type)
 
 
 return result;
+}
+
+
+/*****************************************************************************/
+
+void Debugcfdb(CfdbConn *cfdb)
+{
+ printf("SIZE of CfdbConn: %d = %d\n",sizeof(CfdbConn),sizeof(*cfdb));
+ printf( "cfdb->result = %d\n",cfdb->result);
+ printf( "cfdb->row = %d\n",cfdb->row);
+ printf( "cfdb->column = %d\n",cfdb->column);
+ printf( "cfdb->maxcolumns = %d\n",cfdb->maxcolumns);
+ printf( "cfdb->maxrows = %d\n",cfdb->maxrows);
+ printf( "cfdb->type = %d\n",cfdb->type);
+}
+
+/*****************************************************************************/
+
+int SizeCfSQLContainer()
+{
+return sizeof(CfdbConn);
 }
 
 /* EOF */

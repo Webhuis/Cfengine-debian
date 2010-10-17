@@ -36,52 +36,73 @@
 
 void CfHtmlHeader(FILE *fp,char *title,char *css,char *webdriver,char *header)
 {
-#ifndef HAVE_CFLIBNOVA
-
 if (title == NULL)
    {
    title = "Cfengine Knowledge";
    }
  
-fprintf(fp,"<html>"
-        "  <head>"
-        "    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-1\" />"
-        "    <title>"
-        "      %s"
-        "    </title>"
-        "    <link rel=\"stylesheet\" href=\"%s\" type=\"text/css\" media=\"screen\" />"
-        "    <link rel=\"stylesheet\" href=\"hand_%s\" type=\"text/css\" media=\"handheld\" />"
-        "  </head>"
-        "  <body>",title,css,css);
-#endif
+fprintf(fp,"<html>\n"
+        "  <head>\n"
+        "    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-1\" />\n"
+        "    <meta http-equiv=\"refresh\" CONTENT=\"150\">\n"
+        "    <title>%s</title>\n"
+        "    <link rel=\"stylesheet\" href=\"%s\" type=\"text/css\" media=\"screen\" />\n"
+        "    <link rel=\"stylesheet\" href=\"hand_%s\" type=\"text/css\" media=\"handheld\" />\n"
+        "  </head>\n"
+        "  <body>\n",title,css,css);
 
 if (header && strlen(header) > 0)
    {
-   fprintf(fp,"%s\n",header);
+   if (strlen(LICENSE_COMPANY) > 0)
+      {
+      fprintf(fp,"<div id=\"company\">%s</div>\n%s\n",LICENSE_COMPANY,header);
+      }
+   else
+      {
+      fprintf(fp,"%s\n",header);
+      }
    }
 
-if (title)
-   {
-   fprintf(fp,"<h1>%s</h1>",title);
-   fprintf(fp,"<div id=\"primary\">\n");
-   }
+fprintf(fp,"<div id=\"primary\">\n");
 }
 
 /*****************************************************************************/
 
 void CfHtmlFooter(FILE *fp,char *footer)
 {
- /* This section should be conditional */
+if (strlen(footer) > 0)
+   {
+   fprintf(fp,"%s",footer);
+   }
 
- if (strlen(footer) > 0)
-    {
-    fprintf(fp,"%s",footer);
-    }
-/* end */
-
-#ifndef HAVE_CFLIBNOVA
 fprintf(fp,"</div></body></html>\n");
-#endif
+}
+
+/*****************************************************************************/
+
+int IsHtmlHeader(char *s)
+
+{ char *str[] = { "<html>", "</html>", "<body>", "</body>",
+                  "<title>", "<meta", "<link", "head>",
+                  "<div id=\"primary\">", NULL};
+  int i;
+
+for (i = 0; str[i] != NULL; i++)
+   {
+   if (strstr(s,str[i]))
+      {
+      return true;
+      }
+   }
+
+return false;
+}
+
+/*****************************************************************************/
+
+void CfHtmlTitle(FILE *fp,char *title)
+{
+fprintf(fp,"<h1>%s</h1>\n",title);
 }
 
 /*********************************************************************/
@@ -90,7 +111,7 @@ char *URLControl(char *driver,char *url)
 
 { static char transform[CF_BUFSIZE];
 
-if (strncmp(url,"http",4) == 0)
+if (strncmp(url,"http",4) == 0 || strstr(url,"php"))
    {
    return url;
    }

@@ -91,7 +91,6 @@ else if (a.havemount)
       }
    }
 
-
 thislock = AcquireLock(path,VUQNAME,CFSTARTTIME,a,pp);
 
 if (thislock.lock == NULL)
@@ -102,15 +101,15 @@ if (thislock.lock == NULL)
 /* Do mounts first */
 
 #ifndef MINGW
+if (!MOUNTEDFSLIST && !LoadMountInfo(&MOUNTEDFSLIST))
+   {
+   CfOut(cf_error,"","Couldn't obtain a list of mounted filesystems - aborting\n");
+   YieldCurrentLock(thislock);
+   return;
+   }
+
 if (a.havemount)
    {
-   if (!MOUNTEDFSLIST && !LoadMountInfo(&MOUNTEDFSLIST))
-      {
-      CfOut(cf_error,"","Couldn't obtain a list of mounted filesystems - aborting\n");
-	  YieldCurrentLock(thislock);
-      return;
-      }
-
    VerifyMountPromise(path,a,pp);
    }
 #endif  /* NOT MINGW */
@@ -119,8 +118,12 @@ if (a.havemount)
 
 if (a.havevolume)
    {
-   VerifyFileSystem(path,a,pp);   
-   VerifyFreeSpace(path,a,pp);
+   VerifyFileSystem(path,a,pp);
+   
+   if (a.volume.freespace != CF_NOINT)
+      {
+      VerifyFreeSpace(path,a,pp);
+      }
    
    if (a.volume.scan_arrivals)
       {
@@ -206,13 +209,13 @@ if (S_ISDIR(statbuf.st_mode))
       return true;
       }
 
-   if (sizeinbytes < SENSIBLEFSSIZE)
+   if (sizeinbytes < a.volume.sensible_size)
       {
       cfPS(cf_error,CF_INTERPT,"",pp,a," !! File system %s is suspiciously small! (%d bytes)\n",name,sizeinbytes);
       return(false);
       }
 
-   if (filecount < SENSIBLEFILECOUNT)
+   if (filecount < a.volume.sensible_count)
       {
       cfPS(cf_error,CF_INTERPT,"",pp,a," !! Filesystem %s has only %d files/directories.\n",name,filecount);
       return(false);
@@ -232,7 +235,7 @@ int VerifyFreeSpace(char *file,struct Attributes a,struct Promise *pp)
   long kilobytes;
   
 #ifdef MINGW
-if(!a.volume.check_foreign)
+if (!a.volume.check_foreign)
 {
 CfOut(cf_verbose, "", "storage.volume.check_foreign is not supported on Windows (checking every mount)");
 }
@@ -316,9 +319,9 @@ for (rp = list; rp != NULL; rp=rp->next)
 
       found = true;
       
-      if (strcmp(mp->source,a.mount.mount_source) != 0)
+      if (a.mount.mount_source && (strcmp(mp->source,a.mount.mount_source) != 0))
          {
-         CfOut(cf_inform,"","A different files system (%s:%s) is mounted on %s than what is promised\n",mp->host,mp->source,name);
+         CfOut(cf_inform,"","A different file system (%s:%s) is mounted on %s than what is promised\n",mp->host,mp->source,name);
          return false;
          }
       else
@@ -331,10 +334,9 @@ for (rp = list; rp != NULL; rp=rp->next)
 
 if (!found)
    {
-   CfOut(cf_verbose,""," !! File system %s seems not to be mounted correctly\n",name);
-
    if (! a.mount.unmount)
       {
+      CfOut(cf_verbose,""," !! File system %s seems not to be mounted correctly\n",name);
       CF_MOUNTALL = true;
       }
    }
@@ -367,21 +369,34 @@ else
 
 if (cfstat(vbuff,&parentstat) == -1)
    {
-   Debug2("File %s couldn't stat its parent directory! Assuming permission\n",dir);
-   Debug2("is denied because the file system is mounted from another host.\n");
-   return(true);
+   CfOut(cf_verbose,"stat"," !! Unable to stat %s",vbuff);
+   return(false);
    }
 
 if (childstat->st_dev != parentstat.st_dev)
    {
-   Debug2("[%s is on a different file system, not descending]\n",dir);
-   return (true);
+   struct Rlist *rp;
+   struct CfMount *entry;
+
+   Debug("[%s is on a different file system, not descending]\n",dir);
+
+   for (rp = MOUNTEDFSLIST; rp != NULL; rp=rp->next)
+      {
+      entry = (struct CfMount *)rp->item;
+
+      if (strncmp(entry->mounton,dir,strlen(entry->mounton)) == 0)
+         {
+         if (entry->options && strstr(entry->options,"nfs"))
+            {
+            return (true);
+            }
+         }
+      }
    }
 
 Debug("NotMountedFileSystem\n");
 return(false);
 }
-
 
 /*********************************************************************/
 /*  Unix-specific implementations                                    */

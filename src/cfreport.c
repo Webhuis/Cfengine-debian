@@ -106,7 +106,7 @@ struct Rlist *CSVLIST = NULL;
             "data stored in cfengine's embedded databases in human\n"
             "readable form.";
 
- struct option OPTIONS[22] =
+ struct option OPTIONS[23] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -125,6 +125,7 @@ struct Rlist *CSVLIST = NULL;
       { "timestamps",no_argument,0,'T'},
       { "resolution",no_argument,0,'R'},
       { "syntax",no_argument,0,'S'},
+      { "syntax-export",no_argument,0,'s'},
       { "no-error-bars",no_argument,0,'e'},
       { "no-scaling",no_argument,0,'n'},
       { "verbose",no_argument,0,'v'},
@@ -132,7 +133,7 @@ struct Rlist *CSVLIST = NULL;
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[22] =
+ char *HINTS[23] =
       {
       "Print the help message",
       "Set debugging level 0,1,2,3",
@@ -151,6 +152,7 @@ struct Rlist *CSVLIST = NULL;
       "Add a time stamp to directory name for graph file data",
       "Print graph data in high resolution",
       "Print a syntax summary for this cfengine version",
+      "Export a syntax tree in Javascript format",
       "Do not add error bars to the printed graphs",
       "Do not automatically scale the axes",
       "Generate verbose output",
@@ -190,7 +192,8 @@ enum cf_format
    cfx_index,
    cfx_min,
    cfx_max,
-   cfx_end
+   cfx_end,
+   cfx_alias
    };
 
 char *CFRX[][2] =
@@ -211,6 +214,7 @@ char *CFRX[][2] =
     "<min>\n","\n</min>\n",
     "<max>\n","\n</max>\n",
     "<end>\n","\n</end>\n",
+    "<alias>\n","\n</alias>\n",
     NULL,NULL
    };
 
@@ -232,6 +236,7 @@ char *CFRH[][2] =
     "<td>","</td>\n",
     "<td>","</td>\n",
     "<td>","</td>\n",
+    "<td>","</td>\n",
     NULL,NULL
    };
 
@@ -245,7 +250,6 @@ GenericInitialize(argc,argv,"reporter");
 ThisAgentInit();
 KeepReportsControlPromises();
 KeepReportsPromises();
-Aggregate(STYLESHEET,BANNER,FOOTER,WEBDRIVER);
 return 0;
 }
 
@@ -289,6 +293,12 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:",OPTIONS,&optindex)) !
 
       case 'S':
           SyntaxTree();
+          exit(0);
+          break;
+
+      case 's':
+          SyntaxExport();
+          exit(0);
           break;
 
       case'K':
@@ -774,8 +784,8 @@ void ShowLastSeen()
   time_t tid = time(NULL);
   double now = (double)tid,average = 0, var = 0;
   double ticksperhr = (double)CF_TICKS_PER_HOUR;
-  char name[CF_BUFSIZE],hostname[CF_BUFSIZE];
-  struct QPoint entry;
+  char name[CF_BUFSIZE],hostname[CF_BUFSIZE],address[CF_MAXVARSIZE];
+  struct CfKeyHostSeen entry;
   int ret,ksize,vsize;
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
@@ -843,14 +853,16 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
    char tbuf[CF_BUFSIZE],addr[CF_BUFSIZE];
 
    memcpy(&then,value,sizeof(then));
-   strncpy(hostname,(char *)key,ksize);
-
+   
    if (value != NULL)
       {
       memcpy(&entry,value,sizeof(entry));
-      then = entry.q;
-      average = (double)entry.expect;
-      var = (double)entry.var;
+      strncpy(hostname,(char *)key,ksize);
+      strncpy(address,(char *)entry.address,ksize);   
+      then = entry.Q.q;
+      average = (double)entry.Q.expect;
+      var = (double)entry.Q.var;
+      strncpy(addr,entry.address,CF_MAXVARSIZE);
       }
    else
       {
@@ -868,21 +880,15 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
    snprintf(tbuf,CF_BUFSIZE-1,"%s",cf_ctime(&fthen));
    tbuf[strlen(tbuf)-9] = '\0';                     /* Chop off second and year */
 
-   if (strlen(hostname+1) > 15)
-      {
-      snprintf(addr,15,"...%s",hostname+strlen(hostname)-10); /* ipv6 */
-      }
-   else
-      {
-      snprintf(addr,15,"%s",hostname+1);
-      }
-
+   CfOut(cf_verbose,""," -> Reporting on %s",hostname);
+   
    if (XML)
       {
       fprintf(fout,"%s",CFRX[cfx_entry][cfb]);
       fprintf(fout,"%s%c%s",CFRX[cfx_pm][cfb],*hostname,CFRX[cfx_pm][cfe]);
-      fprintf(fout,"%s%s%s",CFRX[cfx_host][cfb],IPString2Hostname(hostname+1),CFRX[cfx_host][cfe]);
-      fprintf(fout,"%s%s%s",CFRX[cfx_ip][cfb],hostname+1,CFRX[cfx_ip][cfe]);
+      fprintf(fout,"%s%s%s",CFRX[cfx_host][cfb],hostname+1,CFRX[cfx_host][cfe]);
+      fprintf(fout,"%s%s%s",CFRX[cfx_alias][cfb],IPString2Hostname(address),CFRX[cfx_ip][cfe]);
+      fprintf(fout,"%s%s%s",CFRX[cfx_ip][cfb],address,CFRX[cfx_ip][cfe]);
       fprintf(fout,"%s%s%s",CFRX[cfx_date][cfb],tbuf,CFRX[cfx_date][cfe]);
       fprintf(fout,"%s%.2lf%s",CFRX[cfx_q][cfb],((double)(now-then))/ticksperhr,CFRX[cfx_q][cfe]);
       fprintf(fout,"%s%.2lf%s",CFRX[cfx_av][cfb],average/ticksperhr,CFRX[cfx_av][cfe]);
@@ -901,8 +907,9 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
          {
          fprintf(fout,"%s in (%c)%s",CFRH[cfx_pm][cfb],*hostname,CFRH[cfx_pm][cfe]);
          }
-      fprintf(fout,"%s%s%s",CFRH[cfx_host][cfb],IPString2Hostname(hostname+1),CFRH[cfx_host][cfe]);
-      fprintf(fout,"%s%s%s",CFRH[cfx_ip][cfb],hostname+1,CFRH[cfx_ip][cfe]);
+      fprintf(fout,"%s%s%s",CFRH[cfx_host][cfb],hostname+1,CFRH[cfx_host][cfe]);
+      fprintf(fout,"%s%s%s",CFRH[cfx_ip][cfb],address,CFRH[cfx_ip][cfe]);
+      fprintf(fout,"%s%s%s",CFRH[cfx_alias][cfb],IPString2Hostname(address),CFRH[cfx_ip][cfe]);
       fprintf(fout,"%s Last seen at %s%s",CFRH[cfx_date][cfb],tbuf,CFRH[cfx_date][cfe]);
       fprintf(fout,"%s %.2lf hrs ago %s",CFRH[cfx_q][cfb],((double)(now-then))/ticksperhr,CFRH[cfx_q][cfe]);
       fprintf(fout,"%s Av %.2lf hrs %s",CFRH[cfx_av][cfb],average/ticksperhr,CFRH[cfx_av][cfe]);
@@ -911,9 +918,10 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
       }
    else if (CSV)
       {
-      fprintf(fout,"%c,%25.25s,%15.15s,%s,%.2lf,%.2lf,%.2lf hrs\n",
+      fprintf(fout,"%c,%25.25s,%25.25s,%15.15s,%s,%.2lf,%.2lf,%.2lf hrs\n",
              *hostname,
-             IPString2Hostname(hostname+1),
+             hostname+1,
+             IPString2Hostname(address),
              addr,
              tbuf,
              ((double)(now-then))/ticksperhr,
@@ -922,9 +930,10 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
       }
    else
       {
-      fprintf(fout,"IP %c %25.25s %15.15s  @ [%s] not seen for (%.2lf) hrs, Av %.2lf +/- %.2lf hrs\n",
+      fprintf(fout,"IP %c %25.25s %25.25s %15.15s  @ [%s] not seen for (%.2lf) hrs, Av %.2lf +/- %.2lf hrs\n",
              *hostname,
-             IPString2Hostname(hostname+1),
+             hostname+1,
+             IPString2Hostname(address),
              addr,
              tbuf,
              ((double)(now-then))/ticksperhr,
@@ -1293,7 +1302,7 @@ for (i = 0; i < 1024; i++)
       }
    else
       {
-      fprintf(fout,"Probability %7.4lf +/- %7.4lf for %s (last oberved @ %s)\n",array[i].q,sqrt(array[i].d),array[i].name,array[i].date);
+      fprintf(fout,"Probability %7.4lf +/- %7.4lf for %s (last observed @ %s)\n",array[i].q,sqrt(array[i].d),array[i].name,array[i].date);
       }
    }
 
@@ -1311,7 +1320,9 @@ for (ip = VHEAP; ip != NULL; ip=ip->next)
       continue;
       }
 
-   if (strncmp(ip->name,"Min",3) == 0 || strncmp(ip->name,"Hr",2) == 0 || strncmp(ip->name,"Q",1) == 0)
+   if (strncmp(ip->name,"Min",3) == 0 || strncmp(ip->name,"Hr",2) == 0 || strncmp(ip->name,"Q",1) == 0
+       || strncmp(ip->name,"Yr",1) == 0 || strncmp(ip->name,"Day",1) == 0 || strncmp(ip->name,"Morning",1) == 0
+       || strncmp(ip->name,"Afternoon",1) == 0 || strncmp(ip->name,"Evening",1) == 0 || strncmp(ip->name,"Night",1) == 0)
       {
       continue;
       }
@@ -1320,7 +1331,7 @@ for (ip = VHEAP; ip != NULL; ip=ip->next)
       {
       fprintf(fout,"%s",CFRX[cfx_entry][cfb]);
       fprintf(fout,"%s%s%s",CFRX[cfx_event][cfb],ip->name,CFRX[cfx_event][cfe]);
-      fprintf(fout,"%s%s%s",CFRX[cfx_date][cfb],"always",CFRX[cfx_date][cfe]);
+      fprintf(fout,"%s%s%s",CFRX[cfx_date][cfb],"often",CFRX[cfx_date][cfe]);
       fprintf(fout,"%s%.4lf%s",CFRX[cfx_av][cfb],1.0,CFRX[cfx_av][cfe]);
       fprintf(fout,"%s%.4lf%s",CFRX[cfx_dev][cfb],0.0,CFRX[cfx_dev][cfe]);
       fprintf(fout,"%s",CFRX[cfx_entry][cfe]);
@@ -1329,14 +1340,14 @@ for (ip = VHEAP; ip != NULL; ip=ip->next)
       {
       fprintf(fout,"%s",CFRH[cfx_entry][cfb]);
       fprintf(fout,"%s%s%s",CFRH[cfx_event][cfb],ip->name,CFRH[cfx_event][cfe]);
-      fprintf(fout,"%s occured %s%s",CFRH[cfx_date][cfb],"always",CFRH[cfx_date][cfe]);
+      fprintf(fout,"%s occurred %s%s",CFRH[cfx_date][cfb],"often",CFRH[cfx_date][cfe]);
       fprintf(fout,"%s Probability %.4lf %s",CFRH[cfx_av][cfb],1.0,CFRH[cfx_av][cfe]);
       fprintf(fout,"%s &plusmn; %.4lf %s",CFRH[cfx_dev][cfb],0.0,CFRH[cfx_dev][cfe]);
       fprintf(fout,"%s",CFRH[cfx_entry][cfe]);
       }
    else if (CSV)
       {
-      fprintf(fout,"%7.4lf,%7.4lf,%s,%s\n",1.0,0.0,ip->name,"always");
+      fprintf(fout,"%7.4lf,%7.4lf,%s,%s\n",1.0,0.0,ip->name,"often");
       }
    }
 
@@ -1418,7 +1429,8 @@ if (XML)
 
 if (!NewDBCursor(dbp,&dbcp))
    {
-   CfOut(cf_inform,""," !! Unable to scan last-seen db");
+   CfOut(cf_inform,""," !! Unable to scan checksum db");
+   CloseDB(dbp);
    return;
    }
 
@@ -1534,7 +1546,8 @@ else
 if ((fout = fopen(name,"w")) == NULL)
    {
    CfOut(cf_error,"fopen"," !! Unable to write to %s/%s\n",OUTPUTDIR,name);
-   exit(1);
+   CloseDB(dbp);
+   return;
    }
 
 if (HTML && !EMBEDDED)
@@ -1556,6 +1569,8 @@ if (XML)
 if (!NewDBCursor(dbp,&dbcp))
    {
    CfOut(cf_inform,""," !! Unable to scan last-seen db");
+   CloseDB(dbp);
+   fclose(fout);
    return;
    }
 
@@ -2076,7 +2091,7 @@ for (i = 0; i < CF_OBSERVABLES; i++)
       }
    else
       {
-      CfOut(cf_verbose,"","%2d. MAX <%-10s-in>   = %10lf - %10lf u %10lf\n",i,name,MIN.Q[i].expect,MAX.Q[i].expect,sqrt(MAX.Q[i].var));
+      fprintf(fout,"%2d. MAX <%-10s-in>   = %10lf - %10lf u %10lf\n",i,name,MIN.Q[i].expect,MAX.Q[i].expect,sqrt(MAX.Q[i].var));
       }
    }
 
@@ -2588,7 +2603,7 @@ CfOut(cf_verbose,"","Examining known peers...\n");
 
 while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
    {
-   strcpy(hostname,IPString2Hostname((char *)key+1));
+   strcpy(hostname,(char *)key+1);
 
    if (!IsItemIn(hostlist,hostname))
       {

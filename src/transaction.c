@@ -115,8 +115,8 @@ if (CF_STCKFRAME == 1)
    /* Must not set pp->done = true for editfiles etc */
    }
 
-HashPromise(operand,pp,digest,cf_md5);
-strcpy(str_digest,HashPrint(cf_md5,digest));
+HashPromise(operand,pp,digest,CF_DEFAULT_DIGEST);
+strcpy(str_digest,HashPrint(CF_DEFAULT_DIGEST,digest));
 
 /* As a backup to "done" we need something immune to re-use */
 
@@ -139,8 +139,10 @@ if (IGNORELOCK)
    return this;
    }
 
+RemoveDates(operand);
+
 promise = BodyName(pp);
-strncpy(cc_operator,promise,CF_MAXVARSIZE-1);
+snprintf(cc_operator,CF_MAXVARSIZE-1,"%s-%s",promise,host);
 strncpy(cc_operand,CanonifyName(operand),CF_BUFSIZE-1);
 free(promise);
 
@@ -179,7 +181,7 @@ if (elapsedtime < 0)
 
 if (elapsedtime < attr.transaction.ifelapsed)
    {
-   CfOut(cf_verbose,""," XX Nothing promised here [%.30s] (%u/%u minutes elapsed)\n",cflock,elapsedtime,attr.transaction.ifelapsed);
+   CfOut(cf_verbose,""," XX Nothing promised here [%.40s] (%u/%u minutes elapsed)\n",cflock,elapsedtime,attr.transaction.ifelapsed);
    return this;
    }
 
@@ -311,7 +313,7 @@ else
    max_sample = 0;
    }
 
-strncat(lockname,locktype,CF_BUFSIZE/10);
+strncpy(lockname,locktype,CF_BUFSIZE/10);
 strcat(lockname,"_");
 strncat(lockname,base,CF_BUFSIZE/10);
 strcat(lockname,"_");
@@ -362,6 +364,10 @@ switch(name)
    case cft_db_lastseen:
        return &MUTEX_DB_LASTSEEN;
        break;
+
+   case cft_report:
+       return &MUTEX_DB_REPORT;
+       break;
        
    default:
        CfOut(cf_error, "", "!! NameToThreadMutex supplied with unknown mutex name: %d", name);
@@ -386,7 +392,8 @@ mutex = NameToThreadMutex(name);
 
 if (pthread_mutex_lock(mutex) != 0)
    {
-   CfOut(cf_error,"pthread_mutex_lock","!! Could not lock: %d", name);
+   // Don't use CfOut here as it also requires locking
+   printf("!! Could not lock: %d", name);
    return false;
    }
 
@@ -412,7 +419,8 @@ mutex = NameToThreadMutex(name);
 
 if (pthread_mutex_unlock(mutex) != 0)
    {
-   CfOut(cf_error,"pthread_mutex_unlock","pthread_mutex_unlock failed");
+   // Don't use CfOut here as it also requires locking
+   printf("pthread_mutex_unlock","pthread_mutex_unlock failed");
    return false;
    }
 
@@ -668,5 +676,69 @@ void CloseLock(CF_DB *dbp)
 if (dbp)
    {
    CloseDB(dbp);
+   }
+}
+
+/*****************************************************************************/
+
+void RemoveDates(char *s)
+
+{ int i,a = 0,b = 0,c = 0,d = 0;
+  char *dayp = NULL, *monthp = NULL, *sp;
+  char *days[7] = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+  char *months[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+// Canonifies or blanks our times/dates for locks where there would be an explosion of state
+  
+if (strlen(s) < strlen("Fri Oct 1 15:15:23 EST 2010"))
+   {
+   // Probably not a full date
+   return;
+   }
+
+for (i = 0; i < 7; i++)
+   {
+   if (dayp = strstr(s,days[i]))
+      {
+      *dayp = 'D';
+      *(dayp+1) = 'A';
+      *(dayp+2) = 'Y';
+      break;
+      }
+   }
+
+for (i = 0; i < 12; i++)
+   {
+   if (monthp = strstr(s,months[i]))
+      {
+      *monthp = 'M';
+      *(monthp+1) = 'O';
+      *(monthp+2) = 'N';
+      break;
+      }
+   }
+
+if (dayp && monthp) // looks like a full date
+   {
+   sscanf(monthp+4,"%d %d:%d:%d",&a,&b,&c,&d);
+
+   if (a*b*c*d == 0)
+      {
+      // Probably not a date
+      return;
+      }
+
+   for (sp = monthp+4; *sp != '\0'; sp++)
+      {
+      if (sp > monthp+15)
+         {
+         break;
+         }
+      
+      if (isdigit(*sp))
+         {
+         *sp = 't';
+         }
+      }
    }
 }

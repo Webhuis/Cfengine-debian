@@ -41,6 +41,7 @@ extern pthread_mutex_t MUTEX_DBHANDLE;
 extern pthread_mutex_t MUTEX_POLICY;
 extern pthread_mutex_t MUTEX_GETADDR;
 extern pthread_mutex_t MUTEX_DB_LASTSEEN;
+extern pthread_mutex_t MUTEX_DB_REPORT;
 # endif
 
 extern pid_t ALARM_PID;
@@ -81,6 +82,7 @@ extern struct Item *IPADDRESSES;
 extern char PIDFILE[CF_BUFSIZE];
 extern char  STR_CFENGINEPORT[16];
 extern unsigned short SHORT_CFENGINEPORT;
+extern time_t CONNTIMEOUT;
 
 extern char CFLOCK[CF_BUFSIZE];
 extern char SAVELOCK[CF_BUFSIZE];
@@ -153,7 +155,6 @@ extern int ERRORCOUNT;
 extern int NUMBEROFEDITS;
 extern time_t CFSTARTTIME;
 extern time_t CFINITSTARTTIME;
-extern int CF_TIMEOUT;
 
 extern struct utsname VSYSNAME;
 extern int LINENUMBER;

@@ -80,7 +80,8 @@ struct BodySyntax CF_EDITCOL_BODY[] =
    {"field_operation",cf_opts,"prepend,append,alphanum,delete,set","Menu option policy for editing subfields"},
    {"field_separator",cf_str,CF_ANYSTRING,"The regular expression used to separate fields in a line"},
    {"field_value",cf_str,CF_ANYSTRING,"Set field value to a fixed value"},
-   {"select_field",cf_int,"1,99999999","Integer index of the field required 1..n"},
+   {"select_field",cf_int,"0,99999999","Integer index of the field required 0..n (default starts from 1)"},
+   {"start_fields_from_zero",cf_opts,CF_BOOL,"If set, the default field numbering starts from 0"},
    {"value_separator",cf_str,CF_CHARRANGE,"Character separator for subfields inside the selected field"},
    {NULL,cf_notype,NULL,NULL}
    };
@@ -322,8 +323,9 @@ struct BodySyntax CF_COPYFROM_BODY[] =
    {"force_ipv4",cf_opts,CF_BOOL,"true/false force use of ipv4 on ipv6 enabled network"},
    {"portnumber",cf_int,"1024,99999","Port number to connect to on server host"},
    {"preserve",cf_opts,CF_BOOL,"true/false whether to preserve file permissions on copied file"},
-   {"purge",cf_opts,CF_BOOL,"true/false purge files on client that do not match files on server when depth_search"},
+   {"purge",cf_opts,CF_BOOL,"true/false purge files on client that do not match files on server when a depth_search is used"},
    {"stealth",cf_opts,CF_BOOL,"true/false whether to preserve time stamps on copied file"},
+   {"timeout",cf_int,"1,3600","Connection timeout, seconds"},
    {"trustkey",cf_opts,CF_BOOL,"true/false trust public keys from remote server if previously unknown"},
    {"type_check",cf_opts,CF_BOOL,"true/false compare file types before copying and require match"},
    {"verify",cf_opts,CF_BOOL,"true/false verify transferred file by hashing after copy (resource penalty)"},

@@ -51,7 +51,7 @@ int VerifyMethod(struct Attributes a,struct Promise *pp)
 { struct Bundle *bp;
   void *vp;
   struct FnCall *fp;
-  char *method_name = NULL;
+  char method_name[CF_EXPANDSIZE];
   struct Rlist *params = NULL;
   int retval = false;
   struct CfLock thislock;
@@ -63,12 +63,12 @@ if (a.havebundle)
    if (vp = GetConstraint("usebundle",pp,CF_FNCALL))
       {
       fp = (struct FnCall *)vp;
-      method_name = fp->name;
+      ExpandScalar(fp->name,method_name);
       params = fp->args;
       }
    else if (vp = GetConstraint("usebundle",pp,CF_SCALAR))
       {
-      method_name = (char *)vp;
+      ExpandScalar((char *)vp,method_name);
       params = NULL;
       }
    else
@@ -93,8 +93,11 @@ if (bp = GetBundle(method_name,"agent"))
    char *bp_stack = THIS_BUNDLE;
 
    BannerSubBundle(bp,params);
-   NewScope(bp->name);
 
+   DeleteScope(bp->name);
+   NewScope(bp->name);
+   HashVariables(bp->name);
+      
    AugmentScope(bp->name,bp->args,params);
 
    THIS_BUNDLE = bp->name;
@@ -107,7 +110,7 @@ if (bp = GetBundle(method_name,"agent"))
    
    if (retval)
       {
-      cfPS(cf_verbose,CF_CHG,"",pp,a," -> Method invoked successfully\n");
+      cfPS(cf_verbose,CF_NOP,"",pp,a," -> Method invoked successfully\n");
       }
    else
       {
@@ -118,7 +121,18 @@ if (bp = GetBundle(method_name,"agent"))
    }
 else
    {
-   cfPS(cf_error,CF_FAIL,"",pp,a," !! Method \"%s\" was used but was not defined!\n",bp->name);
+   if (IsCf3VarString(method_name))
+      {
+      CfOut(cf_error,""," !! A variable seems to have been used for the name of the method. In this case, the promiser also needs to contain the uique name of the method");
+      }
+   if (bp && bp->name)
+      {
+      cfPS(cf_error,CF_FAIL,"",pp,a," !! Method \"%s\" was used but was not defined!\n",bp->name);
+      }
+   else
+      {
+      cfPS(cf_error,CF_FAIL,"",pp,a," !! A method attempted to use a bundle \"%s\" that was apparently not defined!\n",method_name);
+      }
    }
 
 YieldCurrentLock(thislock);

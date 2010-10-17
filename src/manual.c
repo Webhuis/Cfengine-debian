@@ -226,7 +226,7 @@ fprintf(fout,
         "in this document. All efforts have been made to ensure the correctness of\n"
         "the information contained herein.\n"
         "@end cartouche\n"
-        "Copyright @copyright{} from 2008 to the year of issue Cfengine AS\n"
+        "Copyright @copyright{} 2008,2010 to the year of issue Cfengine AS\n"
         "@end titlepage\n"
         "@c *************************** File begins here ************************\n"
         "@ifinfo\n"
@@ -561,6 +561,9 @@ if (cfstat(filename,&sb) == -1)
       return;
       }
 
+#ifdef HAVE_LIBCFNOVA
+   fprintf(fp,"\n@i{History}: Was introduced in version %s,Nova %s (%s)\n\n",VERSION,Nova_GetVersion(),VYEAR);
+#endif
    fprintf(fp,"\n@verbatim\n\nFill me in (%s)\n\"\"\n@end verbatim\n",filename);
    fclose(fp);
    CfOut(cf_verbose,"","Created %s template\n",filename);  

@@ -25,6 +25,8 @@ is to create a one or more sets of configuration files which willclassify and de
 .SH COMMAND LINE OPTIONS:
 .IP "--help, -h"
 Print the help message
+.IP "--background, -b" value
+Parallelize connections (50 by default)
 .IP "--debug, -d" value
 Set debugging level 0,1,2,3
 .IP "--verbose, -v"
@@ -49,6 +51,10 @@ Activate internal diagnostics (developers only)
 Hail the following comma-separated lists of hosts, overriding default list
 .IP "--interactive, -i"
 Enable interactive mode for key trust
+.IP "--query, -q" value
+Query a server for a knowledge menu
+.IP "--timeout, -t" value
+Connection timeout, seconds
 .SH AUTHOR
 Mark Burgess and Cfengine AS
 .SH INFORMATION

@@ -71,6 +71,7 @@ char *NextMap(char *topic,char *type,enum cfknow_image imgtype);
 void GenerateGraph(void);
 void GenerateManual(void);
 void VerifyOccurrenceGroup(char *file,struct Promise *pp);
+void CfQueryCFDB(char *query);
 
 /*******************************************************************/
 /* GLOBAL VARIABLES                                                */
@@ -98,13 +99,8 @@ char *TYPESEQUENCE[] =
 
 char TM_PREFIX[CF_MAXVARSIZE];
 char BUILD_DIR[CF_BUFSIZE];
-char SQL_DATABASE[CF_MAXVARSIZE];
-char SQL_OWNER[CF_MAXVARSIZE];
-char SQL_PASSWD[CF_MAXVARSIZE];
-char SQL_SERVER[CF_MAXVARSIZE];
-char SQL_CONNECT_NAME[CF_MAXVARSIZE];
 char TOPIC_CMD[CF_MAXVARSIZE];
-enum cfdbtype SQL_TYPE = cfd_notype;
+
 int HTML = false;
 int WRITE_SQL = false;
 int ISREGEX = false;
@@ -112,6 +108,7 @@ int SHOWMAP = cf_no_image;
 int GRAPH = false;
 int GENERATE_MANUAL = false;
 char MANDIR[CF_BUFSIZE];
+int PASS;
 
 /*******************************************************************/
 /* Command line options                                            */
@@ -126,7 +123,7 @@ char MANDIR[CF_BUFSIZE];
             "and cf-know can assemble and converge the reference manual\n"
             "for the current version of the Cfengine software.";
  
- struct option OPTIONS[17] =
+ struct option OPTIONS[19] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -139,6 +136,7 @@ char MANDIR[CF_BUFSIZE];
       { "manpage",no_argument,0,'M'},
       { "map-full",required_argument,0,'K'},
       { "map-impact",required_argument,0,'k'},
+      { "query_cfdb",required_argument,0,'Q'},
       { "quote",required_argument,0,'q'},
       { "regex",required_argument,0,'r'},
       { "sql",no_argument,0,'s'},
@@ -147,7 +145,7 @@ char MANDIR[CF_BUFSIZE];
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[17] =
+ char *HINTS[19] =
       {
       "Print the help message",
       "Set debugging level 0,1,2,3",
@@ -160,6 +158,7 @@ char MANDIR[CF_BUFSIZE];
       "Generate reference manpage from internal data",
       "Show full image map for argument",
       "Show impact map for argument",
+      "Query the CFDB for testing, etc",
       "Quote encapsulated HTML output through the query engine",
       "Specify a regular expression for searching the topic map",
       "Store topic map in defined SQL database",
@@ -197,7 +196,7 @@ else
    {
    if (SHOWMAP == cf_special_quote)
       {
-      CfHtmlHeader(stdout,NULL,STYLESHEET,WEBDRIVER,BANNER);
+      CfHtmlHeader(stdout,TOPIC_CMD,STYLESHEET,WEBDRIVER,BANNER);
       SpecialQuote(TOPIC_CMD,"quoted");
       CfHtmlFooter(stdout,FOOTER);
       }
@@ -230,7 +229,7 @@ void CheckOpts(int argc,char **argv)
 strcpy(TOPIC_CMD,"");
 LOOKUP = false;
 
-while ((c=getopt_long(argc,argv,"ghHd:vVf:S:st:r:mMK:k:q:",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"ghHd:vVf:S:R:st:r:mMK:k:q:Q:",OPTIONS,&optindex)) != EOF)
   {
   switch ((char) c)
       {
@@ -301,6 +300,12 @@ while ((c=getopt_long(argc,argv,"ghHd:vVf:S:st:r:mMK:k:q:",OPTIONS,&optindex)) !
           SHOWMAP = 3;
           break;
 
+      case 'Q':
+          strcpy(TOPIC_CMD,optarg);
+          CfQueryCFDB(TOPIC_CMD);
+          exit(0);
+          break;
+          
       case 's':
           WRITE_SQL = true;
           break;
@@ -355,13 +360,15 @@ if (argv[optind] != NULL)
 void ThisAgentInit()
 
 { char vbuff[CF_BUFSIZE];
-
+  int s1,s2;
+ 
 strcpy(TM_PREFIX,"");
 strcpy(WEBDRIVER,"");
 strcpy(BANNER,"");
 strcpy(FOOTER,"");
 strcpy(STYLESHEET,"");
 strcpy(BUILD_DIR,".");
+strcpy(LICENSE_COMPANY,"");
 strcpy(MANDIR,".");
 strcpy(SQL_DATABASE,"cf_topic_map");
 strcpy(SQL_OWNER,"");
@@ -369,6 +376,18 @@ strcpy(SQL_CONNECT_NAME,"");
 strcpy(SQL_PASSWD,"");
 strcpy(SQL_SERVER,"localhost");
 strcpy(GRAPHDIR,"");
+SHOWREPORTS = false;
+
+#ifdef HAVE_LIBCFNOVA
+s1 = Nova_SizeCfSQLContainer();
+s2 = SizeCfSQLContainer();
+
+if (s1 != s2)
+   {
+   CfOut(cf_error,""," !!! Pathological build. Nova module has different database combinations than core. %d (Nova) versus %d (Core)\n",s1,s2);
+   FatalError("stop");
+   }
+#endif
 }
 
 /*****************************************************************************/
@@ -412,6 +431,7 @@ for (cp = ControlBodyConstraints(cf_know); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_sql_type].lval) == 0)
       {
       SQL_TYPE = Str2dbType(retval);
+      WebCache("SQL_TYPE",retval);
       
       if (SQL_TYPE == cfd_notype)
          {
@@ -423,30 +443,35 @@ for (cp = ControlBodyConstraints(cf_know); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_sql_database].lval) == 0)
       {
       strncpy(SQL_DATABASE,retval,CF_MAXVARSIZE);
+      WebCache("SQL_DATABASE",retval);
       continue;
       }
 
    if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_sql_owner].lval) == 0)
       {
       strncpy(SQL_OWNER,retval,CF_MAXVARSIZE);
+      WebCache("SQL_OWNER",retval);
       continue;
       }
       
    if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_sql_passwd].lval) == 0)
       {
       strncpy(SQL_PASSWD,retval,CF_MAXVARSIZE);
+      WebCache("SQL_PASSWD",retval);
       continue;
       }
    
    if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_sql_server].lval) == 0)
       {
       strncpy(SQL_SERVER,retval,CF_MAXVARSIZE);
+      WebCache("SQL_SERVER",retval);
       continue;
       }
 
    if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_sql_connect_db].lval) == 0)
       {
       strncpy(SQL_CONNECT_NAME,retval,CF_MAXVARSIZE);
+      WebCache("SQL_CONNECT_NAME",retval);
       continue;
       }
    
@@ -496,7 +521,6 @@ for (cp = ControlBodyConstraints(cf_know); cp != NULL; cp=cp->next)
       CfOut(cf_verbose,"","SET view_projections = %d\n",VIEWS);
       continue;
       }
-
    
    if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_graph_dir].lval) == 0)
       {
@@ -516,6 +540,13 @@ for (cp = ControlBodyConstraints(cf_know); cp != NULL; cp=cp->next)
       {
       strncpy(MANDIR,retval,CF_MAXVARSIZE);
       CfOut(cf_verbose,"","SET manual_source_directory = %s\n",MANDIR);
+      continue;
+      }
+
+   if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_docroot].lval) == 0)
+      {
+      strncpy(DOCROOT,retval,CF_MAXVARSIZE);
+      CfOut(cf_verbose,"","SET document root = %s\n",DOCROOT);
       continue;
       }
    }
@@ -579,6 +610,8 @@ if (!ok)
 
 /* If all is okay, go ahead and evaluate */
 
+PASS = 1;
+
 for (type = 0; TYPESEQUENCE[type] != NULL; type++)
    {
    for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
@@ -618,6 +651,8 @@ for (type = 0; TYPESEQUENCE[type] != NULL; type++)
    }
 
 /* Second pass association processing */
+
+PASS = 2;
 
 for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
    {
@@ -723,7 +758,7 @@ CfOut(cf_verbose,"","Writing %s\n",filename);
 
 if ((fout = fopen(filename,"w")) == NULL)
    {
-   CfOut(cf_error,"fopen"," !! Cannot write to %s\n",filename);
+   CfOut(cf_verbose,"fopen"," !! Cannot write ontology to %s\n",filename);
    return;
    }
 
@@ -836,7 +871,7 @@ CfOut(cf_verbose,"","Writing %s\n",filename);
 
 if ((fout = fopen(filename,"w")) == NULL)
    {
-   CfOut(cf_error,"fopen"," !! Cannot write to %s\n",filename);
+   CfOut(cf_verbose,"fopen"," !! Cannot write to %s\n",filename);
    return;
    }
 
@@ -1289,6 +1324,15 @@ if (strcmp("reports",pp->agentsubtype) == 0)
 }
 
 /*********************************************************************/
+
+void CfQueryCFDB(char *query)
+{
+#ifdef HAVE_LIBCFNOVA
+Nova_CfQueryCFDB(query);
+#endif
+}
+
+/*********************************************************************/
 /* Level                                                             */
 /*********************************************************************/
 
@@ -1297,7 +1341,8 @@ void VerifyTopicPromise(struct Promise *pp)
 { char id[CF_BUFSIZE];
   char fwd[CF_BUFSIZE],bwd[CF_BUFSIZE];
   struct Attributes a;
-  struct Topic *tp;
+  struct Topic *tp,*tp_sub;
+  char *handle = (char *)GetConstraint("handle",pp,CF_SCALAR);
 
 // Put all this in subfunc if LTM output specified
 
@@ -1307,13 +1352,54 @@ strncpy(id,CanonifyName(pp->promiser),CF_BUFSIZE-1);
 
 CfOut(cf_verbose,""," -> Attempting to install topic %s::%s \n",pp->classes,pp->promiser);
 
+// Add a standard reserved word
+
+if (TOPIC_MAP == NULL) 
+   {
+   AddCommentedTopic(&TOPIC_MAP,"synonym","An alternative short form for a topic using its handle","any");
+   }
+
 if (pp->ref != NULL)
    {
    AddCommentedTopic(&TOPIC_MAP,pp->promiser,pp->ref,pp->classes);
+
+   if (handle)
+      {
+      struct Rlist *list = NULL;
+      char ref[CF_MAXVARSIZE];
+      snprintf(ref,CF_MAXVARSIZE,"knowledge.php?topic=%s",pp->promiser);
+      AddCommentedTopic(&TOPIC_MAP,handle,pp->ref,"synonym");
+      PrependRScalar(&list,"Go to topic",CF_SCALAR);
+      tp= GetTopic(TOPIC_MAP,handle);      
+      AddOccurrence(&(tp->occurrences),ref,list,cfk_url);
+      DeleteRlist(list);
+      list = NULL;
+      tp_sub= GetTopic(TOPIC_MAP,"synonym");      
+      PrependRScalar(&list,handle,CF_SCALAR);
+      AddOccurrence(&(tp->occurrences),ref,list,cfk_url);
+      DeleteRlist(list);
+      }
    }
 else
    {
    AddTopic(&TOPIC_MAP,pp->promiser,pp->classes);
+
+   if (handle)
+      {
+      struct Rlist *list = NULL;
+      char ref[CF_MAXVARSIZE];      
+      snprintf(ref,CF_MAXVARSIZE,"knowledge.php?topic=%s",pp->promiser);
+      AddTopic(&TOPIC_MAP,handle,pp->classes);
+      tp= GetTopic(TOPIC_MAP,handle);      
+      PrependRScalar(&list,"Go to topic",CF_SCALAR);
+      AddOccurrence(&(tp->occurrences),ref,list,cfk_url);
+      DeleteRlist(list);
+      list =  NULL;
+      tp_sub= GetTopic(TOPIC_MAP,"synonym");      
+      PrependRScalar(&list,handle,CF_SCALAR);
+      AddOccurrence(&(tp->occurrences),ref,list,cfk_url);
+      DeleteRlist(list);
+      }
    }
 
 if (tp = GetTopic(TOPIC_MAP,pp->promiser))
@@ -1323,7 +1409,7 @@ if (tp = GetTopic(TOPIC_MAP,pp->promiser))
    if (pp->ref)
       {
       struct Rlist *list = NULL;
-      PrependRScalar(&list,"About",CF_SCALAR);
+      PrependRScalar(&list,"Go to topic",CF_SCALAR);
       AddOccurrence(&(tp->occurrences),pp->ref,list,cfk_literal);
       DeleteRlist(list);
       }
@@ -1332,6 +1418,14 @@ else
    {
    CfOut(cf_inform,""," -> Topic/Association \"%s\" did not install\n",pp->promiser);
    PromiseRef(cf_inform,pp);
+   }
+
+if (handle)
+   {
+   struct Rlist *list = NULL;
+   PrependRScalar(&list,handle,CF_SCALAR);
+   AddTopicAssociation(&(tp->associations),"is the promise of","stands for",list,true);
+   DeleteRlist(list);
    }
 }
 
@@ -1423,8 +1517,11 @@ switch (rep_type)
 
        if ((tp = GetCanonizedTopic(TOPIC_MAP,pp->classes)) == NULL)
           {
-          CfOut(cf_error,""," !! Type context \"%s\" must be defined in order to map it to occurrences (ordering problem with bundlesequence?)",pp->classes);
-          PromiseRef(cf_error,pp);
+          if (PASS > 1)
+             {
+             CfOut(cf_inform,""," !! Type context \"%s\" must be defined in order to map it to occurrences (ordering problem with bundlesequence?)",pp->classes);
+             PromiseRef(cf_error,pp);
+             }
           return;
           }
        
@@ -1572,7 +1669,7 @@ CfOut(cf_verbose,""," -> Writing %s\n",filename);
 
 if ((fout = fopen(filename,"w")) == NULL)
    {
-   CfOut(cf_error,"fopen"," !! Cannot write to %s\n",filename);
+   CfOut(cf_verbose,"fopen"," !! Cannot write to %s\n",filename);
    return;
    }
 
@@ -1616,6 +1713,7 @@ fprintf(fout,"# USE %s_topic_map\n",TM_PREFIX);
 snprintf(query,CF_BUFSIZE-1,
         "CREATE TABLE topics"
         "("
+        "pid integer PRIMARY KEY,"
         "topic_name varchar(256),"
         "topic_comment varchar(1024),",
         "topic_id varchar(256),"
@@ -1625,6 +1723,7 @@ snprintf(query,CF_BUFSIZE-1,
 
 fprintf(fout,"%s",query);
 
+AppendRScalar(&columns,"pid,int",CF_SCALAR);
 AppendRScalar(&columns,"topic_name,varchar,256",CF_SCALAR);
 AppendRScalar(&columns,"topic_comment,varchar,1024",CF_SCALAR);
 AppendRScalar(&columns,"topic_id,varchar,256",CF_SCALAR);
@@ -1645,10 +1744,12 @@ snprintf(query,CF_BUFSIZE-1,
         "("
         "from_name varchar(256),"
         "from_type varchar(256),"
+        "from_id int,"
         "from_assoc varchar(256),"
         "to_assoc varchar(256),"
         "to_type varchar(256),"
         "to_name varchar(256)"
+        "to_id int,"
         ");\n"
         );
 
@@ -1656,10 +1757,12 @@ fprintf(fout,"%s",query);
 
 AppendRScalar(&columns,"from_name,varchar,256",CF_SCALAR);
 AppendRScalar(&columns,"from_type,varchar,256",CF_SCALAR);
+AppendRScalar(&columns,"from_id,int",CF_SCALAR);
 AppendRScalar(&columns,"from_assoc,varchar,256,",CF_SCALAR);
 AppendRScalar(&columns,"to_assoc,varchar,256",CF_SCALAR);
 AppendRScalar(&columns,"to_type,varchar,256",CF_SCALAR);
 AppendRScalar(&columns,"to_name,varchar,256",CF_SCALAR);
+AppendRScalar(&columns,"to_id,int",CF_SCALAR);
 
 snprintf(query,CF_MAXVARSIZE-1,"%s.associations",SQL_DATABASE);
 
@@ -1674,6 +1777,7 @@ columns = NULL;
 snprintf(query,CF_BUFSIZE-1,
         "CREATE TABLE occurrences"
         "("
+        "from_id,int"
         "topic_name varchar(256),"
         "locator varchar(1024),"
         "locator_type varchar(256),"
@@ -1683,6 +1787,7 @@ snprintf(query,CF_BUFSIZE-1,
 
 fprintf(fout,"%s",query);
 
+AppendRScalar(&columns,"from_id,int",CF_SCALAR);
 AppendRScalar(&columns,"topic_name,varchar,256",CF_SCALAR);
 AppendRScalar(&columns,"locator,varchar,1024",CF_SCALAR);
 AppendRScalar(&columns,"locator_type,varchar,256",CF_SCALAR);
@@ -1719,11 +1824,11 @@ for (tp = TOPIC_MAP; tp != NULL; tp=tp->next)
    if (tp->topic_comment)
       {
       strncpy(safe2,EscapeSQL(&cfdb,tp->topic_comment),CF_BUFSIZE);
-      snprintf(query,CF_BUFSIZE-1,"INSERT INTO topics (topic_name,topic_id,topic_type,topic_comment) values ('%s','%s','%s','%s')\n",safe,Name2Id(tp->topic_name),tp->topic_type,safe2);
+      snprintf(query,CF_BUFSIZE-1,"INSERT INTO topics (topic_name,topic_id,topic_type,topic_comment,pid) values ('%s','%s','%s','%s','%d')\n",safe,Name2Id(tp->topic_name),tp->topic_type,safe2,tp->id);
       }
    else
       {
-      snprintf(query,CF_BUFSIZE-1,"INSERT INTO topics (topic_name,topic_id,topic_type) values ('%s','%s','%s')\n",safe,Name2Id(tp->topic_name),tp->topic_type);
+      snprintf(query,CF_BUFSIZE-1,"INSERT INTO topics (topic_name,topic_id,topic_type,pid) values ('%s','%s','%s','%d')\n",safe,Name2Id(tp->topic_name),tp->topic_type,tp->id);
       }
    fprintf(fout,"%s",query);
    Debug(" -> Add topic %s\n",tp->topic_name);
@@ -1741,10 +1846,11 @@ for (tp = TOPIC_MAP; tp != NULL; tp=tp->next)
       for (rp = ta->associates; rp != NULL; rp=rp->next)
          {
          char to_type[CF_MAXVARSIZE],to_topic[CF_MAXVARSIZE];
+         int to_id = GetTopicPid(rp->item);
          
          DeTypeTopic(rp->item,to_topic,to_type);
          
-         snprintf(query,CF_BUFSIZE-1,"INSERT INTO associations (from_name,to_name,from_assoc,to_assoc,from_type,to_type) values ('%s','%s','%s','%s','%s','%s');\n",safe,EscapeSQL(&cfdb,to_topic),ta->fwd_name,ta->bwd_name,tp->topic_type,to_type);
+         snprintf(query,CF_BUFSIZE-1,"INSERT INTO associations (from_name,to_name,from_assoc,to_assoc,from_type,to_type,from_id,to_id) values ('%s','%s','%s','%s','%s','%s','%d','%d');\n",safe,EscapeSQL(&cfdb,to_topic),ta->fwd_name,ta->bwd_name,tp->topic_type,to_type,tp->id,to_id);
 
          fprintf(fout,"%s",query);
          CfVoidQueryDB(&cfdb,query);
@@ -1766,7 +1872,7 @@ for (tp = TOPIC_MAP; tp != NULL; tp=tp->next)
          char safeexpr[CF_BUFSIZE];
          strcpy(safeexpr,EscapeSQL(&cfdb,op->locator));
 
-         snprintf(query,CF_BUFSIZE-1,"INSERT INTO occurrences (topic_name,locator,locator_type,subtype) values ('%s','%s','%d','%s')\n",CanonifyName(tp->topic_name),safeexpr,op->rep_type,rp->item);
+         snprintf(query,CF_BUFSIZE-1,"INSERT INTO occurrences (from_id,topic_name,locator,locator_type,subtype) values ('%d','%s','%s','%d','%s')\n",tp->id,CanonifyName(tp->topic_name),safeexpr,op->rep_type,rp->item);
          fprintf(fout,"%s",query);
          CfVoidQueryDB(&cfdb,query);
          Debug(" -> Add occurrence of %s\n",tp->topic_name);
@@ -2547,7 +2653,7 @@ if (occurrences != NULL)
    
    fprintf(fout,"<p><div id=\"occurrences\">");
    
-   fprintf(fout,"\n<h2>References to this topic:</h2>\n\n");
+   fprintf(fout,"\n<h2>References to '<span id=\"subject\">%s</span>' in section `<span id=\"category\">%s</span>'</h2>\n\n",this_name,this_type);
    
    fprintf(fout,"<ul>\n");
    
@@ -2679,7 +2785,7 @@ if (other_topics || topics_this_type)
    
    fprintf(fout,"<p><div id=\"others\">\n");
    
-   fprintf(fout,"\n<h2>Category \"%s\" :</h2>\n\n",this_type);
+   fprintf(fout,"\n<h2>The rest of the category \"%s\" :</h2>\n\n",this_type);
    
    fprintf(fout,"<ul>\n");
 
@@ -2808,6 +2914,12 @@ else
       {
       line[0] = '\0';
       fgets(line,CF_BUFSIZE,fin);
+
+      if (IsHtmlHeader(line))
+         {
+         continue;
+         }
+      
       snprintf(buffer,CF_BUFSIZE-1,line,WEBDRIVER);
       fprintf(fout,"%s",buffer);
       }
@@ -2899,7 +3011,7 @@ char *NextTopic(char *topic,char *type)
 
 { static char url[CF_BUFSIZE];
   char ctopic[CF_MAXVARSIZE],ctype[CF_MAXVARSIZE];
-
+  
 if (strlen(WEBDRIVER) == 0)
    {
    CfOut(cf_error,""," !! No query_engine is defined\n");

@@ -119,6 +119,7 @@ struct BodySyntax CFG_CONTROLBODY[] =
    {"host_licenses_paid",cf_int,CF_VALRANGE,"The number of licenses that you promise to have paid for by setting this value (legally binding for commercial license)"},
    {"syslog_host",cf_str,CF_IPRANGE,"The name or address of a host to which syslog messages should be sent directly by UDP"},
    {"syslog_port",cf_int,CF_VALRANGE,"The port number of a UDP syslog service"},
+   {"fips_mode",cf_opts,CF_BOOL,"Activate full FIPS mode restrictions"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -186,6 +187,7 @@ struct BodySyntax CFS_CONTROLBODY[] =
    {"bindtointerface",cf_str,"","IP of the interface to which the server should bind on multi-homed hosts"},
    {"serverfacility",cf_opts,CF_FACILITY,"Menu option for syslog facility level"},
    {"port",cf_int,"1024,99999","Default port for cfengine server"},
+   {"keycacheTTL",cf_int,CF_VALRANGE,"Maximum number of hours to hold public keys in the cache"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -210,6 +212,7 @@ struct BodySyntax CFR_CONTROLBODY[] =
    {"background_children",cf_opts,CF_BOOL,"true/false parallelize connections to servers"},
    {"max_children",cf_int,CF_VALRANGE,"Maximum number of simultaneous connections to attempt"},
    {"output_to_file",cf_opts,CF_BOOL,"true/false whether to send collected output to file(s)"},
+   {"timeout",cf_int,"1,9999","Connection timeout, sec"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -229,6 +232,7 @@ struct BodySyntax CFEX_CONTROLBODY[] = /* enum cfexcontrol */
 struct BodySyntax CFK_CONTROLBODY[] =
    {
    {"build_directory",cf_str,".*","The directory in which to generate output files"},
+   {"document_root",cf_str,".*","The directory in which the web root resides"},
    {"generate_manual",cf_opts,CF_BOOL,"true/false generate texinfo manual page skeleton for this version"},
    {"graph_directory",cf_str,CF_PATHRANGE,"Path to directory where rendered .png files will be created"},
    {"graph_output",cf_opts,CF_BOOL,"true/false generate png visualization of topic map if possible (requires lib)"},
@@ -267,6 +271,13 @@ struct BodySyntax CFRE_CONTROLBODY[] = /* enum cfrecontrol */
    {NULL,cf_notype,NULL,NULL}
    };
 
+struct BodySyntax CFH_CONTROLBODY[] = /* enum cfh_control */
+   {
+   {"export_zenoss",cf_opts,CF_BOOL,"Make data available for Zenoss integration in docroot/reports/summary.z"},
+   {"hub_schedule",cf_slist,"","The class schedule used by cf-hub for report collation"},
+   {NULL,cf_notype,NULL,NULL}
+   };
+
 
 /*********************************************************/
 
@@ -282,6 +293,7 @@ struct SubTypeSyntax CF_ALL_BODIES[] =
    {CF_EXECC,"control",CFEX_CONTROLBODY},
    {CF_KNOWC,"control",CFK_CONTROLBODY},
    {CF_REPORTC,"control",CFRE_CONTROLBODY},
+   {CF_HUBC,"control",CFH_CONTROLBODY},
 
    //  get others from modules e.g. "agent","files",CF_FILES_BODIES,
 
@@ -321,7 +333,7 @@ struct SubTypeSyntax CF_COMMON_SUBTYPES[] =
      {"*","vars",CF_VARBODY},
      {"*","classes",CF_CLASSBODY},
      {"*","reports",CF_REPORT_BODIES},
-     {"agent","*",CF_COMMON_BODIES},
+     {"*","*",CF_COMMON_BODIES},
      {NULL,NULL,NULL}
      };
 

@@ -42,15 +42,15 @@ enum typesequence
    kp_classes,
    kp_outputs,
    kp_interfaces,
-   kp_processes,
-   kp_storage,
-   kp_packages,
-   kp_commands,
-   kp_methods,
    kp_files,
-   kp_databases,
-   kp_services,
+   kp_packages,
    kp_environments,
+   kp_methods,
+   kp_processes,
+   kp_services,
+   kp_commands,
+   kp_storage,
+   kp_databases,
    kp_reports,
    kp_none
    };
@@ -61,15 +61,15 @@ char *TYPESEQUENCE[] =
    "classes",    /* Maelstrom order 2 */
    "outputs",
    "interfaces",
-   "processes",
-   "storage",
-   "packages",
-   "commands",
-   "methods",
    "files",
-   "databases",
-   "services",
+   "packages",
    "environments",
+   "methods",
+   "processes",
+   "services",
+   "commands",
+   "storage",
+   "databases",
    "reports",
    NULL
    };
@@ -104,7 +104,7 @@ extern virConnectPtr CFVC[];
       { "bundlesequence",required_argument,0,'b' },
       { "debug",optional_argument,0,'d' },
       { "define",required_argument,0,'D' },
-      { "diagnostic",no_argument,0,'x'},
+      { "diagnostic",optional_argument,0,'x'},
       { "dry-run",no_argument,0,'n'},
       { "file",required_argument,0,'f'},
       { "help",no_argument,0,'h' },
@@ -119,11 +119,11 @@ extern virConnectPtr CFVC[];
 
  char *HINTS[15] =
       {
-      "Bootstrap/repair a cfengine configuration from failsafe file in the current directory",
+      "Bootstrap/repair a cfengine configuration from failsafe file in the WORKDIR else in current directory",
       "Set or override bundlesequence from command line",
       "Set debugging level 0,1,2",
       "Define a list of comma separated classes to be defined at the start of execution",
-      "Activate internal diagnostics (developers only)",
+      "Do internal diagnostic (developers only) level in optional argument",
       "All talk and no action mode - make no changes, only inform of promises not kept",
       "Specify an alternative input file than the default",      
       "Print the help message",
@@ -149,6 +149,7 @@ ThisAgentInit();
 KeepPromises();
 NoteClassUsage(VHEAP);
 NoteVarUsage();
+UpdateLastSeen();
 GenericDeInitialize();
 return 0;
 }
@@ -170,7 +171,7 @@ void CheckOpts(int argc,char **argv)
 
 POLICY_SERVER[0] = '\0';
   
-while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:xMBb:",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:x:MBb:",OPTIONS,&optindex)) != EOF)
   {
   switch ((char) c)
       {
@@ -291,9 +292,9 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:xMBb:",OPTIONS,&optindex)) != E
           exit(0);
 
       case 'x':
-          AgentDiagnostic();
+	 AgentDiagnostic(optarg);
           exit(0);
-
+          
       case 'r':
           SHOWREPORTS = true;
           break;
@@ -306,6 +307,7 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:xMBb:",OPTIONS,&optindex)) != E
 if (argv[optind] != NULL)
    {
    CfOut(cf_error,"","Unexpected argument with no preceding option: %s\n",argv[optind]);
+   FatalError("Aborted");
    }
 
 Debug("Set debugging\n");
@@ -614,8 +616,8 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
 
    if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_timeout].lval) == 0)
       {
-      CF_TIMEOUT = Str2Int(retval);
-      CfOut(cf_verbose,"","SET timeout = %d\n",CF_TIMEOUT);
+      CONNTIMEOUT = Str2Int(retval);
+      CfOut(cf_verbose,"","SET timeout = %d\n",CONNTIMEOUT);
       continue;
       }
    
@@ -655,6 +657,12 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
 if (GetVariable("control_common",CFG_CONTROLBODY[cfg_lastseenexpireafter].lval,&retval,&rettype) != cf_notype)
    {
    LASTSEENEXPIREAFTER = Str2Int(retval);
+   }
+
+if (GetVariable("control_common",CFG_CONTROLBODY[cfg_fips_mode].lval,&retval,&rettype) != cf_notype)
+   {
+   FIPS_MODE = GetBoolean(retval);
+   CfOut(cf_verbose,"","SET FIPS_MODE = %d\n",FIPS_MODE);
    }
 
 if (GetVariable("control_common",CFG_CONTROLBODY[cfg_syslog_port].lval,&retval,&rettype) != cf_notype)
@@ -707,6 +715,12 @@ for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
       case CF_SCALAR:
           name = (char *)rp->item;
           params = NULL;
+
+          if (strcmp(name,CF_NULL_VALUE) == 0)
+             {
+             continue;
+             }
+          
           break;
       case CF_FNCALL:
           fp = (struct FnCall *)rp->item;
@@ -1249,10 +1263,10 @@ void ParallelFindAndVerifyFilesPromises(struct Promise *pp)
 
 #ifdef MINGW
 
-if(background)
-  {
+if (background)
+   {
    CfOut(cf_verbose, "", "Background processing of files promises is not supported on Windows");
-  }
+   }
   
 FindAndVerifyFilesPromises(pp);
 
@@ -1278,9 +1292,8 @@ else if (CFA_BACKGROUND >= CFA_BACKGROUND_LIMIT)
    {
    CfOut(cf_verbose,""," !> Promised parallel execution promised but exceeded the max number of promised background tasks, so serializing");
    }
-
-   
-if (child || !background)
+ 
+if (child == 0 || !background)
    {
    FindAndVerifyFilesPromises(pp);
    }

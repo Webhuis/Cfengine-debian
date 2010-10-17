@@ -212,7 +212,7 @@ void VerifyFilePromise(char *path,struct Promise *pp)
 { struct stat osb,oslb,dsb,dslb;
   struct Attributes a;
   struct CfLock thislock;
-  int exists,success,rlevel = 0,isthere,save = true;
+  int exists,success,rlevel = 0,isthere,save = true,isdirectory = false;
 
 a = GetFilesAttributes(pp);
 
@@ -534,7 +534,7 @@ void PurgeLocalFiles(struct Item *filelist,char *localdir,struct Attributes attr
 { DIR *dirh;
   struct stat sb; 
   struct dirent *dirp;
-  char filename[CF_BUFSIZE];
+  char filename[CF_BUFSIZE] = {0};
 
 Debug("PurgeLocalFiles(%s)\n",localdir);
 
@@ -582,9 +582,12 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
    if (!IsItemIn(filelist,dirp->d_name))
       {
       strncpy(filename,localdir,CF_BUFSIZE-2);
-      AddSlash(filename);
-      strncat(filename,dirp->d_name,CF_BUFSIZE-2);
       
+      AddSlash(filename);
+
+      Join(filename,dirp->d_name,CF_BUFSIZE-1);
+      
+
       if (DONTDO)
          {
          printf(" !! Need to purge %s from copy dest directory\n",filename);
@@ -618,6 +621,12 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
                {
                cfPS(cf_verbose,CF_INTERPT,"rmdir",pp,attr," !! Couldn't empty directory %s while purging\n",filename);
                }
+
+
+	    if (chdir("..") != 0)
+	       {
+	       CfOut(cf_error, "chdir", "!! Can't step out of directory \"%s\" before deletion",filename);
+	       }
             
             if (rmdir(filename) == -1)
                {
@@ -1174,7 +1183,7 @@ int CfReadLine(char *buff,int size,FILE *fp)
 buff[0] = '\0';
 buff[size - 1] = '\0';                        /* mark end of buffer */
 
-if (fgets(buff, size, fp) == NULL)
+if (fgets(buff,size,fp) == NULL)
    {
    *buff = '\0';                   /* EOF */
    return false;
@@ -1630,7 +1639,7 @@ if (sstat.st_nlink > 1)  /* Preserve hard links, if possible */
 
 if (attr.copy.servers != NULL && strcmp(attr.copy.servers->item,"localhost") != 0)
    {
-   Debug("This is a remote copy from server: %s\n",attr.copy.servers->item);
+   Debug("This is a remote copy from server: %s\n",(char *)attr.copy.servers->item);
    remote = true;
    }
 
@@ -1720,7 +1729,7 @@ if (!discardbackup)
    if (attr.copy.backup == cfa_timestamp)
       {
       stampnow = time((time_t *)NULL);   
-      snprintf(stamp,CF_BUFSIZE-1,"_%d_%s", CFSTARTTIME, CanonifyName(cf_ctime(&stampnow)));
+      snprintf(stamp,CF_BUFSIZE-1,"_%lu_%s", CFSTARTTIME, CanonifyName(cf_ctime(&stampnow)));
 
       if (!JoinSuffix(backup,stamp))
          {
