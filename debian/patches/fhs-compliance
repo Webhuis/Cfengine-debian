@@ -8,19 +8,15 @@ actual creation of the inputs dir any cf-* binary will fail
 
 --- a/src/generic_agent.c
 +++ b/src/generic_agent.c
-@@ -414,9 +414,10 @@
+@@ -414,7 +414,6 @@
     CfOut(cf_verbose,"","Work directory is %s\n",CFWORKDIR);
  
     snprintf(HASHDB,CF_BUFSIZE-1,"%s%c%s",CFWORKDIR,FILE_SEPARATOR,CF_CHKDB);
 -
-+/*
     snprintf(vbuff,CF_BUFSIZE,"%s%cinputs%cupdate.conf",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
     MakeParentDirectory(vbuff,force);
-+*/
     snprintf(vbuff,CF_BUFSIZE,"%s%cbin%ccf-agent -D from_cfexecd",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
-    MakeParentDirectory(vbuff,force);
-    snprintf(vbuff,CF_BUFSIZE,"%s%coutputs%cspooled_reports",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
-@@ -1077,7 +1078,7 @@
+@@ -1077,7 +1076,7 @@
     }
  else
     {
@@ -29,7 +25,7 @@ actual creation of the inputs dir any cf-* binary will fail
     VSETUIDLOG = strdup(LOGFILE);
     }
  
-@@ -1667,7 +1668,7 @@
+@@ -1667,7 +1666,7 @@
  
  { FILE *fp;
  
