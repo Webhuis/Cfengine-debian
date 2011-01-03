@@ -4,20 +4,14 @@ by the fhs-compliance patch; see #552144 for more details
 I'm also removing the auto-update of the binaries because the debian package is
 supposed to update the binaries, rather than cf-execd itself
 
---- a/inputs/library.cf
-+++ b/inputs/library.cf
-@@ -131,7 +131,7 @@
- 
-     exec_fix::
- 
--      "0,5,10,15,20,25,30,35,40,45,50,55 * * * * /var/cfengine/bin/cf-execd -F";
-+      "0,5,10,15,20,25,30,35,40,45,50,55 * * * * /usr/sbin/cf-execd -F";
- 
-   replace_patterns:
- 
 --- a/inputs/update.cf
 +++ b/inputs/update.cf
-@@ -30,19 +30,12 @@
+@@ -26,23 +26,17 @@
+ {
+ vars:
+ 
+- "master_location" string => "/var/cfengine/masterfiles";
++ "master_location" string => "/var/lib/cfengine3/masterfiles";
  
  files:
  
@@ -27,21 +21,32 @@ supposed to update the binaries, rather than cf-execd itself
      perms => u_p("600"),
      copy_from => mycopy("$(master_location)","localhost"),
      depth_search => recurse("inf"),
-     action => immediate;
--
+     action => uimmediate;
+ 
 -  "/var/cfengine/bin" 
 -
 -    perms => u_p("700"),
 -    copy_from => mycopy("/usr/local/sbin","localhost"),
 -    depth_search => recurse("inf"),
--    action => immediate;
+-    action => uimmediate;
  }
  
  ############################################
-@@ -77,4 +70,4 @@
- body action immediate
+@@ -77,4 +71,4 @@
+ body action uimmediate
  {
  ifelapsed => "1";
 -}
 \ No newline at end of file
 +}
+--- a/inputs/site.cf
++++ b/inputs/site.cf
+@@ -306,7 +306,7 @@
+ 
+     exec_fix::
+ 
+-      "0,5,10,15,20,25,30,35,40,45,50,55 * * * * /var/cfengine/bin/cf-execd -F";
++      "0,5,10,15,20,25,30,35,40,45,50,55 * * * * /usr/sbin/cf-execd -F";
+ 
+   replace_patterns:
+ 
