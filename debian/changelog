@@ -1,6 +1,6 @@
 cfengine3 (3.1.2+dfsg-1) experimental; urgency=low
 
-  * New upstream release
+  * New upstream release (Closes: 585619)
   * debian/cfengine3.init: quote the unquoted variables (Closes: 605044)
   * debian/postrm: clean up files during purge (Closes: 606359)
 
