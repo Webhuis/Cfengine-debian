@@ -59,9 +59,9 @@ do_start()
         PIDFILE="$PIDROOT/$DAEMON_NAME.pid"
         
         # get the args
-        [ $DAEMON_NAME = "cf-monitord" ] && DAEMON_ARGS=$CFMONITORD_ARGS
-        [ $DAEMON_NAME = "cf-serverd" ] && DAEMON_ARGS=$CFSERVERD_ARGS
-        [ $DAEMON_NAME = "cf-execd" ] && DAEMON_ARGS=$CFEXECD_ARGS
+        [ $DAEMON_NAME = "cf-monitord" ] && DAEMON_ARGS="$CFMONITORD_ARGS"
+        [ $DAEMON_NAME = "cf-serverd" ] && DAEMON_ARGS="$CFSERVERD_ARGS"
+        [ $DAEMON_NAME = "cf-execd" ] && DAEMON_ARGS="$CFEXECD_ARGS"
 
 	# Return
 	#   0 if daemon has been started
