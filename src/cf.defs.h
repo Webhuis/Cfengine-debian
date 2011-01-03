@@ -141,11 +141,14 @@ struct utsname
 #define LOG_LOCAL7      (23<<3)
 #define LOG_USER        (1<<3)
 #define LOG_DAEMON      (3<<3)
-#else
+
+#else  /* NOT MINGW */
+
 #include <syslog.h>
-#endif
 
 extern int errno;
+#endif
+
 
 /* Do this for ease of configuration from the Makefile */
 
@@ -290,10 +293,6 @@ extern int errno;
 
 #ifdef HAVE_PCRE_H
 # include <pcreposix.h>
-#elif HAVE_RXPOSIX_H
-# include <rxposix.h>
-#elif  HAVE_REGEX_H
-# include <regex.h>
 #endif
 
 #ifndef HAVE_SNPRINTF
@@ -348,6 +347,7 @@ typedef int clockid_t;
 #define CF_PROCCOLS 16
 #define CF_HASHTABLESIZE 7919 /* prime number */
 #define CF_MACROALPHABET 61    /* a-z, A-Z plus a bit */
+#define CF_ALPHABETSIZE 256
 #define CF_MAXSHELLARGS 64
 #define CF_MAX_SCLICODES 16
 #define CF_SAMEMODE 7777
@@ -1177,15 +1177,9 @@ struct Item
 
 /*******************************************************************/
 
-struct TwoDimList
+struct AlphaList  // Indexed itemlist
    {
-   short is2d;                  /* true if list > 1 */
-   short rounds;
-   short tied;                  /* do variables march together or in rounds ? */
-   char  sep;                   /* list separator */
-   struct Item *ilist;          /* Each node contains a list */
-   struct Item *current;        /* A static working pointer */
-   struct TwoDimList *next;
+   struct Item *list[256];
    };
 
 /*******************************************************************/

@@ -82,7 +82,7 @@ for (rp = namelist; rp != NULL; rp = rp->next)
             }
          }
       }
-   
+
    if (new = NewAssoc(rp->item,returnval,rtype,dtype))
       {
       this = OrthogAppendRlist(&deref_listoflists,new,CF_LIST);
@@ -90,10 +90,11 @@ for (rp = namelist; rp != NULL; rp = rp->next)
       
       while (rp->state_ptr && strcmp(rp->state_ptr->item,CF_NULL_VALUE) == 0)
          {
-         rp->state_ptr = rp->state_ptr->next;         
+         if (rp->state_ptr)
+            {
+            rp->state_ptr = rp->state_ptr->next;
+            }
          }
-
-      Debug("SETTING state to %s\n",rp->state_ptr->item);
       }
    }
 
@@ -123,7 +124,8 @@ int IncrementIterationContext(struct Rlist *iterator,int level)
 
 { struct Rlist *rp,*state_ptr,*state;
   struct CfAssoc *cp;
-
+  void *vp = NULL;
+  
 if (iterator == NULL)
    {
    return false;
@@ -134,6 +136,11 @@ if (iterator == NULL)
 
 cp = (struct CfAssoc *)iterator->item;
 state = iterator->state_ptr;
+
+if (state == NULL)
+   {
+   return false;
+   }
 
 /* Go ahead and increment */
 
@@ -151,6 +158,7 @@ if (state->next == NULL)
          {
          /* Not at end yet, so reset this wheel */
          iterator->state_ptr = cp->rval;
+         iterator->state_ptr = iterator->state_ptr->next;         
          return true;
          }
       else
@@ -174,9 +182,25 @@ else
 
    while (iterator->state_ptr && strcmp(iterator->state_ptr->item,CF_NULL_VALUE) == 0)
       {
-      iterator->state_ptr = iterator->state_ptr->next;
+      if (IncrementIterationContext(iterator->next,level+1))
+         {
+         /* Not at end yet, so reset this wheel (next because we always start with cf_null now) */
+         iterator->state_ptr = cp->rval;
+         iterator->state_ptr = iterator->state_ptr->next;         
+         return true;
+         }
+      else
+         {
+         /* Reached last variable wheel - pass up */
+         break;
+         }
       }
-   
+
+   if (EndOfIteration(iterator))
+      {
+      return false;
+      }
+
    return true;
    }
 }
@@ -200,10 +224,10 @@ for (rp = iterator; rp != NULL; rp = rp->next)
 
    if (state == NULL)
       {
-      break;
+      continue;
       }
 
-   if (state->next != NULL)
+   if (state && state->next != NULL)
       {
       return false;
       }

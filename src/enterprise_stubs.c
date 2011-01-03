@@ -47,6 +47,10 @@ should be free, please let us know and we will consider this carefully.
 # include <cf.nova.h>
 #endif
 
+#ifdef HAVE_ZONE_H
+# include <zone.h>
+#endif
+
 void *Nova_LDAPValue(char *uri,char *basedn,char *filter,char *name,char *scope,char *sec);
 void *Nova_LDAPList(char *uri,char *dn,char *filter,char *name,char *scope,char *sec);
 void *Nova_LDAPArray(char *array,char *uri,char *dn,char *filter,char *scope,char *sec);
@@ -418,13 +422,14 @@ Nova_SpecialQuote(topic,type);
 
 void HistoryUpdate(struct Averages newvals)
 
-{ struct Promise *pp = NewPromise("history_db","the long term memory");
-  struct Attributes dummyattr;
+{
+#ifdef HAVE_LIBCFNOVA  
+  struct Promise *pp = NewPromise("history_db","the long term memory");
+  struct Attributes dummyattr = {0};
   struct CfLock thislock;
   time_t now = time(NULL);
   char timekey[CF_MAXVARSIZE];
 
-#ifdef HAVE_LIBCFNOVA  
 /* We do this only once per hour - this should not be changed */
 
 Banner("Update long-term history");
@@ -438,7 +443,7 @@ if (strlen(CURRENT_SHIFT) == 0)
 memset(&dummyattr,0,sizeof(dummyattr));
 dummyattr.transaction.ifelapsed = 59;
 
-thislock = AcquireLock(pp->promiser,VUQNAME,now,dummyattr,pp);
+thislock = AcquireLock(pp->promiser,VUQNAME,now,dummyattr,pp,false);
 
 if (thislock.lock == NULL)
    {
@@ -622,10 +627,10 @@ return NULL;
 
 /*****************************************************************************/
 
-void IdempAddToKeyRing(char *name,RSA *key)
+void IdempAddToKeyRing(char *name,char *ip,RSA *key)
 {
 #ifdef HAVE_LIBCFNOVA
-Nova_IdempAddToKeyRing(name,key);
+Nova_IdempAddToKeyRing(name,ip,key);
 #else
 return;
 #endif 
@@ -1104,8 +1109,8 @@ void NoteEfficiency(double e)
 
 {
 #ifdef HAVE_LIBCFNOVA
- struct Attributes a;
- struct Promise p;
+ struct Attributes a = {0};
+ struct Promise p = {0};
  
 NovaNamedEvent("Configuration model efficiency",e,a,&p);
 CfOut(cf_verbose,"","Configuration model efficiency for %s = %.2lf%%",VUQNAME,e);
@@ -1116,11 +1121,19 @@ CfOut(cf_verbose,"","Configuration model efficiency for %s = %.2lf%%",VUQNAME,e)
 
 char *GetProcessOptions()
 {
-#ifdef HAVE_LIBCFNOVA
- return Nova_GetProcessOptions();
-#else
-CfOut(cf_verbose,"","Extended process options are only available with Cfengine Nova or above");
-return VPSOPTS[VSYSTEMHARDCLASS];
+#ifdef HAVE_GETZONEID
+ zoneid_t zid;
+ char zone[ZONENAME_MAX];
+ 
+zid = getzoneid();
+getzonenamebyid(zid,zone,ZONENAME_MAX);
+
+if (cf_strcmp(zone,"global") == 0)
+   {
+   return "-z global";
+   }
 #endif
+
+return VPSOPTS[VSYSTEMHARDCLASS];
 }
 

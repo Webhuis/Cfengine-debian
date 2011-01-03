@@ -210,7 +210,7 @@ cf_closedir(dirh);
 void VerifyFilePromise(char *path,struct Promise *pp)
 
 { struct stat osb,oslb,dsb,dslb;
-  struct Attributes a;
+  struct Attributes a = {0};
   struct CfLock thislock;
   int exists,success,rlevel = 0,isthere,save = true,isdirectory = false;
 
@@ -221,7 +221,7 @@ if (!FileSanityChecks(path,a,pp))
    return;
    }
 
-thislock = AcquireLock(path,VUQNAME,CFSTARTTIME,a,pp);
+thislock = AcquireLock(path,VUQNAME,CFSTARTTIME,a,pp,false);
 
 if (thislock.lock == NULL)
    {
@@ -291,7 +291,7 @@ if (exists && !VerifyFileLeaf(path,&oslb,a,pp))
       return;
       }
    }
-
+     
 if (cfstat(path,&osb) == -1)
    {
    if (a.create||a.touch)
@@ -343,7 +343,7 @@ if (a.link.link_children)
    }
 
 /* Phase 1 - */
-
+     
 if (exists && (a.havedelete||a.haverename||a.haveperms||a.havechange||a.transformer))
    {
    lstat(path,&oslb); /* if doesn't exist have to stat again anyway */
@@ -392,7 +392,7 @@ if (a.havecopy)
 
 if (a.havelink && a.link.link_children)
    {
-   ScheduleLinkChildrenOperation(path,a,pp);
+   ScheduleLinkChildrenOperation(path,a.link.source,1,a,pp);
    }
 else if (a.havelink)
    {
@@ -602,7 +602,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
             }
          else if (S_ISDIR(sb.st_mode))
             {
-            struct Attributes purgeattr;
+            struct Attributes purgeattr = {0};
             memset(&purgeattr,0,sizeof(purgeattr));
 
             /* Deletion is based on a files promise */
@@ -1232,6 +1232,13 @@ if (a.havelink && a.havecopy)
    return false;
    }
 
+if (a.havelink && !a.link.source)
+   {
+   CfOut(cf_error,""," !! Promise to establish a link at %s has no source",path);
+   PromiseRef(cf_error,pp);
+   return false;
+   }
+
 if (a.haveeditline && a.haveeditxml)
    {
    CfOut(cf_error,""," !! Promise constraint conflicts - %s editing file as both line and xml makes no sense",path);
@@ -1322,7 +1329,7 @@ return true;
 
 void LoadSetuid(struct Attributes a,struct Promise *pp)
 
-{ struct Attributes b;
+{ struct Attributes b = {0};
   char filename[CF_BUFSIZE];
 
 b = a;
@@ -1342,7 +1349,7 @@ if (!LoadFileAsItemList(&VSETUIDLIST,filename,b,pp))
 
 void SaveSetuid(struct Attributes a,struct Promise *pp)
 
-{ struct Attributes b;
+{ struct Attributes b = {0};
   char filename[CF_BUFSIZE];
 
 b = a;
@@ -1354,7 +1361,7 @@ MapName(filename);
 
 PurgeItemList(&VSETUIDLIST,"SETUID/SETGID");
 
-if (VSETUIDLIST && !CompareToFile(VSETUIDLIST,filename,a,pp))
+if (!CompareToFile(VSETUIDLIST,filename,a,pp))
    {
    SaveItemListAsFile(VSETUIDLIST,filename,b,pp);
    }
@@ -1388,7 +1395,7 @@ switch (attr.copy.compare)
        
        if (ok_to_copy)
           { 
-          CfOut(cf_verbose,""," !! Image file %s has a wrong MD5 checksum (should be copy of %s)\n",destfile,sourcefile);
+          CfOut(cf_verbose,""," !! Image file %s has a wrong digest/checksum (should be copy of %s)\n",destfile,sourcefile);
           return ok_to_copy;
           }
        break;

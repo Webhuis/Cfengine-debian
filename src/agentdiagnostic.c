@@ -286,7 +286,6 @@ int FlattenText(char *str);
 int GetOptions(int argc, char *argv[]);
 int MyCreate(struct line_data *);
 int ReadLineInput(char *dst, char *frm );
-void CheckInstalledLibraries(void);
 
 //used only for internal testing
 void PrintChars(char *);
@@ -329,6 +328,7 @@ TestVariableScan();
 TestExpandPromise();
 TestExpandVariables();
 //TestSearchFilePromiser();
+CheckInstalledLibraries();
 
 #ifdef BUILD_TESTSUITE
 
@@ -341,7 +341,11 @@ printf("----------------------------------------------------------\n\n");
 InitializeGA(0,NULL);
  TestSuite(file);
 }
+
+#else  
+printf("!! Extensive self-diagnostic capabilities not built in\n");
 #endif
+
 }
 
 /******************************************************************/
@@ -410,9 +414,6 @@ void TestSuite(char *s)
 { char output[CF_EXPANDSIZE],command[CF_BUFSIZE], c[CF_BUFSIZE];  
   int i = 0, j = 0, nMap = 0, nInput = 0;
 
-printf("\tChecking for installed libraries...\n");
-CheckInstalledLibraries();
-printf("\tDone.\n\n");   
 if(s == NULL)
 {
    snprintf(s,CF_BUFSIZE,"%s","input.in");
@@ -571,7 +572,7 @@ int DoIt(struct line_data *p)
 
 { char buf[CF_EXPANDSIZE];
   char *pBuf = buf;
-  struct Attributes a;
+  struct Attributes a = {0};
   char file[CF_BUFSIZE];
  
 switch(p->action)
@@ -2463,7 +2464,9 @@ int CheckPredefined(char *name)
 	return -1;
      }
 }
+
 /*********************************************************/
+
 int ExecutePreDefined(int id, char *opt)
 {
    switch(id)
@@ -2473,11 +2476,13 @@ int ExecutePreDefined(int id, char *opt)
 	break;
      }
    
+   return -1;   
 }
+
 /*********************************************************/
 int PerformBootstrap(char *server)
 {
-   char buf[CF_BUFSIZE], output[CF_BUFSIZE];;
+   char buf[CF_BUFSIZE], output[CF_BUFSIZE];
    snprintf(buf,CF_BUFSIZE,"%s/ppkeys/localhost.pub",CFWORKDIR);
    if(!FileExists(buf))
      {
@@ -2521,9 +2526,17 @@ int FileExists(char *file)
      }
    return 1;
 }
+
+#endif  /* BUILD_TESTSUITE */
+
+
 /*********************************************************/
+
+
 void CheckInstalledLibraries(void)
 {
+  printf("---- INSTALLED LIBRARIES ----\n");
+
 
    #ifndef HAVE_LIBLDAP
    printf("\t->LIBLDAP not found!!\n");
@@ -2552,7 +2565,29 @@ void CheckInstalledLibraries(void)
    #ifndef HAVE_LIBMYSQLCLIENT
    printf("\t->LIBMYSQLCLIENT not found!!\n");
    #endif
+
+   #ifdef HAVE_LIBPQ
+     printf("\t-> LIBPQ (postgresql) version ???\n");
+   #else
+     printf("\t!! LIBPQ (postgresql) not found\n");
+   #endif
+
+
+   #ifdef HAVE_LIBCFNOVA
+   if(!Nova_HaveFIPS())
+     {
+     printf("\t->FIPS OpenSSL canister not found!!\n");
+     }
+
+   #else
+   printf("\t->Nova not found!!\n");
+   #endif
+
+   printf("---- INSTALLED LIBRARIES POLICY SERVER ONLY ----\n");
+
+   #ifndef HAVE_LIBGD
+   printf("\t->LIBGD not found!!\n");
+   #endif
+
 }
 
-/*********************************************************/
-#endif

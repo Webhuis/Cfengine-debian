@@ -89,7 +89,6 @@ int main (int argc,char *argv[]);
 int main(int argc,char *argv[])
 
 {
-
 CheckOpts(argc,argv); 
 GenericInitialize(argc,argv,"common");
 ThisAgentInit();
@@ -104,7 +103,7 @@ else
    {
    CfOut(cf_verbose,""," -> Inputs are valid\n");
    exit(0);
-   }
+   } 
 }
 
 /*******************************************************************/
@@ -171,6 +170,7 @@ while ((c=getopt_long(argc,argv,"ad:vnIf:D:N:VSrxM",OPTIONS,&optindex)) != EOF)
           
       case 'n': DONTDO = true;
           IGNORELOCK = true;
+	  LOOKUP = true;
           NewClass("opt_dry_run");
           break;
           

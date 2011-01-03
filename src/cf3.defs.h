@@ -33,7 +33,7 @@
 #undef VERSION
 #undef Verbose
 
-#define CF3_REVISION "$Rev: 1396 $"
+#define CF3_REVISION "$Rev: 1581 $"
 
 #include "conf.h"
 
@@ -109,17 +109,17 @@
 struct PromiseParser
    {
    char *block;                     /* body/bundle  */
-   char *blocktype;
-   char *blockid;
+   char blocktype[CF_MAXVARSIZE];
+   char blockid[CF_MAXVARSIZE];
 
-   char *filename;
+   char filename[CF_MAXVARSIZE];
    int line_pos;
    int line_no;
 
    int arg_nesting;
    int list_nesting;
       
-   char *lval;
+   char lval[CF_MAXVARSIZE];
    void *rval;
    char rtype;
    int isbody;
@@ -127,9 +127,9 @@ struct PromiseParser
    char *promiser;
    void *promisee;
 
-   char *currentid;
+   char currentid[CF_MAXVARSIZE];
+   char currenttype[CF_MAXVARSIZE];
    char *currentstring;
-   char *currenttype;
    char *currentclasses;
 
    struct Bundle *currentbundle;
@@ -253,6 +253,7 @@ enum cfacontrol
    cfa_addclasses,
    cfa_agentaccess,
    cfa_agentfacility,
+   cfa_alwaysvalidate,
    cfa_auditing,
    cfa_binarypaddingchar,
    cfa_bindtointerface,
@@ -477,7 +478,7 @@ enum cfeditorder
 #define CF_CLASSRANGE  "[a-zA-Z0-9_!&@@$|.()]+"
 #define CF_IDRANGE     "[a-zA-Z0-9_$()\\[\\].]+"
 #define CF_USERRANGE   "[a-zA-Z0-9_$.-]+"
-#define CF_IPRANGE     "[a-zA-Z0-9_$.:-]+"
+#define CF_IPRANGE     "[a-zA-Z0-9_$().:-]+"
 #define CF_FNCALLRANGE "[a-zA-Z0-9_().$@]+"
 #define CF_NAKEDLRANGE "@[(][a-zA-Z0-9]+[)]"
 #define CF_ANYSTRING   ".*"
@@ -1048,17 +1049,17 @@ enum promiselog_rep
 
 /*************************************************************************/
 
-// Special Purpose Policy types
-typedef enum spp_report
+// Content-Driven Policy types
+typedef enum cdp_report
 {
-  spp_acls,
-  spp_commands,
-  spp_filechanges,
-  spp_filediffs,
-  spp_registry,
-  spp_services,
-  spp_unknown
-}spp_t;
+  cdp_acls,
+  cdp_commands,
+  cdp_filechanges,
+  cdp_filediffs,
+  cdp_registry,
+  cdp_services,
+  cdp_unknown
+}cdp_t;
 
 
 
@@ -1215,11 +1216,9 @@ struct Occurrence
 #endif
 
 #ifdef HAVE_PGSQL_LIBPQ_FE_H
-#include <pgsql/libpq-fe.h>
-#endif
-
-#ifdef HAVE_LIBPQ_FE_H
-#include <libpq-fe.h>
+ #include <pgsql/libpq-fe.h>
+#elif defined(HAVE_LIBPQ_FE_H)
+ #include <libpq-fe.h>
 #endif
 
 enum cfdbtype
@@ -1855,7 +1854,7 @@ meter_endmark
 /* common macros                                                         */
 /*************************************************************************/
 
-#define EMPTY(str) ((str == NULL) || (strlen(str) == 0))
+#define EMPTY(str) ((str == NULL) || (str[0] == '\0'))
 
 // classes not interesting in reports
 #define IGNORECLASS(c)                                                         \
@@ -1864,8 +1863,7 @@ meter_endmark
   || strncmp(c,"GMT_Hr",6) == 0  || strncmp(c,"Yr",2) == 0                     \
   || strncmp(c,"Day",3) == 0 || strcmp(c,"Morning") == 0                       \
   || strcmp(c,"Afternoon") == 0 || strcmp(c,"Evening") == 0                    \
-  || strcmp(c,"Night") == 0 || strcmp(c,"license_expired") == 0                \
-  || strcmp(c,"unlabelled_promise") == 0)
+  || strcmp(c,"Night") == 0 || strcmp(c,"license_expired") == 0)
 
 
 #include "prototypes3.h"

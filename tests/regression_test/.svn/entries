@@ -1,9 +1,9 @@
 10
 
 dir
-1412
-https://svn.iu.hio.no/projects/cfengine-3/trunk/tests/regression_test
-https://svn.iu.hio.no/projects/cfengine-3
+1581
+https://c.cfengine.com/svn/core/trunk/tests/regression_test
+https://c.cfengine.com/svn/core
 
 
 
@@ -38,7 +38,7 @@ file
 
 
 
-2010-09-23T07:08:47.818482Z
+2010-11-29T07:55:53.295128Z
 a5ae13c8aa7f103beb3b17bb8f9d3780
 2010-09-21T14:01:20.987487Z
 1288

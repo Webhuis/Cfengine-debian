@@ -396,7 +396,7 @@ dummyattr.transaction.expireafter = CF_EXEC_EXPIREAFTER;
 
 if (!ONCE)
    {
-   thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
+   thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp,false);
 
    if (thislock.lock == NULL)
       {
@@ -530,7 +530,7 @@ if (!ONCE)
 
 void Apoptosis()
 
-{ struct Promise pp;
+{ struct Promise pp = {0};
   struct Rlist *signals = NULL, *owners = NULL;
   char mypid[32],pidrange[32];
   char *psopts = GetProcessOptions();
@@ -621,10 +621,12 @@ if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY))
   }
 
 ThreadLock(cft_system);
-DeleteItemList(VHEAP);
-VHEAP = NULL;
-DeleteItemList(VADDCLASSES);
-VADDCLASSES = NULL;
+
+DeleteAlphaList(&VHEAP);
+InitAlphaList(&VHEAP);
+DeleteAlphaList(&VADDCLASSES);
+InitAlphaList(&VADDCLASSES);
+
 DeleteItemList(IPADDRESSES);
 IPADDRESSES = NULL;
 DeleteScope("this");

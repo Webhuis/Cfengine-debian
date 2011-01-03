@@ -472,6 +472,7 @@ if (strstr(s,varstr) != NULL)
    }
 
 snprintf(varstr,CF_MAXVARSIZE-1,"@{%s}",v);
+
 if (strstr(s,varstr) != NULL)
    {
    return true;
@@ -732,7 +733,7 @@ for (sp = str+2; *sp != '\0' ; sp++)       /* check for varitems */
           else
              {
              Debug("Illegal character found: '%c'\n", *sp);
-             CfOut(cf_error,"","Illegal character somewhere in variable \"%s\" or nested expansion",str);
+             Debug("Illegal character somewhere in variable \"%s\" or nested expansion",str);
              }
       }
    

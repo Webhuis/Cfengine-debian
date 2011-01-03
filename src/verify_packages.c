@@ -36,7 +36,7 @@
 
 void VerifyPackagesPromise(struct Promise *pp)
 
-{ struct Attributes a,al;
+{ struct Attributes a = {0},al = {0};
   struct CfLock thislock;
   char lockname[CF_BUFSIZE];
 
@@ -68,7 +68,7 @@ if (a.packages.package_list_update_command)
       al.transaction.ifelapsed = a.packages.package_list_update_ifelapsed;
       }
 
-   thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,al,pp);
+   thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,al,pp,false);
    
    if (thislock.lock != NULL)
       {
@@ -81,7 +81,7 @@ if (a.packages.package_list_update_command)
 
 snprintf(lockname,CF_BUFSIZE-1,"package-%s-%s",pp->promiser,a.packages.package_list_command);
  
-thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
+thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp,false);
 
 if (thislock.lock == NULL)
    {
@@ -149,25 +149,23 @@ if (a.packages.package_file_repositories)
    }
 
 if (a.packages.package_name_regex||a.packages.package_version_regex||a.packages.package_arch_regex)
-   {
-   if (a.packages.package_name_regex && a.packages.package_version_regex && a.packages.package_arch_regex)
-      {
-      if (a.packages.package_version || a.packages.package_architectures)
-         {
-         cfPS(cf_error,CF_FAIL,"",pp,a," !! You must either supply all regexs for (name,version,arch) xor a separate version number and architecture");
-         return false;            
-         }
-      }
-   else
-      {
+  if (a.packages.package_name_regex && a.packages.package_version_regex && a.packages.package_arch_regex)
+    {
+      if(a.packages.package_version || a.packages.package_architectures)
+	{
+	cfPS(cf_error,CF_FAIL,"",pp,a," !! You must either supply all regexs for (name,version,arch) xor a separate version number and architecture");
+        return false;            
+	}
+    }
+  else
+    {
       if (a.packages.package_version && a.packages.package_architectures)
-         {
-         cfPS(cf_error,CF_FAIL,"",pp,a," !! You must either supply all regexs for (name,version,arch) xor a separate version number and architecture");
-         return false;
-         }
-      }
-   }
-
+	{
+	cfPS(cf_error,CF_FAIL,"",pp,a," !! You must either supply all regexs for (name,version,arch) xor a separate version number and architecture");
+	return false;
+	}
+    }
+ 
 
 if (a.packages.package_add_command == NULL || a.packages.package_delete_command == NULL)
    {
@@ -533,7 +531,7 @@ int ExecuteSchedule(struct CfPackageManager *schedule,enum package_actions actio
   struct CfPackageManager *pm;
   int size,estimated_size,retval = true,verify = false;
   char *command_string = NULL;
-  struct Attributes a;
+  struct Attributes a = {0};
   struct Promise *pp;
   int ok;       
 
@@ -779,7 +777,7 @@ int ExecutePatch(struct CfPackageManager *schedule,enum package_actions action)
   struct CfPackageManager *pm;
   int size,estimated_size,retval = true,verify = false;
   char *command_string = NULL;
-  struct Attributes a;
+  struct Attributes a = {0};
   struct Promise *pp;
 
 for (pm = schedule; pm != NULL; pm = pm->next)
@@ -1252,6 +1250,12 @@ else
 
 
 CfOut(cf_verbose,""," -> Package promises to refer to itself as \"%s\" to the manager\n",id);
+
+if(IsIn('*', id))
+  {
+  CfOut(cf_verbose,"","!! Package name contians '*' -- perhaps a missing attribute (name/version/arch) should be specified");
+  }
+
 
 if (a.packages.package_select == cfa_eq || a.packages.package_select == cfa_ge ||
     a.packages.package_select == cfa_le || a.packages.package_select == cfa_cmp_none)

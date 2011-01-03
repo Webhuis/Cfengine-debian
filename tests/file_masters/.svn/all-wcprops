@@ -1,47 +1,47 @@
 K 25
 svn:wc:ra_dav:version-url
-V 59
-/projects/cfengine-3/!svn/ver/1239/trunk/tests/file_masters
+V 48
+/svn/core/!svn/ver/1580/trunk/tests/file_masters
 END
 failsafe.cf
 K 25
 svn:wc:ra_dav:version-url
-V 70
-/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters/failsafe.cf
+V 59
+/svn/core/!svn/ver/852/trunk/tests/file_masters/failsafe.cf
 END
 Makefile.in
 K 25
 svn:wc:ra_dav:version-url
-V 71
-/projects/cfengine-3/!svn/ver/1239/trunk/tests/file_masters/Makefile.in
+V 60
+/svn/core/!svn/ver/1580/trunk/tests/file_masters/Makefile.in
 END
 promises.cf
 K 25
 svn:wc:ra_dav:version-url
-V 70
-/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters/promises.cf
+V 59
+/svn/core/!svn/ver/852/trunk/tests/file_masters/promises.cf
 END
 Makefile.am
 K 25
 svn:wc:ra_dav:version-url
-V 70
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/Makefile.am
+V 59
+/svn/core/!svn/ver/297/trunk/tests/file_masters/Makefile.am
 END
 update.cf
 K 25
 svn:wc:ra_dav:version-url
-V 68
-/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters/update.cf
+V 57
+/svn/core/!svn/ver/852/trunk/tests/file_masters/update.cf
 END
 library.cf
 K 25
 svn:wc:ra_dav:version-url
-V 69
-/projects/cfengine-3/!svn/ver/852/trunk/tests/file_masters/library.cf
+V 58
+/svn/core/!svn/ver/852/trunk/tests/file_masters/library.cf
 END
 README
 K 25
 svn:wc:ra_dav:version-url
-V 65
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_masters/README
+V 54
+/svn/core/!svn/ver/297/trunk/tests/file_masters/README
 END

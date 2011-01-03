@@ -91,7 +91,6 @@ extern char CFLAST[CF_BUFSIZE];
 extern char LOCKDB[CF_BUFSIZE];
 extern char EDITBUFF[CF_BUFSIZE];
 
-extern char *tzname[2];
 extern int CFSIGNATURE;
 extern char CFDES1[8];
 extern char CFDES2[8];
@@ -280,7 +279,6 @@ extern struct Item *VSTRATEGYBUILD;
 
 
 extern struct Item *VMOUNTLIST;
-extern struct Item *VHEAP;      /* Points to the base of the attribute heap */
 extern struct Item *VNEGHEAP;
 extern struct Item *VDELCLASSES;
 extern struct Item *ABORTHEAP;
@@ -345,8 +343,8 @@ extern struct MiscMount *VMISCMOUNTTOP;
 extern struct Item *VIMPORT;
 extern struct Item *VACTIONSEQ;
 extern struct Item *VACCESSLIST;
-extern struct Item *VADDCLASSES;
-extern struct Item *VALLADDCLASSES;
+extern struct AlphaList VHEAP; 
+extern struct AlphaList VADDCLASSES;
 extern struct Rlist *PRIVCLASSHEAP;
 
 extern struct Item *VJUSTACTIONS;
@@ -509,7 +507,9 @@ extern mode_t UMASK;
 
 extern char *SIGNALS[];
 
+#ifndef MINGW
 extern char *tzname[2]; /* see man ctime */
+#endif
 
 extern int SENSIBLEFILECOUNT;
 extern int SENSIBLEFSSIZE;

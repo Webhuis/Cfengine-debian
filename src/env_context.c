@@ -177,8 +177,8 @@ if (strcmp(pp->bundletype,THIS_AGENT) == 0 || FullTextMatch("edit_.*",pp->bundle
 void DeleteEntireHeap()
 
 {
-DeleteItemList(VHEAP);
-VHEAP = NULL;
+DeleteAlphaList(&VHEAP);
+InitAlphaList(&VHEAP);
 }
 
 /*****************************************************************************/
@@ -186,9 +186,9 @@ VHEAP = NULL;
 void DeletePrivateClassContext()
 
 {
-DeleteItemList(VADDCLASSES);
+DeleteAlphaList(&VADDCLASSES);
+InitAlphaList(&VADDCLASSES);
 DeleteItemList(VDELCLASSES);
-VADDCLASSES = NULL;
 VDELCLASSES = NULL;
 }
 
@@ -196,9 +196,11 @@ VDELCLASSES = NULL;
 
 void PushPrivateClassContext()
 
-{
-PushStack(&PRIVCLASSHEAP,VADDCLASSES);
-VADDCLASSES = NULL;
+{ struct AlphaList *ap = malloc(sizeof(struct AlphaList));
+
+// copy to heap
+PushStack(&PRIVCLASSHEAP,CopyAlphaListPointers(ap,&VADDCLASSES));
+InitAlphaList(&VADDCLASSES);
 }
 
 /*****************************************************************************/
@@ -206,9 +208,12 @@ VADDCLASSES = NULL;
 void PopPrivateClassContext()
 
 { struct Item *list;
-
-DeleteItemList(VADDCLASSES);
-PopStack(&PRIVCLASSHEAP,(void *)&VADDCLASSES,sizeof(VADDCLASSES));
+  struct AlphaList *ap;
+ 
+DeleteAlphaList(&VADDCLASSES);
+PopStack(&PRIVCLASSHEAP,(void *)&ap,sizeof(VADDCLASSES));
+CopyAlphaListPointers(&VADDCLASSES,ap);
+free(ap);
 }
 
 /*****************************************************************************/
@@ -289,6 +294,11 @@ void LoadPersistentContext()
   struct CfState q;
   char filename[CF_BUFSIZE];
 
+if(LOOKUP)
+  {
+  return;
+  }
+
 Banner("Loading persistent classes");
   
 snprintf(filename,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_STATEDB_FILE);
@@ -340,7 +350,7 @@ void AddEphemeralClasses(struct Rlist *classlist)
 
 for (rp = classlist; rp != NULL; rp = rp->next)
    {
-   if (!IsItemIn(VHEAP,rp->item))
+   if (!InAlphaList(VHEAP,rp->item))
       {
       NewClass(rp->item);
       }
@@ -380,32 +390,33 @@ for (sp = local; *sp != '\0'; sp++)
 
 /*********************************************************************/
 
-void NegateClassesFromString(char *class,struct Item **heap)
+void NegateClassesFromString(char *classlist,struct Item **heap)
 
-{ char *sp = class;
-  char cbuff[CF_MAXVARSIZE];
+{ char *sp, currentitem[CF_MAXVARSIZE],local[CF_MAXVARSIZE];
 
-while(*sp != '\0')
+if ((classlist == NULL) || strlen(classlist) == 0)
    {
-   sscanf(sp,"%255[^.]",cbuff);
+   return;
+   }
 
-   while ((*sp != '\0') && ((*sp !='.')||(*sp == '&')))
-      {
-      sp++;
-      }
+memset(local,0,CF_MAXVARSIZE);
+strncpy(local,classlist,CF_MAXVARSIZE-1);
 
-   if ((*sp == '.') || (*sp == '&'))
-      {
-      sp++;
-      }
+for (sp = local; *sp != '\0'; sp++)
+   {
+   memset(currentitem,0,CF_MAXVARSIZE);
 
-   if (IsHardClass(cbuff))
+   sscanf(sp,"%250[^.:,]",currentitem);
+
+   sp += strlen(currentitem);
+
+   if (IsHardClass(currentitem))
       { char err[CF_BUFSIZE];
-      sprintf (err,"Cannot negate the reserved class [%s]\n",cbuff);
+      sprintf (err,"Cannot negate the reserved class [%s]\n",currentitem);
       FatalError(err);
       }
 
-   AppendItem(heap,cbuff,NULL);
+   AppendItem(heap,currentitem,NULL);
    }
 }
 
@@ -451,7 +462,7 @@ int IsHardClass(char *sp)  /* true if string matches a hardwired class e.g. hpux
   static char *names[] =
      {
      "any","agent","Morning","Afternoon","Evening","Night","Q1","Q2","Q3","Q4",
-     "SuSE","suse","fedora","Ubuntu","cfengine","ipv4","lsb_compliant","localhost",
+     "SuSE","suse","fedora","Ubuntu","cfengine_","ipv4","lsb_compliant","localhost",
      NULL
      };
  
@@ -566,7 +577,7 @@ else
 
 void SaveClassEnvironment()
 
-{ struct Item *ip;
+{ struct AlpahList *ap;
   char file[CF_BUFSIZE];
   FILE *fp;
  
@@ -578,22 +589,8 @@ if ((fp = fopen(file,"w")) == NULL)
    return;
    }
 
-for (ip = VHEAP; ip != NULL; ip=ip->next)
-   {
-   if (!IsItemIn(VNEGHEAP,ip->name))
-      {
-      fprintf(fp,"%s\n",ip->name);
-      }
-   }
- 
-for (ip = VADDCLASSES; ip != NULL; ip=ip->next)
-   {
-   if (!IsItemIn(VNEGHEAP,ip->name))
-      {
-      fprintf(fp,"%s\n",ip->name);
-      }
-   }
-
+ListAlphaList(fp,VHEAP,'\n');
+ListAlphaList(fp,VADDCLASSES,'\n');
 fclose(fp);
 }
 
@@ -812,12 +809,12 @@ if (IsRegexItemIn(ABORTHEAP,class))
    exit(1);
    }
 
-if (IsItemIn(VHEAP,class))
+if (InAlphaList(VHEAP,class))
    {
    return;
    }
 
-AppendItem(&VHEAP,class,NULL);
+PrependAlphaList(&VHEAP,class);
 
 for (ip = ABORTHEAP; ip != NULL; ip = ip->next)
    {
@@ -880,9 +877,10 @@ for (sp = local; *sp != '\0'; sp++)
 
 void DeleteClass(char *class)
 
-{
-DeleteItemLiteral(&VHEAP,class);
-DeleteItemLiteral(&VADDCLASSES,class);
+{ int i = (int)*class;
+
+DeleteItemLiteral(&(VHEAP.list[i]),class);
+DeleteItemLiteral(&(VADDCLASSES.list[i]),class);
 }
 
 /*******************************************************************/
@@ -915,17 +913,17 @@ if (IsRegexItemIn(ABORTHEAP,copy))
    exit(1);
    }
 
-if (IsItemIn(VHEAP,copy))
+if (InAlphaList(VHEAP,copy))
    {
    CfOut(cf_error,"","WARNING - private class \"%s\" in bundle \"%s\" shadows a global class - you should choose a different name to avoid conflicts",copy,bundle);
    }
 
-if (IsItemIn(VADDCLASSES,copy))
+if (InAlphaList(VADDCLASSES,copy))
    {
    return;
    }
 
-AppendItem(&VADDCLASSES,copy,CONTEXTID);
+PrependAlphaList(&VADDCLASSES,copy);
 
 for (ip = ABORTHEAP; ip != NULL; ip = ip->next)
    {
@@ -957,7 +955,6 @@ int IsExcluded(char *exception)
 {
 if (!IsDefinedClass(exception))
    {
-   Debug2("%s is excluded!\n",exception);
    return true;
    }  
 
@@ -990,7 +987,7 @@ return ret;
 /* Level 2                                                           */
 /*********************************************************************/
 
-int EvaluateORString(char *class,struct Item *list,int fromIsInstallable)
+int EvaluateORString(char *class,struct AlphaList list,int fromIsInstallable)
 
 { char *sp, cbuff[CF_BUFSIZE];
   int result = false;
@@ -1059,7 +1056,7 @@ else
 /* Level 3                                                           */
 /*********************************************************************/
 
-int EvaluateANDString(char *class,struct Item *list,int fromIsInstallable)
+int EvaluateANDString(char *class,struct AlphaList list,int fromIsInstallable)
 
 { char *sp, *atom;
   char cbuff[CF_BUFSIZE];
@@ -1151,7 +1148,7 @@ while(*sp != '\0')
          return false;
          }
       } 
-   else if (IsItemIn(VHEAP,atom))
+   else if (InAlphaList(VHEAP,atom))
       {
       if (negation)
          {
@@ -1164,7 +1161,7 @@ while(*sp != '\0')
          count--;
          }
       } 
-   else if (IsItemIn(list,atom))
+   else if (InAlphaList(list,atom))
       {
       if (negation && !fromIsInstallable)
          {
@@ -1298,16 +1295,6 @@ for (sp = class; *sp != '\0'; sp++)
       count++;
       }
    }
-
-// This is checked in the lexer now, and so can be eliminated?
-//
-// if (bracklevel != 0)
-//    {
-//    char output[CF_BUFSIZE];
-//    snprintf(output,CF_BUFSIZE,"Bracket mismatch, in [class=\"%s\"], level = %d\n",class,bracklevel);
-//    yyerror(output);
-//    FatalError("Aborted");
-//    }
 
 return count+1;
 }

@@ -260,7 +260,7 @@ int ScheduleCopyOperation(char *destination,struct Attributes attr,struct Promis
 
 { struct cfagent_connection *conn;
 
- CfOut(cf_verbose,""," -> Copy file %s from %s check\n",destination,attr.copy.source);
+CfOut(cf_verbose,""," -> Copy file %s from %s check\n",destination,attr.copy.source);
 
 if (attr.copy.servers == NULL || strcmp(attr.copy.servers->item,"localhost") == 0)
    {
@@ -289,14 +289,15 @@ return true;
 
 /*****************************************************************************/
 
-int ScheduleLinkChildrenOperation(char *destination,struct Attributes attr,struct Promise *pp)
+int ScheduleLinkChildrenOperation(char *destination,char *source,int recurse,struct Attributes attr,struct Promise *pp)
 
 { DIR *dirh;
   struct dirent *dirp;
   char promiserpath[CF_BUFSIZE],sourcepath[CF_BUFSIZE];
   struct stat lsb;
+  int ret;
 
-if (lstat(destination,&lsb) != -1)
+if ((ret = lstat(destination,&lsb)) != -1)
    {
    if (attr.move_obstructions && S_ISLNK(lsb.st_mode))
       {
@@ -311,13 +312,13 @@ if (lstat(destination,&lsb) != -1)
 
 snprintf(promiserpath,CF_BUFSIZE,"%s/.",destination);
 
-if (!CfCreateFile(promiserpath,pp,attr))
+if ((ret == -1 || !S_ISDIR(lsb.st_mode)) && !CfCreateFile(promiserpath,pp,attr))
    {
    CfOut(cf_error,"","Cannot promise to link multiple files to children of %s as it is not a directory!",destination);
    return false;
    }
 
-if ((dirh = opendir(attr.link.source)) == NULL)
+if ((dirh = opendir(source)) == NULL)
    {
    cfPS(cf_error,CF_FAIL,"opendir",pp,attr,"Can't open source of children to link %s\n",attr.link.source);
    return false;
@@ -325,7 +326,7 @@ if ((dirh = opendir(attr.link.source)) == NULL)
 
 for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
    {
-   if (!ConsiderFile(dirp->d_name,attr.link.source,attr,pp))
+   if (!ConsiderFile(dirp->d_name,source,attr,pp))
       {
       continue;
       }
@@ -342,7 +343,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
       return false;
       }
 
-   strncpy(sourcepath,attr.link.source,CF_BUFSIZE-1);
+   strncpy(sourcepath,source,CF_BUFSIZE-1);
    AddSlash(sourcepath);
 
    if (!JoinPath(sourcepath,dirp->d_name))
@@ -352,7 +353,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
       return false;
       }
 
-   if ((lstat(promiserpath,&lsb) != -1) && !S_ISLNK(lsb.st_mode))
+   if ((lstat(promiserpath,&lsb) != -1) && !S_ISLNK(lsb.st_mode) && !S_ISDIR(lsb.st_mode))
       {
       if (attr.link.when_linking_children == cfa_override)
          {
@@ -365,7 +366,14 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
          }
       }
 
-   ScheduleLinkOperation(promiserpath,sourcepath,attr,pp);
+   if ((attr.recursion.depth > recurse) && (lstat(sourcepath,&lsb) != -1) && S_ISDIR(lsb.st_mode))
+      {
+      ScheduleLinkChildrenOperation(promiserpath,sourcepath,recurse+1,attr,pp);
+      }
+   else
+      {
+      ScheduleLinkOperation(promiserpath,sourcepath,attr,pp);
+      }
    }
 
 closedir(dirh);
@@ -422,7 +430,7 @@ int ScheduleEditOperation(char *filename,struct Attributes a,struct Promise *pp)
   struct CfLock thislock;
 
 snprintf(lockname,CF_BUFSIZE-1,"fileedit-%s",pp->promiser);
-thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
+thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp,false);
 
 if (thislock.lock == NULL)
    {
@@ -433,7 +441,7 @@ pp->edcontext = NewEditContext(filename,a,pp);
 
 if (pp->edcontext == NULL)
    {
-   CfOut(cf_error,"","File %s was marked for editing but could not be opened\n",filename);
+   cfPS(cf_error,CF_FAIL,"",pp,a,"File %s was marked for editing but could not be opened\n",filename);
    FinishEditContext(pp->edcontext,a,pp);
    YieldCurrentLock(thislock);
    return false;
@@ -445,7 +453,7 @@ if (a.haveeditline)
       {
       fp = (struct FnCall *)vp;
       edit_bundle_name = fp->name;
-      params = fp->args;;
+      params = fp->args;
       }
    else if (vp = GetConstraint("edit_line",pp,CF_SCALAR))
       {
@@ -466,7 +474,11 @@ if (a.haveeditline)
    if (bp = GetBundle(edit_bundle_name,"edit_line"))
       {
       BannerSubBundle(bp,params);
+
+      DeleteScope(bp->name);
       NewScope(bp->name);
+      HashVariables(bp->name);
+
       AugmentScope(bp->name,bp->args,params);
       PushPrivateClassContext();
       retval = ScheduleEditLineOperations(filename,bp,a,pp);
@@ -1177,6 +1189,8 @@ int TransformFile(char *file,struct Attributes attr,struct Promise *pp)
 
 { char comm[CF_EXPANDSIZE],line[CF_BUFSIZE];
   FILE *pop = NULL;
+  int print = false;
+  struct CfLock thislock;
 
 if (attr.transformer == NULL || file == NULL)
    {
@@ -1192,28 +1206,50 @@ if (!IsExecutable(GetArg0(comm)))
    return false;
    }
 
+if (strncmp(comm,"/bin/echo",strlen("/bin/echo")) == 0)
+   {
+   print = true;
+   }
+
 if (!DONTDO)
    {
+   thislock = AcquireLock(comm,VUQNAME,CFSTARTTIME,attr,pp,false);
+   
+   if (thislock.lock == NULL)
+      {
+      return false;
+      }
+   
    if ((pop = cf_popen(comm,"r")) == NULL)
       {
       cfPS(cf_inform,CF_FAIL,"",pp,attr,"Transformer %s %s failed",attr.transformer,file);
+      YieldCurrentLock(thislock);
       return false;
       }
    
    while (!feof(pop))
       {
       CfReadLine(line,CF_BUFSIZE,pop);
-      CfOut(cf_inform,"",line);
+
+      if (print)
+         {
+         CfOut(cf_reporting,"",line);
+         }
+      else
+         {
+         CfOut(cf_inform,"",line);
+         }
       }
    
    cf_pclose(pop);
-   cfPS(cf_inform,CF_CHG,"",pp,attr,"Transformer %s => %s seemed to work ok",file,comm);   
+   cfPS(cf_inform,CF_CHG,"",pp,attr,"Transformer %s => %s seemed to work ok",file,comm);
    }
 else
    {
    CfOut(cf_error,""," -> Need to transform file \"%s\" with \"%s\"",file,comm);
    }
-       
+
+YieldCurrentLock(thislock);
 return true;
 }
 
@@ -1272,7 +1308,10 @@ if (lstat(pathbuf,&statbuf) != -1)
 
    if (force)   /* force in-the-way directories aside */
       {
-      if (!S_ISDIR(statbuf.st_mode))  /* if the dir exists - no problem */
+      struct stat dir;
+      stat(pathbuf,&dir);
+   
+      if (!S_ISDIR(dir.st_mode))  /* if the dir exists - no problem */
          {
          struct stat sbuf;
 
@@ -1481,8 +1520,8 @@ void RotateFiles(char *name,int number)
 { int i, fd;
   struct stat statbuf;
   char from[CF_BUFSIZE],to[CF_BUFSIZE];
-  struct Attributes attr;
-  struct Promise dummyp;
+  struct Attributes attr = {0};
+  struct Promise dummyp = {0};
 
 if (IsItemIn(ROTATED,name))
    {
@@ -1573,7 +1612,7 @@ else
 
 void DeleteDirectoryTree(char *path,struct Promise *pp)
 
-{ struct Promise promise;
+{ struct Promise promise = {0};
   char s[CF_MAXVARSIZE];
   time_t now = time(NULL);
 
@@ -1731,18 +1770,6 @@ Debug("Unix_VerifyOwner: %d\n",sb->st_uid);
 
 for (ulp = attr.perms.owners; ulp != NULL; ulp=ulp->next)
    {
-   if (ulp->uid == CF_UNKNOWN_OWNER)
-      {
-      unknownulp = MakeUidList(ulp->uidname); /* Will only match one */
-
-      if (unknownulp != NULL && sb->st_uid == unknownulp->uid)
-         {
-         uid = unknownulp->uid;
-         uidmatch = true;
-         break;
-         }
-      }
-
    if (ulp->uid == CF_SAME_OWNER || sb->st_uid == ulp->uid)   /* "same" matches anything */
       {
       uid = ulp->uid;
@@ -1751,20 +1778,18 @@ for (ulp = attr.perms.owners; ulp != NULL; ulp=ulp->next)
       }
    }
 
+if (attr.perms.groups->next == NULL && attr.perms.groups->gid == CF_UNKNOWN_GROUP) // Only one non.existent item
+   {   
+   cfPS(cf_inform,CF_FAIL,"",pp,attr," !! Unable to make file belong to an unknown group");
+   }
+
+if (attr.perms.owners->next == NULL && attr.perms.owners->uid == CF_UNKNOWN_OWNER) // Only one non.existent item
+   {   
+   cfPS(cf_inform,CF_FAIL,"",pp,attr," !! Unable to make file belong to an unknown user");
+   }
+
 for (glp = attr.perms.groups; glp != NULL; glp=glp->next)
    {
-   if (glp->gid == CF_UNKNOWN_GROUP) /* means not found while parsing */
-      {
-      unknownglp = MakeGidList(glp->gidname); /* Will only match one */
-
-      if (unknownglp != NULL && sb->st_gid == unknownglp->gid)
-         {
-         gid = unknownglp->gid;
-         gidmatch = true;
-         break;
-         }
-      }
-
    if (glp->gid == CF_SAME_GROUP || sb->st_gid == glp->gid)  /* "same" matches anything */
       {
       gid = glp->gid;
@@ -1809,7 +1834,7 @@ else
 
           if (uid == CF_SAME_OWNER && gid == CF_SAME_GROUP)
              {
-             CfOut(cf_verbose,"","%s:   touching %s\n",VPREFIX,file);
+             CfOut(cf_verbose,""," -> Touching %s\n",file);
              }
           else
              {
@@ -1937,7 +1962,7 @@ for (sp = uidnames; *sp != '\0'; sp+=strlen(uidbuff))
             {
             if ((pw = getpwnam(ip->name)) == NULL)
                {
-               CfOut(cf_inform,"","Unknown user \'%s\'\n",ip->name);
+               CfOut(cf_inform,""," !! Unknown user \'%s\'\n",ip->name);
                uid = CF_UNKNOWN_OWNER; /* signal user not found */
                usercopy = ip->name;
                }
@@ -2023,7 +2048,7 @@ for (sp = gidnames; *sp != '\0'; sp+=strlen(gidbuff))
             }
          else if ((gr = getgrnam(gidbuff)) == NULL)
             {
-            CfOut(cf_inform,"","Unknown group %s\n",gidbuff);
+            CfOut(cf_inform,""," !! Unknown group %s\n",gidbuff);
             gid = CF_UNKNOWN_GROUP;
             groupcopy = gidbuff;
             }
@@ -2246,7 +2271,7 @@ save_gid = (attr.perms.groups)->gid;
 
 if (attr.copy.preserve)
    {
-   CfOut(cf_verbose,""," -> Attempting to preserve file permissions from the source");
+   CfOut(cf_verbose,""," -> Attempting to preserve file permissions from the source: %o",(sstat->st_mode & 07777));
       
    if ((attr.perms.owners)->uid == CF_SAME_OWNER)          /* Preserve uid and gid  */
       {
@@ -2260,8 +2285,8 @@ if (attr.copy.preserve)
 
 // Will this preserve if no mode set?
 
-   newplus = (sstat->st_mode & 07777) | attr.perms.plus;
-   newminus = ~(newplus & ~(attr.perms.minus)) & 07777;
+   newplus = (sstat->st_mode & 07777);
+   newminus = ~newplus & 07777;
    attr.perms.plus = newplus;
    attr.perms.minus = newminus;
    VerifyFileAttributes(file,dstat,attr,pp);
@@ -2294,7 +2319,7 @@ else
 
 /*******************************************************************/
 
-void AddSimpleUidItem(struct UidList **uidlist,int uid,char *uidname)
+void AddSimpleUidItem(struct UidList **uidlist,uid_t uid,char *uidname)
 
 { struct UidList *ulp, *u;
   char *copyuser;
@@ -2337,7 +2362,7 @@ else
 
 /*******************************************************************/
 
-void AddSimpleGidItem(struct GidList **gidlist,int gid,char *gidname)
+void AddSimpleGidItem(struct GidList **gidlist,gid_t gid,char *gidname)
 
 { struct GidList *glp,*g;
   char *copygroup;

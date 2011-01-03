@@ -1,113 +1,113 @@
 K 25
 svn:wc:ra_dav:version-url
-V 51
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes
+V 40
+/svn/core/!svn/ver/852/trunk/tests/notes
 END
 mod_varexp_scalar.cf
 K 25
 svn:wc:ra_dav:version-url
-V 72
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_varexp_scalar.cf
+V 61
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_varexp_scalar.cf
 END
 mod_files_copy.cf
 K 25
 svn:wc:ra_dav:version-url
-V 69
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_files_copy.cf
+V 58
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_files_copy.cf
 END
 mod_access.cf
 K 25
 svn:wc:ra_dav:version-url
-V 65
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_access.cf
+V 54
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_access.cf
 END
 mod_files.cf
 K 25
 svn:wc:ra_dav:version-url
-V 64
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_files.cf
+V 53
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_files.cf
 END
 mod_storage.cf
 K 25
 svn:wc:ra_dav:version-url
-V 66
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_storage.cf
-END
-mod_varexp.cf
-K 25
-svn:wc:ra_dav:version-url
-V 65
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_varexp.cf
-END
-cfbrain.cf
-K 25
-svn:wc:ra_dav:version-url
-V 62
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/cfbrain.cf
+V 55
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_storage.cf
 END
 mod_extern.cf
 K 25
 svn:wc:ra_dav:version-url
-V 65
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_extern.cf
+V 54
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_extern.cf
+END
+cfbrain.cf
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/core/!svn/ver/852/trunk/tests/notes/cfbrain.cf
+END
+mod_varexp.cf
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_varexp.cf
 END
 mod_files_edit.cf
 K 25
 svn:wc:ra_dav:version-url
-V 69
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_files_edit.cf
+V 58
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_files_edit.cf
 END
 mod_ok.cf
 K 25
 svn:wc:ra_dav:version-url
-V 61
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_ok.cf
+V 50
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_ok.cf
 END
 mod_map.cf
 K 25
 svn:wc:ra_dav:version-url
-V 62
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_map.cf
+V 51
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_map.cf
 END
 mod_process.cf
 K 25
 svn:wc:ra_dav:version-url
-V 66
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_process.cf
+V 55
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_process.cf
 END
 mod_knowledge.cf
 K 25
 svn:wc:ra_dav:version-url
-V 68
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_knowledge.cf
+V 57
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_knowledge.cf
 END
 mod_exec.cf
 K 25
 svn:wc:ra_dav:version-url
-V 63
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_exec.cf
-END
-mod_monitor.cf
-K 25
-svn:wc:ra_dav:version-url
-V 66
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_monitor.cf
+V 52
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_exec.cf
 END
 mod_routing.cf
 K 25
 svn:wc:ra_dav:version-url
-V 66
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_routing.cf
+V 55
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_routing.cf
+END
+mod_monitor.cf
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_monitor.cf
 END
 mod_execd.cf
 K 25
 svn:wc:ra_dav:version-url
-V 64
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_execd.cf
+V 53
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_execd.cf
 END
 mod_common.cf
 K 25
 svn:wc:ra_dav:version-url
-V 65
-/projects/cfengine-3/!svn/ver/852/trunk/tests/notes/mod_common.cf
+V 54
+/svn/core/!svn/ver/852/trunk/tests/notes/mod_common.cf
 END

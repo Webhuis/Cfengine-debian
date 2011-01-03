@@ -89,12 +89,6 @@ if ((bp = (struct Bundle *)malloc(sizeof(struct Bundle))) == NULL)
    FatalError("");
    }
 
-if ((sp = strdup(name)) == NULL)
-   {
-   CfOut(cf_error,"malloc","Unable to allocate Bundle");
-   FatalError("");
-   }
-
 if (*start == NULL)
    {
    *start = bp;
@@ -108,9 +102,9 @@ else
    lp->next = bp;
    }
 
-bp->name = sp;
+bp->name = strdup(name);
 bp->next = NULL;
-bp->type = type;
+bp->type = strdup(type);
 bp->args = args;
 bp->subtypes = NULL;
 return bp;
@@ -140,12 +134,6 @@ if ((bp = (struct Body *)malloc(sizeof(struct Body))) == NULL)
    FatalError("");
    }
 
-if ((sp = strdup(name)) == NULL)
-   {
-   CfOut(cf_error,"malloc","Unable to allocate Body");
-   FatalError("");
-   }
-
 if (*start == NULL)
    {
    *start = bp;
@@ -159,9 +147,9 @@ else
    lp->next = bp;
    }
 
-bp->name = sp;
+bp->name = strdup(name);
 bp->next = NULL;
-bp->type = type;
+bp->type = strdup(type);
 bp->args = args;
 bp->conlist = NULL;
 return bp;
@@ -232,6 +220,8 @@ struct Promise *AppendPromise(struct SubType *type,char *promiser, void *promise
 
 { struct Promise *pp,*lp;
   char *sp = NULL,*spe = NULL;
+  char *reserved[] = { "promiser", "handle", "promise_filename", "promise_linenumber", NULL };
+  char output[CF_BUFSIZE];
 
 if (INSTALL_SKIP)
    {
@@ -284,7 +274,16 @@ if (strcmp(type->name,"classes") == 0 || strcmp(type->name,"vars") == 0)
       yyerror("Variable or class identifier is purely numerical, which is not allowed");
       }
    }
-   
+
+if (strcmp(type->name,"vars") == 0)
+   {
+   if (IsStrIn(promiser,reserved,false))
+      {
+      snprintf(output,CF_BUFSIZE,"Use of a reserved variable name \"%s\" ",promiser);
+      ReportError(output);      
+      }
+   }
+
 if (type->promiselist == NULL)
    {
    type->promiselist = pp;
@@ -314,9 +313,9 @@ pp->cache = NULL;
 pp->conn = NULL;
 pp->inode_cache = NULL;
 
-pp->bundletype = bundletype;   /* cache agent,common,server etc*/
-pp->agentsubtype = type->name; /* Cache the typename */
-pp->ref = NULL;                /* cache a reference if given*/
+pp->bundletype = strdup(bundletype); /* cache agent,common,server etc*/
+pp->agentsubtype = type->name;       /* Cache the typename */
+pp->ref = NULL;                      /* cache a reference if given*/
 pp->ref_alloc = 'n';
 pp->next = NULL;
 return pp;
@@ -344,8 +343,14 @@ if (bp->name != NULL)
    free(bp->name);
    }
 
+if (bp->type != NULL)
+   {
+   free(bp->type);
+   }
+
 DeleteRlist(bp->args);
 DeleteSubTypes(bp->subtypes);
+free(bp);
 }
 
 /*******************************************************************/
@@ -369,6 +374,8 @@ if (tp->name != NULL)
    {
    free(tp->name);
    }
+
+free(tp);
 }
 
 /*******************************************************************/
@@ -391,6 +398,12 @@ if (bp->name != NULL)
    free(bp->name);
    }
 
+if (bp->type != NULL)
+   {
+   free(bp->type);
+   }
+
 DeleteRlist(bp->args);
 DeleteConstraintList(bp->conlist);
+free(bp);
 }

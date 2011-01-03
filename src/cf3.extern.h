@@ -32,6 +32,7 @@ extern struct PromiseParser P;
 extern int REQUIRE_COMMENTS;
 extern int FIPS_MODE;
 extern char POLICY_SERVER[CF_BUFSIZE];
+extern int ALWAYS_VALIDATE;
 extern int VIEWS;
 extern int LICENSES;
 extern char EXPIRY[32];
@@ -92,7 +93,6 @@ extern char *CF_AGENTTYPES[];
 extern char HASHDB[CF_BUFSIZE];
 extern int FSTAB_EDITS;
 extern char GRAPHDIR[CF_BUFSIZE];
-
 
 extern int CFA_MAXTHREADS;
 extern char *THIS_BUNDLE;

@@ -175,6 +175,9 @@
 /* Define to 1 if you have the `getnetgrent' function. */
 #undef HAVE_GETNETGRENT
 
+/* Define to 1 if you have the `getzoneid' function. */
+#undef HAVE_GETZONEID
+
 /* Define to 1 if you have the <graphviz/gvc.h> header file. */
 #undef HAVE_GRAPHVIZ_GVC_H
 
@@ -323,15 +326,6 @@
 /* Define to 1 if you have the `realpath' function. */
 #undef HAVE_REALPATH
 
-/* Define to 1 if you have the `regcomp' function. */
-#undef HAVE_REGCOMP
-
-/* Define to 1 if you have the <regex.h> header file. */
-#undef HAVE_REGEX_H
-
-/* Define to 1 if you have the <rxposix.h> header file. */
-#undef HAVE_RXPOSIX_H
-
 /* Define to 1 if you have the <sched.h> header file. */
 #undef HAVE_SCHED_H
 
@@ -392,10 +386,10 @@
 /* Define to 1 if you have the `strstr' function. */
 #undef HAVE_STRSTR
 
-/* Define to 1 if `n_un.n_name' is member of `struct nlist'. */
+/* Define to 1 if `n_un.n_name' is a member of `struct nlist'. */
 #undef HAVE_STRUCT_NLIST_N_UN_N_NAME
 
-/* Define to 1 if `sa_len' is member of `struct sockaddr'. */
+/* Define to 1 if `sa_len' is a member of `struct sockaddr'. */
 #undef HAVE_STRUCT_SOCKADDR_SA_LEN
 
 /* Define to 1 if you have the `sysconf' function. */
@@ -487,6 +481,9 @@
 /* Define to 1 if you have the <winsock2.h> header file. */
 #undef HAVE_WINSOCK2_H
 
+/* Define to 1 if you have the <zone.h> header file. */
+#undef HAVE_ZONE_H
+
 /* Define to the sub-directory in which libtool stores uninstalled libraries.
    */
 #undef LT_OBJDIR
@@ -512,6 +509,9 @@
 
 /* Define to the one symbol short name of this package. */
 #undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
