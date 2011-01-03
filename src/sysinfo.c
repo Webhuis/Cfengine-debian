@@ -197,22 +197,22 @@ FindDomainName(VSYSNAME.nodename);
 
 if (!StrStr(VSYSNAME.nodename,VDOMAIN))
    {
-   snprintf(VFQNAME,CF_BUFSIZE,"%s.%s",VSYSNAME.nodename,ToLowerStr(VDOMAIN));
-   NewClass(VFQNAME);
-   strcpy(VUQNAME,VSYSNAME.nodename);
-   NewClass(VUQNAME);
+   strcpy(VUQNAME,ToLowerStr(VSYSNAME.nodename));
+   NewClass(ToLowerStr(VUQNAME));
+   snprintf(VFQNAME,CF_BUFSIZE,"%s.%s",VUQNAME,ToLowerStr(VDOMAIN));
+   NewClass(ToLowerStr(VFQNAME));
    }
 else
    {
    int n = 0;
-   strcpy(VFQNAME,VSYSNAME.nodename);
+   strcpy(VFQNAME,ToLowerStr(VSYSNAME.nodename));
    NewClass(VFQNAME);
 
    while(VSYSNAME.nodename[n++] != '.' && VSYSNAME.nodename[n] != '\0')
       {
       }
 
-   strncpy(VUQNAME,VSYSNAME.nodename,n);
+   strncpy(VUQNAME,ToLowerStr(VSYSNAME.nodename),n);
 
    if (VUQNAME[n-1] == '.')
       {
@@ -607,7 +607,7 @@ return false;
 
 void FindDomainName(char *hostname)
 
-{ char fqn[CF_MAXVARSIZE];
+{ char fqn[CF_MAXVARSIZE] = {0};
   char *ptr;
   char buffer[CF_BUFSIZE];
 
@@ -1280,17 +1280,15 @@ int Linux_Suse_Version(void)
 /* The full string read in from SuSE-release */
 char relstring[CF_MAXVARSIZE];
 char classbuf[CF_MAXVARSIZE];
-char vbuf[CF_BUFSIZE];
+char vbuf[CF_BUFSIZE],strversion[CF_MAXVARSIZE],strpatch[CF_MAXVARSIZE];
 
 /* Where the numerical release will be found */
 char *release=NULL;
-
 int i,version;
 int major = -1;
 char strmajor[CF_MAXVARSIZE];
 int minor = -1;
 char strminor[CF_MAXVARSIZE];
-
 FILE *fp;
 
 /* Grab the first line from the file and then close it. */
@@ -1302,6 +1300,26 @@ if ((fp = fopen(SUSE_REL_FILENAME,"r")) == NULL)
 
 fgets(relstring, sizeof(relstring), fp);
 Chop(relstring);
+strversion[0] = '\0';
+strpatch[0] = '\0';
+
+while (!feof(fp))
+   {
+   fgets(vbuf,sizeof(vbuf),fp);
+
+   if (strncmp(vbuf,"VERSION",strlen("version")) == 0)
+      {
+      strncpy(strversion,vbuf,sizeof(strversion));
+      sscanf(strversion,"VERSION = %d",&major);
+      }
+
+   if (strncmp(vbuf,"PATCH",strlen("PATCH")) == 0)
+      {
+      strncpy(strpatch,vbuf,sizeof(strpatch));
+      sscanf(strpatch,"PATCHLEVEL = %d",&minor);
+      }
+   }
+
 fclose(fp);
 
    /* Check if it's a SuSE Enterprise version  */
@@ -1324,6 +1342,21 @@ if (!strncmp(relstring, SUSE_SLES8_ID, strlen(SUSE_SLES8_ID)))
    classbuf[0] = '\0';
    strcat(classbuf, "SLES8");
    NewClass(classbuf);
+   }
+else if (strncmp(relstring,"sles",4) == 0)
+   {
+   struct Item *list, *ip;
+   sscanf(relstring,"%[-_a-zA-Z0-9]",vbuf);
+   NewClass(vbuf);
+
+   list = SplitString(vbuf,'-');
+
+   for (ip = list; ip != NULL; ip=ip->next)
+      {
+      NewClass(ip->name);
+      }
+   
+   DeleteItemList(list);
    }
 else
    {
@@ -1364,32 +1397,66 @@ if (release == NULL)
 
 if (release == NULL)
    {
+   release = strversion;
+   }
+
+if (release == NULL)
+   {
    CfOut(cf_verbose,"","Could not find a numeric OS release in %s\n",SUSE_REL_FILENAME);
    return 2;
    }
 else
    {
-   sscanf(release, "%*s %d.%d", &major, &minor);
-   sprintf(strmajor, "%d", major);
-   sprintf(strminor, "%d", minor);
+   if (strchr(release,'.'))
+      {
+      sscanf(release, "%*s %d.%d", &major, &minor);
+      sprintf(strmajor, "%d", major);
+      sprintf(strminor, "%d", minor);
+
+      if (major != -1 && minor != -1)
+         {
+         strcpy(classbuf, "SuSE");
+         NewClass(classbuf);
+         strcat(classbuf, "_");
+         strcat(classbuf, strmajor);
+         NewClass(classbuf);
+         NewScalar("sys","flavour",classbuf,cf_str);
+         NewScalar("sys","flavor",classbuf,cf_str);
+         strcat(classbuf, "_");
+         strcat(classbuf, strminor);
+         NewClass(classbuf);
+         
+         CfOut(cf_verbose,""," -> Discovered SuSE version %s",classbuf);
+         return 0;
+         }
+      }
+   else
+      {
+      sscanf(strversion,"VERSION = %s",strmajor);
+      sscanf(strpatch,"PATCHLEVEL = %s",strminor);
+      
+      if (major != -1 && minor != -1)
+         {
+         strcpy(classbuf, "SLES");
+         NewClass(classbuf);
+         strcat(classbuf, "_");
+         strcat(classbuf, strmajor);
+         NewClass(classbuf);
+         strcat(classbuf, "_");
+         strcat(classbuf, strminor);
+         NewClass(classbuf);
+         snprintf(classbuf,CF_MAXVARSIZE,"SuSE_%d",major);
+         NewScalar("sys","flavour",classbuf,cf_str);
+         NewScalar("sys","flavor",classbuf,cf_str);
+         NewClass(classbuf);
+         
+         CfOut(cf_verbose,""," -> Discovered SuSE version %s",classbuf);
+         return 0;
+         }
+      }
    }
 
-if (major != -1 && minor != -1)
-   {
-   classbuf[0] = '\0';
-   strcat(classbuf, "SuSE");
-   NewClass(classbuf);
-   strcat(classbuf, "_");
-   strcat(classbuf, strmajor);
-   NewClass(classbuf);
-   NewScalar("sys","flavour",classbuf,cf_str);
-   NewScalar("sys","flavor",classbuf,cf_str);
-   strcat(classbuf, "_");
-   strcat(classbuf, strminor);
-   NewClass(classbuf);
-
-   CfOut(cf_verbose,""," -> Discovered SuSE version %s",classbuf);
-   }
+CfOut(cf_verbose,"","Could not find a numeric OS release in %s\n",SUSE_REL_FILENAME);
 
 return 0;
 }
@@ -1472,7 +1539,7 @@ switch (result)
         NewClass(classname);
         NewScalar("sys","flavour",classname,cf_str);
         NewScalar("sys","flavor",classname,cf_str);
-        return 0;
+        break;
         /* Fall-through */
     case 1:
         CfOut(cf_verbose,"","This appears to be a Debian %u system.", major);
@@ -1480,7 +1547,7 @@ switch (result)
         NewClass(classname);
         NewScalar("sys","flavour",classname,cf_str);
         NewScalar("sys","flavor",classname,cf_str);
-        return 0;
+        break;
 
     default:
         version[0] = '\0';
@@ -1508,6 +1575,7 @@ if (strcmp(os,"Debian") == 0)
    {
    sscanf(buffer,"%*s %*s %[^/]",version);
    snprintf(buffer,CF_MAXVARSIZE, "debian_%s",version);
+   NewClass("debian");
    NewClass(buffer);
    NewScalar("sys","flavour",buffer,cf_str);
    NewScalar("sys","flavor",buffer,cf_str);
@@ -1518,6 +1586,7 @@ else if (strcmp(os,"Ubuntu") == 0)
    snprintf(buffer,CF_MAXVARSIZE, "ubuntu_%s",version);
    NewScalar("sys","flavour",buffer,cf_str);
    NewScalar("sys","flavor",buffer,cf_str);
+   NewClass("ubuntu");
    NewClass(buffer);
    if (release >= 0)
       {
@@ -1807,6 +1876,15 @@ return 1;
 
 #endif
 
+/******************************************************************/
+
+char *Cf_GetVersion(void)
+
+{
+return VERSION;
+}
+
+
 
 /******************************************************************/
 /* User info                                                      */
@@ -1829,7 +1907,7 @@ return Unix_GetCurrentUserName(userName, userNameLen);
 void Unix_GetInterfaceInfo(enum cfagenttype ag)
 
 { int fd,len,i,j,first_address = false,ipdefault = false;
-  struct ifreq ifbuf[CF_IFREQ],ifr, *ifp;
+  struct ifreq ifbuf[CF_IFREQ] = {0},ifr, *ifp;
   struct ifconf list;
   struct sockaddr_in *sin;
   struct hostent *hp;
@@ -1866,7 +1944,7 @@ last_name[0] = '\0';
 for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*ifp),j++,ifp=(struct ifreq *)((char *)ifp+SIZEOF_IFREQ(*ifp)))
    {
    int skip = false;
-   
+
    if (ifp->ifr_addr.sa_family == 0)
       {
       continue;
@@ -2066,7 +2144,7 @@ close(fd);
 
 void Unix_FindV6InterfaceInfo(void)
 
-{ FILE *pp;
+{ FILE *pp = NULL;
   char buffer[CF_BUFSIZE];
 
 /* Whatever the manuals might say, you cannot get IPV6

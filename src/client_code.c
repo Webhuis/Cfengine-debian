@@ -1105,7 +1105,7 @@ if (!attr.copy.force_ipv4)
    snprintf(conn->remoteip,CF_MAX_IP_LEN-1,"%s",inet_ntoa(cin.sin_addr));
 
 
-   return TryConnect(conn,&tv,&cin,sizeof(cin));
+   return TryConnect(conn,&tv,(struct sockaddr *)&cin,sizeof(cin));
    }
 }
 
@@ -1360,34 +1360,35 @@ for (i = 0; i < toget; i++)
 
 /*********************************************************************/
 
-int TryConnect(struct cfagent_connection *conn, struct timeval *tvp, struct sockaddr_in *cinp, int cinpSz)
+int TryConnect(struct cfagent_connection *conn, struct timeval *tvp, struct sockaddr *cinp, int cinpSz)
+
 /** 
  * Tries a nonblocking connect and then restores blocking if
  * successful. Returns true on success, false otherwise.
  * NB! Do not use recv() timeout - see note below.
  **/
+    
 #ifdef MINGW
-
 {
-  return NovaWin_TryConnect(conn,tvp,cinp,cinpSz);
+return NovaWin_TryConnect(conn,tvp,cinp,cinpSz);
 }
 
 #else  /* NOT MINGW */
-{
 
-  int res;
+{ int res;
   long arg;
   struct sockaddr_in emptyCin = {0};
 
-  if(!cinp)
-    {
-      cinp = &emptyCin;
-      cinpSz = sizeof(emptyCin);
-    }
+  if (!cinp)
+     {
+     cinp = (struct sockaddr *)&emptyCin;
+     cinpSz = sizeof(emptyCin);
+     }
   
 
    /* set non-blocking socket */
    arg = fcntl(conn->sd, F_GETFL, NULL);
+
    if(fcntl(conn->sd, F_SETFL, arg | O_NONBLOCK) == -1)
      {
      CfOut(cf_error,"","!! Could not set socket to non-blocking mode");

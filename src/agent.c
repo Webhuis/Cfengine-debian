@@ -87,6 +87,8 @@ extern struct BodySyntax CFA_CONTROLBODY[];
 extern struct Rlist *SERVERLIST;
 
 #ifdef HAVE_LIBVIRT
+# include <libvirt/libvirt.h>
+# include <libvirt/virterror.h>
 extern virConnectPtr CFVC[];
 #endif
 
@@ -343,6 +345,7 @@ EDITFILESIZE = 100000;
 
 snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
 MapName(filename);
+
 if ((fp = fopen(filename,"a")) != NULL)
    {
    fclose(fp);
@@ -474,6 +477,13 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
       {
       AUDIT = GetBoolean(retval);
       CfOut(cf_verbose,"","SET auditing = %d\n",AUDIT);
+      continue;
+      }
+
+   if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_alwaysvalidate].lval) == 0)
+      {
+      ALWAYS_VALIDATE = GetBoolean(retval);
+      CfOut(cf_verbose,"","SET alwaysvalidate = %d\n",ALWAYS_VALIDATE);
       continue;
       }
    
@@ -676,6 +686,10 @@ if (GetVariable("control_common",CFG_CONTROLBODY[cfg_syslog_host].lval,&retval,&
    strncpy(SYSLOGHOST,Hostname2IPString(retval),CF_MAXVARSIZE-1);
    CfOut(cf_verbose,"","SET syslog_host to %s",SYSLOGHOST);
    }
+
+#ifdef HAVE_LIBCFNOVA
+Nova_Initialize();
+#endif
 }
 
 /*********************************************************************/
@@ -800,6 +814,9 @@ int ScheduleAgentOperations(struct Bundle *bp)
   struct Promise *pp;
   enum typesequence type;
   int pass;
+
+DeleteItemList(PROCESSTABLE);
+PROCESSTABLE = NULL;
 
 for (pass = 1; pass < CF_DONEPASSES; pass++)
    {
@@ -993,7 +1010,7 @@ if (strcmp("files",pp->agentsubtype) == 0)
       {
       FindAndVerifyFilesPromises(pp);
       }
-   
+
    EndMeasurePromise(start,pp);
    return;
    }
@@ -1115,7 +1132,7 @@ void DeleteTypeContext(enum typesequence type)
 
 { struct Rlist *rp;
   struct ServerItem *svp;
-  struct Attributes a;
+  struct Attributes a = {0};
   int i;
  
 switch(type)
@@ -1158,14 +1175,11 @@ switch(type)
           }
 
        DeleteRlist(SERVERLIST);
+       SERVERLIST = NULL;
+
        break;
 
    case kp_processes:
-
-       /* should cleanup proc memory list */
-
-       DeleteItemList(PROCESSTABLE);
-       PROCESSTABLE = NULL;
        break;
 
    case kp_storage:
@@ -1214,6 +1228,7 @@ switch(type)
 void ClassBanner(enum typesequence type)
 
 { struct Item *ip;
+  int i;
  
 if (type != kp_interfaces)   /* Just parsed all local classes */
    {
@@ -1223,9 +1238,12 @@ if (type != kp_interfaces)   /* Just parsed all local classes */
 CfOut(cf_verbose,"","\n");
 CfOut(cf_verbose,"","     +  Private classes augmented:\n");
 
-for (ip = VADDCLASSES; ip != NULL; ip=ip->next)
+for (i = 0; i < CF_ALPHABETSIZE; i++)
    {
-   CfOut(cf_verbose,"","     +       %s\n",ip->name);
+   for (ip = VADDCLASSES.list[i]; ip != NULL; ip=ip->next)
+      {
+      CfOut(cf_verbose,"","     +       %s\n",ip->name);
+      }
    }
 
 NoteClassUsage(VADDCLASSES);
@@ -1243,13 +1261,15 @@ CfOut(cf_verbose,"","\n");
 
 Debug("     ?  Public class context:\n");
 
-for (ip = VHEAP; ip != NULL; ip=ip->next)
+for (i = 0; i < CF_ALPHABETSIZE; i++)
    {
-   Debug("     ?       %s\n",ip->name);
+   for (ip = VHEAP.list[i]; ip != NULL; ip=ip->next)
+      {
+      Debug("     ?       %s\n",ip->name);
+      }
    }
 
 CfOut(cf_verbose,"","\n");
-
 }
 
 /**************************************************************/

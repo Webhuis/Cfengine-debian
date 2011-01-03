@@ -380,7 +380,7 @@ void StartServer(int argc,char **argv)
  dummyattr.transaction.ifelapsed = 0;
  dummyattr.transaction.expireafter = 0;
 
- thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
+ thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp,false);
 
  if (thislock.lock == NULL)
     {
@@ -636,7 +636,7 @@ return newvals;
 
 void LeapDetection()
 
-{ int i,j,last_pos = LDT_POS;;
+{ int i,j,last_pos = LDT_POS;
   double n1,n2,d;
   double padding = 0.2;
 

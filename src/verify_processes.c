@@ -36,7 +36,7 @@
 
 void VerifyProcessesPromise(struct Promise *pp)
 
-{ struct Attributes a;
+{ struct Attributes a = {0};
 
 a = GetProcessAttributes(pp);
 ProcessSanityChecks(a,pp);
@@ -62,14 +62,20 @@ if (a.signals != NULL && a.process_stop != NULL)
 promised_zero = (a.process_count.min_range == 0 && a.process_count.max_range == 0);
 promised_any = (a.process_count.min_range == CF_NOINT);
 
-
 if (a.restart_class)
    {
    if (IsStringIn(a.signals,"term") || IsStringIn(a.signals,"kill"))
       {
       CfOut(cf_inform,""," -> (warning) Promise %s kills then restarts - never strictly converges",pp->promiser);
       PromiseRef(cf_inform,pp);
-      }   
+      }
+
+   if (a.haveprocess_count)
+      {
+      CfOut(cf_error,""," !! process_count and restart_class should not be used in the same promise as this makes no sense",pp->promiser);
+      PromiseRef(cf_inform,pp);
+      ret = false;
+      }
    }
 
 if (promised_zero && a.restart_class)
@@ -105,7 +111,7 @@ else
    snprintf(lockname,CF_BUFSIZE-1,"proc-%s-norestart",pp->promiser);
    }
  
-thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp);
+thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,pp,false);
 
 if (thislock.lock == NULL)
    {
@@ -125,7 +131,13 @@ YieldCurrentLock(thislock);
 
 int LoadProcessTable(struct Item **procdata,char *psopts)
 
-{ 
+{
+if (PROCESSTABLE)
+   {
+   CfOut(cf_verbose,"","Reuse cached process state");
+   return true;
+   }
+ 
 #ifdef MINGW
 return NovaWin_LoadProcessTable(procdata);
 #else
@@ -215,7 +227,7 @@ DeleteItemList(killlist);
  
 if (!need_to_restart)
    {
-   cfPS(cf_verbose,CF_NOP,"",pp,a," -- Matches in range for %s - process count promise kept\n",pp->promiser);
+   cfPS(cf_verbose,CF_NOP,"",pp,a," -> No restart promised for %s\n",pp->promiser);
    return;
    }
 else
@@ -227,7 +239,7 @@ else
    else 
       {
       cfPS(cf_inform,CF_CHG,"",pp,a," -> Making a one-time restart promise for %s",pp->promiser);
-      NewBundleClass(a.restart_class,pp->bundle);
+      NewClass(a.restart_class);
       }
    }
 }

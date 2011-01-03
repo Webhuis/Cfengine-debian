@@ -1,23 +1,23 @@
 K 25
 svn:wc:ra_dav:version-url
-V 60
-/projects/cfengine-3/!svn/ver/1239/trunk/tests/file_operands
+V 49
+/svn/core/!svn/ver/1580/trunk/tests/file_operands
 END
 Makefile.in
 K 25
 svn:wc:ra_dav:version-url
-V 72
-/projects/cfengine-3/!svn/ver/1239/trunk/tests/file_operands/Makefile.in
+V 61
+/svn/core/!svn/ver/1580/trunk/tests/file_operands/Makefile.in
 END
 Makefile.am
 K 25
 svn:wc:ra_dav:version-url
-V 71
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_operands/Makefile.am
+V 60
+/svn/core/!svn/ver/297/trunk/tests/file_operands/Makefile.am
 END
 README
 K 25
 svn:wc:ra_dav:version-url
-V 66
-/projects/cfengine-3/!svn/ver/297/trunk/tests/file_operands/README
+V 55
+/svn/core/!svn/ver/297/trunk/tests/file_operands/README
 END

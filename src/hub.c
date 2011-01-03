@@ -243,6 +243,7 @@ else if (SCHEDULE == NULL)
    AppendItem(&SCHEDULE,"Min25",NULL);   
    AppendItem(&SCHEDULE,"Min30",NULL);
    AppendItem(&SCHEDULE,"Min35",NULL);
+   AppendItem(&SCHEDULE,"Min40",NULL);
    AppendItem(&SCHEDULE,"Min45",NULL);
    AppendItem(&SCHEDULE,"Min50",NULL);
    AppendItem(&SCHEDULE,"Min55",NULL);
@@ -331,10 +332,10 @@ if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY))
   }
 
 ThreadLock(cft_system);
-DeleteItemList(VHEAP);
-VHEAP = NULL;
-DeleteItemList(VADDCLASSES);
-VADDCLASSES = NULL;
+DeleteAlphaList(&VHEAP);
+InitAlphaList(&VHEAP);
+DeleteAlphaList(&VADDCLASSES);
+InitAlphaList(&VADDCLASSES);
 DeleteItemList(IPADDRESSES);
 IPADDRESSES = NULL;
 DeleteScope("this");

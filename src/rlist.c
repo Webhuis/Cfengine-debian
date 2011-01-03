@@ -246,8 +246,8 @@ switch(type)
        return start;
    }
 
-snprintf(output,CF_BUFSIZE,"Unknown type %c in CopyRvalItem - should not happen",type);
-FatalError(output);
+//snprintf(output,CF_BUFSIZE,"Unknown type %c in CopyRvalItem - should not happen",type);
+//FatalError(output);
 return NULL;
 }
 
@@ -297,17 +297,34 @@ for (rp1 = list1, rp2 = list2; rp1 != NULL && rp2!= NULL; rp1=rp1->next,rp2=rp2-
    {
    if (rp1->item && rp2->item)
       {
+      struct Rlist *rc1,*rc2;
+      
       if (rp1->type == CF_FNCALL || rp2->type == CF_FNCALL)
          {
          return -1; // inconclusive
          }
+
+      rc1 = rp1;
+      rc2 = rp2;
+
+      // Check for list nesting with { fncall(), "x" ... }
       
-      if (IsCf3VarString(rp1->item) || IsCf3VarString(rp2->item))
+      if (rp1->type == CF_LIST)
+         {   
+         rc1 = rp1->item;
+         }
+      
+      if (rp2->type == CF_LIST)
+         {
+         rc2 = rp2->item;
+         }
+
+      if (IsCf3VarString(rc1->item) || IsCf3VarString(rp2->item))
          {
          return -1; // inconclusive
          }
 
-      if (strcmp(rp1->item,rp2->item) != 0)
+      if (strcmp(rc1->item,rc2->item) != 0)
          {
          return false;
          }
@@ -589,8 +606,6 @@ rp->next = *start;
 rp->item = CopyRvalItem(item,type);
 rp->type = type;  /* scalar, builtin function */
 
-ThreadLock(cft_lock);
-
 if (type == CF_LIST)
    {
    rp->state_ptr = rp->item;
@@ -600,8 +615,8 @@ else
    rp->state_ptr = NULL;
    }
 
+ThreadLock(cft_lock);
 *start = rp;
-
 ThreadUnlock(cft_lock);
 return rp;
 }
@@ -616,7 +631,7 @@ struct Rlist *OrthogAppendRlist(struct Rlist **start,void *item, char type)
   struct FnCall *fp;
   char *sp = NULL;
   struct CfAssoc *cp;
-
+  
 Debug("OrthogAppendRlist\n");
  
 switch(type)
@@ -649,15 +664,20 @@ else
    }
 
 
-// This is item is infact a struct CfAssoc pointing to a list
+// This is item is in fact a struct CfAssoc pointing to a list
 
 cp = (struct CfAssoc *)item;
-rp->state_ptr = (struct Rlist *)cp->rval;
+
+// Note, we pad all iterators will a blank so the ptr arithmetic works
+// else EndOfIteration will not see lists with only one element
+
+lp = PrependRlist((struct Rlist **)&(cp->rval),CF_NULL_VALUE,CF_SCALAR);
+rp->state_ptr = lp->next; // Always skip the null value
+AppendRlist((struct Rlist **)&(cp->rval),CF_NULL_VALUE,CF_SCALAR);
 
 rp->item = item;
 rp->type = CF_LIST;
 rp->next = NULL;
-
 return rp;
 }
 
@@ -910,6 +930,8 @@ ShowRval(fp,list->state_ptr->item,list->type);
 void ShowRval(FILE *fp,void *rval,char type)
 
 {
+char buf[CF_BUFSIZE];
+
 if (rval == NULL)
    {
    return;
@@ -918,7 +940,8 @@ if (rval == NULL)
 switch (type)
    {
    case CF_SCALAR:
-       fprintf(fp,"%s",(char *)rval);
+       EscapeQuotes((char *)rval,buf,sizeof(buf));
+       fprintf(fp,"%s",buf);
        break;
        
    case CF_LIST:
@@ -969,19 +992,16 @@ switch(type)
        /* rval is now a list whose first item is list->item */
        clist = (struct Rlist *)rval;
 
-       if (clist->next != NULL)
-          {
-          DeleteRvalItem(clist->next,CF_LIST);
-          }
-       
-       if (clist->item != NULL)
+       if (clist && clist->item != NULL)
           {
           DeleteRvalItem(clist->item,clist->type);
           }
+
+       free(clist);
        break;
        
    case CF_FNCALL:
-       
+
        if (rval)
           {
           DeleteFnCall((struct FnCall *)rval);

@@ -300,7 +300,7 @@ void StartServer(int argc,char **argv)
   struct timeval timeout;
   int ret_val;
   struct Promise *pp = NewPromise("server_cfengine","the server daemon");
-  struct Attributes dummyattr;
+  struct Attributes dummyattr = {0};
   struct CfLock thislock;
 
 memset(&dummyattr,0,sizeof(dummyattr));
@@ -336,7 +336,7 @@ if (listen(sd,queuesize) == -1)
 dummyattr.transaction.ifelapsed = 0;
 dummyattr.transaction.expireafter = 1;
 
-thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp);
+thislock = AcquireLock(pp->promiser,VUQNAME,CFSTARTTIME,dummyattr,pp,false);
 
 if (thislock.lock == NULL)
    {
@@ -356,7 +356,7 @@ if(!NO_FORK)
 
 if ((!NO_FORK) && (fork() != 0))
    {
-   CfOut(cf_inform,"","cfServerd starting %.24s\n",cf_ctime(&CFDSTARTTIME));
+   CfOut(cf_inform,"","cf-serverd starting %.24s\n",cf_ctime(&CFDSTARTTIME));
    GenericDeInitialize();
    exit(0);
    }
@@ -782,7 +782,11 @@ if (NewPromiseProposals())
       
       /* Free & reload -- lock this to avoid access errors during reload */
       
-      DeleteItemList(VHEAP);
+      DeleteAlphaList(&VHEAP);
+      InitAlphaList(&VHEAP);
+      DeleteAlphaList(&VADDCLASSES);
+      InitAlphaList(&VADDCLASSES);
+
       DeleteItemList(VNEGHEAP);
       DeleteItemList(TRUSTKEYLIST);
       DeleteItemList(SKIPVERIFY);
@@ -802,7 +806,7 @@ if (NewPromiseProposals())
       
       VADMIT = VADMITTOP = NULL;
       VDENY  = VDENYTOP  = NULL;
-      VHEAP  = VNEGHEAP  = NULL;
+      VNEGHEAP = NULL;
       TRUSTKEYLIST = NULL;
       SKIPVERIFY = NULL;
       DHCPLIST = NULL;
@@ -831,11 +835,14 @@ if (NewPromiseProposals())
       Get3Environment();
       OSClasses();
       SetReferenceTime(true);
-
       ReadPromises(cf_server,CF_SERVERC);
-
       KeepPromises();
       Summarize();
+      
+      if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY)) 
+         {
+         CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
+         }
       }
    else
       {
@@ -961,7 +968,7 @@ if ((received = ReceiveTransaction(conn->sd_reply,recvbuffer,NULL)) == -1)
 
 if (strlen(recvbuffer) == 0)
    {
-   Debug("cfServerd terminating NULL transmission!\n");
+   Debug("cf-serverd terminating NULL transmission!\n");
    return false;
    }
   
@@ -1537,7 +1544,7 @@ while (true && (count < 10))  /* arbitrary check to avoid infinite loop, DoS att
          return true;
          }
 
-      if (IsRegexItemIn(VHEAP,ip->name))
+      if (MatchInAlphaList(VHEAP,ip->name))
          {
          Debug("Class matched regular expression %s, accepting...\n",ip->name);
          DeleteItemList(classlist);
@@ -1586,6 +1593,13 @@ CfOut(cf_verbose,"","Examining command string: %s\n",args);
 
 for (sp = args; *sp != '\0'; sp++) /* Blank out -K -f */
    {
+   if (*sp == ';' || *sp == '&' || *sp == '|')
+      {
+      sprintf(sendbuffer,"You are not authorized to activate these classes/roles on host %s\n",VFQNAME);
+      SendTransaction(conn->sd_reply,sendbuffer,0,CF_DONE);
+      return;
+      }
+   
    if (OptionFound(args,sp,"-K")||OptionFound(args,sp,"-f"))
       {
       *sp = ' ';
@@ -1628,11 +1642,11 @@ if (strlen(ebuff)+strlen(args)+6 > CF_BUFSIZE)
    }
 else
    {
-   if ((args != NULL) & (strlen(args) > 0))
+   if ((args != NULL) && (strlen(args) > 0))
       {
       strcat(ebuff," ");
       strncat(ebuff,args,CF_BUFSIZE-strlen(ebuff));
-      snprintf(sendbuffer,CF_BUFSIZE,"cfServerd Executing %s\n",ebuff);
+      snprintf(sendbuffer,CF_BUFSIZE,"cf-serverd Executing %s\n",ebuff);
       SendTransaction(conn->sd_reply,sendbuffer,0,CF_DONE);
       }
    }
@@ -1848,7 +1862,7 @@ ThreadLock(cft_getaddr);
  
 if ((hp = gethostbyname(dns_assert)) == NULL)
    {
-   CfOut(cf_verbose,"","cfServerd Couldn't look up name %s\n",fqname);
+   CfOut(cf_verbose,"","cf-serverd Couldn't look up name %s\n",fqname);
    CfOut(cf_log,"gethostbyname","DNS lookup of %s failed",dns_assert);
    matched = false;
    }
@@ -2027,7 +2041,7 @@ Debug("AccessControl, match(%s,%s) encrypt request=%d\n",transrequest,conn->host
 
 if (vadmit == NULL)
    {
-   CfOut(cf_verbose,"","cfServerd access list is empty, no files are visible\n");
+   CfOut(cf_verbose,"","cf-serverd access list is empty, no files are visible\n");
    return false;
    }
  
@@ -2080,11 +2094,7 @@ for (ap = vadmit; ap != NULL; ap=ap->next)
          if (IsMatchItemIn(ap->maproot,MapAddress(conn->ipaddr)) || IsRegexItemIn(ap->maproot,conn->hostname))             
             {
             conn->maproot = true;
-            CfOut(cf_verbose,"","Mapping root privileges\n");
-            }
-         else
-            {
-            CfOut(cf_verbose,"","No root privileges granted\n");
+            CfOut(cf_verbose,"","Mapping root privileges to access non-root files\n");
             }
          
          if (IsMatchItemIn(ap->accesslist,MapAddress(conn->ipaddr)) || IsRegexItemIn(ap->accesslist,conn->hostname))
@@ -2476,17 +2486,30 @@ int AuthenticationDialogue(struct cfd_connection *conn,char *recvbuffer, int rec
 
 { char in[CF_BUFSIZE],*out, *decrypted_nonce;
   BIGNUM *counter_challenge = NULL;
-  unsigned char digest[EVP_MAX_MD_SIZE+1];
+  unsigned char digest[EVP_MAX_MD_SIZE+1] = {0};
   unsigned int crypt_len, nonce_len = 0,encrypted_len = 0;
   char sauth[10], iscrypt ='n',enterprise_field = 'c';
   int len_n = 0,len_e = 0,keylen, session_size;
   unsigned long err;
   RSA *newkey;
+  int digestLen = 0;
+  enum cfhashes digestType;
 
 if (PRIVKEY == NULL || PUBKEY == NULL)
    {
    CfOut(cf_error,"","No public/private key pair exists, create one with cf-key\n");
    return false;
+   }
+
+ if(FIPS_MODE)
+   {
+   digestType = CF_DEFAULT_DIGEST;
+   digestLen = CF_DEFAULT_DIGEST_LEN;
+   }
+ else
+   {
+   digestType = cf_md5;
+   digestLen = CF_MD5_LEN;
    }
  
 /* proposition C1 */
@@ -2566,14 +2589,7 @@ ThreadUnlock(cft_system);
 
 /* Client's ID is now established by key or trusted, reply with digest */
 
-if (FIPS_MODE)
-   {
-   HashString(decrypted_nonce,nonce_len,digest,CF_DEFAULT_DIGEST);
-   }
-else
-   {
-   HashString(decrypted_nonce,nonce_len,digest,cf_md5);
-   }
+HashString(decrypted_nonce,nonce_len,digest,digestType);
 
 free(decrypted_nonce);
 
@@ -2659,14 +2675,8 @@ if (!CheckStoreKey(conn,newkey))    /* conceals proposition S1 */
 
 /* proposition S2 */
 
-if (FIPS_MODE)
-   {
-   SendTransaction(conn->sd_reply,digest,CF_DEFAULT_DIGEST_LEN,CF_DONE);
-   }
-else
-   {
-   SendTransaction(conn->sd_reply,digest,CF_MD5_LEN,CF_DONE);
-   }
+SendTransaction(conn->sd_reply,digest,digestLen,CF_DONE);
+
 
 /* Send counter challenge to be sure this is a live session */
 
@@ -2678,14 +2688,7 @@ nonce_len = BN_bn2mpi(counter_challenge,in);
 
 // hash the challenge from the client
 
-if (FIPS_MODE)
-   {
-   HashString(in,nonce_len,digest,CF_DEFAULT_DIGEST);
-   }
-else
-   {
-   HashString(in,nonce_len,digest,cf_md5);
-   }
+HashString(in,nonce_len,digest,digestType);
 
 encrypted_len = RSA_size(newkey);         /* encryption buffer is always the same size as n */ 
 
@@ -2736,7 +2739,7 @@ if (ReceiveTransaction(conn->sd_reply,in,NULL) == -1)
    return false;
    }
  
-if (HashesMatch(digest,in,CF_DEFAULT_DIGEST) || HashesMatch(digest,in,cf_md5))  /* replay / piggy in the middle attack ? */
+if (HashesMatch(digest,in,digestType))  /* replay / piggy in the middle attack ? */
    {
    if (!conn->trust)
       {

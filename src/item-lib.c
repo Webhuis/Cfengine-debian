@@ -189,7 +189,7 @@ if (!IsItemIn(*liststart,itemstring))
 
 /*********************************************************************/
 
-void PrependItem(struct Item **liststart,char *itemstring,char *classes)
+struct Item * PrependItem(struct Item **liststart,char *itemstring,char *classes)
 
 { struct Item *ip;
   char *sp,*spe = NULL;
@@ -224,6 +224,8 @@ else
    {
    ip->classes = NULL;
    }
+
+return *liststart;
 }
 
 /*********************************************************************/
@@ -511,7 +513,7 @@ return false;
 
 int SelectLastItemMatching(char *regexp,struct Item *begin,struct Item *end,struct Item **match,struct Item **prev) 
 
-{ struct Item *ip,*ip_last = NULL,*ip_prev = CF_UNDEFINED_ITEM;;
+{ struct Item *ip,*ip_last = NULL,*ip_prev = CF_UNDEFINED_ITEM;
  
 *match = CF_UNDEFINED_ITEM;
 *prev = CF_UNDEFINED_ITEM;
@@ -1291,26 +1293,24 @@ return(false);
 void DeleteItemList(struct Item *item)  /* delete starting from item */
  
 {
-if (item != NULL)
-   {
-   if (item->next)
-      {
-      DeleteItemList(item->next);
-      item->next = NULL;
-      }
+  struct Item *ip, *next;
 
-   if (item->name != NULL)
-      {
-      free (item->name);
-      }
+  for(ip = item; ip != NULL; ip = next)
+    {
+      next = ip->next;  // save before free
 
-   if (item->classes != NULL)
-      {
-      free (item->classes);
-      }
-
-   free((char *)item);
-   }
+      if (ip->name != NULL)
+	{
+	  free (ip->name);
+	}
+      
+      if (ip->classes != NULL)
+	{
+	  free (ip->classes);
+	}
+      
+      free((char *)ip);
+    }
 }
 
 /*********************************************************************/
@@ -1642,6 +1642,11 @@ Debug("CompareToFile(%s)\n",file);
 if (cfstat(file,&statbuf) == -1)
    {
    return false;
+   }
+
+if (liststart == NULL && statbuf.st_size == 0)
+   {
+   return true;
    }
 
 if (liststart == NULL)

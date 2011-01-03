@@ -42,7 +42,7 @@ void GenericInitialize(int argc,char **argv,char *agents)
 
 { enum cfagenttype ag = Agent2Type(agents);
   char vbuff[CF_BUFSIZE];
-  int ok;
+  int ok = false;
 
 #ifdef HAVE_LIBCFNOVA
 CF_DEFAULT_DIGEST = cf_sha256;
@@ -111,7 +111,16 @@ else
 
 SetPolicyServer(POLICY_SERVER);
 
-ok = BOOTSTRAP || CheckPromises(ag);
+if (NewPromiseProposals())
+   {
+   CfOut(cf_verbose,""," -> New promises proposals detected...\n");
+   ok = BOOTSTRAP || CheckPromises(ag);
+   }
+else
+   {
+   CfOut(cf_verbose,""," -> No new promises proposals - so policy is already validated\n");
+   ok = true;
+   }
 
 if (ok)
    {
@@ -154,14 +163,16 @@ CloseAllDB();
 int CheckPromises(enum cfagenttype ag)
 
 { char cmd[CF_BUFSIZE],path[CF_BUFSIZE];
+  char filename[CF_MAXVARSIZE];
   struct stat sb;
+  int fd;
 
 if ((ag != cf_agent) && (ag != cf_executor) && (ag != cf_server))
    {
    return true;
    }
 
-CfOut(cf_verbose,""," > Verifying the syntax of the inputs...\n");
+CfOut(cf_verbose,""," -> Verifying the syntax of the inputs...\n");
 
 snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX);
 
@@ -186,6 +197,19 @@ else
 
 if (ShellCommandReturnsZero(cmd,true))
    {
+   snprintf(filename,CF_MAXVARSIZE,"%s/masterfiles/cf_promises_validated",CFWORKDIR);
+   MapName(filename);
+
+   if ((fd = creat(filename,0600)) != -1)
+      {
+      close(fd);
+      CfOut(cf_verbose,""," -> Caching the state of validation\n");
+      }
+   else
+      {
+      CfOut(cf_verbose,"creat"," -> Failed to cache the state of validation\n");
+      }
+   
    return true;
    }
 else
@@ -478,7 +502,12 @@ OpenNetwork();
 OpenSSL_add_all_algorithms();
 OpenSSL_add_all_digests();
 ERR_load_crypto_strings();
-CheckWorkingDirectories();
+
+if(!LOOKUP)
+  {
+  CheckWorkingDirectories();
+  }
+
 RandomSeed();
 
 RAND_bytes(s,16);
@@ -585,6 +614,15 @@ int NewPromiseProposals()
 { struct Rlist *rp,*sl;
   struct stat sb;
   int result = false;
+  char filename[CF_MAXVARSIZE];
+
+snprintf(filename,CF_MAXVARSIZE,"%s/masterfiles/cf_promises_validated",CFWORKDIR);
+MapName(filename);
+
+if (stat(filename,&sb) != -1)
+   {
+   PROMISETIME = sb.st_mtime;
+   }
 
 if (cfstat(InputLocation(VINPUTFILE),&sb) == -1)
    {
@@ -596,6 +634,18 @@ if (sb.st_mtime > PROMISETIME)
    {
    return true;
    }
+
+// Check the directories first for speed and because non-input/data files should trigger an update
+
+snprintf(filename,CF_MAXVARSIZE,"%s/inputs",CFWORKDIR);
+MapName(filename);
+
+if (!MINUSF && IsNewerFileTree(filename,PROMISETIME))
+   {
+   return true;
+   }
+
+// Check files in case there are any abs paths
 
 if (VINPUTLIST != NULL)
    {
@@ -656,7 +706,7 @@ if (VINPUTLIST != NULL)
       }
    }
 
-return result;
+return result | ALWAYS_VALIDATE;
 }
 
 /*******************************************************************/
@@ -802,15 +852,17 @@ P.line_no = 1;
 P.line_pos = 1;
 P.list_nesting = 0;
 P.arg_nesting = 0;
-P.filename = strdup(wfilename);
+strncpy(P.filename,wfilename,CF_MAXVARSIZE);
 
-P.currentid = NULL;
+P.currentid[0] = '\0';
 P.currentstring = NULL;
-P.currenttype = NULL;
+P.currenttype[0] = '\0';
 P.currentclasses = NULL;
 P.currentRlist = NULL;
 P.currentpromise = NULL;
 P.promiser = NULL;
+P.blockid[0] = '\0';
+P.blocktype[0] = '\0';
 
 while (!feof(yyin))
    {
@@ -1101,8 +1153,11 @@ if (cfstat(CFWORKDIR,&statbuf) != -1)
 snprintf(vbuff,CF_BUFSIZE,"%s%cstate%c.",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
 MakeParentDirectory(vbuff,false);
 
-snprintf(CFPRIVKEYFILE,CF_BUFSIZE,"%s%cppkeys%clocalhost.priv",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
-snprintf(CFPUBKEYFILE,CF_BUFSIZE,"%s%cppkeys%clocalhost.pub",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
+if (strlen(CFPRIVKEYFILE) == 0)
+   {
+   snprintf(CFPRIVKEYFILE,CF_BUFSIZE,"%s%cppkeys%clocalhost.priv",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
+   snprintf(CFPUBKEYFILE,CF_BUFSIZE,"%s%cppkeys%clocalhost.pub",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
+   }
 
 CfOut(cf_verbose,"","Checking integrity of the state database\n");
 snprintf(vbuff,CF_BUFSIZE,"%s%cstate",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
@@ -1377,7 +1432,7 @@ if (BadBundleSequence(agent))
 
 void PrependAuditFile(char *file)
 
-{ struct stat statbuf;;
+{ struct stat statbuf;
 
 if ((AUDITPTR = (struct Audit *)malloc(sizeof(struct Audit))) == NULL)
    {
@@ -1438,7 +1493,7 @@ void CheckBundleParameters(char *scope,struct Rlist *args)
 
 { struct Rlist *rp;
   struct Rval retval;
-  char *lval,rettype;;
+  char *lval,rettype;
 
 for (rp = args; rp != NULL; rp = rp->next)
    {
@@ -1499,10 +1554,10 @@ for (cp = controllist; cp != NULL; cp=cp->next)
       }
 
    DeleteVariable(scope,cp->lval);
-   
+
    if (!AddVariableHash(scope,cp->lval,returnval.item,returnval.rtype,GetControlDatatype(cp->lval,bp),cp->audit->filename,cp->lineno))
       {
-      CfOut(cf_error,"","Rule from %s at/before line %d\n",cp->audit->filename,cp->lineno);
+      CfOut(cf_error,""," !! Rule from %s at/before line %d\n",cp->audit->filename,cp->lineno);
       }
 
    if (strcmp(cp->lval,CFG_CONTROLBODY[cfg_output_prefix].lval) == 0)
@@ -1587,8 +1642,8 @@ for (i=0; options[i].name != NULL; i++)
       }
    }
 
-printf("\nBug reports: bug-cfengine@cfengine.org, ");
-printf("Community help: help-cfengine@cfengine.org\n");
+printf("\nBug reports: http://bug.cfengine.com, ");
+printf("Community help: http://forum.cfengine.com\n");
 printf("Community info: http://www.cfengine.org, ");
 printf("Support services: http://www.cfengine.com\n\n");
 printf("This software is Copyright (C) 2008,2010-present Cfengine AS.\n");
@@ -1634,8 +1689,8 @@ printf(".SH AUTHOR\n"
        "Mark Burgess and Cfengine AS\n"
        ".SH INFORMATION\n");
 
-printf("\nBug reports: bug-cfengine@cfengine.org\n");
-printf(".pp\nCommunity help: help-cfengine@cfengine.org\n");
+printf("\nBug reports: http://bug.cfengine.com, ");
+printf(".pp\nCommunity help: http://forum.cfengine.com\n");
 printf(".pp\nCommunity info: http://www.cfengine.org\n");
 printf(".pp\nSupport services: http://www.cfengine.com\n");
 printf(".pp\nThis software is Copyright (C) 2008- Cfengine AS.\n");

@@ -62,7 +62,7 @@ if (!LoadFileAsItemList(&(ec->file_start),filename,a,pp))
 
 if (a.edits.empty_before_use)
    {
-   CfOut(cf_verbose,"","Build file model from a blank slate (emptying)\n");
+   CfOut(cf_verbose,""," -> Build file model from a blank slate (emptying)\n");
    DeleteItemList(ec->file_start);
    ec->file_start = NULL;
    }
@@ -262,7 +262,7 @@ if (fclose(fp) == -1)
    return false;
    }
  
-cfPS(cf_inform,CF_CHG,"",pp,a,"Edited file %s \n",file); 
+cfPS(cf_inform,CF_CHG,"",pp,a," -> Edited file %s \n",file); 
 
 if (cf_rename(file,backup) == -1)
    {

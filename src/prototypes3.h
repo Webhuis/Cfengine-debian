@@ -52,6 +52,18 @@ int ScheduleAgentOperations(struct Bundle *bp);
 /* agentdiagnostic.c */
 
 void AgentDiagnostic(char *inputfile);
+void CheckInstalledLibraries(void);
+
+/* alphalist.c */
+
+void InitAlphaList(struct AlphaList *al);
+int InAlphaList(struct AlphaList al,char *string);
+int MatchInAlphaList(struct AlphaList al,char *string);
+void PrependAlphaList(struct AlphaList *al,char *string);
+void ShowAlphaList(struct AlphaList al);
+void ListAlphaList(FILE *fp,struct AlphaList al,char sep);
+void DeleteAlphaList(struct AlphaList *al);
+struct AlphaList *CopyAlphaListPointers(struct AlphaList *al,struct AlphaList *ap);
 
 /* args.c */
 
@@ -180,7 +192,7 @@ struct cfagent_connection *ServerConnectionReady(char *server);
 void MarkServerOffline(char *server);
 void CacheServerConnection(struct cfagent_connection *conn,char *server);
 void ServerNotBusy(struct cfagent_connection *conn);
-int TryConnect(struct cfagent_connection *conn, struct timeval *tvp, struct sockaddr_in *cinp, int cinpSz);
+int TryConnect(struct cfagent_connection *conn, struct timeval *tvp, struct sockaddr *cinp, int cinpSz);
 
 /* client_protocols.c */
 
@@ -242,6 +254,7 @@ struct PromiseIdent *PromiseIdExists(char *handle);
 
 /* conversion.c */
 
+char *EscapeQuotes(char *s, char *out, int outSz);
 char *MapAddress (char *addr);
 void IPString2KeyDigest(char *ipv4,char *result);
 time_t StrToTime(char *s);
@@ -288,6 +301,7 @@ enum cf_acl_inherit Str2ServicePolicy(char *string);
 char *Item2String(struct Item *ip);
 int IsSpace(char *remainder);
 int IsNumber(char *s);
+int IsRealNumber(char *s);
 
 #ifndef MINGW
 struct UidList *Rlist2UidList(struct Rlist *uidnames, struct Promise *pp);
@@ -311,7 +325,7 @@ void SavePublicKey (char *username,char *ipaddress,char *digest,RSA *key);
 void DeletePublicKey (char *username,char *ipaddress,char *digest);
 char *KeyPrint(RSA *key);
 RSA *SelectKeyRing(char *name);
-void IdempAddToKeyRing(char *name,RSA *key);
+void IdempAddToKeyRing(char *name,char *ip,RSA *key);
 void PurgeKeyRing(void);
 
 /* dbm_api.c */
@@ -504,8 +518,8 @@ int IsHardClass (char *sp);
 int IsSpecialClass (char *class);
 int IsExcluded (char *exception);
 int IsDefinedClass (char *class);
-int EvaluateORString (char *class, struct Item *list,int fromIsInstallable);
-int EvaluateANDString (char *class, struct Item *list,int fromIsInstallable);
+int EvaluateORString (char *class, struct AlphaList list,int fromIsInstallable);
+int EvaluateANDString (char *class, struct AlphaList list,int fromIsInstallable);
 int GetORAtom (char *start, char *buffer);
 int GetANDAtom (char *start, char *buffer);
 int CountEvalAtoms (char *class);
@@ -607,6 +621,7 @@ void ScanScalar(char *scope,struct Rlist **los,struct Rlist **lol,char *string,i
 
 int IsExpandable(char *str);
 int ExpandScalar(char *string,char buffer[CF_EXPANDSIZE]);
+int ExpandThis(enum cfreport level,char *string,char buffer[CF_EXPANDSIZE]);
 int ExpandPrivateScalar(char *contextid,char *string,char buffer[CF_EXPANDSIZE]);
 struct Rval ExpandBundleReference(char *scopeid,void *rval,char type);
 struct FnCall *ExpandFnCall(char *contextid,struct FnCall *f,int expandnaked);
@@ -720,6 +735,7 @@ void SaveSetuid(struct Attributes a,struct Promise *pp);
 
 /* files_names.c */
 
+int IsNewerFileTree(char *dir,time_t reftime);
 char *Titleize (char *str);
 int DeEscapeQuotedString(char *in, char *out);
 void DeEscapeFilename(char *in,char *out);
@@ -728,7 +744,10 @@ int EmptyString(char *s);
 int ExpandOverflow(char *str1,char *str2);
 char *JoinPath(char *path,char *leaf);
 char *JoinSuffix(char *path,char *leaf);
-char *Join(char *path,char *leaf,int bufsize);
+int StartJoin(char *path,char *leaf,int bufsize);
+int Join(char *path,char *leaf,int bufsize);
+int EndJoin(char *path,char *leaf,int bufsize);
+int JoinMargin(char *path,char *leaf,int bufsize,int margin);
 int IsAbsPath(char *path);
 void AddSlash(char *str);
 void DeleteSlash(char *str);
@@ -739,7 +758,7 @@ char *ReadLastNode(char *str);
 int CompressPath(char *dest,char *src);
 void Chop(char *str);
 int IsIn(char c,char *str);
-int IsStrIn(char *str, char **strs);
+int IsStrIn(char *str, char **strs, int ignoreCase);
 void FreeStringArray(char **strs);
 int IsAbsoluteFileName(char *f);
 int RootDirLength(char *f);
@@ -750,6 +769,7 @@ char *ToLowerStr (char *str);
 int SubStrnCopyChr(char *to,char *from,int len,char sep);
 int CountChar(char *string,char sp);
 void ReplaceChar(char *in, char *out, int outSz, char from, char to);
+int ReplaceStr(char *in, char *out, int outSz, char* from, char *to);
     
 #if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
 void *ThreadUniqueName(pthread_t tid);
@@ -762,7 +782,7 @@ int VerifyFileLeaf(char *path,struct stat *sb,struct Attributes attr,struct Prom
 int CfCreateFile(char *file,struct Promise *pp,struct Attributes attr);
 FILE *CreateEmptyStream(void);
 int ScheduleCopyOperation(char *destination,struct Attributes attr,struct Promise *pp);
-int ScheduleLinkChildrenOperation(char *destination,struct Attributes attr,struct Promise *pp);
+int ScheduleLinkChildrenOperation(char *destination,char *source,int rec,struct Attributes attr,struct Promise *pp);
 int ScheduleLinkOperation(char *destination,char *source,struct Attributes attr,struct Promise *pp);
 int ScheduleEditOperation(char *filename,struct Attributes attr,struct Promise *pp);
 struct FileCopy *NewFileCopy(struct Promise *pp);
@@ -791,8 +811,8 @@ struct UidList *MakeUidList(char *uidnames);
 struct GidList *MakeGidList(char *gidnames);
 void Unix_VerifyFileAttributes(char *file,struct stat *dstat,struct Attributes attr,struct Promise *pp);
 void Unix_VerifyCopiedFileAttributes(char *file,struct stat *dstat,struct stat *sstat,struct Attributes attr,struct Promise *pp);
-void AddSimpleUidItem(struct UidList **uidlist,int uid,char *uidname);
-void AddSimpleGidItem(struct GidList **gidlist,int gid,char *gidname);
+void AddSimpleUidItem(struct UidList **uidlist,uid_t uid,char *uidname);
+void AddSimpleGidItem(struct GidList **gidlist,gid_t gid,char *gidname);
 #endif  /* NOT MINGW */
 
 /* files_properties.c */
@@ -817,7 +837,7 @@ int SelectNameRegexMatch(char *filename,char *crit);
 int SelectPathRegexMatch(char *filename,char *crit);
 int SelectExecRegexMatch(char *filename,char *crit,char *prog);
 int SelectIsSymLinkTo(char *filename,struct Rlist *crit);
-int SelectExecProgram(char *filename,char *crit);
+int SelectExecProgram(char *filename,char *command);
 int SelectSizeMatch(size_t size,size_t min,size_t max);
 int SelectBSDMatch(struct stat *lstatptr,struct Rlist *bsdflags,struct Promise *pp);
 #ifndef MINGW
@@ -974,7 +994,7 @@ int FuzzyHostParse(char *arg1,char *arg2);
 void IdempItemCount(struct Item **liststart,char *itemstring,char *classes);
 void IdempPrependItem(struct Item **liststart,char *itemstring,char *classes);
 void IdempAppendItem(struct Item **liststart,char *itemstring,char *classes);
-void PrependItem(struct Item **liststart, char *itemstring, char *classes);
+struct Item *PrependItem(struct Item **liststart, char *itemstring, char *classes);
 void AppendItem(struct Item **liststart, char *itemstring, char *classes);
 void DeleteItemList (struct Item *item);
 void DeleteItem (struct Item **liststart, struct Item *item);
@@ -1004,7 +1024,7 @@ struct timespec BeginMeasure(void);
 void EndMeasure(char *eventname,struct timespec start);
 void EndMeasurePromise(struct timespec start,struct Promise *pp);
 void NotePerformance(char *eventname,time_t t,double value);
-void NoteClassUsage(struct Item *list);
+void NoteClassUsage(struct AlphaList list);
 void LastSaw(char *username,char *ipaddress,unsigned char digest[EVP_MAX_MD_SIZE+1],enum roles role);
 void UpdateLastSeen(void);
 double GAverage(double anew,double aold,double p);
@@ -1433,6 +1453,7 @@ void Xen_Cpuid(uint32_t idx, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32
 int Xen_Hv_Check(void);
 void SetSignals(void);
 int IsInterfaceAddress(char *adr);
+char *Cf_GetVersion(void);
 int GetCurrentUserName(char *userName, int userNameLen);
 #ifndef MINGW
 void Unix_GetInterfaceInfo(enum cfagenttype ag);
@@ -1443,7 +1464,7 @@ char *GetHome(uid_t uid);
 /* transaction.c */
 
 void SummarizeTransaction(struct Attributes attr,struct Promise *pp,char *logname);
-struct CfLock AcquireLock(char *operand,char *host,time_t now,struct Attributes attr,struct Promise *pp);
+struct CfLock AcquireLock(char *operand,char *host,time_t now,struct Attributes attr,struct Promise *pp, int ignoreProcesses);
 void YieldCurrentLock(struct CfLock this);
 void GetLockName(char *lockname,char *locktype,char *base,struct Rlist *params);
 time_t FindLock(char *last);
@@ -1591,6 +1612,7 @@ int DoAllSignals(struct Item *siglist,struct Attributes a,struct Promise *pp);
 int ExtractPid(char *psentry,char **names,int *start,int *end);
 void GetProcessColumnNames(char *proc,char **names,int *start,int *end);
 int GracefulTerminate(pid_t pid);
+int GetProcColumnIndex(char *name1,char *name2,char **names);
 
 /* verify_services.c */
 
