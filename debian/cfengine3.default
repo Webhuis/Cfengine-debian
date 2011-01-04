@@ -15,6 +15,6 @@ RUN_CFSERVERD=0
 RUN_CFEXECD=0
 
 # Additional options that are passed to the daemons
-CFMONITORD_OPTS=""
-CFSERVERD_OPTS=""
-CFEXECD_OPTS=""
+CFMONITORD_ARGS=""
+CFSERVERD_ARGS=""
+CFEXECD_ARGS=""

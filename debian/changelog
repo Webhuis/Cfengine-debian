@@ -1,4 +1,4 @@
-cfengine3 (3.1.2+dfsg-1) experimental; urgency=low
+cfengine3 (3.1.2+dfsg-1) unstable; urgency=low
 
   * New upstream release (Closes: 585619, 605534)
   * debian/cfengine3.init: quote the unquoted variables (Closes: 605044)
@@ -6,6 +6,8 @@ cfengine3 (3.1.2+dfsg-1) experimental; urgency=low
   * debian/patches: all refreshed/re-adapted
   * debian/rules: added --enable-shared=no, otherwise libpromises.so.1 will be
     shipped
+  * debian/cfengine3.default: variable names now compatible with cfengine3.init
+    (Closes: 602404)
 
  -- Antonio Radici <antonio@debian.org>  Mon, 03 Jan 2011 21:08:59 +0000
 
