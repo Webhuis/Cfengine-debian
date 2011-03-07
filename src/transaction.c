@@ -371,6 +371,15 @@ switch(name)
    case cft_report:
        return &MUTEX_DB_REPORT;
        break;
+
+   case cft_vscope:
+       return &MUTEX_VSCOPE;
+       break;
+
+   case cft_server_keyseen:
+       return &MUTEX_SERVER_KEYSEEN;
+       break;
+
        
    default:
        CfOut(cf_error, "", "!! NameToThreadMutex supplied with unknown mutex name: %d", name);
@@ -497,29 +506,15 @@ Debug("WriteLock(%s)\n",name);
 
 if ((dbp = OpenLock()) == NULL)
    {
-   return 0;
+   return -1;
    }
-
-DeleteDB(dbp,name);
 
 entry.pid = getpid();
 entry.time = time((time_t *)NULL);
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
-if (pthread_mutex_lock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"pthread_mutex_lock","pthread_mutex_lock failed");
-   }
-#endif
-
+ThreadLock(cft_lock);
 WriteDB(dbp,name,&entry,sizeof(entry));
-
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
-if (pthread_mutex_unlock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   }
-#endif
+ThreadUnlock(cft_lock);
 
 CloseLock(dbp);
 return 0;
@@ -581,21 +576,9 @@ if ((dbp = OpenLock()) == NULL)
    return -1;
    }
 
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
-if (pthread_mutex_lock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"pthread_mutex_lock","pthread_mutex_lock failed");
-   }
-#endif
-
+ThreadLock(cft_lock);
 DeleteDB(dbp,name);
-
-#if defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD
-if (pthread_mutex_unlock(&MUTEX_LOCK) != 0)
-   {
-   CfOut(cf_error,"unlock","pthread_mutex_unlock failed");
-   }
-#endif
+ThreadUnlock(cft_lock);
 
 CloseLock(dbp);
 return 0;
@@ -744,4 +727,57 @@ if (dayp && monthp) // looks like a full date
          }
       }
    }
+}
+
+/************************************************************************/
+
+void PurgeLocks()
+
+{ CF_DB *dbp = OpenLock();
+  CF_DBC *dbcp;
+  char *key,name[CF_BUFSIZE];
+  int i,ksize,vsize;
+  struct LockData entry;
+  time_t now = time(NULL);
+
+memset(&entry, 0, sizeof(entry)); 
+
+if (ReadDB(dbp,"lock_horizon",&entry,sizeof(entry)))
+   {
+   if (now - entry.time < CF_MONTH)
+      {
+      CfOut(cf_verbose,""," -> No lock purging scheduled");
+      CloseLock(dbp);
+      return;
+      }
+   }
+
+CfOut(cf_verbose,""," -> Looking for stale locks to purge");
+
+if (!NewDBCursor(dbp,&dbcp))
+   {
+   CloseLock(dbp);
+   return;
+   }
+
+while(NextDB(dbp,dbcp,&key,&ksize,(void *)&entry,&vsize))
+   {
+   if (strncmp(key,"last.internal_bundle.track_license.handle",
+               strlen("last.internal_bundle.track_license.handle")) == 0)
+      {
+      continue;
+      }
+
+   if (now - entry.time > (time_t)CF_LOCKHORIZON)
+      {
+      CfOut(cf_verbose,""," --> Purging lock (%d) %s",now-entry.time,key);
+      DeleteDB(dbp,key);
+      }
+   }
+
+entry.time = now;
+WriteDB(dbp,"lock_horizon",&entry,sizeof(entry));
+
+DeleteDBCursor(dbp,dbcp);
+CloseLock(dbp);
 }

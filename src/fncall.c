@@ -118,7 +118,7 @@ if (fp->name)
 
 if (fp->args)
    {
-   DeleteRvalItem(fp->args,CF_LIST);
+   DeleteRlist(fp->args);
    }
 
 free(fp);
@@ -296,6 +296,8 @@ ClearFnCallStatus();
 
 expargs = NewExpArgs(fp,pp);
 
+THIS_BUNDLE = pp->bundle;
+
 if (UnresolvedArgs(expargs))
    {
    FNCALL_STATUS.status = FNCALL_FAILURE;
@@ -315,6 +317,9 @@ switch (this)
        break;
    case cfn_host2ip:
        rval = FnCallHost2IP(fp,expargs);
+       break;
+   case cfn_ip2host:
+       rval = FnCallIP2Host(fp,expargs);
        break;
    case cfn_join:
        rval = FnCallJoin(fp,expargs);
@@ -378,6 +383,9 @@ switch (this)
        break;
    case cfn_filesexist:
        rval = FnCallFileSexist(fp,expargs);
+       break;
+   case cfn_filesize:
+       rval = FnCallStatInfo(fp,expargs,this);
        break;
    case cfn_isdir:
        rval = FnCallStatInfo(fp,expargs,this);

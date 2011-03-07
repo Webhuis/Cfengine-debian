@@ -223,14 +223,16 @@ if (BN_num_bits(PUBKEY->e) < 2 || !BN_is_odd(PUBKEY->e))
    FatalError("RSA Exponent too small or not odd");
    }
 
-snprintf(name,CF_MAXVARSIZE-1,"%s%cpolicy_server.dat",CFWORKDIR,FILE_SEPARATOR);
+if(EMPTY(POLICY_SERVER))
+  {
+  snprintf(name,CF_MAXVARSIZE-1,"%s%cpolicy_server.dat",CFWORKDIR,FILE_SEPARATOR);
 
-if ((fp = fopen(name,"r")) != NULL)
-   {
-   fscanf(fp,"%s",POLICY_SERVER);
-   fclose(fp);
-   }
-
+  if ((fp = fopen(name,"r")) != NULL)
+     {
+     fscanf(fp,"%s",POLICY_SERVER);
+     fclose(fp);
+     }
+  }
 
 /* Check that we have our own SHA key form of the key in the IP on the hub */
 
@@ -249,6 +251,7 @@ MapName(guard);
 // need to use cf_stat
 
 if (stat(name,&sb) == -1 && stat(guard,&sb) != -1)
+  // copy localhost.pub to root-HASH.pub on policy server
    {
    LastSaw("root",POLICY_SERVER,digest,cf_connect);
    UpdateLastSeen();
@@ -300,7 +303,6 @@ if (newkey = SelectKeyRing(keyname))
 else if (cfstat(newname,&statbuf) == -1)
    {
    CfOut(cf_verbose,""," -> Did not find new key format %s",newname);
-   strcpy(newname,newname);
    snprintf(oldname,CF_BUFSIZE,"%s/ppkeys/%s-%s.pub",CFWORKDIR,username,ipaddress);   
    MapName(oldname);
 
@@ -312,11 +314,22 @@ else if (cfstat(newname,&statbuf) == -1)
       return NULL;
       }
 
-   if (strlen(keyname) > 0)
+   if (strlen(digest) > 0)
       {
       CfOut(cf_inform,""," -> Renaming old key from %s to %s",oldname,newname);
-      rename(oldname,newname);
+
+      if(rename(oldname,newname) != 0)
+	{
+	CfOut(cf_error, "rename", "!! Could not rename from old key format (%s) to new (%s)",oldname,newname);
+	}
       }
+   else  // we don't know the digest (e.g. because we are a client and
+	 // have no lastseen-map and/or root-SHA...pub of the server's key
+	 // yet) Just using old file format (root-IP.pub) without renaming for now.
+     {
+     CfOut(cf_verbose, "", " -> Could not map key file to new format - we have no digest yet (using %s)", oldname);
+     snprintf(newname,sizeof(newname),"%s",oldname);
+     }
    }
 
 CfOut(cf_verbose,""," -> Going to secondary storage for key");

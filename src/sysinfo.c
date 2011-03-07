@@ -261,6 +261,7 @@ NewScalar("sys","uqhost",VUQNAME,cf_str);
 NewScalar("sys","fqhost",VFQNAME,cf_str);
 NewScalar("sys","os",VSYSNAME.sysname,cf_str);
 NewScalar("sys","release",VSYSNAME.release,cf_str);
+NewScalar("sys","version",VSYSNAME.version,cf_str);
 NewScalar("sys","arch",VSYSNAME.machine,cf_str);
 NewScalar("sys","workdir",CFWORKDIR,cf_str);
 NewScalar("sys","fstab",VFSTAB[VSYSTEMHARDCLASS],cf_str);
@@ -516,14 +517,14 @@ void Get3Environment()
   struct stat statbuf;
   time_t now = time(NULL);
 
-CfOut(cf_verbose,"","Looking for environment from cf-monitor...\n");
+CfOut(cf_verbose,"","Looking for environment from cf-monitord...\n");
 
 snprintf(env,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,CF_ENV_FILE);
 MapName(env);
 
 if (cfstat(env,&statbuf) == -1)
    {
-   CfOut(cf_verbose,"","Unable to detect environment from cfMonitord\n\n");
+   CfOut(cf_verbose,"","Unable to detect environment from cf-monitord\n\n");
    return;
    }
 
@@ -891,8 +892,8 @@ NewScalar("sys","crontab","",cf_str);
 #endif  /* CFCYG */
 
 #ifdef MINGW
-NewClass(VSYSNAME.version);  // code name - e.g. Windows Vista
-NewClass(VSYSNAME.release);  // service pack number - e.g. Service Pack 3
+NewClass(VSYSNAME.release);  // code name - e.g. Windows Vista
+NewClass(VSYSNAME.version);  // service pack number - e.g. Service Pack 3
 
 if (strstr(VSYSNAME.sysname, "workstation"))
    {
@@ -1052,7 +1053,8 @@ int Linux_Redhat_Version(void)
 #define REDHAT_ES_ID "Red Hat Enterprise Linux ES"
 #define REDHAT_WS_ID "Red Hat Enterprise Linux WS"
 #define REDHAT_C_ID "Red Hat Enterprise Linux Client"
-#define REDHAT_S_ID "Red Hat Enterprise Linux Server"
+#define REDHAT_S_ID "Red Hat Enterprise Linux Server" 
+#define REDHAT_W_ID "Red Hat Enterprise Linux Workstation"
 #define MANDRAKE_ID "Linux Mandrake"
 #define MANDRAKE_10_1_ID "Mandrakelinux"
 #define WHITEBOX_ID "White Box Enterprise Linux"
@@ -1135,7 +1137,7 @@ else if(!strncmp(relstring, REDHAT_S_ID, strlen(REDHAT_S_ID)))
    vendor = "redhat";
    edition = "s";
    }
-else if(!strncmp(relstring, REDHAT_C_ID, strlen(REDHAT_C_ID)))
+else if(!strncmp(relstring, REDHAT_C_ID, strlen(REDHAT_C_ID)) || !strncmp(relstring, REDHAT_W_ID, strlen(REDHAT_W_ID)))
    {
    vendor = "redhat";
    edition = "c";

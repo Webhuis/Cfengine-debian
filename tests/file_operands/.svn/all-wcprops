@@ -1,13 +1,13 @@
 K 25
 svn:wc:ra_dav:version-url
 V 49
-/svn/core/!svn/ver/1580/trunk/tests/file_operands
+/svn/core/!svn/ver/1717/trunk/tests/file_operands
 END
 Makefile.in
 K 25
 svn:wc:ra_dav:version-url
 V 61
-/svn/core/!svn/ver/1580/trunk/tests/file_operands/Makefile.in
+/svn/core/!svn/ver/1756/trunk/tests/file_operands/Makefile.in
 END
 Makefile.am
 K 25

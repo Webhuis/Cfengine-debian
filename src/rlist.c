@@ -173,7 +173,7 @@ void *CopyRvalItem(void *item, char type)
   struct FnCall *fp;
   void *new,*rval;
   char rtype = CF_SCALAR,output[CF_BUFSIZE];
-  char naked[CF_MAXVARSIZE];
+  char naked[CF_BUFSIZE];
   
 Debug("CopyRvalItem(%c)\n",type);
 
@@ -344,7 +344,6 @@ struct Rlist *CopyRlist(struct Rlist *list)
 
 { struct Rlist *rp,*start = NULL;
   struct FnCall *fp;
-  void *new;
 
 Debug("CopyRlist()\n");
   
@@ -353,10 +352,9 @@ if (list == NULL)
    return NULL;
    }
 
-for (rp = list; rp != NULL; rp= rp->next)
+for (rp = list; rp != NULL; rp = rp->next)
    {
-   new = CopyRvalItem(rp->item,rp->type);
-   AppendRlist(&start,new,rp->type);
+   AppendRlist(&start,rp->item,rp->type);  // allocates memory for objects
    }
 
 return start;
@@ -365,12 +363,41 @@ return start;
 /*******************************************************************/
 
 void DeleteRlist(struct Rlist *list)
-
+/* Delete a rlist and all it references */
 {
-if (list != NULL)
-   {
-   DeleteRvalItem(list,CF_LIST);
-   }
+  struct Rlist *rl, *next;
+
+  if(list != NULL)
+    {
+      for(rl = list; rl != NULL; rl = next)
+	{
+	  next = rl->next;
+	  
+	  if (rl->item != NULL)
+	    {
+	    DeleteRvalItem(rl->item,rl->type);
+	    }
+	  
+	  free(rl);
+	}
+    }
+}
+
+/*******************************************************************/
+
+void DeleteRlistNoRef(struct Rlist *list)
+/* Delete a rlist, but not its references */
+{
+  struct Rlist *rl, *next;
+
+  if(list != NULL)
+    {
+      for(rl = list; rl != NULL; rl = next)
+	{
+	  next = rl->next;
+	  free(rl);
+	}
+    }
 }
 
 /*******************************************************************/
@@ -710,7 +737,7 @@ splitlist = SplitStringAsRList(string,',');
 for (rp =  splitlist; rp != NULL; rp = rp->next)
    {
    value[0];
-   sscanf(rp->item,"%*[{ ']%255[^']",value);
+   sscanf(rp->item,"%*[{ '\"]%255[^'\"]",value);
    AppendRlist(&newlist,value,CF_SCALAR);
    }
 
@@ -962,7 +989,7 @@ switch (type)
 
 void DeleteRvalItem(void *rval, char type)
 
-{ struct Rlist *clist;
+{ struct Rlist *clist, *next = NULL;
 
 Debug("DeleteRvalItem(%c)",type);
 
@@ -982,22 +1009,29 @@ if (rval == NULL)
 switch(type)
    {
    case CF_SCALAR:
+
        ThreadLock(cft_lock);
        free((char *)rval);
        ThreadUnlock(cft_lock);
        break;
 
    case CF_LIST:
-       
-       /* rval is now a list whose first item is list->item */
-       clist = (struct Rlist *)rval;
+     
+       /* rval is now a list whose first item is clist->item */
 
-       if (clist && clist->item != NULL)
+     for(clist = (struct Rlist *)rval; clist != NULL; clist = next)
+       {
+
+       next = clist->next;
+
+       if (clist->item)
           {
           DeleteRvalItem(clist->item,clist->type);
           }
 
        free(clist);
+       }
+
        break;
        
    case CF_FNCALL:
@@ -1085,6 +1119,30 @@ ThreadUnlock(cft_lock);
 return rp;
 }
 
+/*******************************************************************/
+
+struct Rlist *PrependRlistAlien(struct Rlist **start,void *item)
+
+   /* Allocates new memory for objects - careful, could leak!  */
+    
+{ struct Rlist *rp,*lp = *start;
+
+ThreadLock(cft_lock); 
+
+if ((rp = (struct Rlist *)malloc(sizeof(struct Rlist))) == NULL)
+   {
+   CfOut(cf_error,"malloc","Unable to allocate Rlist");
+   FatalError("");
+   }
+
+rp->next = *start;
+*start = rp;
+ThreadUnlock(cft_lock);
+
+rp->item = item;
+rp->type = CF_SCALAR;
+return rp;
+}
 
 /*******************************************************************/
 /* Stack                                                           */
@@ -1235,220 +1293,80 @@ if (count < max)
 return liststart;
 }
 
-/*******************************************************************/
+/*****************************************************************************/
 
-struct Rlist *SortRlist(struct Rlist *list, int (*CompareItems)())
-/**
- * Sorts an Rlist on list->item. A function CompareItems(i1,i2)
- * must be written for this particular item, which returns
- * true if i1 <= i2, false otherwise.
- **/
+int PrependPackageItem(struct CfPackageItem **list,char *name,char *version,char *arch,struct Attributes a,struct Promise *pp)
 
-{ struct Rlist *p = NULL, *q = NULL, *e = NULL, *tail = NULL, *oldhead = NULL;
-  int insize = 0, nmerges = 0, psize = 0, qsize = 0, i = 0;
+{ struct CfPackageItem *pi;
 
-if (list == NULL)
-   { 
-   return NULL;
-   }
- 
-insize = 1;
-
-while (true)
+if (strlen(name) == 0 || strlen(version) == 0 || strlen(arch) == 0)
    {
-   p = list;
-   oldhead = list;                /* only used for circular linkage */
-   list = NULL;
-   tail = NULL;
-   
-   nmerges = 0;  /* count number of merges we do in this pass */
-   
-   while (p)
-      {
-      nmerges++;  /* there exists a merge to be done */
-      /* step `insize' places along from p */
-      q = p;
-      psize = 0;
-      
-      for (i = 0; i < insize; i++)
-         {
-         psize++;
-
-         q = q->next;
-
-         if (!q)
-            {
-            break;
-            }
-         }
-      
-      /* if q hasn't fallen off end, we have two lists to merge */
-      qsize = insize;
-      
-      /* now we have two lists; merge them */
-      while (psize > 0 || (qsize > 0 && q))
-         {          
-          /* decide whether next element of merge comes from p or q */
-         if (psize == 0)
-            {
-            /* p is empty; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         else if (qsize == 0 || !q)
-            {
-            /* q is empty; e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else if (CompareItems(p->item,q->item))
-            {
-            /* First element of p is lower (or same);
-             * e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else
-            {
-            /* First element of q is lower; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         
-         /* add the next element to the merged list */
-         if (tail)
-            {
-            tail->next = e;
-            }
-         else
-            {
-            list = e;
-            }
-         
-         tail = e;
-         }
-      
-      /* now p has stepped `insize' places along, and q has too */
-      p = q;
-      }
-
-   tail->next = NULL;
-   
-   /* If we have done only one merge, we're finished. */
-   
-   if (nmerges <= 1)   /* allow for nmerges==0, the empty list case */
-     {
-     return list;
-     }
-   
-   /* Otherwise repeat, merging lists twice the size */
-   insize *= 2;
+   return false;
    }
 
-}
+CfOut(cf_verbose,""," -> Package (%s,%s,%s) found",name,version,arch);
 
-/*******************************************************************/
-
-struct Rlist *AlphaSortRListNames(struct Rlist *list)
-
-/* Borrowed this algorithm from merge-sort implementation */
-
-{ struct Rlist *p, *q, *e, *tail, *oldhead;
-  int insize, nmerges, psize, qsize, i;
-
-if (list == NULL)
-   { 
-   return NULL;
+if ((pi = (struct CfPackageItem *)malloc(sizeof(struct CfPackageItem))) == NULL)
+   {
+   CfOut(cf_error,"malloc","Can't allocate new package\n");
+   return false;
    }
- 
- insize = 1;
- 
- while (true)
-    {
-    p = list;
-    oldhead = list;                /* only used for circular linkage */
-    list = NULL;
-    tail = NULL;
-    
-    nmerges = 0;  /* count number of merges we do in this pass */
-    
-    while (p)
-       {
-       nmerges++;  /* there exists a merge to be done */
-       /* step `insize' places along from p */
-       q = p;
-       psize = 0;
-       
-       for (i = 0; i < insize; i++)
-          {
-          psize++;
-          q = q->next;
 
-          if (!q)
-              {
-              break;
-              }
-          }
-       
-       /* if q hasn't fallen off end, we have two lists to merge */
-       qsize = insize;
-       
-       /* now we have two lists; merge them */
-       while (psize > 0 || (qsize > 0 && q))
-          {          
-          /* decide whether next element of merge comes from p or q */
-          if (psize == 0)
-             {
-             /* p is empty; e must come from q. */
-             e = q; q = q->next; qsize--;
-             }
-          else if (qsize == 0 || !q)
-             {
-             /* q is empty; e must come from p. */
-             e = p; p = p->next; psize--;
-             }
-          else if (strcmp(p->item, q->item) <= 0)
-             {
-             /* First element of p is lower (or same);
-              * e must come from p. */
-             e = p; p = p->next; psize--;
-             }
-          else
-             {
-             /* First element of q is lower; e must come from q. */
-             e = q; q = q->next; qsize--;
-             }
-          
-          /* add the next element to the merged list */
-          if (tail)
-             {
-             tail->next = e;
-             }
-          else
-             {
-             list = e;
-             }
-          tail = e;
-          }
-       
-       /* now p has stepped `insize' places along, and q has too */
-       p = q;
-       }
-    tail->next = NULL;
-    
-    /* If we have done only one merge, we're finished. */
+if (list)
+   {
+   pi->next = *list;
+   }
+else
+   {
+   pi->next = NULL;
+   }
 
-    if (nmerges <= 1)   /* allow for nmerges==0, the empty list case */
-       {
-       return list;
-       }
+pi->name = strdup(name);
+pi->version = strdup(version);
+pi->arch = strdup(arch);
+*list = pi;
 
-    /* Otherwise repeat, merging lists twice the size */
-    insize *= 2;
-    }
+/* Finally we need these for later schedule exec, once this iteration context has gone */
+
+pi->pp = DeRefCopyPromise("this",pp);
+return true;
 }
 
+
+/*****************************************************************************/
+
+int PrependListPackageItem(struct CfPackageItem **list,char *item,struct Attributes a,struct Promise *pp)
+
+{ char name[CF_MAXVARSIZE];
+  char arch[CF_MAXVARSIZE];
+  char version[CF_MAXVARSIZE];
+  char vbuff[CF_MAXVARSIZE];
+
+strncpy(vbuff,ExtractFirstReference(a.packages.package_list_name_regex,item),CF_MAXVARSIZE-1);
+sscanf(vbuff,"%s",name); /* trim */
+
+strncpy(vbuff,ExtractFirstReference(a.packages.package_list_version_regex,item),CF_MAXVARSIZE-1);
+sscanf(vbuff,"%s",version); /* trim */
+
+if (a.packages.package_list_arch_regex)
+   {
+   strncpy(vbuff,ExtractFirstReference(a.packages.package_list_arch_regex,item),CF_MAXVARSIZE-1);
+   sscanf(vbuff,"%s",arch); /* trim */
+   }
+else
+   {
+   strncpy(arch,"default",CF_MAXVARSIZE-1);
+   }
+
+if (strcmp(name,"CF_NOMATCH") == 0 || strcmp(version,"CF_NOMATCH") == 0 || strcmp(arch,"CF_NOMATCH") == 0)
+   {
+   return false;
+   }
+
+Debug(" -? Package line \"%s\"\n",item);
+Debug(" -?      with name \"%s\"\n",name);
+Debug(" -?      with version \"%s\"\n",version);
+Debug(" -?      with architecture \"%s\"\n",arch);
+
+return PrependPackageItem(list,name,version,arch,a,pp);
+}

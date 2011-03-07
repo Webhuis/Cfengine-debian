@@ -451,9 +451,11 @@ return list1;
 /* Search                                                                  */
 /***************************************************************************/
 
-int SelectItemMatching(char *regex,struct Item *begin_ptr,struct Item *end_ptr,struct Item **match,struct Item **prev,char *fl)
+int SelectItemMatching(struct Item *start,char *regex,struct Item *begin_ptr,struct Item *end_ptr,struct Item **match,struct Item **prev,char *fl)
 
-{
+{ struct Item *ip;
+ int ret = false;
+
 *match = CF_UNDEFINED_ITEM;
 *prev = CF_UNDEFINED_ITEM;
 
@@ -466,18 +468,26 @@ if (fl && (strcmp(fl,"first") == 0))
    {
    if (SelectNextItemMatching(regex,begin_ptr,end_ptr,match,prev))
       {
-      return true;
+      ret = true;
       }
    }
 else
    {
    if (SelectLastItemMatching(regex,begin_ptr,end_ptr,match,prev))
       {
-      return true;
+      ret = true;
       }
    }
 
-return false;
+if (*match != CF_UNDEFINED_ITEM && *prev == CF_UNDEFINED_ITEM)
+   {
+   for (ip = start; ip != NULL && ip != *match; ip = ip->next)
+      {
+      *prev = ip;
+      }
+   }
+
+return ret;
 }
 
 /*********************************************************************/ 
@@ -543,449 +553,6 @@ if (ip_last)
 return false;
 }
 
-/*******************************************************************/
-
-/* Borrowed this algorithm from merge-sort implementation */
-
-struct Item *SortItemListNames(struct Item *list) /* Alphabetical */
-
-{ struct Item *p, *q, *e, *tail, *oldhead;
-  int insize, nmerges, psize, qsize, i;
-
-if (list == NULL)
-   { 
-   return NULL;
-   }
- 
-insize = 1;
-
-while (true)
-   {
-   p = list;
-   oldhead = list;                /* only used for circular linkage */
-   list = NULL;
-   tail = NULL;
-   
-   nmerges = 0;  /* count number of merges we do in this pass */
-   
-   while (p)
-      {
-      nmerges++;  /* there exists a merge to be done */
-      /* step `insize' places along from p */
-      q = p;
-      psize = 0;
-      
-      for (i = 0; i < insize; i++)
-         {
-         psize++;
-
-         q = q->next;
-
-         if (!q)
-            {
-            break;
-            }
-         }
-      
-      /* if q hasn't fallen off end, we have two lists to merge */
-      qsize = insize;
-      
-      /* now we have two lists; merge them */
-      while (psize > 0 || (qsize > 0 && q))
-         {          
-          /* decide whether next element of merge comes from p or q */
-         if (psize == 0)
-            {
-            /* p is empty; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         else if (qsize == 0 || !q)
-            {
-            /* q is empty; e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else if (strcmp(p->name, q->name) <= 0)
-            {
-            /* First element of p is lower (or same);
-             * e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else
-            {
-            /* First element of q is lower; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         
-         /* add the next element to the merged list */
-         if (tail)
-            {
-            tail->next = e;
-            }
-         else
-            {
-            list = e;
-            }
-         
-         tail = e;
-         }
-      
-      /* now p has stepped `insize' places along, and q has too */
-      p = q;
-      }
-
-   tail->next = NULL;
-   
-   /* If we have done only one merge, we're finished. */
-   
-   if (nmerges <= 1)   /* allow for nmerges==0, the empty list case */
-      {
-      return list;
-      }
-   
-   /* Otherwise repeat, merging lists twice the size */
-   insize *= 2;
-   }
-}
-
-/*******************************************************************/
-
-struct Item *SortItemListClasses(struct Item *list) /* Alphabetical */
-
-{ struct Item *p, *q, *e, *tail, *oldhead;
-  int insize, nmerges, psize, qsize, i;
-
-if (list == NULL)
-   { 
-   return NULL;
-   }
- 
-insize = 1;
-
-while (true)
-   {
-   p = list;
-   oldhead = list;                /* only used for circular linkage */
-   list = NULL;
-   tail = NULL;
-   
-   nmerges = 0;  /* count number of merges we do in this pass */
-   
-   while (p)
-      {
-      nmerges++;  /* there exists a merge to be done */
-      /* step `insize' places along from p */
-      q = p;
-      psize = 0;
-      
-      for (i = 0; i < insize; i++)
-         {
-         psize++;
-
-         q = q->next;
-
-         if (!q)
-            {
-            break;
-            }
-         }
-      
-      /* if q hasn't fallen off end, we have two lists to merge */
-      qsize = insize;
-      
-      /* now we have two lists; merge them */
-      while (psize > 0 || (qsize > 0 && q))
-         {          
-          /* decide whether next element of merge comes from p or q */
-         if (psize == 0)
-            {
-            /* p is empty; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         else if (qsize == 0 || !q)
-            {
-            /* q is empty; e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else if (strcmp(p->classes, q->classes) <= 0)
-            {
-            /* First element of p is lower (or same);
-             * e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else
-            {
-            /* First element of q is lower; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         
-         /* add the next element to the merged list */
-         if (tail)
-            {
-            tail->next = e;
-            }
-         else
-            {
-            list = e;
-            }
-         
-         tail = e;
-         }
-      
-      /* now p has stepped `insize' places along, and q has too */
-      p = q;
-      }
-
-   tail->next = NULL;
-   
-   /* If we have done only one merge, we're finished. */
-   
-   if (nmerges <= 1)   /* allow for nmerges==0, the empty list case */
-      {
-      return list;
-      }
-   
-   /* Otherwise repeat, merging lists twice the size */
-   insize *= 2;
-   }
-}
-
-/*******************************************************************/
-
-struct Item *SortItemListCounters(struct Item *list) /* Biggest first */
-
-{ struct Item *p, *q, *e, *tail, *oldhead;
-  int insize, nmerges, psize, qsize, i;
-
-if (list == NULL)
-   { 
-   return NULL;
-   }
- 
-insize = 1;
-
-while (true)
-   {
-   p = list;
-   oldhead = list;                /* only used for circular linkage */
-   list = NULL;
-   tail = NULL;
-   
-   nmerges = 0;  /* count number of merges we do in this pass */
-   
-   while (p)
-      {
-      nmerges++;  /* there exists a merge to be done */
-      /* step `insize' places along from p */
-      q = p;
-      psize = 0;
-      
-      for (i = 0; i < insize; i++)
-         {
-         psize++;
-         q = q->next;
-         
-         if (!q)
-            {
-            break;
-            }
-         }
-      
-      /* if q hasn't fallen off end, we have two lists to merge */
-      qsize = insize;
-      
-      /* now we have two lists; merge them */
-
-      while (psize > 0 || (qsize > 0 && q))
-         {          
-         /* decide whether next element of merge comes from p or q */
-         if (psize == 0)
-            {
-            /* p is empty; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         else if (qsize == 0 || !q)
-            {
-            /* q is empty; e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else if (p->counter - q->counter >= 0)
-            {
-            /* First element of p is higher (or same);
-             * e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else
-            {
-            /* First element of q is lower; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         
-         /* add the next element to the merged list */
-
-         if (tail)
-            {
-            tail->next = e;
-            }
-         else
-            {
-            list = e;
-            }
-         
-         tail = e;
-         }
-      
-      /* now p has stepped `insize' places along, and q has too */
-      p = q;
-      }
-
-   tail->next = NULL;
-   
-   /* If we have done only one merge, we're finished. */
-   
-   if (nmerges <= 1)   /* allow for nmerges==0, the empty list case */
-      {
-      return list;
-      }
-   
-   /* Otherwise repeat, merging lists twice the size */
-   insize *= 2;
-   }
-}
-
-/*******************************************************************/
-
-struct Item *SortItemListTimes(struct Item *list) /* Biggest first */
-
-{ struct Item *p, *q, *e, *tail, *oldhead;
-  int insize, nmerges, psize, qsize, i;
-
-if (list == NULL)
-   { 
-   return NULL;
-   }
- 
-insize = 1;
-
-while (true)
-   {
-   p = list;
-   oldhead = list;                /* only used for circular linkage */
-   list = NULL;
-   tail = NULL;
-   
-   nmerges = 0;  /* count number of merges we do in this pass */
-   
-   while (p)
-      {
-      nmerges++;  /* there exists a merge to be done */
-      /* step `insize' places along from p */
-      q = p;
-      psize = 0;
-      
-      for (i = 0; i < insize; i++)
-         {
-         psize++;
-         q = q->next;
-         
-         if (!q)
-            {
-            break;
-            }
-         }
-      
-      /* if q hasn't fallen off end, we have two lists to merge */
-      qsize = insize;
-      
-      /* now we have two lists; merge them */
-
-      while (psize > 0 || (qsize > 0 && q))
-         {          
-         /* decide whether next element of merge comes from p or q */
-         if (psize == 0)
-            {
-            /* p is empty; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         else if (qsize == 0 || !q)
-            {
-            /* q is empty; e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else if (p->time - q->time >= 0)
-            {
-            /* First element of p is higher (or same);
-             * e must come from p. */
-            e = p;
-            p = p->next;
-            psize--;
-            }
-         else
-            {
-            /* First element of q is lower; e must come from q. */
-            e = q;
-            q = q->next;
-            qsize--;
-            }
-         
-         /* add the next element to the merged list */
-
-         if (tail)
-            {
-            tail->next = e;
-            }
-         else
-            {
-            list = e;
-            }
-         
-         tail = e;
-         }
-      
-      /* now p has stepped `insize' places along, and q has too */
-      p = q;
-      }
-
-   tail->next = NULL;
-   
-   /* If we have done only one merge, we're finished. */
-   
-   if (nmerges <= 1)   /* allow for nmerges==0, the empty list case */
-      {
-      return list;
-      }
-   
-   /* Otherwise repeat, merging lists twice the size */
-   insize *= 2;
-   }
-}
 
 /*********************************************************************/
 /* Level                                                             */
@@ -996,7 +563,7 @@ void InsertAfter(struct Item **filestart,struct Item *ptr,char *string)
 { struct Item *ip;
   char *sp;
 
-if (*filestart == NULL || ptr == *filestart || ptr == CF_UNDEFINED_ITEM)
+if (*filestart == NULL || ptr == CF_UNDEFINED_ITEM)
    {
    AppendItem(filestart,string,NULL);
    return;

@@ -1,7 +1,7 @@
 K 25
 svn:wc:ra_dav:version-url
 V 41
-/svn/core/!svn/ver/1580/trunk/tests/units
+/svn/core/!svn/ver/1717/trunk/tests/units
 END
 unit_intarray.cf
 K 25
@@ -93,11 +93,11 @@ svn:wc:ra_dav:version-url
 V 57
 /svn/core/!svn/ver/849/trunk/tests/units/unit_regarray.cf
 END
-unit_service_start.cf
+unit_cf2_integration.cf
 K 25
 svn:wc:ra_dav:version-url
-V 62
-/svn/core/!svn/ver/766/trunk/tests/units/unit_service_start.cf
+V 64
+/svn/core/!svn/ver/849/trunk/tests/units/unit_cf2_integration.cf
 END
 unit_multipassvars.cf
 K 25
@@ -105,17 +105,11 @@ svn:wc:ra_dav:version-url
 V 62
 /svn/core/!svn/ver/849/trunk/tests/units/unit_multipassvars.cf
 END
-unit_cf2_integration.cf
+unit_service_start.cf
 K 25
 svn:wc:ra_dav:version-url
-V 64
-/svn/core/!svn/ver/849/trunk/tests/units/unit_cf2_integration.cf
-END
-unit_userexists.cf
-K 25
-svn:wc:ra_dav:version-url
-V 60
-/svn/core/!svn/ver/1174/trunk/tests/units/unit_userexists.cf
+V 62
+/svn/core/!svn/ver/766/trunk/tests/units/unit_service_start.cf
 END
 unit_reporttofile.cf
 K 25
@@ -123,23 +117,29 @@ svn:wc:ra_dav:version-url
 V 61
 /svn/core/!svn/ver/849/trunk/tests/units/unit_reporttofile.cf
 END
+unit_userexists.cf
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/core/!svn/ver/1174/trunk/tests/units/unit_userexists.cf
+END
 unit_filesexist.cf
 K 25
 svn:wc:ra_dav:version-url
 V 59
 /svn/core/!svn/ver/849/trunk/tests/units/unit_filesexist.cf
 END
-unit_user_edit_method.cf
-K 25
-svn:wc:ra_dav:version-url
-V 65
-/svn/core/!svn/ver/849/trunk/tests/units/unit_user_edit_method.cf
-END
 unit_tidy_all_files.cf
 K 25
 svn:wc:ra_dav:version-url
 V 63
 /svn/core/!svn/ver/849/trunk/tests/units/unit_tidy_all_files.cf
+END
+unit_user_edit_method.cf
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/core/!svn/ver/849/trunk/tests/units/unit_user_edit_method.cf
 END
 unit_disable_and_rotate_files.cf
 K 25
@@ -159,17 +159,17 @@ svn:wc:ra_dav:version-url
 V 56
 /svn/core/!svn/ver/849/trunk/tests/units/unit_postfix.cf
 END
-unit_switchcase.cf
-K 25
-svn:wc:ra_dav:version-url
-V 59
-/svn/core/!svn/ver/849/trunk/tests/units/unit_switchcase.cf
-END
 unit_deletelines.cf
 K 25
 svn:wc:ra_dav:version-url
 V 60
 /svn/core/!svn/ver/849/trunk/tests/units/unit_deletelines.cf
+END
+unit_switchcase.cf
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/svn/core/!svn/ver/849/trunk/tests/units/unit_switchcase.cf
 END
 unit_pathtype.cf
 K 25
@@ -218,6 +218,12 @@ K 25
 svn:wc:ra_dav:version-url
 V 57
 /svn/core/!svn/ver/849/trunk/tests/units/unit_failsafe.cf
+END
+unit_filesize.cf
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/core/!svn/ver/1655/trunk/tests/units/unit_filesize.cf
 END
 unit_occurrences.cf
 K 25
@@ -387,23 +393,17 @@ svn:wc:ra_dav:version-url
 V 74
 /svn/core/!svn/ver/849/trunk/tests/units/unit_server_flatcopy_localhost.cf
 END
-unit_edit_sectioned_file.cf
-K 25
-svn:wc:ra_dav:version-url
-V 69
-/svn/core/!svn/ver/1415/trunk/tests/units/unit_edit_sectioned_file.cf
-END
 unit_getuid.cf
 K 25
 svn:wc:ra_dav:version-url
 V 55
 /svn/core/!svn/ver/849/trunk/tests/units/unit_getuid.cf
 END
-unit_update.cf
+unit_edit_sectioned_file.cf
 K 25
 svn:wc:ra_dav:version-url
-V 55
-/svn/core/!svn/ver/849/trunk/tests/units/unit_update.cf
+V 69
+/svn/core/!svn/ver/1415/trunk/tests/units/unit_edit_sectioned_file.cf
 END
 unit_literal_server.cf
 K 25
@@ -411,11 +411,11 @@ svn:wc:ra_dav:version-url
 V 64
 /svn/core/!svn/ver/1060/trunk/tests/units/unit_literal_server.cf
 END
-unit_user_edit.cf
+unit_update.cf
 K 25
 svn:wc:ra_dav:version-url
-V 58
-/svn/core/!svn/ver/849/trunk/tests/units/unit_user_edit.cf
+V 55
+/svn/core/!svn/ver/849/trunk/tests/units/unit_update.cf
 END
 unit_hash.cf
 K 25
@@ -423,17 +423,17 @@ svn:wc:ra_dav:version-url
 V 53
 /svn/core/!svn/ver/849/trunk/tests/units/unit_hash.cf
 END
+unit_user_edit.cf
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/core/!svn/ver/849/trunk/tests/units/unit_user_edit.cf
+END
 unit_package_yum.cf
 K 25
 svn:wc:ra_dav:version-url
 V 61
 /svn/core/!svn/ver/1259/trunk/tests/units/unit_package_yum.cf
-END
-unit_compare.cf
-K 25
-svn:wc:ra_dav:version-url
-V 56
-/svn/core/!svn/ver/849/trunk/tests/units/unit_compare.cf
 END
 unit_fileperms.cf
 K 25
@@ -441,11 +441,11 @@ svn:wc:ra_dav:version-url
 V 58
 /svn/core/!svn/ver/849/trunk/tests/units/unit_fileperms.cf
 END
-unit_copy_classes.cf
+unit_compare.cf
 K 25
 svn:wc:ra_dav:version-url
-V 61
-/svn/core/!svn/ver/756/trunk/tests/units/unit_copy_classes.cf
+V 56
+/svn/core/!svn/ver/849/trunk/tests/units/unit_compare.cf
 END
 unit_isnewerthan.cf
 K 25
@@ -453,11 +453,17 @@ svn:wc:ra_dav:version-url
 V 60
 /svn/core/!svn/ver/849/trunk/tests/units/unit_isnewerthan.cf
 END
-unit_env.cf
+unit_copy_classes.cf
 K 25
 svn:wc:ra_dav:version-url
-V 52
-/svn/core/!svn/ver/703/trunk/tests/units/unit_env.cf
+V 61
+/svn/core/!svn/ver/756/trunk/tests/units/unit_copy_classes.cf
+END
+unit_host2ip.cf
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/core/!svn/ver/1215/trunk/tests/units/unit_host2ip.cf
 END
 unit_badtype.cf
 K 25
@@ -465,11 +471,11 @@ svn:wc:ra_dav:version-url
 V 56
 /svn/core/!svn/ver/849/trunk/tests/units/unit_badtype.cf
 END
-unit_host2ip.cf
+unit_env.cf
 K 25
 svn:wc:ra_dav:version-url
-V 57
-/svn/core/!svn/ver/1215/trunk/tests/units/unit_host2ip.cf
+V 52
+/svn/core/!svn/ver/703/trunk/tests/units/unit_env.cf
 END
 unit_selectservers.cf
 K 25
@@ -483,17 +489,17 @@ svn:wc:ra_dav:version-url
 V 57
 /svn/core/!svn/ver/849/trunk/tests/units/unit_mount_fs.cf
 END
-unit_linking.cf
-K 25
-svn:wc:ra_dav:version-url
-V 56
-/svn/core/!svn/ver/849/trunk/tests/units/unit_linking.cf
-END
 unit_monitord.cf
 K 25
 svn:wc:ra_dav:version-url
 V 57
 /svn/core/!svn/ver/849/trunk/tests/units/unit_monitord.cf
+END
+unit_linking.cf
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/core/!svn/ver/849/trunk/tests/units/unit_linking.cf
 END
 unit_countlinesmatching.cf
 K 25
@@ -501,23 +507,17 @@ svn:wc:ra_dav:version-url
 V 67
 /svn/core/!svn/ver/849/trunk/tests/units/unit_countlinesmatching.cf
 END
-unit_package_apt.cf
-K 25
-svn:wc:ra_dav:version-url
-V 60
-/svn/core/!svn/ver/849/trunk/tests/units/unit_package_apt.cf
-END
 unit_null_config.cf
 K 25
 svn:wc:ra_dav:version-url
 V 60
 /svn/core/!svn/ver/849/trunk/tests/units/unit_null_config.cf
 END
-unit_global_list_expansion_2.cf
+unit_package_apt.cf
 K 25
 svn:wc:ra_dav:version-url
-V 72
-/svn/core/!svn/ver/849/trunk/tests/units/unit_global_list_expansion_2.cf
+V 60
+/svn/core/!svn/ver/849/trunk/tests/units/unit_package_apt.cf
 END
 unit_hashmatch.cf
 K 25
@@ -525,11 +525,11 @@ svn:wc:ra_dav:version-url
 V 58
 /svn/core/!svn/ver/849/trunk/tests/units/unit_hashmatch.cf
 END
-unit_promises.cf
+unit_global_list_expansion_2.cf
 K 25
 svn:wc:ra_dav:version-url
-V 57
-/svn/core/!svn/ver/849/trunk/tests/units/unit_promises.cf
+V 72
+/svn/core/!svn/ver/849/trunk/tests/units/unit_global_list_expansion_2.cf
 END
 unit_arrays.cf
 K 25
@@ -537,17 +537,23 @@ svn:wc:ra_dav:version-url
 V 55
 /svn/core/!svn/ver/849/trunk/tests/units/unit_arrays.cf
 END
-unit_filenames.cf
+unit_promises.cf
 K 25
 svn:wc:ra_dav:version-url
-V 58
-/svn/core/!svn/ver/849/trunk/tests/units/unit_filenames.cf
+V 57
+/svn/core/!svn/ver/849/trunk/tests/units/unit_promises.cf
 END
 unit_getindixes.cf
 K 25
 svn:wc:ra_dav:version-url
 V 59
 /svn/core/!svn/ver/849/trunk/tests/units/unit_getindixes.cf
+END
+unit_filenames.cf
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/core/!svn/ver/849/trunk/tests/units/unit_filenames.cf
 END
 unit_irange.cf
 K 25
@@ -597,17 +603,17 @@ svn:wc:ra_dav:version-url
 V 59
 /svn/core/!svn/ver/849/trunk/tests/units/unit_epimenides.cf
 END
-Makefile.am
-K 25
-svn:wc:ra_dav:version-url
-V 52
-/svn/core/!svn/ver/410/trunk/tests/units/Makefile.am
-END
 unit_execresult.cf
 K 25
 svn:wc:ra_dav:version-url
 V 59
 /svn/core/!svn/ver/849/trunk/tests/units/unit_execresult.cf
+END
+Makefile.am
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/core/!svn/ver/410/trunk/tests/units/Makefile.am
 END
 unit_backreferences_files.cf
 K 25
@@ -639,11 +645,17 @@ svn:wc:ra_dav:version-url
 V 58
 /svn/core/!svn/ver/849/trunk/tests/units/unit_hostrange.cf
 END
-Makefile.in
+unit_repairedcommand.cf
 K 25
 svn:wc:ra_dav:version-url
-V 53
-/svn/core/!svn/ver/1580/trunk/tests/units/Makefile.in
+V 65
+/svn/core/!svn/ver/1636/trunk/tests/units/unit_repairedcommand.cf
+END
+unit_groupexists.cf
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/core/!svn/ver/849/trunk/tests/units/unit_groupexists.cf
 END
 unit_classvar_convergence.cf
 K 25
@@ -651,11 +663,11 @@ svn:wc:ra_dav:version-url
 V 69
 /svn/core/!svn/ver/849/trunk/tests/units/unit_classvar_convergence.cf
 END
-unit_groupexists.cf
+Makefile.in
 K 25
 svn:wc:ra_dav:version-url
-V 60
-/svn/core/!svn/ver/849/trunk/tests/units/unit_groupexists.cf
+V 53
+/svn/core/!svn/ver/1756/trunk/tests/units/Makefile.in
 END
 unit_acl.cf
 K 25
@@ -687,17 +699,17 @@ svn:wc:ra_dav:version-url
 V 63
 /svn/core/!svn/ver/849/trunk/tests/units/unit_package_zypper.cf
 END
-unit_stringarray.cf
-K 25
-svn:wc:ra_dav:version-url
-V 60
-/svn/core/!svn/ver/849/trunk/tests/units/unit_stringarray.cf
-END
 unit_edit_passwd_file.cf
 K 25
 svn:wc:ra_dav:version-url
 V 65
 /svn/core/!svn/ver/849/trunk/tests/units/unit_edit_passwd_file.cf
+END
+unit_stringarray.cf
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/core/!svn/ver/849/trunk/tests/units/unit_stringarray.cf
 END
 unit_package_msi_version.cf
 K 25
@@ -717,29 +729,11 @@ svn:wc:ra_dav:version-url
 V 66
 /svn/core/!svn/ver/849/trunk/tests/units/unit_process_matching2.cf
 END
-unit_vars.cf
+unit_log_private.cf
 K 25
 svn:wc:ra_dav:version-url
-V 53
-/svn/core/!svn/ver/849/trunk/tests/units/unit_vars.cf
-END
-unit_template.cf
-K 25
-svn:wc:ra_dav:version-url
-V 57
-/svn/core/!svn/ver/849/trunk/tests/units/unit_template.cf
-END
-unit_remove_deadlinks.cf
-K 25
-svn:wc:ra_dav:version-url
-V 65
-/svn/core/!svn/ver/849/trunk/tests/units/unit_remove_deadlinks.cf
-END
-unit_edit_insert_fuzzylines.cf
-K 25
-svn:wc:ra_dav:version-url
-V 71
-/svn/core/!svn/ver/965/trunk/tests/units/unit_edit_insert_fuzzylines.cf
+V 60
+/svn/core/!svn/ver/849/trunk/tests/units/unit_log_private.cf
 END
 unit_helloworld.cf
 K 25
@@ -747,11 +741,29 @@ svn:wc:ra_dav:version-url
 V 59
 /svn/core/!svn/ver/849/trunk/tests/units/unit_helloworld.cf
 END
-unit_log_private.cf
+unit_edit_insert_fuzzylines.cf
 K 25
 svn:wc:ra_dav:version-url
-V 60
-/svn/core/!svn/ver/849/trunk/tests/units/unit_log_private.cf
+V 71
+/svn/core/!svn/ver/965/trunk/tests/units/unit_edit_insert_fuzzylines.cf
+END
+unit_remove_deadlinks.cf
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/core/!svn/ver/849/trunk/tests/units/unit_remove_deadlinks.cf
+END
+unit_template.cf
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/core/!svn/ver/849/trunk/tests/units/unit_template.cf
+END
+unit_vars.cf
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/core/!svn/ver/849/trunk/tests/units/unit_vars.cf
 END
 unit_varexpansion.cf
 K 25
@@ -918,8 +930,8 @@ END
 unit_module_exec_2.cf
 K 25
 svn:wc:ra_dav:version-url
-V 62
-/svn/core/!svn/ver/849/trunk/tests/units/unit_module_exec_2.cf
+V 63
+/svn/core/!svn/ver/1617/trunk/tests/units/unit_module_exec_2.cf
 END
 unit_hostsseen.cf
 K 25
@@ -1130,6 +1142,12 @@ K 25
 svn:wc:ra_dav:version-url
 V 60
 /svn/core/!svn/ver/849/trunk/tests/units/unit_select_mode.cf
+END
+unit_failedcommand.cf
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/svn/core/!svn/ver/1637/trunk/tests/units/unit_failedcommand.cf
 END
 unit_iprange.cf
 K 25

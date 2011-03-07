@@ -324,7 +324,9 @@ pcopy->this_server = pp->this_server;
 pcopy->conn = pp->conn;
 pcopy->edcontext = pp->edcontext;
 
+
 /* No further type checking should be necessary here, already done by CheckConstraintTypeMatch */
+
 
 for (cp = pp->conlist; cp != NULL; cp=cp->next)
    {
@@ -707,7 +709,7 @@ void DeleteDeRefPromise(char *scopeid,struct Promise *pp)
 
 { struct Constraint *cp;
 
-Debug("ExpandDerefPromise()\n");
+Debug("DeleteDeRefPromise()\n");
 
 free(pp->promiser);
 
@@ -817,14 +819,14 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
 
    for (i = 0; noRvalHash[i] != NULL; i++ )
       {
-      if(strcmp(cp->lval, noRvalHash[i]) == 0)
+      if (strcmp(cp->lval, noRvalHash[i]) == 0)
 	 {
          doHash = false;
          break;
 	 }
       }
    
-   if(!doHash)
+   if (!doHash)
       {
       continue;
       }
