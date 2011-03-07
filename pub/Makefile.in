@@ -49,7 +49,7 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libcfpub_la_LIBADD =
 am_libcfpub_la_OBJECTS = getopt.lo getopt1.lo full-write.lo regex.lo \
-	getloadavg.lo snprintf.lo
+	sort.lo getloadavg.lo snprintf.lo
 libcfpub_la_OBJECTS = $(am_libcfpub_la_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -217,6 +217,7 @@ libcfpub_la_SOURCES = \
 	getopt1.c							\
 	full-write.c							\
 	regex.c								\
+	sort.c								\
 	getloadavg.c							\
 	snprintf.c
 
@@ -307,6 +308,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/getopt1.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/regex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/snprintf.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sort.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

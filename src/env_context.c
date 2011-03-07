@@ -47,6 +47,12 @@ if (*cp == '&' || *cp == '|' || *cp == '.' || *cp == ')')
    return;
    }
 
+if (!FullTextMatch(CF_CLASSRANGE,str))
+   {
+   yyerror("Illegal characters in class specification");
+   return;   
+   }
+
 for (; *cp; cp++)
    {
    if (*cp == '(')
@@ -294,7 +300,7 @@ void LoadPersistentContext()
   struct CfState q;
   char filename[CF_BUFSIZE];
 
-if(LOOKUP)
+if (LOOKUP)
   {
   return;
   }
@@ -594,6 +600,118 @@ ListAlphaList(fp,VADDCLASSES,'\n');
 fclose(fp);
 }
 
+/*******************************************************************/
+
+/*********************************************************************/
+
+struct Rlist *SplitContextExpression(char *context,struct Promise *pp)
+
+{ struct Rlist *list = NULL;
+  char *sp,*spsub,cbuff[CF_MAXVARSIZE],csub[CF_MAXVARSIZE];
+  int result = false;
+  
+if (context == NULL)
+   {
+   PrependRScalar(&list,"any",CF_SCALAR);
+   }
+else
+   {
+   for (sp = context; *sp != '\0'; sp++)
+      {
+      while (*sp == '|')
+         {
+         sp++;
+         }
+      
+      memset(cbuff,0,CF_MAXVARSIZE);
+      
+      sp += GetORAtom(sp,cbuff);
+      
+      if (strlen(cbuff) == 0)
+         {
+         break;
+         }
+      
+      if (IsBracketed(cbuff))
+         {
+         // Fully bracketed atom (protected)
+         cbuff[strlen(cbuff)-1] = '\0';
+         PrependRScalar(&list,cbuff+1,CF_SCALAR);
+         }
+      else
+         {
+         if (HasBrackets(cbuff,pp))             
+            {
+            struct Rlist *andlist = SplitRegexAsRList(cbuff,"[.&]+",99,false);
+            struct Rlist *rp,*orlist = NULL;
+            char buff[CF_MAXVARSIZE];
+            char orstring[CF_MAXVARSIZE] = {0};
+            char andstring[CF_MAXVARSIZE] = {0};
+
+            // Apply distribution P.(A|B) -> P.A|P.B
+            
+            for (rp = andlist; rp != NULL; rp=rp->next)
+               {
+               if (IsBracketed(rp->item))
+                  {
+                  // This must be an OR string to be ORed and split into a list
+                  *((char *)rp->item+strlen((char *)rp->item)-1) = '\0';
+
+                  if (strlen(orstring) > 0)
+                     {
+                     strcat(orstring,"|");
+                     }
+                  
+                  Join(orstring,(char *)(rp->item)+1,CF_MAXVARSIZE);
+                  }
+               else
+                  {
+                  if (strlen(andstring) > 0)
+                     {
+                     strcat(andstring,".");
+                     }
+                  
+                  Join(andstring,rp->item,CF_MAXVARSIZE);
+                  }
+
+               // foreach ORlist, AND with AND string
+               }
+
+            if (strlen(orstring) > 0)
+               {
+               orlist = SplitRegexAsRList(orstring,"[|]+",99,false);
+               
+               for (rp = orlist; rp != NULL; rp=rp->next)
+                  {
+                  snprintf(buff,CF_MAXVARSIZE,"%s.%s",rp->item,andstring);
+                  PrependRScalar(&list,buff,CF_SCALAR);
+                  }
+               }
+            else
+               {
+               PrependRScalar(&list,andstring,CF_SCALAR);
+               }
+            
+            DeleteRlist(orlist);
+            DeleteRlist(andlist);
+            }
+         else
+            {
+            // Clean atom
+            PrependRScalar(&list,cbuff,CF_SCALAR);
+            }
+         }
+      
+      if (*sp == '\0')
+         {
+         break;
+         }
+      }
+   }
+ 
+return list;
+}
+
 /*****************************************************************************/
 /* Level                                                                     */
 /*****************************************************************************/
@@ -603,7 +721,7 @@ int EvalClassExpression(struct Constraint *cp,struct Promise *pp)
 { int result_and = true;
   int result_or = false;
   int result_xor = 0;
-  int result,total = 0;
+  int result = 0,total = 0;
   char *lval = cp->lval,buffer[CF_MAXVARSIZE];
   struct Rlist *rp;
   double prob,cum = 0,fluct;
@@ -735,7 +853,7 @@ for (rp = (struct Rlist *)cp->rval; rp != NULL; rp = rp->next)
 
    result_and = result_and && result;
    result_or  = result_or || result;
-   result_xor += result;
+   result_xor ^= result;
 
    if (total > 0) // dist class
       {
@@ -1306,33 +1424,115 @@ int IsBracketed(char *s)
  /* return true if the entire string is bracketed, not just if
     if contains brackets */
 
-{ int i, level= 0;
+{ int i, level= 0, yes = 0;
 
 if (*s != '(')
    {
    return false;
    }
 
-for (i = 0; i < strlen(s)-1; i++)
+if (*(s+strlen(s)-1) != ')')
+   {
+   return false;
+   }
+
+if (strstr(s,")("))
+   {
+   CfOut(cf_error,""," !! Class expression \"%s\" has broken brackets",s);
+   return false;
+   }
+
+for (i = 0; i < strlen(s); i++)
    {
    if (s[i] == '(')
       {
+      yes++;
       level++;
+      if (i > 0 && !IsIn(s[i-1],".&|!("))
+         {
+         CfOut(cf_error,""," !! Class expression \"%s\" has a missing operator in front of '('",s);
+         }
+      }
+   
+   if (s[i] == ')')
+      {
+      yes++;
+      level--;
+      if (i < strlen(s)-1 && !IsIn(s[i+1],".&|!)"))
+         {
+         CfOut(cf_error,""," !! Class expression \"%s\" has a missing operator after of ')'",s);
+         }
+      }
+   }
+
+
+if (level != 0)
+   {
+   CfOut(cf_error,""," !! Class expression \"%s\" has broken brackets",s);
+   return false;  /* premature ) */
+   }
+
+if (yes > 2)
+   {
+   // e.g. (a|b).c.(d|e)
+   return false;
+   }
+
+
+return true;
+}
+
+/*********************************************************************/
+
+int HasBrackets(char *s,struct Promise *pp)
+
+ /* return true if contains brackets */
+
+{ int i, level= 0, yes = 0;
+
+for (i = 0; i < strlen(s); i++)
+   {
+   if (s[i] == '(')
+      {
+      yes++;
+      level++;
+      if (i > 0 && !IsIn(s[i+1],".&|!("))
+         {
+         CfOut(cf_error,""," !! Class expression \"%s\" has a missing operator in front of '('",s);
+         }
       }
    
    if (s[i] == ')')
       {
       level--;
-      }
-
-   if (level == 0)
-      {
-      return false;  /* premature ) */
+      if (i < strlen(s)-1 && !IsIn(s[i+1],".&|!)"))
+         {
+         CfOut(cf_error,""," !! Class expression \"%s\" has a missing operator after ')'",s);
+         }
       }
    }
 
-return true;
+if (level != 0)
+   {
+   CfOut(cf_error,""," !! Class expression \"%s\" has unbalanced brackets",s);
+   PromiseRef(cf_error,pp);
+   return true;
+   }
+
+if (yes > 1)
+   {
+   CfOut(cf_error,""," !! Class expression \"%s\" has multiple brackets",s);
+   PromiseRef(cf_error,pp);
+   }
+else if (yes)
+   {
+   return true;
+   }
+
+return false;
 }
+
+
 
 
 

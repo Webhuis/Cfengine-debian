@@ -126,15 +126,13 @@ DeleteScalar("this","promiser");
 YieldCurrentLock(thislock);
 }
 
-
 /*******************************************************************/
 
 int LoadProcessTable(struct Item **procdata,char *psopts)
-
 {
 if (PROCESSTABLE)
    {
-   CfOut(cf_verbose,"","Reuse cached process state");
+   CfOut(cf_verbose,""," -> Reusing cached process state");
    return true;
    }
  
@@ -267,13 +265,18 @@ GetProcessColumnNames(procdata->name,(char **)names,start,end);
 for (ip = procdata->next; ip != NULL; ip=ip->next)
    {
    CF_NODES++;
-   
+
    if (BlockTextMatch(pp->promiser,ip->name,&s,&e))
       {
       if (!SelectProcess(ip->name,names,start,end,a,pp))
          {
          continue;
          }
+
+      if(EMPTY(ip->name))
+	{
+	continue;
+	}
 
       pid = ExtractPid(ip->name,names,start,end);
 
@@ -283,7 +286,7 @@ for (ip = procdata->next; ip != NULL; ip=ip->next)
          continue;
          }
       
-      Debug("Found matching pid %d\n",pid);
+      CfOut(cf_verbose,""," ->  Found matching pid %d\n     (%s)",pid,ip->name);
       
       matches++;
       
@@ -314,9 +317,9 @@ for (ip = procdata->next; ip != NULL; ip=ip->next)
          continue;
          }
       
-      if (pid == cfengine_pid)
+      if (pid == cfengine_pid && a.signals)
          {
-         CfOut(cf_verbose,"","cf-agent will not kill itself!\n");
+         CfOut(cf_verbose,""," !! cf-agent will not signal itself!\n");
          continue;
          }
       

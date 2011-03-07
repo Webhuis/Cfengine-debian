@@ -303,8 +303,6 @@ void StartServer(int argc,char **argv)
   struct Attributes dummyattr = {0};
   struct CfLock thislock;
 
-memset(&dummyattr,0,sizeof(dummyattr));
-  
 #if defined(HAVE_GETADDRINFO)
   int addrlen=sizeof(struct sockaddr_in6);
   struct sockaddr_in6 cin;
@@ -312,7 +310,9 @@ memset(&dummyattr,0,sizeof(dummyattr));
   int addrlen=sizeof(struct sockaddr_in);
   struct sockaddr_in cin;
 #endif
-  
+
+memset(&dummyattr,0,sizeof(dummyattr));
+
 if ((sd = OpenReceiverChannel()) == -1)
    {
    CfOut(cf_error,"","Unable to start server");
@@ -454,6 +454,10 @@ while (true)
          }
       
       if (LOGCONNS)
+         {
+         CfOut(cf_log,"","Accepting connection from \"%s\"\n",ipaddr);
+         }
+      else
          {
          CfOut(cf_inform,"","Accepting connection from \"%s\"\n",ipaddr);
          }
@@ -2111,8 +2115,7 @@ for (ap = vdeny; ap != NULL; ap=ap->next)
    {
    if (strncmp(transpath,transrequest,strlen(transpath)) == 0)
       {
-      if (IsMatchItemIn(ap->accesslist,MapAddress(conn->ipaddr)) ||
-          IsRegexItemIn(ap->accesslist,conn->hostname))
+      if (IsRegexItemIn(ap->accesslist,conn->hostname))
          {
          access = false;
          CfOut(cf_verbose,"","Host %s explicitly denied access to %s\n",conn->hostname,transrequest);
@@ -3203,7 +3206,8 @@ else
 
       cnt++;
       
-      if (n_read < blocksize) // Last transaction
+      //if (n_read < blocksize) // Last transaction
+      if (total >= savedlen)
          {
          if (SendTransaction(sd,out,cipherlen+finlen,CF_DONE) == -1)
             {
@@ -3314,6 +3318,13 @@ if (strlen(query) == 0)
    {
    return false;
    }
+
+#ifdef HAVE_LIBCFCONSTELLATION
+if (cf_strncmp(query,"RELAY",5) == 0)
+   {
+   return Constellation_ReturnRelayQueryData(conn,query+5,sendbuffer);
+   }
+#endif
 
 #ifdef HAVE_LIBCFNOVA
 return Nova_ReturnQueryData(conn,query,sendbuffer);

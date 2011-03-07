@@ -49,6 +49,12 @@ switch(type)
    {
    case CF_SCALAR:
        Debug("   Appending Constraint: %s => %s\n",lval,rval);
+       
+       if (PARSING && strcmp(lval,"ifvarclass") == 0)
+          {
+          ValidateClassSyntax(rval);
+          }
+
        break;
    case CF_FNCALL:
        Debug("   Appending a function call to rhs\n");
@@ -609,7 +615,12 @@ if (strcmp(pp->agentsubtype,"reports") == 0 && strcmp(pp->classes,"any") == 0)
       PromiseRef(cf_error,pp);
       }
    }
-  
+
+if (SHOWREPORTS)
+   {
+   NewPromiser(pp);
+   }
+
 if (handle)
    {
    if (!ThreadLock(cft_policy))
@@ -630,7 +641,6 @@ if (handle)
       {
       NewPromiseId(handle,pp);
       }
-   
    
    prid = NULL; // we can't access this after unlocking
    ThreadUnlock(cft_policy);

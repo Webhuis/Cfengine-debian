@@ -42,6 +42,8 @@ extern pthread_mutex_t MUTEX_POLICY;
 extern pthread_mutex_t MUTEX_GETADDR;
 extern pthread_mutex_t MUTEX_DB_LASTSEEN;
 extern pthread_mutex_t MUTEX_DB_REPORT;
+extern pthread_mutex_t MUTEX_VSCOPE;
+extern pthread_mutex_t MUTEX_SERVER_KEYSEEN;
 # endif
 
 extern pid_t ALARM_PID;
@@ -83,6 +85,7 @@ extern char PIDFILE[CF_BUFSIZE];
 extern char  STR_CFENGINEPORT[16];
 extern unsigned short SHORT_CFENGINEPORT;
 extern time_t CONNTIMEOUT;
+extern time_t RECVTIMEOUT;
 
 extern char CFLOCK[CF_BUFSIZE];
 extern char SAVELOCK[CF_BUFSIZE];

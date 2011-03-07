@@ -217,12 +217,30 @@ DeleteItemList(path);
 int IsNewerFileTree(char *dir,time_t reftime)
 
 { struct dirent *dirp;
-  char path[CF_BUFSIZE] = {0},pbuffer[CF_BUFSIZE];
+  char path[CF_BUFSIZE] = {0};
   struct Attributes dummyattr = {0};
   DIR *dirh;
   struct stat sb;
 
 // Assumes that race conditions on the file path are unlikely and unimportant
+
+if (lstat(dir,&sb) == -1)
+   {
+   CfOut(cf_error,"stat"," !! Unable to stat directory %s in IsNewerFileTree",dir);
+   // return true to provoke update
+   return true;
+   }
+
+if (S_ISDIR(sb.st_mode))
+   {
+   //CfOut(cf_verbose,""," ?? Looking at %s (%ld)",dir,sb.st_mtime-reftime);      
+   
+   if (sb.st_mtime > reftime)
+      {
+      CfOut(cf_verbose,""," >> Detected change in %s",dir);      
+      return true;
+      }
+   }
   
 if ((dirh=opendir(dir)) == NULL)
    {
@@ -233,7 +251,7 @@ else
    {
    for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
       {
-      if (!ConsiderFile(dirp->d_name,pbuffer,dummyattr,NULL))
+      if (!ConsiderFile(dirp->d_name,dir,dummyattr,NULL))
          {
          continue;
          }
@@ -251,13 +269,15 @@ else
          {
          CfOut(cf_error,"stat"," !! Unable to stat directory %s in IsNewerFileTree",path);
 	 closedir(dirh);
-         return false;
+         // return true to provoke update
+         return true;
          }
 
       if (S_ISDIR(sb.st_mode))
          {
          if (sb.st_mtime > reftime)
             {
+            CfOut(cf_verbose,""," >> Detected change in %s",path);      
             closedir(dirh);
             return true;
             }
@@ -378,7 +398,18 @@ int StartJoin(char *path,char *leaf,int bufsize)
 
 {
 *path = '\0';
-return JoinMargin(path,leaf,bufsize,CF_BUFFERMARGIN);
+return JoinMargin(path,leaf,NULL,bufsize,CF_BUFFERMARGIN);
+}
+
+/*********************************************************************/
+
+int StartJoinFast(char *path,char *leaf,char **nextFree,int bufsize)
+
+{
+*path = '\0';
+*nextFree = path;
+
+return JoinMargin(path,leaf,nextFree,bufsize,CF_BUFFERMARGIN);
 }
 
 /*********************************************************************/
@@ -386,36 +417,64 @@ return JoinMargin(path,leaf,bufsize,CF_BUFFERMARGIN);
 int Join(char *path,char *leaf,int bufsize)
 
 {
-  return JoinMargin(path,leaf,bufsize,CF_BUFFERMARGIN);
+  return JoinMargin(path,leaf,NULL,bufsize,CF_BUFFERMARGIN);
 }
+
+/*********************************************************************/
+
+int JoinFast(char *path,char *leaf,char **nextFree,int bufsize)
+/*
+ * Faster stringjoin by keeping track of where we last stopped
+ */
+{
+  return JoinMargin(path,leaf,nextFree,bufsize,CF_BUFFERMARGIN);
+}
+
 
 /*********************************************************************/
 
 int EndJoin(char *path,char *leaf,int bufsize)
 
 {
-  return JoinMargin(path,leaf,bufsize,0);
+  return JoinMargin(path,leaf,NULL,bufsize,0);
 }
 
 /*********************************************************************/
 
-int JoinMargin(char *path,char *leaf,int bufsize,int margin)
+int JoinMargin(char *path,char *leaf,char **nextFree,int bufsize,int margin)
 
 { 
-  if(margin < 0)
-    {
-    FatalError("Negative margin in JoinMargin()");
-    }
-
   int len = strlen(leaf);
 
-if ((strlen(path)+len) > (bufsize - margin))
+
+if (margin < 0)
    {
-   CfOut(cf_error,"","Buffer overflow constructing string, len = %d > %d.\n",(strlen(path)+len),(bufsize - CF_BUFFERMARGIN));
-   return false;
+   FatalError("Negative margin in JoinMargin()");
    }
 
-strcat(path,leaf);
+
+ if(nextFree)
+   {
+   if((*nextFree - path) + len > (bufsize - margin) )
+     {
+     CfOut(cf_error,"","Buffer overflow constructing string (using nextFree), len = %d > %d.\n",(strlen(path)+len),(bufsize - CF_BUFFERMARGIN));
+     return false;
+     }
+   
+   strcpy(*nextFree, leaf);
+   *nextFree += len;
+   }
+ else
+   {
+
+   if ((strlen(path)+len) > (bufsize - margin))
+     {
+     CfOut(cf_error,"","Buffer overflow constructing string, len = %d > %d.\n",(strlen(path)+len),(bufsize - CF_BUFFERMARGIN));
+     return false;
+     }
+
+   strcat(path,leaf);
+   }
 
 return true;
 }
@@ -798,7 +857,6 @@ int IsStrIn(char *str, char **strs, int ignoreCase)
 
 for (i = 0; strs[i] != NULL; i++)
    {
-
    if(ignoreCase)
      {
      if (strcasecmp(str,strs[i]) == 0)

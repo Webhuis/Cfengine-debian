@@ -645,7 +645,7 @@ if (s == NULL)
    return false;
    }
   
-Debug("\nCheckParseString(%s => %s/%s)\n",lval,s,range);
+Debug("\nCheckParseClass(%s => %s/%s)\n",lval,s,range);
   
 if (strlen(range) == 0)
    {
@@ -985,6 +985,47 @@ if (!err)
    {
    Debug("CheckParseOpts - syntax verified\n\n");
    }
+}
+
+/****************************************************************************/
+
+int CheckParseVariableName(char *name)
+
+{ char *reserved[] = { "promiser", "handle", "promise_filename", "promise_linenumber", NULL };
+ char *sp,scopeid[CF_MAXVARSIZE],vlval[CF_MAXVARSIZE];
+  int count = 0;
+  
+if (IsStrIn(name,reserved,false))
+   {
+   return false;
+   }
+
+scopeid[0] = '\0';
+
+if (strchr(name,'.'))
+   {
+   for (sp = name; *sp != '\0'; sp++)
+      {
+      if (*sp == '.')
+         {
+         count++;
+
+         if (count > 1)
+            {
+            return false;
+            }
+         }      
+      }
+   
+   sscanf(name,"%[^.].%s",scopeid,vlval);
+
+   if (strlen(scopeid) == 0 || strlen(vlval) == 0)
+      {
+      return false;
+      }
+   }
+
+return true;
 }
 
 /****************************************************************************/

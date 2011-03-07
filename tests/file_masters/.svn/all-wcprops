@@ -1,7 +1,7 @@
 K 25
 svn:wc:ra_dav:version-url
 V 48
-/svn/core/!svn/ver/1580/trunk/tests/file_masters
+/svn/core/!svn/ver/1717/trunk/tests/file_masters
 END
 failsafe.cf
 K 25
@@ -13,7 +13,7 @@ Makefile.in
 K 25
 svn:wc:ra_dav:version-url
 V 60
-/svn/core/!svn/ver/1580/trunk/tests/file_masters/Makefile.in
+/svn/core/!svn/ver/1756/trunk/tests/file_masters/Makefile.in
 END
 promises.cf
 K 25
