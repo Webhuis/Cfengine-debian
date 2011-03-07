@@ -1,4 +1,4 @@
-cfengine3 (3.1.4+dsfg-1) experimental; urgency=low
+cfengine3 (3.1.4+dsfg-1) unstable; urgency=low
 
   * New upstream release (Closes: 610962)
   * debian/patches:
