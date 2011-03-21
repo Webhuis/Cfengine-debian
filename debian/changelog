@@ -4,7 +4,7 @@ cfengine3 (3.1.4+dsfg-1) unstable; urgency=low
   * debian/patches:
     + all patches refreshed
 
- -- Antonio Radici <antonio@dyne.org>  Mon, 07 Mar 2011 00:36:34 +0000
+ -- Antonio Radici <antonio@debian.org>  Mon, 07 Mar 2011 00:36:34 +0000
 
 cfengine3 (3.1.2+dfsg-1) experimental; urgency=low
 
