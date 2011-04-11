@@ -6,6 +6,8 @@ cfengine3 (3.1.5~b1) unstable; urgency=low
       be fully compliant with FHS (Closes: 619580)
   * debian/watch: removed the repack for copyright issues, the pdf is not 
     shipped anymore by upstream
+  * debian/copyright:
+    + removing any reference to repack.sh and its licenses
 
  -- Antonio Radici <antonio@debian.org>  Mon, 11 Apr 2011 17:45:21 +0100
 

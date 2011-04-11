@@ -4,13 +4,6 @@ Upstream-Maintainer: Mark Burgess <Mark.Burgess@iu.hio.no>
 Upstream-Source: http://www.cfengine.org/download.php
 Upstream-Name: cfengine
 
-X-Repackaging-Reasoning:
-  Upstream sources are repackaged to remove a file which contains a pdf but
-  not the source to generate it:
-    + docs/ContributorStatement.pdf
-  .
-  Repackaging is done via debian/repack.sh and can be replayed using "uscan -f"
-
 Files: *
 Copyright: 2008, Cfengine AS
 License: GPL-3
@@ -26,10 +19,6 @@ License: Frontier Artistic License
 Files: debian/*
 Copyright: 2009, Antonio Radici <antonio@dyne.org>
 License: GPL-3
-
-Files: debian/repack.sh
-Copyright: 2008, Damyan Ivanov <dmn@debian.org>
-License: Artistic | GPL-1+
 
 License: GPL-3
     This program is free software: you can redistribute it and/or modify
@@ -64,17 +53,3 @@ License: Frontier Artistic License
     of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
     A copy of the Frontier Artistic License can be found at 
     http://spinwardstars.com/frontier/fal.html
-
-License: Artistic
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the Artistic License, which comes with Perl.
-    On Debian GNU/Linux systems, the complete text of the Artistic License
-    can be found in `/usr/share/common-licenses/Artistic'
-
-License: GPL-1+
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 1, or (at your option)
-    any later version.
-    On Debian GNU/Linux systems, the complete text of the GNU General
-    Public License can be found in `/usr/share/common-licenses/GPL'
