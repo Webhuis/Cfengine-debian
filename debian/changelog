@@ -13,6 +13,7 @@ cfengine3 (3.1.5~b1-1) unstable; urgency=low
   * debian/rules:
     + reformatted configure opts and added htmldir to include the html docs in
       the package (Closes: 609367)
+    + disabled nova and constellation, not included in the free version
   * debian/cfengine3.doc-base: added a doc-base for the HTML doc distributed
 
  -- Antonio Radici <antonio@debian.org>  Mon, 11 Apr 2011 17:45:21 +0100

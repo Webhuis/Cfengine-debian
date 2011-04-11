@@ -34,6 +34,8 @@ ifneq "$(wildcard /usr/share/misc/config.guess)" ""
 	cp -f /usr/share/misc/config.guess config.guess
 endif
 	./configure $(CROSS) 	--enable-shared=no \
+							--without-nova \
+							--without-constellation \
 							--prefix=/usr \
 							--with-sql=no \
 							--with-workdir=/var/lib/cfengine3 \
