@@ -3,7 +3,7 @@ file; I'm removing all the man errors from here
 
 --- a/src/generic_agent.c
 +++ b/src/generic_agent.c
-@@ -1671,7 +1671,7 @@
+@@ -1701,7 +1701,7 @@
     {
     if (options[i].has_arg)
        {
@@ -12,7 +12,7 @@ file; I'm removing all the man errors from here
        }
     else
        {
-@@ -1698,12 +1698,12 @@
+@@ -1728,12 +1728,12 @@
  printf(".SH SYNOPSIS:\n\n %s [options]\n\n.SH DESCRIPTION:\n\n%s\n",GetArg0(component),id);
  
  printf(".B cfengine\n"
@@ -27,7 +27,7 @@ file; I'm removing all the man errors from here
         ".B cfengine\n"
         "is to create a one or more sets of configuration files which will"
         "classify and describe the setup of every host in a network.\n");
-@@ -1714,7 +1714,7 @@
+@@ -1744,7 +1744,7 @@
     {
     if (options[i].has_arg)
        {
@@ -36,7 +36,7 @@ file; I'm removing all the man errors from here
        }
     else
        {
-@@ -1727,10 +1727,10 @@
+@@ -1757,10 +1757,10 @@
         ".SH INFORMATION\n");
  
  printf("\nBug reports: http://bug.cfengine.com, ");
@@ -51,3 +51,14 @@ file; I'm removing all the man errors from here
  }
  
  /*******************************************************************/
+--- a/src/verify_packages.c
++++ b/src/verify_packages.c
+@@ -1911,7 +1911,7 @@
+ 	  }
+        else
+ 	  {
+-          CfOut(cf_verbose, "", " Package sucessfully verified from return code");
++          CfOut(cf_verbose, "", " Package successfully verified from return code");
+ 	  }
+        }
+     }
