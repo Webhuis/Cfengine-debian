@@ -56,6 +56,15 @@ actual creation of the inputs dir any cf-* binary will fail
  MapName(filename);
  
  if (!LoadFileAsItemList(&VSETUIDLIST,filename,b,pp))
+@@ -1365,7 +1365,7 @@
+ b.edits.backup = cfa_nobackup;
+ b.edits.maxfilesize = 1000000;
+ 
+-snprintf(filename,CF_BUFSIZE,"%s/cfagent.%s.log",CFWORKDIR,VSYSNAME.nodename);
++snprintf(filename,CF_BUFSIZE,"/var/log/cfagent.%s.log",VSYSNAME.nodename);
+ MapName(filename);
+ 
+ PurgeItemList(&VSETUIDLIST,"SETUID/SETGID");
 --- a/src/transaction.c
 +++ b/src/transaction.c
 @@ -158,7 +158,7 @@
