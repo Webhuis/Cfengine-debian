@@ -1,26 +1,26 @@
-/* cfengine for GNU
+/*
+   Copyright (C) Cfengine AS
 
-        Copyright (C) 1995
-        Free Software Foundation, Inc.
-
-   This file is part of GNU cfengine - written and maintained
-   by Mark Burgess, Dept of Computing and Engineering, Oslo College,
-   Dept. of Theoretical physics, University of Oslo
+   This file is part of Cfengine 3 - written and maintained by Cfengine AS.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 2, or (at your option) any
-   later version.
+   Free Software Foundation; version 3.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
+*/
 
 /*******************************************************************/
 /*                                                                 */
@@ -120,6 +120,9 @@ struct utsname
 #define WTERMSIG(s) ((s) & 0)
 #endif
 
+#include "bool.h"
+#include "compiler.h"
+
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/evp.h>
@@ -194,6 +197,10 @@ extern int errno;
 #define bcopy(fr,to,n)  memcpy(to,fr,n)  /* Eliminate ucblib */
 #define bcmp(s1, s2, n) memcmp ((s1), (s2), (n))
 #define bzero(s, n)     memset ((s), 0, (n))
+#endif
+
+#ifndef HAVE_STRNDUP
+char *strndup(const char *s, size_t n);
 #endif
 
 #ifdef HAVE_UNISTD_H
@@ -289,10 +296,6 @@ extern int errno;
 #endif
 #endif
 
-#ifdef HAVE_PCRE_H
-# include <pcreposix.h>
-#endif
-
 #ifndef HAVE_SNPRINTF
 #include "../pub/snprintf.h"
 #endif
@@ -326,8 +329,6 @@ typedef int clockid_t;
 /* Various defines                                                 */
 /*******************************************************************/
 
-#define true  1
-#define false 0
 #define CF_BUFSIZE 4096
 #define CF_BILLION 1000000000L
 #define CF_EXPANDSIZE (2*CF_BUFSIZE)
@@ -380,8 +381,8 @@ typedef int clockid_t;
 
 /* these should be >0 to prevent contention */
 
-#define CF_EXEC_IFELAPSED 1
-#define CF_EDIT_IFELAPSED 300
+#define CF_EXEC_IFELAPSED 0
+#define CF_EDIT_IFELAPSED 5
 #define CF_EXEC_EXPIREAFTER 1
 
 #define MAXIP4CHARLEN 16
@@ -518,6 +519,7 @@ typedef u_long in_addr_t;  // as seen in in_addr struct in winsock.h
 /* database file names */
 
 #define CF_CLASSUSAGE     "cf_classes" "." DB_FEXT
+#define CF_VARIABLES      "cf_variables" "." DB_FEXT
 #define CF_PERFORMANCE    "performance" "." DB_FEXT
 #define CF_CHKDB          "checksum_digests" "." DB_FEXT
 #define CF_AVDB_FILE      "cf_observations" "." DB_FEXT
@@ -654,30 +656,6 @@ struct Event
 struct Averages
    {
    struct QPoint Q[CF_OBSERVABLES];
-   };
-
-struct OldAverages /* For conversion to new db */
-   {
-   double expect_number_of_users;
-   double expect_rootprocs;
-   double expect_otherprocs;
-   double expect_diskfree;
-   double expect_loadavg;
-   double expect_incoming[ATTR];
-   double expect_outgoing[ATTR];
-   double expect_pH[PH_LIMIT];
-   double var_number_of_users;
-   double var_rootprocs;
-   double var_otherprocs;
-   double var_diskfree;
-   double var_loadavg;
-   double var_incoming[ATTR];
-   double var_outgoing[ATTR];
-   double var_pH[PH_LIMIT];
-   double expect_netin[CF_NETATTR];
-   double expect_netout[CF_NETATTR];
-   double var_netin[CF_NETATTR];
-   double var_netout[CF_NETATTR];
    };
 
 /******************************************************************/
@@ -1372,8 +1350,9 @@ struct Checksum_Value
 #endif
 
 
-/********************************************************************/
-/* All prototypes                                                   */
-/********************************************************************/
+/* Nobody already knows why it was needed in first place. Please test whether
+   removing this variable is harmless on HP/UX nowadays. */
 
-#include "prototypes.h"
+#ifdef HPuUX
+int Error;
+#endif

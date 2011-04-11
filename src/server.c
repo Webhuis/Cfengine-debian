@@ -31,9 +31,7 @@
 
 #include "cf3.defs.h"
 #include "cf3.extern.h"
-#ifndef HAVE_SERV_H
 #include "cf3.server.h"
-#endif
 
 int main (int argc,char *argv[]);
 void StartServer (int argc, char **argv);
@@ -99,7 +97,6 @@ extern struct BodySyntax CFS_CONTROLBODY[];
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
       { "verbose",no_argument,0,'v' },
-      { "dry-run",no_argument,0,'n'},
       { "version",no_argument,0,'V' },
       { "file",required_argument,0,'f'},
       { "define",required_argument,0,'D' },
@@ -381,8 +378,8 @@ while (true)
       {
       CheckFileChanges(argc,argv,sd);
       PurgeKeyRing();
-      UpdateLastSeen();
       }
+   UpdateLastSeen();
    
    FD_ZERO(&rset);
    FD_SET(sd,&rset);
@@ -763,7 +760,7 @@ void CheckFileChanges(int argc,char **argv,int sd)
 memset(&newstat,0,sizeof(struct stat));
 memset(filename,0,CF_BUFSIZE);
 
-if ((*VINPUTFILE != '.') && !IsAbsoluteFileName(VINPUTFILE)) /* Don't prepend to absolute names */
+if (!IsFileOutsideDefaultRepository(VINPUTFILE)) /* Don't prepend to absolute names */
    {
    snprintf(filename,CF_BUFSIZE,"%s/inputs/",CFWORKDIR);
    }
@@ -827,13 +824,20 @@ if (NewPromiseProposals())
       ERRORCOUNT = 0;
       
       NewScope("sys");
+
+      NewScalar("sys","policy_hub",POLICY_SERVER,cf_str);
+
+      if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY)) 
+         {
+         CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
+         }
+
       NewScope("const");
       NewScope("this");
       NewScope("control_server");
       NewScope("control_common");
       NewScope("mon");
       NewScope("remote_access");
-      NewScalar("sys","policy_hub",POLICY_SERVER,cf_str);
       GetNameInfo3();
       CfGetInterfaceInfo(cf_server);
       Get3Environment();
@@ -843,10 +847,6 @@ if (NewPromiseProposals())
       KeepPromises();
       Summarize();
       
-      if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY)) 
-         {
-         CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
-         }
       }
    else
       {
@@ -1465,7 +1465,7 @@ switch (GetCommand(recvbuffer))
        memcpy(out,recvbuffer+CF_PROTO_OFFSET,len);
        plainlen = DecryptString(conn->encryption_type,out,recvbuffer,conn->session_key,len);
        
-       if (strncmp(recvbuffer,"QUERY",3) !=0)
+       if (strncmp(recvbuffer,"QUERY",5) !=0)
           {
           CfOut(cf_inform,"","QUERY protocol defect\n");
           RefuseAccess(conn,sendbuffer,0,"decryption failure");
@@ -3187,18 +3187,20 @@ else
 
       if (n_read > 0)
          {
-         EVP_EncryptInit(&ctx,CfengineCipher(enctype),key,iv);    
+         EVP_EncryptInit_ex(&ctx,CfengineCipher(enctype),NULL,key,iv);
          
          if (!EVP_EncryptUpdate(&ctx,out,&cipherlen,sendbuffer,n_read))
             {
             FailedTransfer(sd,sendbuffer,filename);
+            EVP_CIPHER_CTX_cleanup(&ctx);
             close(fd);
             return;
             }
          
-         if (!EVP_EncryptFinal(&ctx,out+cipherlen,&finlen))
+         if (!EVP_EncryptFinal_ex(&ctx,out+cipherlen,&finlen))
             {
             FailedTransfer(sd,sendbuffer,filename);
+            EVP_CIPHER_CTX_cleanup(&ctx);
             close(fd);
             return;
             }
@@ -3212,6 +3214,7 @@ else
          if (SendTransaction(sd,out,cipherlen+finlen,CF_DONE) == -1)
             {
             CfOut(cf_verbose,"send","Send failed in GetFile");
+            EVP_CIPHER_CTX_cleanup(&ctx);
             close(fd);
             return;
             }
@@ -3223,6 +3226,7 @@ else
             {
             CfOut(cf_verbose,"send","Send failed in GetFile");
             close(fd);
+            EVP_CIPHER_CTX_cleanup(&ctx);
             return;
             }
          }
@@ -3319,14 +3323,14 @@ if (strlen(query) == 0)
    return false;
    }
 
-#ifdef HAVE_LIBCFCONSTELLATION
-if (cf_strncmp(query,"RELAY",5) == 0)
+#ifdef HAVE_CONSTELLATION
+if (cf_strncmp(query,"relay",5) == 0)
    {
-   return Constellation_ReturnRelayQueryData(conn,query+5,sendbuffer);
+   return Constellation_ReturnRelayQueryData(conn,query,sendbuffer);
    }
 #endif
 
-#ifdef HAVE_LIBCFNOVA
+#ifdef HAVE_NOVA
 return Nova_ReturnQueryData(conn,query,sendbuffer);
 #else
 return false;

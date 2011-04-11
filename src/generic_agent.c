@@ -39,13 +39,26 @@ extern void CheckOpts(int argc,char **argv);
 
 /*****************************************************************************/
 
+static void SanitizeEnvironment()
+{
+ /* ps(1) and other utilities invoked by Cfengine may be affected */
+unsetenv("COLUMNS");
+ 
+ /* Make sure subprocesses output is not localized */
+unsetenv("LANG");
+unsetenv("LANGUAGE");
+unsetenv("LC_MESSAGES");
+}
+
+/*****************************************************************************/
+
 void GenericInitialize(int argc,char **argv,char *agents)
 
 { enum cfagenttype ag = Agent2Type(agents);
   char vbuff[CF_BUFSIZE];
   int ok = false;
 
-#ifdef HAVE_LIBCFNOVA
+#ifdef HAVE_NOVA
 CF_DEFAULT_DIGEST = cf_sha256;
 CF_DEFAULT_DIGEST_LEN = CF_SHA256_LEN;
 #else
@@ -58,6 +71,7 @@ InitializeGA(argc,argv);
 SetReferenceTime(true);
 SetStartTime(false);
 SetSignals();
+SanitizeEnvironment();
 
 strcpy(THIS_AGENT,CF_AGENTTYPES[ag]);
 NewClass(THIS_AGENT);
@@ -115,19 +129,40 @@ SetPolicyServer(POLICY_SERVER);
 
 if (ag != cf_keygen)
    {
-   if (MissingInputFile())
+   if (!MissingInputFile())
       {
-      ok = false;
-      }
-   else if (SHOWREPORTS || NewPromiseProposals())
-      {
-      CfOut(cf_verbose,""," -> New promises proposals detected...\n");
-      ok = BOOTSTRAP || CheckPromises(ag);
-      }
-   else
-      {
-      CfOut(cf_verbose,""," -> No new promises proposals - so policy is already validated\n");
-      ok = true;
+      bool check_promises = false;
+
+      if (SHOWREPORTS)
+         {
+         check_promises = true;
+         CfOut(cf_verbose, "", " -> Reports mode is enabled, force-validating policy");
+         }
+      if (IsFileOutsideDefaultRepository(VINPUTFILE))
+         {
+         check_promises = true;
+         CfOut(cf_verbose, "", " -> Input file is outside default repository, validating it");
+         }
+      if (NewPromiseProposals())
+         {
+         check_promises = true;
+         CfOut(cf_verbose, "", " -> Input file is changed since last valiadtion, validating it");
+         }
+
+      if (check_promises)
+         {
+         ok = CheckPromises(ag);
+         if (BOOTSTRAP && !ok)
+            {
+            CfOut(cf_verbose, "", " -> Policy is not valid, but proceeding with bootstrap");
+            ok = true;
+            }
+         }
+      else
+         {
+         CfOut(cf_verbose, "", " -> Policy is already validated");
+         ok = true;
+         }
       }
    
    if (ok)
@@ -193,7 +228,7 @@ if (cfstat(cmd,&sb) == -1)
 
 /* If we are cf-agent, check syntax before attempting to run */
 
-if ((*VINPUTFILE == '.') || IsAbsoluteFileName(VINPUTFILE))
+if (IsFileOutsideDefaultRepository(VINPUTFILE))
    {
    snprintf(cmd,CF_BUFSIZE-1,"\"%s%cbin%ccf-promises%s\" -f \"%s\"",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX,VINPUTFILE);
    }
@@ -277,11 +312,6 @@ else
    v = "not specified";
    }
 
-if (strchr(retval,':'))
-   {
-   CfOut(cf_error,""," !! The version string may not contain the \":\" character");
-   }
-
 snprintf(vbuff,CF_BUFSIZE-1,"Expanded promises for %s",agents);
 CfHtmlHeader(FREPORT_HTML,vbuff,STYLESHEET,WEBDRIVER,BANNER);
 
@@ -361,7 +391,8 @@ void InitializeGA(int argc,char *argv[])
 { char *sp;
   int i,j,seed,force = false;
   struct stat statbuf,sb;
-  unsigned char s[16],vbuff[CF_BUFSIZE];
+  unsigned char s[16];
+  char vbuff[CF_BUFSIZE];
   char ebuff[CF_EXPANDSIZE];
 
 SHORT_CFENGINEPORT =  htons((unsigned short)5308);
@@ -385,7 +416,7 @@ strcpy(FILE_SEPARATOR_STR,"/");
 
 NewClass("any");
 
-#ifdef HAVE_LIBCFNOVA
+#ifdef HAVE_NOVA
 NewClass("nova_edition");
 #else
 NewClass("community_edition");
@@ -839,7 +870,7 @@ void CloseReports(char *agents)
 
 { char name[CF_BUFSIZE];
 
-#ifndef HAVE_LIBCFNOVA 
+#ifndef HAVE_NOVA 
 if (SHOWREPORTS)
    {
    CfOut(cf_verbose,"","Wrote compilation report %s%creports%cpromise_output_%s.txt",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,agents);
@@ -870,7 +901,6 @@ void Cf3ParseFile(char *filename)
   struct Rlist *rp;
   int access = false;
   char wfilename[CF_BUFSIZE];
-
 
 strncpy(wfilename,InputLocation(filename),CF_BUFSIZE);
 
@@ -1070,7 +1100,7 @@ CfOut(cf_verbose,"","***********************************************************
 
 if (VERBOSE || DEBUG)
    {
-   printf("%s BUNDLE %s",VPREFIX,bp->name);
+   printf("%s> BUNDLE %s",VPREFIX,bp->name);
    }
 
 if (params && (VERBOSE||DEBUG))
@@ -1099,7 +1129,7 @@ CfOut(cf_verbose,"","      * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
 if (VERBOSE || DEBUG)
    {
-   printf("%s       BUNDLE %s",VPREFIX,bp->name);
+   printf("%s>       BUNDLE %s",VPREFIX,bp->name);
    }
 
 if (params && (VERBOSE||DEBUG))
@@ -1137,8 +1167,8 @@ CfOut(cf_verbose,"","    .......................................................
 
 if (VERBOSE||DEBUG)
    {
-   printf ("%s     Promise handle: %s\n",VPREFIX,handle);
-   printf ("%s     Promise made by: %s",VPREFIX,pp->promiser);
+   printf ("%s>     Promise handle: %s\n",VPREFIX,handle);
+   printf ("%s>     Promise made by: %s",VPREFIX,pp->promiser);
    }
 
 if (pp->promisee)
@@ -1298,14 +1328,14 @@ char *InputLocation(char *filename)
 
 { static char wfilename[CF_BUFSIZE], path[CF_BUFSIZE];
 
-if (MINUSF && (filename != VINPUTFILE) && (*VINPUTFILE == '.' || IsAbsoluteFileName(VINPUTFILE)) && !IsAbsoluteFileName(filename))
+if (MINUSF && (filename != VINPUTFILE) && IsFileOutsideDefaultRepository(VINPUTFILE) && !IsAbsoluteFileName(filename))
    {
    /* If -f assume included relative files are in same directory */
    strncpy(path,VINPUTFILE,CF_BUFSIZE-1);
    ChopLastNode(path);
    snprintf(wfilename,CF_BUFSIZE-1,"%s%c%s",path,FILE_SEPARATOR,filename);
    }
-else if ((*filename == '.') || IsAbsoluteFileName(filename))
+else if (IsFileOutsideDefaultRepository(filename))
    {
    strncpy(wfilename,filename,CF_BUFSIZE-1);
    }
@@ -1328,7 +1358,7 @@ if (THIS_AGENT_TYPE != cf_common)
    return;
    }
 
-#if defined(HAVE_LIBCFNOVA) && defined(HAVE_LIBMONGOC)
+#if defined(HAVE_NOVA) && defined(HAVE_LIBMONGOC)
 if ((FREPORT_TXT = fopen(NULLFILE,"w")) == NULL)
    {
    snprintf(output,CF_BUFSIZE,"Could not write output log to %s",filename);

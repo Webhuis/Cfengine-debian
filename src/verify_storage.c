@@ -57,10 +57,8 @@ LocateFilePromiserGroup(pp->promiser,pp,VerifyStoragePromise);
 
 void VerifyStoragePromise(char *path,struct Promise *pp)
 
-{ struct stat osb,oslb,dsb,dslb;
-  struct Attributes a = {0};
+{ struct Attributes a = {0};
   struct CfLock thislock;
-  int success,rlevel = 0,isthere;
 
 a = GetStorageAttributes(pp);
 
@@ -144,7 +142,8 @@ int VerifyFileSystem(char *name,struct Attributes a,struct Promise *pp)
 { struct stat statbuf, localstat;
   DIR *dirh;
   struct dirent *dirp;
-  long sizeinbytes = 0, filecount = 0;
+  off_t sizeinbytes = 0;
+  long filecount = 0;
   char buff[CF_BUFSIZE];
 
 CfOut(cf_verbose,""," -> Checking required filesystem %s\n",name);
@@ -231,7 +230,7 @@ return(true);
 int VerifyFreeSpace(char *file,struct Attributes a,struct Promise *pp)
 
 { struct stat statbuf;
-  int free;
+  off_t free;
   long kilobytes;
   
 #ifdef MINGW
@@ -267,7 +266,7 @@ if (kilobytes < 0)
 
    if (free < (int)kilobytes)
       {
-      cfPS(cf_error,CF_FAIL,"",pp,a," !! Free disk space is under %d%% for volume containing %s (%d%% free)\n",kilobytes,file,free);
+      cfPS(cf_error,CF_FAIL,"",pp,a," !! Free disk space is under %d% for volume containing %s (%d% free)\n",kilobytes,file,free);
       return false;
       }
    }
@@ -353,7 +352,7 @@ int IsForeignFileSystem (struct stat *childstat,char *dir)
  /* Is FS NFS mounted ? */
 
 { struct stat parentstat;
-  char host[CF_MAXVARSIZE], vbuff[CF_BUFSIZE];
+  char vbuff[CF_BUFSIZE];
  
 strncpy(vbuff,dir,CF_BUFSIZE-1);
 
@@ -384,7 +383,7 @@ if (childstat->st_dev != parentstat.st_dev)
       {
       entry = (struct CfMount *)rp->item;
 
-      if (strncmp(entry->mounton,dir,strlen(entry->mounton)) == 0)
+      if (!strcmp(entry->mounton, dir))
          {
          if (entry->options && strstr(entry->options,"nfs"))
             {
@@ -406,8 +405,7 @@ return(false);
 
 int VerifyMountPromise(char *name,struct Attributes a,struct Promise *pp)
 
-{ struct CfMount mount;
-  char *options;
+{ char *options;
   char dir[CF_BUFSIZE];
   int changes = 0;
  

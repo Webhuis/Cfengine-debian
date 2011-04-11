@@ -44,7 +44,7 @@ NewScalar("const","t","\t",cf_str);
 NewScalar("const","endl","\n",cf_str);
 /* NewScalar("const","0","\0",cf_str);  - this cannot work */
 
-#ifdef HAVE_LIBCFNOVA
+#ifdef HAVE_NOVA
 Nova_EnterpriseDiscovery();
 #endif
 }
@@ -78,15 +78,15 @@ void NewScalar(char *scope,char *lval,char *rval,enum cfdatatype dt)
 { struct Rval rvald;
   struct Scope *ptr;
 
-  Debug("NewScalar(%s,%s,%s)\n",scope,lval,rval);
+Debug("NewScalar(%s,%s,%s)\n",scope,lval,rval);
 
-  ptr = GetScope(scope);
-  
-  if(ptr == NULL)
-    {
-    CfOut(cf_error, "", "!! Attempt to add variable \"%s\" to non-existant scope \"%s\" - ignored", lval, scope);
-    return;
-    }
+ptr = GetScope(scope);
+
+if (ptr == NULL)
+   {
+   CfOut(cf_error, "", "!! Attempt to add variable \"%s\" to non-existant scope \"%s\" - ignored", lval, scope);
+   return;
+   }
 
 // Newscalar allocates memory through NewAssoc
 
@@ -156,6 +156,49 @@ if (GetVariable(scope,lval,&rvald.item,&rvald.rtype) != cf_notype)
  
 sp1 = strdup(lval);
 AddVariableHash(scope,sp1,rval,CF_LIST,dt,NULL,0);
+}
+
+/*******************************************************************/
+
+void ExtendList(char *scope,char *lval,void *rval,enum cfdatatype dt)
+
+{ char *sp1;
+  struct Rval rvald;
+  struct Rlist *list,*rp;
+
+if (GetVariable(scope,lval,&rvald.item,&rvald.rtype) != cf_notype)
+   {
+   list = rvald.item;
+   
+   switch(rvald.rtype)
+      {
+      case CF_SCALAR:
+          IdempAppendRlist(&list,rval,CF_SCALAR);
+          break;
+          
+      case CF_LIST:
+          for (rp = rval; rp != NULL; rp = rp->next)
+             {
+             IdempAppendRlist(&list,rval,CF_SCALAR);
+             }
+          break;
+          
+      case CF_FNCALL:
+          rp = IdempAppendRScalar(&list,"dummy",CF_SCALAR);
+          free(rp->item);
+          rp->item = rval;
+          rp->type = CF_FNCALL;
+          break;
+          
+      default:
+          CfOut(cf_error,"","Attempt to extend a list with something unknown");
+          break;
+      }
+   }
+else
+   {
+   NewList(scope,lval,rval,dt);
+   }
 }
 
 /*******************************************************************/
@@ -333,7 +376,7 @@ else
 
 int CompareVariable(char *lval,struct CfAssoc *ap)
 
-{ char buffer[CF_BUFSIZE];
+{
 
 if (ap == NULL || lval == NULL)
    {

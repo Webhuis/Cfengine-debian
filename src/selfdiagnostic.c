@@ -59,7 +59,7 @@ printf("----------------------------------------------------------\n");
 printf("Cfengine - Level 1 self-diagnostic \n");
 printf("----------------------------------------------------------\n\n");
 
-#ifdef HAVE_LIBCFNOVA
+#ifdef HAVE_NOVA
 s1 = Nova_SizeCfSQLContainer();
 s2 = SizeCfSQLContainer();
 
@@ -347,8 +347,7 @@ ExpandPromiseAndDo(cf_common,"diagnostic",pcopy,scalarvars,listvars,NULL);
 
 void TestRegularExpressions()
 
-{ struct CfRegEx rex;
-  int start,end;
+{ int start,end;
 
 printf("%d. Testing regular expression engine\n",++NR);
 
@@ -359,38 +358,6 @@ printf(" -> Regex engine is the POSIX Regular Expression library\n");
 printf(" -> Some Cfengine are features will not work in this current state.\n");
 printf(" !! This diagnostic might hang if the library is broken\n");
 #endif
-
-rex = CompileRegExp("#.*");
-
-if (rex.failed)
-   {
-   CfOut(cf_error,"","Failed regular expression compilation\n");
-   }
-else
-   {
-   CfOut(cf_error,""," -> Regular expression compilation - ok\n");
-   }
-
-if (!RegExMatchSubString(rex,"line 1:\nline2: # comment to end\nline 3: blablab",&start,&end))
-   {
-   CfOut(cf_error,"","Failed regular expression extraction +1\n");
-   }
-else
-   {
-   CfOut(cf_error,""," -> Regular expression extraction - ok %d - %d\n",start,end);
-   }
-
-/* We have to recompile this for each test - else seg fault - is this a bug? */
-rex = CompileRegExp("#.*");
-
-if (RegExMatchFullString(rex,"line 1:\nline2: # comment to end\nline 3: blablab"))
-   {
-   CfOut(cf_error,"","Failed regular expression extraction -1\n");
-   }
-else
-   {
-   CfOut(cf_error,""," -> Regular expression extraction - ok\n");
-   }
 
 if (FullTextMatch("[a-z]*","1234abcd6789"))
    {

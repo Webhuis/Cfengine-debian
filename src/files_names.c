@@ -89,7 +89,7 @@ for (ip = path; ip != NULL; ip=ip->next)
 
    if (!JoinPath(pbuffer,ip->name))
       {
-      CfOut(cf_error,"","Buffer overflow in LocateFilePromiserGroup\n");
+      CfOut(cf_error,"","Buffer has limited size in LocateFilePromiserGroup\n");
       return;
       }
 
@@ -260,7 +260,7 @@ else
 
       if (!JoinPath(path,dirp->d_name))
          {
-         CfOut(cf_error,""," !! Buffer overflow adding %s to %s in IsNewerFileTree",dir,path);
+         CfOut(cf_error,"","Internal limit: Buffer ran out of space adding %s to %s in IsNewerFileTree",dir,path);
 	 closedir(dirh);
          return false;
          }
@@ -341,21 +341,6 @@ return true;
 
 /*********************************************************************/
 
-int ExpandOverflow(char *str1,char *str2)   /* Should be an inline ! */
-
-{ int len = strlen(str2);
-
-if ((strlen(str1)+len) > (CF_EXPANDSIZE - CF_BUFFERMARGIN))
-   {
-   CfOut(cf_error,"","Expansion overflow constructing string. Increase CF_EXPANDSIZE macro. Tried to add %s to %s\n",str2,str1);
-   return true;
-   }
-
-return false;
-}
-
-/*********************************************************************/
-
 char *JoinPath(char *path,char *leaf)
 
 { int len = strlen(leaf);
@@ -365,7 +350,7 @@ AddSlash(path);
 
 if ((strlen(path)+len) > (CF_BUFSIZE - CF_BUFFERMARGIN))
    {
-   CfOut(cf_error,"","Buffer overflow constructing string. Tried to add %s to %s\n",leaf,path);
+   CfOut(cf_error,"","Internal limit: Buffer ran out of space constructing string. Tried to add %s to %s\n",leaf,path);
    return NULL;
    }
 
@@ -384,7 +369,7 @@ DeleteSlash(path);
       
 if ((strlen(path)+len) > (CF_BUFSIZE - CF_BUFFERMARGIN))
    {
-   CfOut(cf_error,"","Buffer overflow constructing string. Tried to add %s to %s\n",leaf,path);
+   CfOut(cf_error,"","Internal limit: Buffer ran out of space constructing string. Tried to add %s to %s\n",leaf,path);
    return NULL;
    }
 
@@ -443,36 +428,32 @@ int EndJoin(char *path,char *leaf,int bufsize)
 
 int JoinMargin(char *path,char *leaf,char **nextFree,int bufsize,int margin)
 
-{ 
-  int len = strlen(leaf);
-
+{ int len = strlen(leaf);
 
 if (margin < 0)
    {
    FatalError("Negative margin in JoinMargin()");
    }
 
-
- if(nextFree)
+if(nextFree)
    {
-   if((*nextFree - path) + len > (bufsize - margin) )
-     {
-     CfOut(cf_error,"","Buffer overflow constructing string (using nextFree), len = %d > %d.\n",(strlen(path)+len),(bufsize - CF_BUFFERMARGIN));
-     return false;
-     }
+   if ((*nextFree - path) + len > (bufsize - margin) )
+      {
+      CfOut(cf_error,"","Internal limit: Buffer ran out of space constructing string (using nextFree), len = %d > %d.\n",(strlen(path)+len),(bufsize - CF_BUFFERMARGIN));
+      return false;
+      }
    
    strcpy(*nextFree, leaf);
    *nextFree += len;
    }
- else
+else
    {
-
    if ((strlen(path)+len) > (bufsize - margin))
-     {
-     CfOut(cf_error,"","Buffer overflow constructing string, len = %d > %d.\n",(strlen(path)+len),(bufsize - CF_BUFFERMARGIN));
-     return false;
-     }
-
+      {
+      CfOut(cf_error,"","Internal limit: Buffer ran out of space constructing string (%d > %d).\n",(strlen(path)+len),(bufsize - CF_BUFFERMARGIN));
+      return false;
+      }
+   
    strcat(path,leaf);
    }
 
@@ -626,23 +607,71 @@ return ret;
 
 /*********************************************************************/
 
-char *CanonifyName(char *str)
+void CanonifyNameInPlace(char *s)
+{
+for (; *s != '\0'; s++)
+   {
+   if (!isalnum(*s) || *s == '.')
+      {
+      *s = '_';
+      }
+   }
+}
+
+/*********************************************************************/
+
+char *CanonifyName(const char *str)
+
+{ static char buffer[CF_BUFSIZE];
+          
+strncpy(buffer,str,CF_BUFSIZE);
+CanonifyNameInPlace(buffer);
+return buffer;
+}
+
+/*********************************************************************/
+
+char *CanonifyChar(const char *str,char ch)
 
 { static char buffer[CF_BUFSIZE];
   char *sp;
-          
-memset(buffer,0,CF_BUFSIZE);
-strcpy(buffer,str);
+
+strncpy(buffer,str,CF_BUFSIZE-1);
 
 for (sp = buffer; *sp != '\0'; sp++)
-    {
-    if (!isalnum((int)*sp) || *sp == '.')
-       {
-       *sp = '_';
-       }
-    }
+   {
+   if (*sp == ch)
+      {
+      *sp = '_';
+      }
+   }
 
 return buffer;
+}
+
+/*********************************************************************/
+
+int CompareCSVName(char *s1,char *s2)
+
+{ char *sp1,*sp2;
+  char ch1,ch2;
+
+for (sp1 = s1,sp2 = s2; *sp1 != '\0' && *sp2 != '\0'; sp1++,sp2++)
+   {
+   ch1 = (*sp1 == ',') ? '_' : *sp1;
+   ch2 = (*sp2 == ',') ? '_' : *sp2;
+
+   if (ch1 > ch2)
+      {
+      return 1;
+      }
+   else if (ch1 < ch2)
+      {
+      return -1;
+      }
+   }
+
+return 0;
 }
 
 /*********************************************************************/
@@ -766,6 +795,21 @@ for (i = strlen(str)-1; i >= 0 && isspace((int)str[i]); i--)
    }
 }
 
+void StripTrailingNewline(char *str)
+{
+    char *c = str + strlen(str);
+
+    if (c - str > CF_EXPANDSIZE)
+    {
+        CfOut(cf_error, "", "StripTrailingNewline was called on an overlong string");
+        return;
+    }
+
+    for (; c > str && (*c == '\0' || *c == '\n'); --c)
+    {
+        *c = '\0';
+    }
+}
 
 /*********************************************************************/
 
@@ -898,7 +942,7 @@ strs = NULL;
 
 /*********************************************************************/
 
-int IsAbsoluteFileName(char *f)
+int IsAbsoluteFileName(const char *f)
 
 { int quoted,off = 0;
 
@@ -927,6 +971,10 @@ if (f[off] == '/')
 return false;
 }
 
+bool IsFileOutsideDefaultRepository(const char *f)
+{
+return (*f == '.') || IsAbsoluteFileName(f);
+}
 
 /*******************************************************************/
 
@@ -1207,6 +1255,27 @@ for(i = 0; (i < len) && (i < outSz - 1); i++)
       out[i] = in[i];
       }
    }
+}
+
+/*********************************************************************/
+
+void ReplaceTrailingChar(char *str, char from, char to)
+
+/* Replaces any unwanted last char in str. */
+{
+ int strLen;
+
+ strLen = strlen(str);
+
+ if(strLen == 0)
+    {
+    return;
+    }
+ 
+ if(str[strLen - 1] == from)
+    {
+    str[strLen - 1] = to;
+    }
 }
 
 /*********************************************************************/

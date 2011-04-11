@@ -14,7 +14,6 @@
 # PARTICULAR PURPOSE.
 
 @SET_MAKE@
-
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
@@ -35,17 +34,30 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+@CROSS_COMPILING_FALSE@@HAVE_NOVA_TRUE@am__append_1 = cf-hub.8
 subdir = docs
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in texinfo.tex
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/acinclude.m4 \
+	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
+	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/nova/options.m4 \
+	$(top_srcdir)/constellation/options.m4 \
+	$(top_srcdir)/nova/output.m4 \
+	$(top_srcdir)/constellation/output.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
+mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/conf.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
+AM_V_GEN = $(am__v_GEN_$(V))
+am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
+am__v_GEN_0 = @echo "  GEN   " $@;
+AM_V_at = $(am__v_at_$(V))
+am__v_at_ = $(am__v_at_$(AM_DEFAULT_VERBOSITY))
+am__v_at_0 = @
 SOURCES =
 DIST_SOURCES =
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
@@ -70,13 +82,13 @@ am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
 man8dir = $(mandir)/man8
-am__installdirs = "$(DESTDIR)$(man8dir)" "$(DESTDIR)$(docdir)"
+am__installdirs = "$(DESTDIR)$(man8dir)"
 NROFF = nroff
 MANS = $(man_MANS)
-DATA = $(doc_DATA)
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
+AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
@@ -88,6 +100,9 @@ BERKELEY_DB_LIB = @BERKELEY_DB_LIB@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
+CONSTELLATION_CFLAGS = @CONSTELLATION_CFLAGS@
+CONSTELLATION_LDADD = @CONSTELLATION_LDADD@
+CONSTELLATION_SUBDIR = @CONSTELLATION_SUBDIR@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
@@ -125,11 +140,15 @@ LIB_SELINUX = @LIB_SELINUX@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
+MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MKDIR_P = @MKDIR_P@
 NEED_SETGID = @NEED_SETGID@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOVA_CFLAGS = @NOVA_CFLAGS@
+NOVA_LDADD = @NOVA_LDADD@
+NOVA_SUBDIR = @NOVA_SUBDIR@
 NOWRAP = @NOWRAP@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
@@ -178,22 +197,6 @@ build_vendor = @build_vendor@
 builddir = @builddir@
 datadir = @datadir@
 datarootdir = @datarootdir@
-
-# Info used in building the Info files
-#info_TEXINFOS = cf3-Reference.texinfo
-
-#infofiles = $(info_TEXINFOS:.texinfo=.info)
-#MAKEINFOHTML = $(MAKEINFO) --html --no-split
-
-# Info used in building and installing HTML files
-#htmlfiles = $(info_TEXINFOS:.texinfo=.html)
-
-#htmldir = @htmldir@
-#html_DATA = $(htmlfiles)
-
-# Info used in building and installing Postscript files
-#pdffiles = $(info_TEXINFOS:.texinfo=.pdf)
-#dvifiles = $(info_TEXINFOS:.texinfo=.dvi)
 docdir = @docdir@
 dvidir = @dvidir@
 exec_prefix = @exec_prefix@
@@ -231,14 +234,13 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 workdir = @workdir@
-
-# Info used in building the MAN files
-man_MANS = cf-agent.8 cf-serverd.8 cf-execd.8 cf-monitord.8 cf-report.8 cf-know.8 cf-runagent.8 cf-promises.8 cf-key.8 cf-hub.8
-doc_DATA = $(psfiles) $(pdffiles)
+@CROSS_COMPILING_FALSE@man_MANS = cf-agent.8 cf-serverd.8 cf-execd.8 \
+@CROSS_COMPILING_FALSE@	cf-monitord.8 cf-report.8 cf-know.8 \
+@CROSS_COMPILING_FALSE@	cf-runagent.8 cf-promises.8 cf-key.8 \
+@CROSS_COMPILING_FALSE@	$(am__append_1)
 
 # Make sure these get distributed with everything else.
-EXTRA_DIST = *.8 *.texinfo *.png *.pdf *.html
-SUFFIXES = html pdf dvi
+EXTRA_DIST = $(man_MANS) *.png *.html
 
 #
 # Some basic clean ups
@@ -249,25 +251,24 @@ MOSTLYCLEANFILES = *~ *.orig
 # Get everything removed down to where rebuilding requires:
 # "make; make install"
 # 
-CLEANFILES = $(htmlfiles) $(psfiles)
+CLEANFILES = $(man_MANS)
 
 #
 # Get everything removed down to where rebuilding requires:
 # "configure; make; make install"
 #
-DISTCLEANFILES = *.log *.aux *.mbs *.mb *.info*
+DISTCLEANFILES = 
 
 #
 # Get everything removed down to where rebuilding requires:
 # "aclocal; autoconf; autoheader; automake --add-missing"
 # "configure; make; make install"
 #
-MAINTAINERCLEANFILES = Makefile.in mdate-sh
+MAINTAINERCLEANFILES = Makefile.in
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: html pdf dvi
-$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
+$(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -292,9 +293,9 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 
-$(top_srcdir)/configure:  $(am__configure_deps)
+$(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
-$(ACLOCAL_M4):  $(am__aclocal_m4_deps)
+$(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
@@ -341,26 +342,6 @@ uninstall-man8:
 	test -z "$$files" || { \
 	  echo " ( cd '$(DESTDIR)$(man8dir)' && rm -f" $$files ")"; \
 	  cd "$(DESTDIR)$(man8dir)" && rm -f $$files; }
-install-docDATA: $(doc_DATA)
-	@$(NORMAL_INSTALL)
-	test -z "$(docdir)" || $(MKDIR_P) "$(DESTDIR)$(docdir)"
-	@list='$(doc_DATA)'; test -n "$(docdir)" || list=; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; \
-	done | $(am__base_list) | \
-	while read files; do \
-	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(docdir)'"; \
-	  $(INSTALL_DATA) $$files "$(DESTDIR)$(docdir)" || exit $$?; \
-	done
-
-uninstall-docDATA:
-	@$(NORMAL_UNINSTALL)
-	@list='$(doc_DATA)'; test -n "$(docdir)" || list=; \
-	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
-	test -n "$$files" || exit 0; \
-	echo " ( cd '$(DESTDIR)$(docdir)' && rm -f" $$files ")"; \
-	cd "$(DESTDIR)$(docdir)" && rm -f $$files
 tags: TAGS
 TAGS:
 
@@ -413,9 +394,9 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(MANS) $(DATA)
+all-am: Makefile $(MANS)
 installdirs:
-	for dir in "$(DESTDIR)$(man8dir)" "$(DESTDIR)$(docdir)"; do \
+	for dir in "$(DESTDIR)$(man8dir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -467,7 +448,7 @@ info: info-am
 
 info-am:
 
-install-data-am: install-docDATA install-man
+install-data-am: install-man
 
 install-dvi: install-dvi-am
 
@@ -511,7 +492,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-docDATA uninstall-man
+uninstall-am: uninstall-man
 
 uninstall-man: uninstall-man8
 
@@ -520,28 +501,18 @@ uninstall-man: uninstall-man8
 .PHONY: all all-am check check-am clean clean-generic clean-libtool \
 	distclean distclean-generic distclean-libtool distdir dvi \
 	dvi-am html html-am info info-am install install-am \
-	install-data install-data-am install-docDATA install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-man8 install-pdf install-pdf-am install-ps \
-	install-ps-am install-strip installcheck installcheck-am \
-	installdirs maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
-	ps ps-am uninstall uninstall-am uninstall-docDATA \
-	uninstall-man uninstall-man8
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-man8 \
+	install-pdf install-pdf-am install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	uninstall uninstall-am uninstall-man uninstall-man8
 
 
 %.8 : ../src/%
 	../src/$< -M > `echo $<.8 | sed s/src/docs/`
-
-%.html : %.texinfo
-	${MAKEINFO} -I $(srcdir) --html --no-split $<
-
-%.dvi : %.texinfo
-	${TEXI2DVI} $<
-
-%.pdf : %.texinfo
-	${TEXI2PDF} $<
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

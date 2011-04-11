@@ -113,7 +113,6 @@ YieldCurrentLock(thislock);
 int PackageSanityCheck(struct Attributes a,struct Promise *pp)
 
 {
-
 #ifndef MINGW
 if (a.packages.package_list_version_regex == NULL)
    {
@@ -149,23 +148,24 @@ if (a.packages.package_file_repositories)
    }
 
 if (a.packages.package_name_regex||a.packages.package_version_regex||a.packages.package_arch_regex)
-  if (a.packages.package_name_regex && a.packages.package_version_regex && a.packages.package_arch_regex)
-    {
+   {
+   if (a.packages.package_name_regex && a.packages.package_version_regex && a.packages.package_arch_regex)
+      {
       if(a.packages.package_version || a.packages.package_architectures)
-	{
-	cfPS(cf_error,CF_FAIL,"",pp,a," !! You must either supply all regexs for (name,version,arch) xor a separate version number and architecture");
-        return false;            
-	}
-    }
-  else
-    {
+         {
+         cfPS(cf_error,CF_FAIL,"",pp,a," !! You must either supply all regexs for (name,version,arch) xor a separate version number and architecture");
+         return false;            
+         }
+      }
+   else
+      {
       if (a.packages.package_version && a.packages.package_architectures)
-	{
-	cfPS(cf_error,CF_FAIL,"",pp,a," !! You must either supply all regexs for (name,version,arch) xor a separate version number and architecture");
-	return false;
-	}
-    }
- 
+         {
+         cfPS(cf_error,CF_FAIL,"",pp,a," !! You must either supply all regexs for (name,version,arch) xor a separate version number and architecture");
+         return false;
+         }
+       }
+   }
 
 if (a.packages.package_add_command == NULL || a.packages.package_delete_command == NULL)
    {
@@ -298,68 +298,67 @@ if (!NovaWin_GetInstalledPkgs(&(manager->pack_list),a,pp))
 
 if (a.packages.package_list_command != NULL)
    {
-
-     if(strcmp(a.packages.package_list_command,"/cf_internal_rpath_list") == 0)
-       {
-	 CfOut(cf_verbose, "", " Using internal list command for rPath");
-	 
-	 if(!GetInstalledPkgsRpath(&(manager->pack_list),a,pp))
-	   {
-	     CfOut(cf_error, "", "!! Could not get list of installed packages");
-	     return false;
-	   }
-       }
-     else
-       {
-	 CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
-	 CfOut(cf_verbose,"","   Reading package list from %s\n",GetArg0(a.packages.package_list_command));
-	 CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
-
-	 if (!IsExecutable(GetArg0(a.packages.package_list_command)))
-	   {
-	     CfOut(cf_error,"","The proposed package list command \"%s\" was not executable",a.packages.package_list_command);
-	     return false;
-	   }
-   
-	 if ((prp = cf_popen(a.packages.package_list_command,"r")) == NULL)
-	   {
-	     CfOut(cf_error,"cf_popen","Couldn't open the package list with command %s\n",a.packages.package_list_command);
-	     return false;
-	   }
-   
-	 while (!feof(prp))
-	   {
-	     memset(vbuff,0,CF_BUFSIZE);
-	     CfReadLine(vbuff,CF_BUFSIZE,prp);
-	     CF_NODES++;
-
-	     if (a.packages.package_multiline_start)
-	       {
-		 if (FullTextMatch(a.packages.package_multiline_start,vbuff))
-		   {
-		     PrependMultiLinePackageItem(&(manager->pack_list),vbuff,reset,a,pp);
-		   }
-		 else
-		   {
-		     PrependMultiLinePackageItem(&(manager->pack_list),vbuff,update,a,pp);
-		   }
-	       }
-	     else
-	       {
-		 if (!FullTextMatch(a.packages.package_installed_regex,vbuff))
-		   {
-		     continue;
-		   }
+   if(strcmp(a.packages.package_list_command,"/cf_internal_rpath_list") == 0)
+      {
+      CfOut(cf_verbose, "", " Using internal list command for rPath");
+      
+      if(!GetInstalledPkgsRpath(&(manager->pack_list),a,pp))
+         {
+         CfOut(cf_error, "", "!! Could not get list of installed packages");
+         return false;
+         }
+      }
+   else
+      {
+      CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
+      CfOut(cf_verbose,"","   Reading package list from %s\n",GetArg0(a.packages.package_list_command));
+      CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
+      
+      if (!IsExecutable(GetArg0(a.packages.package_list_command)))
+         {
+         CfOut(cf_error,"","The proposed package list command \"%s\" was not executable",a.packages.package_list_command);
+         return false;
+         }
+      
+      if ((prp = cf_popen(a.packages.package_list_command,"r")) == NULL)
+         {
+         CfOut(cf_error,"cf_popen","Couldn't open the package list with command %s\n",a.packages.package_list_command);
+         return false;
+         }
+      
+      while (!feof(prp))
+         {
+         memset(vbuff,0,CF_BUFSIZE);
+         CfReadLine(vbuff,CF_BUFSIZE,prp);
+         CF_NODES++;
          
-		 if (!PrependListPackageItem(&(manager->pack_list),vbuff,a,pp))
-		   {
-		     continue;
-		   }
-	       }
-	   }
-   
-	 cf_pclose(prp);
-       }
+         if (a.packages.package_multiline_start)
+            {
+            if (FullTextMatch(a.packages.package_multiline_start,vbuff))
+               {
+               PrependMultiLinePackageItem(&(manager->pack_list),vbuff,reset,a,pp);
+               }
+            else
+               {
+               PrependMultiLinePackageItem(&(manager->pack_list),vbuff,update,a,pp);
+               }
+            }
+         else
+            {
+            if (!FullTextMatch(a.packages.package_installed_regex,vbuff))
+               {
+               continue;
+               }
+            
+            if (!PrependListPackageItem(&(manager->pack_list),vbuff,a,pp))
+               {
+               continue;
+               }
+            }
+         }
+      
+      cf_pclose(prp);
+      }
    }
 
 #endif  /* NOT MINGW */
@@ -391,7 +390,8 @@ if (a.packages.package_patch_list_command != NULL)
       memset(vbuff,0,CF_BUFSIZE);
       CfReadLine(vbuff,CF_BUFSIZE,prp);   
 
-      if (!FullTextMatch(a.packages.package_patch_installed_regex,vbuff))
+      // assume patch_list_command lists available patches/updates by default
+      if (a.packages.package_patch_installed_regex == NULL || !FullTextMatch(a.packages.package_patch_installed_regex,vbuff))
          {
          PrependPatchItem(&(manager->patch_avail),vbuff,manager->patch_list,a,pp);
          continue;
@@ -438,6 +438,8 @@ if (a.packages.package_version)
       strncpy(arch,"*",CF_MAXVARSIZE-1);
       installed = PackageMatch(name,"*",arch,a,pp);
       matches = PackageMatch(name,version,arch,a,pp);
+
+      SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
       }
    else
       {
@@ -454,8 +456,6 @@ if (a.packages.package_version)
 	SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
 	}
       }
-
-   SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
 
    }
 else if (a.packages.package_version_regex)
@@ -749,7 +749,7 @@ for (pm = schedule; pm != NULL; pm = pm->next)
 
                 if (a.packages.package_file_repositories && ( action == cfa_addpack || action == cfa_update ) )
                    {
-		     if ((sp = PrefixLocalRepository(a.packages.package_file_repositories,pi->name)) != NULL)
+                   if ((sp = PrefixLocalRepository(a.packages.package_file_repositories,pi->name)) != NULL)
                       {
                       strcat(offset,sp);
                       }
@@ -759,10 +759,10 @@ for (pm = schedule; pm != NULL; pm = pm->next)
                       }
                    }
 		else
-		  {
-		    strcat(offset,pi->name);
-		  }
-
+                   {
+                   strcat(offset,pi->name);
+                   }
+                
                 if (ExecPackageCommand(command_string,verify,true,a,pp))
                    {
                    CfOut(cf_verbose,"","Package schedule execution ok for %s (outcome cannot be promised by cf-agent)",pi->name);
@@ -811,14 +811,14 @@ for (pm = schedule; pm != NULL; pm = pm->next)
 	       {
 		 if (ok)
 		   {
-		     CfOut(cf_verbose,"","Bulk package schedule execution ok for %s (outcome cannot be promised by cf-agent)",pi->name);
+                   CfOut(cf_verbose,"","Bulk package schedule execution ok for %s (outcome cannot be promised by cf-agent)",pi->name);
 		   }
 		 else
-		   {
-		     CfOut(cf_error,"","Bulk package schedule execution failed somewhere - unknown outcome for %s",pi->name);
-		   }
+                    {
+                    CfOut(cf_error,"","Bulk package schedule execution failed somewhere - unknown outcome for %s",pi->name);
+                    }
 	       }
-	       
+             
              break;
              
          default:
@@ -1701,73 +1701,81 @@ int FindLargestVersionAvail(char *matchName, char *matchVers, char *refAnyVer, c
 	    continue;
 	    }
 #endif  /* LINUX */
-
+          
 	  if (FullTextMatch(refAnyVer, dirp->d_name))
-	    {
-	      matchVer = ExtractFirstReference(refAnyVer, dirp->d_name);
-
-	      // check if match is largest so far
-	      if(VersionCmp(largestVer, matchVer))
+             {
+             matchVer = ExtractFirstReference(refAnyVer, dirp->d_name);
+             
+             // check if match is largest so far
+             if(VersionCmp(largestVer, matchVer))
 		{
-		  snprintf(largestVer, sizeof(largestVer), "%s", matchVer);
-		  snprintf(largestVerName, sizeof(largestVerName), "%s", dirp->d_name);
-		  match = true;
+                snprintf(largestVer, sizeof(largestVer), "%s", matchVer);
+                snprintf(largestVerName, sizeof(largestVerName), "%s", dirp->d_name);
+                match = true;
 		}
-	    }
+             }
 	  
-	}      
-      closedir(dirh);
+	}
+      
+    closedir(dirh);
     }
-
+  
   Debug("largest ver is \"%s\", name is \"%s\"\n", largestVer, largestVerName);
   Debug("match=%d\n", match);
   
   if(match)
     {
-      snprintf(matchName, CF_MAXVARSIZE, "%s", largestVerName);
-      snprintf(matchVers, CF_MAXVARSIZE, "%s", largestVer);
+    snprintf(matchName, CF_MAXVARSIZE, "%s", largestVerName);
+    snprintf(matchVers, CF_MAXVARSIZE, "%s", largestVer);
     }
   
-  return match;
+return match;
 }
 
 /*****************************************************************************/
 
-int VersionCmp(char *vs1, char *vs2)
+int VersionCmp(char *vs1,char *vs2)
+
 /* Returns true if vs2 is a larger or equal version than vs1, false otherwise */
-{
-  int i;
-  
-  if(strlen(vs1) > strlen(vs2))
-    {
-      return false;
-    }
 
-  if(strlen(vs1) < strlen(vs2))
-    {
+{ int i;
+  char ch1,ch2;
+  
+if (strlen(vs1) > strlen(vs2))
+   {
+   return false;
+   }
+
+if (strlen(vs1) < strlen(vs2))
+   {
+   return true;
+   }
+
+for (i = 0; i < strlen(vs1); i++)
+   {
+   ch1 = (vs1[i] == ',') ? '_' : vs1[i]; // CSV protection. Names will be canonified of commas
+   ch2 = (vs2[i] == ',') ? '_' : vs2[i]; // CSV protection. Names will be canonified of commas
+   
+   if (ch1 < ch2)
+      {
       return true;
-    }
+      }
+   else if (ch1 > ch2)
+      {
+      return false;
+      }
+   }
 
-  for(i = 0; i < strlen(vs1); i++)
-    {
-      if(vs1[i] < vs2[i])
-	{
-	  return true;
-	}
-      else if(vs1[i] > vs2[i])
-	{
-	  return false;
-	}
-    }
-  
-  return true;
+return true;
 }
 
 /*****************************************************************************/
 
 int IsNewerThanInstalled(char *n,char *v,char *a, char *instV, char *instA, struct Attributes attr)
+
 /* Returns true if a package (n, a) is installed and v is larger than
  * the installed version. instV and instA are the version and arch installed. */
+
 { struct CfPackageManager *mp = NULL;
   struct CfPackageItem  *pi;
   
@@ -1783,22 +1791,22 @@ CfOut(cf_verbose,"","Looking for an installed package older than (%s,%s,%s)",n,v
 
 for (pi = mp->pack_list; pi != NULL; pi=pi->next)
    {
-     if((strcmp(n, pi->name) == 0) && ((strcmp(a, pi->arch) == 0) || (strcmp("default", pi->arch) == 0)))
-       {
-	 CfOut(cf_verbose, "", "Found installed package (%s,%s,%s)", pi->name, pi->version, pi->arch);
-	 
-	 snprintf(instV, CF_MAXVARSIZE, "%s", pi->version);
-	 snprintf(instA, CF_MAXVARSIZE, "%s", pi->arch);
-
-	 if(!VersionCmp(v, pi->version))
-	   {
-	     return true;
-	   }
-	 else
-	   {
-	     return false;
-	   }
-       }
+   if ((strcmp(n, pi->name) == 0) && ((strcmp(a, pi->arch) == 0) || (strcmp("default", pi->arch) == 0)))
+      {
+      CfOut(cf_verbose, "", "Found installed package (%s,%s,%s)", pi->name, pi->version, pi->arch);
+      
+      snprintf(instV, CF_MAXVARSIZE, "%s", pi->version);
+      snprintf(instA, CF_MAXVARSIZE, "%s", pi->arch);
+      
+      if (!VersionCmp(v,pi->version))
+         {
+         return true;
+         }
+      else
+         {
+         return false;
+         }
+      }
    }
 
 CfOut(cf_verbose,""," !! Package (%s,%s) is not installed\n",n,a);
@@ -1824,95 +1832,95 @@ int ExecPackageCommand(char *command,int verify,int setCmdClasses,struct Attribu
 int ExecPackageCommandGeneric(char *command,int verify,int setCmdClasses,struct Attributes a,struct Promise *pp)
 
 { int offset = 0, retval = true;
-  char line[CF_BUFSIZE], lineSafe[CF_BUFSIZE], *cmd; 
-  FILE *pfp;
-  int packmanRetval = 0;
-  char packmanRetvalStr[64] = {0};
+ char line[CF_BUFSIZE], lineSafe[CF_BUFSIZE], *cmd; 
+ FILE *pfp;
+ int packmanRetval = 0;
+ char packmanRetvalStr[64] = {0};
 
-if (!IsExecutable(GetArg0(command)))
-   {
-   cfPS(cf_error,CF_FAIL,"",pp,a,"The proposed package schedule command \"%s\" was not executable",command);
-   return false;
-   }
+ if (!IsExecutable(GetArg0(command)))
+    {
+    cfPS(cf_error,CF_FAIL,"",pp,a,"The proposed package schedule command \"%s\" was not executable",command);
+    return false;
+    }
 
-if (DONTDO)
-   {
-   CfOut(cf_error,""," -> Need to execute %-.39s...\n",command);
-   return true;
-   }
+ if (DONTDO)
+    {
+    CfOut(cf_error,""," -> Need to execute %-.39s...\n",command);
+    return true;
+    }
 
 /* Use this form to avoid limited, intermediate argument processing - long lines */
 
-if ((pfp = cf_popen_sh(command,"r")) == NULL)
-   {
-   cfPS(cf_error,CF_FAIL,"cf_popen",pp,a,"Couldn't start command %20s...\n",command);
-   return false;
-   }
+ if ((pfp = cf_popen_sh(command,"r")) == NULL)
+    {
+    cfPS(cf_error,CF_FAIL,"cf_popen",pp,a,"Couldn't start command %20s...\n",command);
+    return false;
+    }
 
-CfOut(cf_verbose,"","Executing %-.60s...\n",command);
+ CfOut(cf_verbose,"","Executing %-.60s...\n",command);
 
 /* Look for short command summary */
-for (cmd = command; *cmd != '\0' && *cmd != ' '; cmd++)
-   {
-   }
+ for (cmd = command; *cmd != '\0' && *cmd != ' '; cmd++)
+    {
+    }
 
-while (*(cmd-1) != FILE_SEPARATOR && cmd >= command)
-   {
-   cmd--;
-   }
+ while (*(cmd-1) != FILE_SEPARATOR && cmd >= command)
+    {
+    cmd--;
+    }
 
-while (!feof(pfp))
-   {
-   if (ferror(pfp))  /* abortable */
-      {
-      fflush(pfp);
-      cfPS(cf_error,CF_INTERPT,"read",pp,a,"Couldn't start command %20s...\n",command);
-      break;
-      }
+ while (!feof(pfp))
+    {
+    if (ferror(pfp))  /* abortable */
+       {
+       fflush(pfp);
+       cfPS(cf_error,CF_INTERPT,"read",pp,a,"Couldn't start command %20s...\n",command);
+       break;
+       }
 
-   line[0] = '\0';
-   CfReadLine(line,CF_BUFSIZE-1,pfp);
+    line[0] = '\0';
+    CfReadLine(line,CF_BUFSIZE-1,pfp);
    
-   ReplaceStr(line,lineSafe,sizeof(lineSafe),"%","%%");
-   CfOut(cf_inform,"","Q:%20.20s ...:%s",cmd,lineSafe);
+    ReplaceStr(line,lineSafe,sizeof(lineSafe),"%","%%");
+    CfOut(cf_inform,"","Q:%20.20s ...:%s",cmd,lineSafe);
 
-   if (line[0] != '\0' && verify)
-      {
-      if (a.packages.package_noverify_regex)
-         {
-	 if(FullTextMatch(a.packages.package_noverify_regex,line))
-	   {
-	   cfPS(cf_inform,CF_FAIL,"",pp,a,"Package verification error in %-.40s ... :%s",cmd,lineSafe);
-	   retval = false;
-	   }
-         }
-      }
+    if (line[0] != '\0' && verify)
+       {
+       if (a.packages.package_noverify_regex)
+          {
+          if(FullTextMatch(a.packages.package_noverify_regex,line))
+             {
+             cfPS(cf_inform,CF_FAIL,"",pp,a,"Package verification error in %-.40s ... :%s",cmd,lineSafe);
+             retval = false;
+             }
+          }
+       }
    
-   }
+    }
 
  packmanRetval = cf_pclose(pfp);
 
  if(verify)  // return code check for verify policy
-   {
+    {
     if(a.packages.package_noverify_returncode != CF_NOINT)
-      {
-	if(a.packages.package_noverify_returncode == packmanRetval)
+       {
+       if(a.packages.package_noverify_returncode == packmanRetval)
 	  {
-	    cfPS(cf_inform,CF_FAIL,"",pp,a,"!! Package verification error (returned %d)",packmanRetval);
-	    retval = false;
+          cfPS(cf_inform,CF_FAIL,"",pp,a,"!! Package verification error (returned %d)",packmanRetval);
+          retval = false;
 	  }
-	else
+       else
 	  {
-	    CfOut(cf_verbose, "", " Package sucessfully verified from return code");
+          CfOut(cf_verbose, "", " Package sucessfully verified from return code");
 	  }
-      }
-   }
+       }
+    }
  else if(setCmdClasses)  // generic return code check
-   {
-   retval = VerifyCommandRetcode(packmanRetval,false,a,pp);
-   }
+    {
+    retval = VerifyCommandRetcode(packmanRetval,true,a,pp);
+    }
 
-return retval; 
+ return retval; 
 }
 
 /*****************************************************************************/
@@ -1928,7 +1936,7 @@ int ComparePackages(char *n,char *v,char *a,struct CfPackageItem *pi,enum versio
 
 Debug("Compare (%s,%s,%s) and (%s,%s,%s)\n",n,v,a,pi->name,pi->version,pi->arch);
   
-if (strcmp(n,pi->name) != 0)
+if (CompareCSVName(n,pi->name) != 0)
    {
    return false;
    }
@@ -1951,16 +1959,14 @@ if (strcmp(v,"*") == 0)
    return true;
    }
 
-ParsePackageVersion(v,numbers_1,separators_1);
-ParsePackageVersion(pi->version,numbers_2,separators_2);
+ParsePackageVersion(CanonifyChar(v,','),numbers_1,&separators_1);
+ParsePackageVersion(CanonifyChar(pi->version,','),numbers_2,&separators_2);
 
 /* If the format of the version string doesn't match, we're already doomed */
 
 CfOut(cf_verbose,""," -> Check for compatible versioning model in (%s,%s)\n",v,pi->version);
 
-for (rp_1 = separators_1,rp_2 = separators_2;
-     rp_1 != NULL & rp_2 != NULL;
-     rp_1= rp_1->next,rp_2=rp_2->next)
+for (rp_1 = separators_1,rp_2 = separators_2; rp_1 != NULL && rp_2 != NULL; rp_1= rp_1->next,rp_2=rp_2->next)
    {
    if (strcmp(rp_1->item,rp_2->item) != 0)
       {
@@ -2089,7 +2095,7 @@ return false;
 /* Level                                                                     */
 /*****************************************************************************/
 
-void ParsePackageVersion(char *version,struct Rlist *num,struct Rlist *sep)
+void ParsePackageVersion(char *version,struct Rlist *num,struct Rlist **sep)
 
 { char *sp,numeral[30],separator[2];
 
@@ -2118,7 +2124,7 @@ for (sp = version; *sp != '\0'; sp++)
       }
    
    sscanf(sp,"%1[^0-9a-zA-Z]",separator);
-   PrependRScalar(&sep,separator,CF_SCALAR);
+   PrependRScalar(sep,separator,CF_SCALAR);
    }
 }
 

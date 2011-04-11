@@ -604,7 +604,7 @@ sscanf(s,"%ld%c%s",&a,&c,remainder);
 
 if (a == CF_NOINT || !IsSpace(remainder))
    {
-   if (THIS_AGENT_TYPE != cf_agent)
+   if (THIS_AGENT_TYPE == cf_common)
       {
       snprintf(output,CF_BUFSIZE,"Error reading assumed integer value \"%s\" => \"%s\" (found remainder \"%s\")\n",s,"non-value",remainder);
       ReportError(output);
@@ -727,7 +727,7 @@ else               /* date Month */
       }
    }
 
-Debug("(%s)\n%d=%s,%d=%s,%d,%d,%d\n",s,year,VYEAR,month,VMONTH,day,hour,min);
+Debug("(%s)\n%d=%s,%ld=%s,%ld,%ld,%ld\n",s,year,VYEAR,month,VMONTH,day,hour,min);
 
 cftime = 0;
 cftime += min * 60;
@@ -819,6 +819,46 @@ for (i = 0; i < 7; i++)
    }
 
 return -1;
+}
+
+/****************************************************************************/
+
+void CtimeHourInterval(time_t t, char *out, int outSz)
+/* 00 - 06, 
+   06 - 12, 
+   12 - 18, 
+   18 - 24*/
+{
+  char buf[CF_MAXVARSIZE];
+  int hr = 0, fromHr = 0, toHr = 0;
+
+  snprintf(buf,sizeof(buf),"%s",cf_ctime(&t));
+  
+  sscanf(buf+11,"%d", &hr);
+  buf[11] = '\0';
+
+  if(hr < 6)
+    {
+      fromHr = 0;
+      toHr = 6;
+    }
+  else if(hr < 12)
+    {
+      fromHr = 6;
+      toHr = 12;
+    }
+  else if(hr < 18)
+    {
+      fromHr = 12;
+      toHr = 18;
+    }
+  else
+    {
+      fromHr = 18;
+      toHr = 24;
+    }
+
+  snprintf(out, outSz, "%s %02d-%02d", buf, fromHr, toHr);
 }
 
 /****************************************************************************/
@@ -1028,6 +1068,55 @@ for (i = 0; i < 3; i++)
 return cfsrv_nostatus;
 }
 
+/*********************************************************************/
+
+enum cfl_view Str2View(char *s)
+
+{ static char *views[] = { "SumCompWk",  // NOTE: must match cfl_view enum
+			   "SumRepairedWk",
+			   "SumNotKeptWk",
+			   "RepairedReason",                           
+			   "NotKeptReason",
+			   NULL };
+  int i;
+
+for (i = 0; views[i] != NULL; i++)
+   {
+   if (strcmp(s,views[i]) == 0)
+      {
+      return i;
+      }
+   }
+
+return cfl_view_error;
+}
+
+/*********************************************************************/
+
+char *Dtype2Str(enum cfdatatype dtype)
+{
+  switch(dtype)
+    {
+    case cf_str:
+      return "s";
+    case cf_slist:
+      return "sl";      
+    case cf_int:
+      return "i";
+    case cf_ilist:
+      return "il";
+    case cf_real:
+      return "r";
+    case cf_rlist:
+      return "rl";
+    case cf_opts:
+      return "m";
+    case cf_olist:
+      return "ml";
+    default:
+      return "D?";
+    }
+}
 
 /*********************************************************************/
 /* Level                                                             */
@@ -1273,6 +1362,8 @@ if (a == CF_NODOUBLE)
 return true;
 }
 
+
+
 /*******************************************************************/
 /* Unix-only functions                                             */
 /*******************************************************************/
@@ -1456,4 +1547,3 @@ else
 return gid;
 }
 #endif  /* NOT MINGW */
-

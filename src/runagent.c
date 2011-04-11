@@ -202,7 +202,7 @@ while ((c=getopt_long(argc,argv,"t:q:d:b:vnKhIif:D:VSxo:s:MH:",OPTIONS,&optindex
 
           if (optarg==NULL)
              {
-             strcpy(MENU,"fast");
+             strcpy(MENU,"delta");
              }
           else
              {
@@ -404,9 +404,28 @@ pp->cache = NULL;
 
 if (strlen(MENU) > 0)
    {
-#ifdef HAVE_LIBCFNOVA
-   Nova_QueryForKnowledgeMap(conn,MENU,time(0) - 7*24*3600);
+#ifdef HAVE_NOVA
+     
+   enum cfd_menu menu = String2Menu(MENU);
+
+   switch(menu)
+     {
+     case cfd_menu_delta:
+     case cfd_menu_full:
+       Nova_QueryForKnowledgeMap(conn,MENU,time(0) - 7*24*3600);
+       break;
+
+     case cfd_menu_relay:
+#ifdef HAVE_CONSTELLATION
+       Constellation_QueryRelay(conn,MENU,time(0) - 7*24*3600);
 #endif
+	 break;
+
+     default:
+       break;
+     }
+
+#endif  /* HAVE_NOVA */
    }
 else
    {
@@ -537,6 +556,8 @@ if ((pp = (struct Promise *)malloc(sizeof(struct Promise))) == NULL)
    FatalError("");
    }
 
+
+
 pp->audit = NULL;
 pp->lineno = 0;
 pp->bundle =  strdup("implicit internal bundle for runagent");
@@ -548,6 +569,7 @@ pp->conlist = NULL;
 pp->done = false;
 pp->donep = &(pp->done);
 pp->ref = NULL;
+pp->agentsubtype = NULL;
 
 pp->this_server = NULL;
 pp->cache = NULL;
