@@ -86,6 +86,10 @@ install: build
                 $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/examples
 	# clean the not-needed static libraries
 	/bin/rm -rf $(CURDIR)/debian/cfengine3/usr/lib
+    # install html files
+	/bin/mkdir $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/html
+	/bin/cp $(CURDIR)/docs/*.html $(CURDIR)/docs/*.png \
+				$(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/html
 
 # Build architecture-independent files here.
 binary-indep: install
