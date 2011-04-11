@@ -192,7 +192,14 @@ selection:            id                         /* BODY ONLY */
                                  {
                                  if (VINPUTLIST == NULL)
                                     {
-                                    VINPUTLIST = P.rval;
+                                    if (P.rtype == CF_LIST)
+                                       {
+                                       VINPUTLIST = P.rval;
+                                       }
+                                    else
+                                       {
+                                       yyerror("inputs promise must have a list as rvalue");
+                                       }                                    
                                     }
                                  else
                                     {
@@ -316,10 +323,9 @@ constraint:           id                        /* BUNDLE ONLY */
                           char *contextid = NULL;
 
                         if (!INSTALL_SKIP)
-                           {
-                           ss = CheckSubType(P.blocktype,P.currenttype);                           
-                           CheckConstraint(P.currenttype,P.blockid,P.lval,P.rval,P.rtype,ss);                           
+                           {                           
                            AppendConstraint(&(P.currentpromise->conlist),P.lval,P.rval,P.rtype,"any",P.isbody);
+                           
                            P.rval = NULL;
                            strcpy(P.lval,"no lval");
                            P.currentRlist = NULL;
@@ -362,6 +368,14 @@ rval:                  ID
                          P.rtype = CF_SCALAR;
                          P.isbody = false;
                          Debug("Recorded scalarRVAL %s\n",P.rval);
+
+                         if (P.currentpromise)
+                            {
+                            if (LvalWantsBody(P.currentpromise->agentsubtype,P.lval))
+                               {
+                               yyerror("An rvalue is quoted, but we expect an unquoted body identifier");
+                               }
+                            }
                          }
                      | NAKEDVAR
                          {
@@ -529,14 +543,14 @@ char *s;
 
 if (sp == NULL)
    {
-   fprintf (stderr, "%s:%s:%d,%d: %s, near token \'NULL\'\n",VPREFIX,P.filename,P.line_no,P.line_pos,s);
+   fprintf (stderr, "%s> %s:%d,%d: %s, near token \'NULL\'\n",VPREFIX,P.filename,P.line_no,P.line_pos,s);
    }
 else if (*sp == '\"' && strlen(sp) > 1)
    {
    sp++;
    }
 
-fprintf (stderr, "%s:%s:%d,%d: %s, near token \'%.20s\'\n",VPREFIX,P.filename,P.line_no,P.line_pos,s,sp);
+fprintf (stderr, "%s> %s:%d,%d: %s, near token \'%.20s\'\n",VPREFIX,P.filename,P.line_no,P.line_pos,s,sp);
 
 ERRORCOUNT++;
 

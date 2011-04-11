@@ -69,9 +69,19 @@ int ScheduleEditLineOperations(char *filename,struct Bundle *bp,struct Attribute
 { enum editlinetypesequence type;
   struct SubType *sp;
   struct Promise *pp;
-  int pass;
+  char lockname[CF_BUFSIZE];
   char *bp_stack = THIS_BUNDLE;
-      
+  struct CfLock thislock;
+  int pass;
+
+snprintf(lockname,CF_BUFSIZE-1,"masterfilelock-%s",parentp->this_server);
+thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,parentp,true);
+
+if (thislock.lock == NULL)
+   {
+   return false;
+   }
+  
 NewScope("edit");
 NewScalar("edit","filename",filename,cf_str);
 
@@ -117,6 +127,7 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
             {
             THIS_BUNDLE = bp_stack;
             DeleteScope("edit");
+            YieldCurrentLock(thislock);
             return false;
             }         
          }
@@ -126,6 +137,7 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
 DeleteScope("edit");
 SetScope(parentp->bundle);
 THIS_BUNDLE = bp_stack;
+YieldCurrentLock(thislock);
 return true;
 }
 
@@ -250,7 +262,14 @@ if (!a.haveregion)
    }
 else if (!SelectRegion(*start,&begin_ptr,&end_ptr,a,pp))
    {
-   cfPS(cf_error,CF_INTERPT,"",pp,a," !! The promised line deletion (%s) could not select an edit region in %s",pp->promiser,pp->this_server);
+   if (a.region.include_end || a.region.include_start)
+      {
+      cfPS(cf_verbose,CF_INTERPT,"",pp,a," !! The promised line deletion (%s) could not select an edit region in %s (this is a good thing, as policy suggests deleting the markers)",pp->promiser,pp->this_server);
+      }
+   else
+      {
+      cfPS(cf_inform,CF_INTERPT,"",pp,a," !! The promised line deletion (%s) could not select an edit region in %s (but the delimiters were expected in the file)",pp->promiser,pp->this_server);
+      }
    return;
    }
 
@@ -387,6 +406,8 @@ if (ReplacePatterns(begin_ptr,end_ptr,a,pp))
    {
    (pp->edcontext->num_edits)++;
    }
+
+DeleteScope("match"); // because this might pollute the parent promise in next iteration
 
 YieldCurrentLock(thislock);
 }
@@ -606,7 +627,7 @@ if (a.sourcetype && strcmp(a.sourcetype,"file") == 0)
       {
       buf[0] = '\0';
       fgets(buf,CF_BUFSIZE,fin);
-      Chop(buf);
+      StripTrailingNewline(buf);
 
       if (feof(fin) && strlen(buf) == 0)
          {
@@ -633,7 +654,8 @@ if (a.sourcetype && strcmp(a.sourcetype,"file") == 0)
          continue;
          }
 
-      retval |= InsertMissingLineAtLocation(exp,start,loc,prev,a,pp);
+      retval |= InsertCompoundLineAtLocation(exp,start,loc,prev,a,pp);
+      //retval |= InsertMissingLineAtLocation(exp,start,loc,prev,a,pp);
 
       if (prev && prev != CF_UNDEFINED_ITEM)
          {
@@ -678,7 +700,7 @@ else
 
          if (!multiline)
             {
-            retval |= InsertMissingLineAtLocation(buf,start,loc,prev,a,pp);
+            retval |= InsertCompoundLineAtLocation(buf,start,loc,prev,a,pp);
          
             if (prev && prev != CF_UNDEFINED_ITEM)
                {
@@ -695,17 +717,34 @@ else
             need_insert = true;            
             }
          }
-
+      
       if (need_insert)
-         {
-         return InsertMissingLineAtLocation(pp->promiser,start,location,prev,a,pp);
+         {         
+         for (sp = pp->promiser; sp <= pp->promiser+strlen(pp->promiser); sp++)
+            {
+            memset(buf,0,CF_BUFSIZE);
+            sscanf(sp,"%[^\n]",buf);
+            sp += strlen(buf);
+            
+            retval |= InsertCompoundLineAtLocation(buf,start,loc,prev,a,pp);
+            
+            if (prev && prev != CF_UNDEFINED_ITEM)
+               {
+               prev = prev->next;
+               }
+            
+            if (loc)
+               {
+               loc = loc->next;
+               }
+            }
          }
-
+      
       return retval;
       }
    else
       {
-      return InsertMissingLineAtLocation(pp->promiser,start,location,prev,a,pp);
+      return InsertCompoundLineAtLocation(pp->promiser,start,location,prev,a,pp);
       }
    }
 }
@@ -714,21 +753,31 @@ else
     
 int DeletePromisedLinesMatching(struct Item **start,struct Item *begin,struct Item *end,struct Attributes a,struct Promise *pp)
 
-{ struct Item *ip,*np,*lp;
- int in_region = false, retval = false, match, noedits = true;
-
+{ struct Item *ip,*np = NULL,*lp;
+  int in_region = false, retval = false, match, noedits = true;
+  int i,lines = 0;
+  char *sp,buf[CF_BUFSIZE];
+  
 if (start == NULL)
    {
    return false;
    }
-  
+
 for (ip = *start; ip != NULL; ip = np)
    {
+   lines = 0;
+   
    if (ip == begin)
       {
       in_region = true;
       }
 
+   if (a.region.include_end == false && ip == end)
+      {
+      in_region = false;
+      break;
+      }
+   
    if (!in_region)
       {
       np = ip->next;
@@ -737,21 +786,31 @@ for (ip = *start; ip != NULL; ip = np)
 
    if (a.not_matching)
       {
-      match = !FullTextMatch(pp->promiser,ip->name);
+      match = !MatchRegion(pp->promiser,ip,begin,end);
       }
    else
       {
-      match = FullTextMatch(pp->promiser,ip->name);
+      match = MatchRegion(pp->promiser,ip,begin,end);
       }
-
+   
    if (!SelectLine(ip->name,a,pp)) // Start search from location
       {
       np = ip->next;
       continue;
       }
-         
+
    if (in_region && match)
       {
+      for (sp = pp->promiser; sp <= pp->promiser+strlen(pp->promiser); sp++)
+         {
+         memset(buf,0,CF_BUFSIZE);
+         sscanf(sp,"%[^\n]",buf);
+         sp += strlen(buf);
+         lines++;
+         }
+      
+      CfOut(cf_verbose,""," -> Delete chunk of %d lines\n",lines,ip->name);
+      
       if (a.transaction.action == cfa_warn)
          {
          cfPS(cf_error,CF_WARN,"",pp,a," -> Need to delete line \"%s\" from %s - but only a warning was promised",ip->name,pp->this_server);
@@ -760,40 +819,50 @@ for (ip = *start; ip != NULL; ip = np)
          }
       else
          {
-         cfPS(cf_verbose,CF_CHG,"",pp,a," -> Deleting the promised line \"%s\" from %s",ip->name,pp->this_server);
-         retval = true;
-         noedits = false;
-         
-         if (ip->name != NULL)
-            {
-            free(ip->name);
-            }
-         
-         np = ip->next;
-         free((char *)ip);
-         
-         lp = ip;
-         
-         if (ip == *start)
-            {
-            *start = np;
-            }
-         else
-            {
-            for (lp = *start; lp->next != ip; lp=lp->next)
-               {
-               }
+         for (i = 0; i < lines; i++)
+            {                     
+            cfPS(cf_verbose,CF_CHG,"",pp,a," -> Deleting the promised line \"%s\" from %s",ip->name,pp->this_server);
+            retval = true;
+            noedits = false;
             
-            lp->next = np;
+            if (ip->name != NULL)
+               {
+               free(ip->name);
+               }
+
+            np = ip->next;
+            free((char *)ip);
+            
+            lp = ip;
+            
+            if (ip == *start)
+               {
+               *start = np;
+               }
+            else
+               {
+               for (lp = *start; lp->next != ip; lp=lp->next)
+                  {
+                  }
+               
+               lp->next = np;
+               }
+
+            if (ip == end)
+               {
+               in_region = false;
+               break;
+               }
+
+            (pp->edcontext->num_edits)++;
+
+            ip = np;
             }
 
-         if (ip == end)
+         if (!in_region)
             {
-            in_region = false;
             break;
-            }
-         
-         (pp->edcontext->num_edits)++;
+            }         
          }
       }
    else
@@ -823,7 +892,6 @@ int ReplacePatterns(struct Item *file_start,struct Item *file_end,struct Attribu
 { char *sp, *start = NULL,*end,replace[CF_EXPANDSIZE],line_buff[CF_EXPANDSIZE];
   char before[CF_BUFSIZE],after[CF_BUFSIZE];
   int match_len,start_off,end_off,once_only = false,retval = false;
-  struct CfRegEx rex;
   struct Item *ip;
   int notfound = true, cutoff = 1, replaced=false;
 
@@ -843,9 +911,16 @@ for (ip = file_start; ip != file_end; ip=ip->next)
    cutoff = 1;
    strncpy(line_buff,ip->name,CF_BUFSIZE);
    replaced = false;
+   match_len = 0;
 
    while (BlockTextMatch(pp->promiser,line_buff,&start_off,&end_off))
       {
+      if (match_len == strlen(line_buff))
+         {
+         CfOut(cf_verbose,""," -> Improper convergent expression matches defacto convergence, so accepting");
+         break;
+         }      
+
       if (cutoff++ > CF_MAX_REPLACE)
          {
          CfOut(cf_verbose,""," !! Too many replacements on this line");
@@ -931,16 +1006,13 @@ int EditColumns(struct Item *file_start,struct Item *file_end,struct Attributes 
 
 { char separator[CF_MAXVARSIZE]; 
   int s,e,retval = false;
-  struct CfRegEx rex;
   struct Item *ip;
   struct Rlist *columns = NULL;
- 
-rex = CompileRegExp(pp->promiser);
 
-if (rex.failed)
-   {
+if (!ValidateRegEx(pp->promiser))
+{
    return false;
-   }
+}
 
 for (ip = file_start; ip != file_end; ip=ip->next)
    {
@@ -1073,6 +1145,40 @@ return ok;
 
 /***************************************************************************/
 /* Level                                                                   */
+/***************************************************************************/
+
+int InsertCompoundLineAtLocation(char *newline,struct Item **start,struct Item *location,struct Item *prev,struct Attributes a,struct Promise *pp)
+
+{ char *sp;
+  int result = false;
+  char buf[CF_EXPANDSIZE];
+
+if (strchr(newline,'\n') != NULL) /* Multi-line string */
+   {
+   char *sp;
+   
+   for (sp = newline; sp <= newline+strlen(newline); sp++)
+      {
+      memset(buf,0,CF_BUFSIZE);
+      sscanf(sp,"%2048[^\n]",buf);
+      sp += strlen(buf);
+
+      if (!SelectLine(buf,a,pp))
+         {
+         continue;
+         }
+      
+      result |= InsertMissingLineAtLocation(buf,start,location,prev,a,pp);
+      }
+   }
+else
+   {
+   result |= InsertMissingLineAtLocation(newline,start,location,prev,a,pp);
+   }
+
+return result;
+}
+
 /***************************************************************************/
 
 int InsertMissingLineAtLocation(char *newline,struct Item **start,struct Item *location,struct Item *prev,struct Attributes a,struct Promise *pp)

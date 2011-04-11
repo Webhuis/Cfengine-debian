@@ -744,6 +744,8 @@ ac_config_libobj_dir=pub
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
+CROSS_COMPILING_FALSE
+CROSS_COMPILING_TRUE
 HOSTNAME
 GCC_CFLAG
 NOWRAP
@@ -756,6 +758,18 @@ OPENSSL_LIB_LDFLAGS
 BERKELEY_DB_LIB
 BERKELEY_DB_CFLAGS
 BERKELEY_DB_LDFLAGS
+HAVE_GALAXY_FALSE
+HAVE_GALAXY_TRUE
+HAVE_CONSTELLATION_FALSE
+HAVE_CONSTELLATION_TRUE
+CONSTELLATION_LDADD
+CONSTELLATION_CFLAGS
+CONSTELLATION_SUBDIR
+HAVE_NOVA_FALSE
+HAVE_NOVA_TRUE
+NOVA_LDADD
+NOVA_CFLAGS
+NOVA_SUBDIR
 GETCONF
 GETLOADAVG_LIBS
 KMEM_GROUP
@@ -806,6 +820,11 @@ CPPFLAGS
 LDFLAGS
 CFLAGS
 CC
+AM_BACKSLASH
+AM_DEFAULT_VERBOSITY
+MAINT
+MAINTAINER_MODE_FALSE
+MAINTAINER_MODE_TRUE
 am__untar
 am__tar
 AMTAR
@@ -882,6 +901,8 @@ SHELL'
 ac_subst_files=''
 ac_user_opts='
 enable_option_checking
+enable_maintainer_mode
+enable_silent_rules
 enable_dependency_tracking
 enable_static
 enable_shared
@@ -892,9 +913,9 @@ enable_libtool_lock
 with_diagnostics
 with_ldap
 with_sql
+enable_largefile
 with_nova
 with_constellation
-with_galaxy
 with_tokyocabinet
 with_qdbm
 with_berkeleydb
@@ -902,8 +923,6 @@ with_openssl
 with_mongo
 with_libvirt
 with_pcre
-with_graphviz
-with_gd
 enable_DCE
 enable_selinux
 with_workdir
@@ -1537,6 +1556,10 @@ Optional Features:
   --disable-option-checking  ignore unrecognized --enable/--with options
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+  --disable-maintainer-mode  disable make rules and dependencies not useful
+			  (and sometimes confusing) to the casual installer
+  --enable-silent-rules          less verbose build output (undo: `make V=1')
+  --disable-silent-rules         verbose build output (undo: `make V=0')
   --disable-dependency-tracking  speeds up one-time build
   --enable-dependency-tracking   do not reject slow dependency extractors
   --enable-static[=PKGS]  build static libraries [default=no]
@@ -1544,6 +1567,7 @@ Optional Features:
   --enable-fast-install[=PKGS]
                           optimize for fast installation [default=yes]
   --disable-libtool-lock  avoid locking (might break parallel builds)
+  --disable-largefile     omit support for large files
   --enable-DCE            support for DCE and ACLs
       --enable-selinux        Enable use of the SELINUX libraries
 
@@ -1558,8 +1582,8 @@ Optional Packages:
   --with-sql              support database functions
   --without-nova          disable Nova enterprise extensions (enabled by
                           default)
-  --with-constellation    use Constellation commercial extensions
-  --with-galaxy           use Galaxy commercial extensions
+  --without-constellation disable Constellation enterprise extensions (enabled
+                          by default)
   --with-tokyocabinet     support database functions
   --with-qdbm             support database functions qdbm
   --with-berkeleydb=PATH directory where BerkeleyDB exists
@@ -1568,8 +1592,6 @@ Optional Packages:
   --with-libvirt          support virtual machine management
   --with-pcre[=PATH]      support for Perl compatible regex (optionally search
                           in PATH)
-  --with-graphviz         support some graphic functions
-  --with-gd               support some graphic functions
   --with-workdir=WORKDIR  default internal for trusted cache
 
 Some influential environment variables:
@@ -3050,7 +3072,7 @@ fi
 
 # Define the identity of the package.
  PACKAGE=cfengine
- VERSION=3.1.4
+ VERSION=3.1.5b1
 
 
 cat >>confdefs.h <<_ACEOF
@@ -3090,7 +3112,53 @@ am__tar='${AMTAR} chof - "$$tardir"'; am__untar='${AMTAR} xf -'
 
 
 
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to disable maintainer-specific portions of Makefiles" >&5
+$as_echo_n "checking whether to disable maintainer-specific portions of Makefiles... " >&6; }
+    # Check whether --enable-maintainer-mode was given.
+if test "${enable_maintainer_mode+set}" = set; then :
+  enableval=$enable_maintainer_mode; USE_MAINTAINER_MODE=$enableval
+else
+  USE_MAINTAINER_MODE=yes
+fi
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $USE_MAINTAINER_MODE" >&5
+$as_echo "$USE_MAINTAINER_MODE" >&6; }
+   if test $USE_MAINTAINER_MODE = yes; then
+  MAINTAINER_MODE_TRUE=
+  MAINTAINER_MODE_FALSE='#'
+else
+  MAINTAINER_MODE_TRUE='#'
+  MAINTAINER_MODE_FALSE=
+fi
+
+  MAINT=$MAINTAINER_MODE_TRUE
+
+
+
+
+$as_echo "#define NOVA_VERSION \"2.0.3a1\"" >>confdefs.h
+
+
+$as_echo "#define CONSTELLATION_VERSION \"1.0.0a1\"" >>confdefs.h
+
+
+# Check whether --enable-silent-rules was given.
+if test "${enable_silent_rules+set}" = set; then :
+  enableval=$enable_silent_rules;
+fi
+
+case $enable_silent_rules in
+yes) AM_DEFAULT_VERBOSITY=0;;
+no)  AM_DEFAULT_VERBOSITY=1;;
+*)   AM_DEFAULT_VERBOSITY=0;;
+esac
+AM_BACKSLASH='\'
+
+
 ac_config_headers="$ac_config_headers src/conf.h"
+
+
+
 
 
 #
@@ -5108,6 +5176,39 @@ else
 fi
 
 
+
+
+# Check whether --enable-static was given.
+if test "${enable_static+set}" = set; then :
+  enableval=$enable_static; p=${PACKAGE-default}
+    case $enableval in
+    yes) enable_static=yes ;;
+    no) enable_static=no ;;
+    *)
+     enable_static=no
+      # Look at the argument we got.  We use all the common list separators.
+      lt_save_ifs="$IFS"; IFS="${IFS}$PATH_SEPARATOR,"
+      for pkg in $enableval; do
+	IFS="$lt_save_ifs"
+	if test "X$pkg" = "X$p"; then
+	  enable_static=yes
+	fi
+      done
+      IFS="$lt_save_ifs"
+      ;;
+    esac
+else
+  enable_static=no
+fi
+
+
+
+
+
+
+
+
+
 case `pwd` in
   *\ * | *\	*)
     { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Libtool does not cope well with whitespace in \`pwd\`" >&5
@@ -5717,13 +5818,13 @@ if test "${lt_cv_nm_interface+set}" = set; then :
 else
   lt_cv_nm_interface="BSD nm"
   echo "int some_variable = 0;" > conftest.$ac_ext
-  (eval echo "\"\$as_me:5720: $ac_compile\"" >&5)
+  (eval echo "\"\$as_me:5821: $ac_compile\"" >&5)
   (eval "$ac_compile" 2>conftest.err)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:5723: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
+  (eval echo "\"\$as_me:5824: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
   (eval "$NM \"conftest.$ac_objext\"" 2>conftest.err > conftest.out)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:5726: output\"" >&5)
+  (eval echo "\"\$as_me:5827: output\"" >&5)
   cat conftest.out >&5
   if $GREP 'External.*some_variable' conftest.out > /dev/null; then
     lt_cv_nm_interface="MS dumpbin"
@@ -6189,11 +6290,11 @@ irix5* | irix6* | nonstopux*)
   ;;
 
 # This must be Linux ELF.
-linux* | k*bsd*-gnu | kopensolaris*-gnu)
+linux* | k*bsd*-gnu)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
-netbsd* | netbsdelf*-gnu)
+netbsd*)
   if echo __ELF__ | $CC -E - | $GREP __ELF__ > /dev/null; then
     lt_cv_deplibs_check_method='match_pattern /lib[^/]+(\.so\.[0-9]+\.[0-9]+|_pic\.a)$'
   else
@@ -6928,7 +7029,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 6931 "configure"' > conftest.$ac_ext
+  echo '#line 7032 "configure"' > conftest.$ac_ext
   if { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_compile\""; } >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -7959,35 +8060,6 @@ done
 
 
 # Set options
-# Check whether --enable-static was given.
-if test "${enable_static+set}" = set; then :
-  enableval=$enable_static; p=${PACKAGE-default}
-    case $enableval in
-    yes) enable_static=yes ;;
-    no) enable_static=no ;;
-    *)
-     enable_static=no
-      # Look at the argument we got.  We use all the common list separators.
-      lt_save_ifs="$IFS"; IFS="${IFS}$PATH_SEPARATOR,"
-      for pkg in $enableval; do
-	IFS="$lt_save_ifs"
-	if test "X$pkg" = "X$p"; then
-	  enable_static=yes
-	fi
-      done
-      IFS="$lt_save_ifs"
-      ;;
-    esac
-else
-  enable_static=no
-fi
-
-
-
-
-
-
-
 
 
 
@@ -8428,6 +8500,10 @@ _lt_linker_boilerplate=`cat conftest.err`
 $RM -r conftest*
 
 
+## CAVEAT EMPTOR:
+## There is no encapsulation within the following macros, do not change
+## the running order or otherwise move them around unless you know exactly
+## what you are doing...
 if test -n "$compiler"; then
 
 lt_prog_compiler_no_builtin_flag=
@@ -8453,11 +8529,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:8456: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:8532: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:8460: \$? = $ac_status" >&5
+   echo "$as_me:8536: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -8622,7 +8698,7 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
       lt_prog_compiler_static='-non_shared'
       ;;
 
-    linux* | k*bsd*-gnu | kopensolaris*-gnu)
+    linux* | k*bsd*-gnu)
       case $cc_basename in
       # old Intel for x86_64 which still supported -KPIC.
       ecc*)
@@ -8792,11 +8868,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:8795: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:8871: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:8799: \$? = $ac_status" >&5
+   echo "$as_me:8875: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -8897,11 +8973,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:8900: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:8976: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:8904: \$? = $ac_status" >&5
+   echo "$as_me:8980: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -8952,11 +9028,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:8955: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:9031: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:8959: \$? = $ac_status" >&5
+   echo "$as_me:9035: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -9071,9 +9147,6 @@ $as_echo_n "checking whether the $compiler linker ($LD) supports shared librarie
   openbsd*)
     with_gnu_ld=no
     ;;
-  linux* | k*bsd*-gnu)
-    link_all_deplibs=no
-    ;;
   esac
 
   ld_shlibs=yes
@@ -9095,7 +9168,6 @@ $as_echo_n "checking whether the $compiler linker ($LD) supports shared librarie
     fi
     supports_anon_versioning=no
     case `$LD -v 2>&1` in
-      *GNU\ gold*) supports_anon_versioning=yes ;;
       *\ [01].* | *\ 2.[0-9].* | *\ 2.10.*) ;; # catch versions < 2.11
       *\ 2.11.93.0.2\ *) supports_anon_versioning=yes ;; # RH7.3 ...
       *\ 2.11.92.0.12\ *) supports_anon_versioning=yes ;; # Mandrake 8.2 ...
@@ -9187,7 +9259,7 @@ _LT_EOF
       archive_expsym_cmds='sed "s,^,_," $export_symbols >$output_objdir/$soname.expsym~$CC -shared $pic_flag $libobjs $deplibs $compiler_flags ${wl}-h,$soname ${wl}--retain-symbols-file,$output_objdir/$soname.expsym ${wl}--image-base,`expr ${RANDOM-$$} % 4096 / 2 \* 262144 + 1342177280` -o $lib'
       ;;
 
-    gnu* | linux* | tpf* | k*bsd*-gnu | kopensolaris*-gnu)
+    gnu* | linux* | tpf* | k*bsd*-gnu)
       tmp_diet=no
       if test "$host_os" = linux-dietlibc; then
 	case $cc_basename in
@@ -9257,7 +9329,7 @@ _LT_EOF
       fi
       ;;
 
-    netbsd* | netbsdelf*-gnu)
+    netbsd*)
       if echo __ELF__ | $CC -E - | $GREP __ELF__ >/dev/null; then
 	archive_cmds='$LD -Bshareable $libobjs $deplibs $linker_flags -o $lib'
 	wlarc=
@@ -9432,7 +9504,6 @@ _LT_EOF
 	if test "$aix_use_runtimelinking" = yes; then
 	  shared_flag="$shared_flag "'${wl}-G'
 	fi
-	link_all_deplibs=no
       else
 	# not using gcc
 	if test "$host_cpu" = ia64; then
@@ -9759,7 +9830,7 @@ rm -f core conftest.err conftest.$ac_objext \
       link_all_deplibs=yes
       ;;
 
-    netbsd* | netbsdelf*-gnu)
+    netbsd*)
       if echo __ELF__ | $CC -E - | $GREP __ELF__ >/dev/null; then
 	archive_cmds='$LD -Bshareable -o $lib $libobjs $deplibs $linker_flags'  # a.out
       else
@@ -10649,7 +10720,7 @@ linux*oldld* | linux*aout* | linux*coff*)
   ;;
 
 # This must be Linux ELF.
-linux* | k*bsd*-gnu | kopensolaris*-gnu)
+linux* | k*bsd*-gnu)
   version_type=linux
   need_lib_prefix=no
   need_version=no
@@ -10702,18 +10773,6 @@ rm -f core conftest.err conftest.$ac_objext \
   # people can always --disable-shared, the test was removed, and we
   # assume the GNU/Linux dynamic linker is in use.
   dynamic_linker='GNU/Linux ld.so'
-  ;;
-
-netbsdelf*-gnu)
-  version_type=linux
-  need_lib_prefix=no
-  need_version=no
-  library_names_spec='${libname}${release}${shared_ext}$versuffix ${libname}${release}${shared_ext}$major ${libname}${shared_ext}'
-  soname_spec='${libname}${release}${shared_ext}$major'
-  shlibpath_var=LD_LIBRARY_PATH
-  shlibpath_overrides_runpath=no
-  hardcode_into_libs=yes
-  dynamic_linker='NetBSD ld.elf_so'
   ;;
 
 netbsd*)
@@ -11336,7 +11395,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11339 "configure"
+#line 11398 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11432,7 +11491,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11435 "configure"
+#line 11494 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11659,6 +11718,7 @@ CC="$lt_save_CC"
 # Only expand once:
 
 
+
 for ac_prog in flex lex
 do
   # Extract the first word of "$ac_prog", so it can be a program name with args.
@@ -11861,7 +11921,6 @@ fi
   test -n "$YACC" && break
 done
 test -n "$YACC" || YACC="yacc"
-
 
 
 
@@ -12650,6 +12709,216 @@ done
 
 fi
 
+# Check whether --enable-largefile was given.
+if test "${enable_largefile+set}" = set; then :
+  enableval=$enable_largefile;
+fi
+
+if test "$enable_largefile" != no; then
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for special C compiler options needed for large files" >&5
+$as_echo_n "checking for special C compiler options needed for large files... " >&6; }
+if test "${ac_cv_sys_largefile_CC+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_cv_sys_largefile_CC=no
+     if test "$GCC" != yes; then
+       ac_save_CC=$CC
+       while :; do
+	 # IRIX 6.2 and later do not support large files by default,
+	 # so use the C compiler's -n32 option if that helps.
+	 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+	 if ac_fn_c_try_compile "$LINENO"; then :
+  break
+fi
+rm -f core conftest.err conftest.$ac_objext
+	 CC="$CC -n32"
+	 if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_largefile_CC=' -n32'; break
+fi
+rm -f core conftest.err conftest.$ac_objext
+	 break
+       done
+       CC=$ac_save_CC
+       rm -f conftest.$ac_ext
+    fi
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_sys_largefile_CC" >&5
+$as_echo "$ac_cv_sys_largefile_CC" >&6; }
+  if test "$ac_cv_sys_largefile_CC" != no; then
+    CC=$CC$ac_cv_sys_largefile_CC
+  fi
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for _FILE_OFFSET_BITS value needed for large files" >&5
+$as_echo_n "checking for _FILE_OFFSET_BITS value needed for large files... " >&6; }
+if test "${ac_cv_sys_file_offset_bits+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  while :; do
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_file_offset_bits=no; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#define _FILE_OFFSET_BITS 64
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_file_offset_bits=64; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  ac_cv_sys_file_offset_bits=unknown
+  break
+done
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_sys_file_offset_bits" >&5
+$as_echo "$ac_cv_sys_file_offset_bits" >&6; }
+case $ac_cv_sys_file_offset_bits in #(
+  no | unknown) ;;
+  *)
+cat >>confdefs.h <<_ACEOF
+#define _FILE_OFFSET_BITS $ac_cv_sys_file_offset_bits
+_ACEOF
+;;
+esac
+rm -rf conftest*
+  if test $ac_cv_sys_file_offset_bits = unknown; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for _LARGE_FILES value needed for large files" >&5
+$as_echo_n "checking for _LARGE_FILES value needed for large files... " >&6; }
+if test "${ac_cv_sys_large_files+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  while :; do
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_large_files=no; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#define _LARGE_FILES 1
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_large_files=1; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  ac_cv_sys_large_files=unknown
+  break
+done
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_sys_large_files" >&5
+$as_echo "$ac_cv_sys_large_files" >&6; }
+case $ac_cv_sys_large_files in #(
+  no | unknown) ;;
+  *)
+cat >>confdefs.h <<_ACEOF
+#define _LARGE_FILES $ac_cv_sys_large_files
+_ACEOF
+;;
+esac
+rm -rf conftest*
+  fi
+fi
+
+ac_fn_c_check_type "$LINENO" "off_t" "ac_cv_type_off_t" "$ac_includes_default"
+if test "x$ac_cv_type_off_t" = x""yes; then :
+
+else
+
+cat >>confdefs.h <<_ACEOF
+#define off_t long int
+_ACEOF
+
+fi
+
+
 
 
 # Check whether --with-nova was given.
@@ -12661,184 +12930,79 @@ fi
 
 
 if test "x$with_nova" != xno; then
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lcfnova" >&5
-$as_echo_n "checking for main in -lcfnova... " >&6; }
-if test "${ac_cv_lib_cfnova_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
+   { $as_echo "$as_me:${as_lineno-$LINENO}: checking presence of Nova directory" >&5
+$as_echo_n "checking presence of Nova directory... " >&6; }
+   if test -d "${srcdir}/nova"; then
+
+$as_echo "#define HAVE_NOVA 1" >>confdefs.h
+
+     NOVA_SUBDIR=nova
+     NOVA_CFLAGS='-I$(top_srcdir)/nova/src'
+     NOVA_LDADD='$(top_srcdir)/nova/src/libcfnova.la'
+     { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+   else
+     { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+   fi
+fi
+
+
+
+
+ if test "x$with_nova" != xno && test -d ${srcdir}/nova; then
+  HAVE_NOVA_TRUE=
+  HAVE_NOVA_FALSE='#'
 else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lcfnova  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_cfnova_main=yes
-else
-  ac_cv_lib_cfnova_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_cfnova_main" >&5
-$as_echo "$ac_cv_lib_cfnova_main" >&6; }
-if test "x$ac_cv_lib_cfnova_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBCFNOVA 1
-_ACEOF
-
-  LIBS="-lcfnova $LIBS"
-
-fi
-
+  HAVE_NOVA_TRUE='#'
+  HAVE_NOVA_FALSE=
 fi
 
 
 # Check whether --with-constellation was given.
 if test "${with_constellation+set}" = set; then :
   withval=$with_constellation;
-fi
-
-if test "x$with_constellation" == "xyes"; then :
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lcfconstellation" >&5
-$as_echo_n "checking for main in -lcfconstellation... " >&6; }
-if test "${ac_cv_lib_cfconstellation_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
 else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lcfconstellation  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_cfconstellation_main=yes
-else
-  ac_cv_lib_cfconstellation_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_cfconstellation_main" >&5
-$as_echo "$ac_cv_lib_cfconstellation_main" >&6; }
-if test "x$ac_cv_lib_cfconstellation_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBCFCONSTELLATION 1
-_ACEOF
-
-  LIBS="-lcfconstellation $LIBS"
-
+  with_constellation=yes
 fi
 
-fi
 
 if test "x$with_constellation" != xno; then
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lcfconstellation" >&5
-$as_echo_n "checking for main in -lcfconstellation... " >&6; }
-if test "${ac_cv_lib_cfconstellation_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
+   { $as_echo "$as_me:${as_lineno-$LINENO}: checking presence of Constellation directory" >&5
+$as_echo_n "checking presence of Constellation directory... " >&6; }
+   if test -d "${srcdir}/constellation"; then
+
+$as_echo "#define HAVE_CONSTELLATION 1" >>confdefs.h
+
+     CONSTELLATION_SUBDIR=constellation
+     CONSTELLATION_CFLAGS='-I$(top_srcdir)/constellation/src'
+     CONSTELLATION_LDADD='$(top_srcdir)/constellation/src/libcfconstellation.la'
+     { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+   else
+     { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+   fi
+fi
+
+
+
+
+ if test "x$with_constellation" != xno && test -d ${srcdir}/constellation; then
+  HAVE_CONSTELLATION_TRUE=
+  HAVE_CONSTELLATION_FALSE='#'
 else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lcfconstellation  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
+  HAVE_CONSTELLATION_TRUE='#'
+  HAVE_CONSTELLATION_FALSE=
+fi
 
 
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_cfconstellation_main=yes
+ if test "x$with_galaxy" != xno && test -d ${srcdir}/galaxy; then
+  HAVE_GALAXY_TRUE=
+  HAVE_GALAXY_FALSE='#'
 else
-  ac_cv_lib_cfconstellation_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_cfconstellation_main" >&5
-$as_echo "$ac_cv_lib_cfconstellation_main" >&6; }
-if test "x$ac_cv_lib_cfconstellation_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBCFCONSTELLATION 1
-_ACEOF
-
-  LIBS="-lcfconstellation $LIBS"
-
-fi
-
-fi
-
-
-
-# Check whether --with-galaxy was given.
-if test "${with_galaxy+set}" = set; then :
-  withval=$with_galaxy;
-fi
-
-if test "x$with_galaxy" = "xyes"; then :
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lcfgalaxy" >&5
-$as_echo_n "checking for main in -lcfgalaxy... " >&6; }
-if test "${ac_cv_lib_cfgalaxy_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lcfgalaxy  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_cfgalaxy_main=yes
-else
-  ac_cv_lib_cfgalaxy_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_cfgalaxy_main" >&5
-$as_echo "$ac_cv_lib_cfgalaxy_main" >&6; }
-if test "x$ac_cv_lib_cfgalaxy_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBCFGALAXY 1
-_ACEOF
-
-  LIBS="-lcfgalaxy $LIBS"
-
-fi
-
+  HAVE_GALAXY_TRUE='#'
+  HAVE_GALAXY_FALSE=
 fi
 
 
@@ -13419,33 +13583,39 @@ $as_echo "$BERKELEY_DB_DIR" >&6; }
             fi
         done
 
-        BERKELEY_DB_LIB="-ldb"
-        for v in db-4.8 db48 db-4.7 db4.7 db47 db-4.6 db4.6 db46 db-4.5 db4.5 db45 db-4.4 db4.4 db44; do
-            if test -f "$BERKELEY_DB_DIR/lib/lib$v.so"; then
-                BERKELEY_DB_LIB="-l$v"
-		break
-            fi
-            if test -f "$BERKELEY_DB_DIR/lib64/lib$v.so"; then
-                BERKELEY_DB_LIB="-l$v"
-		break
-            fi
-        done
+        if test -f "$BERKELEY_DB_CFLAGS/db.h"; then
+            BERKELEY_DB_LIB="-ldb"
+            for v in db-4.8 db48 db-4.7 db4.7 db47 db-4.6 db4.6 db46 db-4.5 db4.5 db45 db-4.4 db4.4 db44; do
+                if test -f "$BERKELEY_DB_DIR/lib/lib$v.so"; then
+                    BERKELEY_DB_LIB="-l$v"
+                    break
+                fi
+                if test -f "$BERKELEY_DB_DIR/lib64/lib$v.so"; then
+                    BERKELEY_DB_LIB="-l$v"
+                    break
+                fi
+            done
 
-        case "$target_os" in
-        solaris*)
-            #If we are staticlly linking the BDB files, we do not want a
-            #-R flag.  If .so's are present, assume we are dynamic linking
-            if test -n "`ls $BERKELEY_DB_DIR/lib/*.so 2>/dev/null`"
-            then
-                BERKELEY_DB_LDFLAGS="-L$BERKELEY_DB_DIR/lib -R$BERKELEY_DB_DIR/lib"
-            else
-                BERKELEY_DB_LDFLAGS="-L$BERKELEY_DB_DIR/lib"
-            fi;;
-        *)         BERKELEY_DB_LDFLAGS="-L$BERKELEY_DB_DIR/lib";;
-        esac
+            case "$target_os" in
+            solaris*)
+                #If we are staticlly linking the BDB files, we do not want a
+                #-R flag.  If .so's are present, assume we are dynamic linking
+                if test -n "`ls $BERKELEY_DB_DIR/lib/*.so 2>/dev/null`"
+                then
+                    BERKELEY_DB_LDFLAGS="-L$BERKELEY_DB_DIR/lib -R$BERKELEY_DB_DIR/lib"
+                else
+                    BERKELEY_DB_LDFLAGS="-L$BERKELEY_DB_DIR/lib"
+                fi;;
+            *)         BERKELEY_DB_LDFLAGS="-L$BERKELEY_DB_DIR/lib";;
 
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BERKELEY_DB_DIR" >&5
+            esac
+
+            { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BERKELEY_DB_DIR" >&5
 $as_echo "$BERKELEY_DB_DIR" >&6; }
+        else
+           as_fn_error "Cannot find BerkeleyDB" "$LINENO" 5
+        fi
+
     else
         as_fn_error "Cannot find BerkeleyDB" "$LINENO" 5
     fi
@@ -14601,140 +14771,116 @@ fi
 
 fi
 
-
-
-
-
-
-# Check whether --with-graphviz was given.
-if test "${with_graphviz+set}" = set; then :
-  withval=$with_graphviz;
-fi
-
-if test "x$with_graphviz" = "xyes"; then :
-  WITH_GVC=1
-else
-  WITH_GVC=0
-fi
-
-if test $WITH_GVC = 1; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for Graphviz" >&5
-$as_echo_n "checking for Graphviz... " >&6; }
-  for ac_header in graphviz/gvc.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "graphviz/gvc.h" "ac_cv_header_graphviz_gvc_h" "$ac_includes_default"
-if test "x$ac_cv_header_graphviz_gvc_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_GRAPHVIZ_GVC_H 1
-_ACEOF
-
-fi
-
-done
-
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lgvc" >&5
-$as_echo_n "checking for main in -lgvc... " >&6; }
-if test "${ac_cv_lib_gvc_main+set}" = set; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for stdbool.h that conforms to C99" >&5
+$as_echo_n "checking for stdbool.h that conforms to C99... " >&6; }
+if test "${ac_cv_header_stdbool_h+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lgvc  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
+#include <stdbool.h>
+#ifndef bool
+ "error: bool is not defined"
+#endif
+#ifndef false
+ "error: false is not defined"
+#endif
+#if false
+ "error: false is not 0"
+#endif
+#ifndef true
+ "error: true is not defined"
+#endif
+#if true != 1
+ "error: true is not 1"
+#endif
+#ifndef __bool_true_false_are_defined
+ "error: __bool_true_false_are_defined is not defined"
+#endif
+
+	struct s { _Bool s: 1; _Bool t; } s;
+
+	char a[true == 1 ? 1 : -1];
+	char b[false == 0 ? 1 : -1];
+	char c[__bool_true_false_are_defined == 1 ? 1 : -1];
+	char d[(bool) 0.5 == true ? 1 : -1];
+	bool e = &s;
+	char f[(_Bool) 0.0 == false ? 1 : -1];
+	char g[true];
+	char h[sizeof (_Bool)];
+	char i[sizeof s.t];
+	enum { j = false, k = true, l = false * true, m = true * 256 };
+	/* The following fails for
+	   HP aC++/ANSI C B3910B A.05.55 [Dec 04 2003]. */
+	_Bool n[m];
+	char o[sizeof n == m * sizeof n[0] ? 1 : -1];
+	char p[-1 - (_Bool) 0 < 0 && -1 - (bool) 0 < 0 ? 1 : -1];
+#	if defined __xlc__ || defined __GNUC__
+	 /* Catch a bug in IBM AIX xlc compiler version 6.0.0.0
+	    reported by James Lemley on 2005-10-05; see
+	    http://lists.gnu.org/archive/html/bug-coreutils/2005-10/msg00086.html
+	    This test is not quite right, since xlc is allowed to
+	    reject this program, as the initializer for xlcbug is
+	    not one of the forms that C requires support for.
+	    However, doing the test right would require a runtime
+	    test, and that would make cross-compilation harder.
+	    Let us hope that IBM fixes the xlc bug, and also adds
+	    support for this kind of constant expression.  In the
+	    meantime, this test will reject xlc, which is OK, since
+	    our stdbool.h substitute should suffice.  We also test
+	    this with GCC, where it should work, to detect more
+	    quickly whether someone messes up the test in the
+	    future.  */
+	 char digs[] = "0123456789";
+	 int xlcbug = 1 / (&(digs + 5)[-2 + (bool) 1] == &digs[4] ? 1 : -1);
+#	endif
+	/* Catch a bug in an HP-UX C compiler.  See
+	   http://gcc.gnu.org/ml/gcc-patches/2003-12/msg02303.html
+	   http://lists.gnu.org/archive/html/bug-coreutils/2005-11/msg00161.html
+	 */
+	_Bool q = true;
+	_Bool *pq = &q;
 
 int
 main ()
 {
-return main ();
+
+	*pq |= q;
+	*pq |= ! q;
+	/* Refer to every declared value, to avoid compiler optimizations.  */
+	return (!a + !b + !c + !d + !e + !f + !g + !h + !i + !!j + !k + !!l
+		+ !m + !n + !o + !p + !q + !pq);
+
   ;
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_gvc_main=yes
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_header_stdbool_h=yes
 else
-  ac_cv_lib_gvc_main=no
+  ac_cv_header_stdbool_h=no
 fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gvc_main" >&5
-$as_echo "$ac_cv_lib_gvc_main" >&6; }
-if test "x$ac_cv_lib_gvc_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBGVC 1
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_header_stdbool_h" >&5
+$as_echo "$ac_cv_header_stdbool_h" >&6; }
+ac_fn_c_check_type "$LINENO" "_Bool" "ac_cv_type__Bool" "$ac_includes_default"
+if test "x$ac_cv_type__Bool" = x""yes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE__BOOL 1
 _ACEOF
 
-  LIBS="-lgvc $LIBS"
 
 fi
 
-fi
+if test $ac_cv_header_stdbool_h = yes; then
 
-
-
-# Check whether --with-gd was given.
-if test "${with_gd+set}" = set; then :
-  withval=$with_gd;
-fi
-
-if test "x$with_gd" = "xyes"; then :
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lgd" >&5
-$as_echo_n "checking for main in -lgd... " >&6; }
-if test "${ac_cv_lib_gd_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lgd  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_gd_main=yes
-else
-  ac_cv_lib_gd_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gd_main" >&5
-$as_echo "$ac_cv_lib_gd_main" >&6; }
-if test "x$ac_cv_lib_gd_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBGD 1
-_ACEOF
-
-  LIBS="-lgd $LIBS"
+$as_echo "#define HAVE_STDBOOL_H 1" >>confdefs.h
 
 fi
 
-    for ac_header in gd.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "gd.h" "ac_cv_header_gd_h" "$ac_includes_default"
-if test "x$ac_cv_header_gd_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_GD_H 1
-_ACEOF
-
-fi
-
-done
-
-
-fi
 
 
 ac_fn_c_check_type "$LINENO" "mode_t" "ac_cv_type_mode_t" "$ac_includes_default"
@@ -14894,6 +15040,45 @@ fi
 
 
 
+for ac_func in unsetenv
+do :
+  ac_fn_c_check_func "$LINENO" "unsetenv" "ac_cv_func_unsetenv"
+if test "x$ac_cv_func_unsetenv" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_UNSETENV 1
+_ACEOF
+
+else
+  case " $LIBOBJS " in
+  *" $ac_func.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS $ac_func.$ac_objext"
+ ;;
+esac
+
+fi
+done
+
+
+for ac_func in strndup
+do :
+  ac_fn_c_check_func "$LINENO" "strndup" "ac_cv_func_strndup"
+if test "x$ac_cv_func_strndup" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_STRNDUP 1
+_ACEOF
+
+else
+  case " $LIBOBJS " in
+  *" $ac_func.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS $ac_func.$ac_objext"
+ ;;
+esac
+
+fi
+done
+
+
+
 for ac_func in getcwd getnetgrent waitpid seteuid setegid setreuid setregid
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
@@ -15002,7 +15187,8 @@ fi
 rm -f conftest*
 
 if test "$rtry" = rtentry; then
- $as_echo "#define HAVE_RTENTRY 1" >>confdefs.h
+
+$as_echo "#define HAVE_RTENTRY 1" >>confdefs.h
 
 fi
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
@@ -15110,14 +15296,16 @@ fi
 
 ac_fn_c_check_func "$LINENO" "lchown" "ac_cv_func_lchown"
 if test "x$ac_cv_func_lchown" = x""yes; then :
-  $as_echo "#define HAVE_LCHOWN 1" >>confdefs.h
+
+$as_echo "#define HAVE_LCHOWN /**/" >>confdefs.h
 
 fi
 
 
 ac_fn_c_check_func "$LINENO" "pthread_attr_setstacksize" "ac_cv_func_pthread_attr_setstacksize"
 if test "x$ac_cv_func_pthread_attr_setstacksize" = x""yes; then :
-  $as_echo "#define HAVE_PTHREAD_ATTR_SETSTACKSIZE 1" >>confdefs.h
+
+$as_echo "#define HAVE_PTHREAD_ATTR_SETSTACKSIZE /**/" >>confdefs.h
 
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for pthread_create in -lpthread" >&5
@@ -15169,7 +15357,8 @@ fi
 
 ac_fn_c_check_func "$LINENO" "pthread_sigmask" "ac_cv_func_pthread_sigmask"
 if test "x$ac_cv_func_pthread_sigmask" = x""yes; then :
-  $as_echo "#define HAVE_PTHREAD_SIGMASK 1" >>confdefs.h
+
+$as_echo "#define HAVE_PTHREAD_SIGMASK /**/" >>confdefs.h
 
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for pthread_create in -lpthread" >&5
@@ -15370,11 +15559,13 @@ fi
 case "$target_os" in
 
    sunos3*)
-	$as_echo "#define SUN3 1" >>confdefs.h
+
+$as_echo "#define SUN3 /**/" >>confdefs.h
 
         ;;
    sunos4*)
-	$as_echo "#define SUN4 1" >>confdefs.h
+
+$as_echo "#define SUN4 /**/" >>confdefs.h
 
         ;;
    solaris2.4*)
@@ -15388,16 +15579,20 @@ case "$target_os" in
    solaris2.5*)
 	$as_echo "#define SOLARIS 1" >>confdefs.h
 
-        $as_echo "#define _POSIX_C_SOURCE 1" >>confdefs.h
 
-        $as_echo "#define __EXTENSIONS__ 1" >>confdefs.h
+$as_echo "#define _POSIX_C_SOURCE /**/" >>confdefs.h
+
+
+$as_echo "#define __EXTENSIONS__ /**/" >>confdefs.h
 
         LIBS="$LIBS -lelf -lsec"
         ;;
    solaris2*)
-	$as_echo "#define SOLARIS 1" >>confdefs.h
 
-        $as_echo "#define __BIT_TYPES_DEFINED__ 1" >>confdefs.h
+$as_echo "#define SOLARIS /**/" >>confdefs.h
+
+
+$as_echo "#define __BIT_TYPES_DEFINED__ /**/" >>confdefs.h
  # avoid conflict with db.h
 
        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
@@ -15428,14 +15623,17 @@ rm -f conftest.err conftest.$ac_ext
         LIBS="$LIBS -lelf -lsec"
         ;;
    ultrix*)
-	$as_echo "#define ULTRIX 1" >>confdefs.h
+
+$as_echo "#define ULTRIX /**/" >>confdefs.h
 
         ;;
    hpux*|hp-ux*)
-	$as_echo "#define HPuUX 1" >>confdefs.h
+
+$as_echo "#define HPuUX /**/" >>confdefs.h
 
         if test "$GCC" != "yes"; then
-	  $as_echo "#define REGEX_MALLOC 1" >>confdefs.h
+
+$as_echo "#define REGEX_MALLOC /**/" >>confdefs.h
 
         fi
 
@@ -15481,7 +15679,8 @@ fi
 
         ;;
    aix*)
-	$as_echo "#define AIX 1" >>confdefs.h
+
+$as_echo "#define AIX /**/" >>confdefs.h
 
         CPPFLAGS="$CPPFLAGS -w"
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lpthreads" >&5
@@ -15531,7 +15730,8 @@ fi
 
         ;;
    osf*)
-	$as_echo "#define OSF 1" >>confdefs.h
+
+$as_echo "#define OSF /**/" >>confdefs.h
 
 	if test "$GCC" = yes; then
 	   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: pthreads may not work with GCC under Tru64" >&5
@@ -15544,9 +15744,11 @@ $as_echo "$as_me: WARNING: re-configure with CC=cc." >&2;}
         ;;
    irix6*)
 	# rtentry is detected OK on a 6.5.19 system.
-        $as_echo "#define HAVE_ORTENTRY 1" >>confdefs.h
+
+$as_echo "#define HAVE_ORTENTRY 1" >>confdefs.h
  # Have to hack this for 6.* owing to bug
-	$as_echo "#define IRIX 1" >>confdefs.h
+
+$as_echo "#define IRIX /**/" >>confdefs.h
 
         CFLAGS="$CFLAGS -w"
         ;;
@@ -15562,7 +15764,8 @@ $as_echo "$as_me: WARNING: re-configure with CC=cc." >&2;}
         CFLAGS="$CFLAGS -w"
         ;;
    linux*)
-	$as_echo "#define LINUX 1" >>confdefs.h
+
+$as_echo "#define LINUX /**/" >>confdefs.h
 
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for yp_get_default_domain in -lnss_nis" >&5
 $as_echo_n "checking for yp_get_default_domain in -lnss_nis... " >&6; }
@@ -15664,7 +15867,8 @@ done
 
         ;;
    freebsd*|dragonfly*)
-	$as_echo "#define FREEBSD 1" >>confdefs.h
+
+$as_echo "#define FREEBSD /**/" >>confdefs.h
 
         CFLAGS="$CFLAGS -pthread -D_THREAD_SAFE -DBUILDTIN_GCC_THREAD"
         for ac_header in pthread.h
@@ -15681,32 +15885,39 @@ done
 
         ;;
    netbsd*)
-	$as_echo "#define NETBSD 1" >>confdefs.h
+
+$as_echo "#define NETBSD /**/" >>confdefs.h
 
         ;;
    newsos*)
-	$as_echo "#define NEWS_OS 1" >>confdefs.h
+
+$as_echo "#define NEWS_OS /**/" >>confdefs.h
 
         ;;
    bsd/os*)
-	$as_echo "#define BSDOS 1" >>confdefs.h
+
+$as_echo "#define BSDOS /**/" >>confdefs.h
 
         ;;
    bsd*)
-	$as_echo "#define BSD43 1" >>confdefs.h
+
+$as_echo "#define BSD43 /**/" >>confdefs.h
 
         ;;
    aos*)
-	$as_echo "#define AOS 1" >>confdefs.h
+
+$as_echo "#define AOS /**/" >>confdefs.h
 
         ;;
    nextstep*)
-	$as_echo "#define NEXTSTEP 1" >>confdefs.h
+
+$as_echo "#define NEXTSTEP /**/" >>confdefs.h
 
         ;;
 
    unicos*)
-	$as_echo "#define CFCRAY 1" >>confdefs.h
+
+$as_echo "#define CFCRAY /**/" >>confdefs.h
 
         ;;
 
@@ -15716,22 +15927,26 @@ done
         ;;
 
    qnx*)
-        $as_echo "#define CFQNX 1" >>confdefs.h
+
+$as_echo "#define CFQNX /**/" >>confdefs.h
 
         ;;
 
    openbsd*|obsd*)
-	$as_echo "#define OPENBSD 1" >>confdefs.h
+
+$as_echo "#define OPENBSD /**/" >>confdefs.h
 
         ;;
 
    gnu*)
-	$as_echo "#define CFGNU 1" >>confdefs.h
+
+$as_echo "#define CFGNU /**/" >>confdefs.h
 
         ;;
 
    sysv4.2MP|unix_sv*)
-	$as_echo "#define UNIXWARE 1" >>confdefs.h
+
+$as_echo "#define UNIXWARE /**/" >>confdefs.h
 
         { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lthread" >&5
 $as_echo_n "checking for main in -lthread... " >&6; }
@@ -15791,7 +16006,8 @@ done
 
 $as_echo "#define CFCYG 1" >>confdefs.h
 
-        $as_echo "#define NT 1" >>confdefs.h
+
+$as_echo "#define NT /**/" >>confdefs.h
 
         ;;
 
@@ -15805,12 +16021,14 @@ $as_echo "#define MINGW 1" >>confdefs.h
         ;;
 
    sco*)
-        $as_echo "#define SCO 1" >>confdefs.h
+
+$as_echo "#define SCO /**/" >>confdefs.h
 
         ;;
 
    darwin*)
-        $as_echo "#define DARWIN 1" >>confdefs.h
+
+$as_echo "#define DARWIN /**/" >>confdefs.h
 
         LDFLAGS="-Xlinker -m $LDFLAGS"
         ;;
@@ -15819,8 +16037,6 @@ $as_echo "#define MINGW 1" >>confdefs.h
 	as_fn_error "Unknown system type $target_os" "$LINENO" 5
         ;;
 esac
-
-LIBS="$LIBS -L../pub -lcfpub"
 
 
 
@@ -15833,7 +16049,8 @@ if test "${with_workdir+set}" = set; then :
   		        WORKDIR=/var/cfengine
 		fi
 
-     	cat >>confdefs.h <<_ACEOF
+
+cat >>confdefs.h <<_ACEOF
 #define WORKDIR "${WORKDIR}"
 _ACEOF
 
@@ -15887,7 +16104,12 @@ $as_echo_n "checking Checking for GCC Specific compile flags... " >&6; }
 if test x"$GCC" = "xyes"; then
 
 
-	GCC_CFLAG="-g -Wreturn-type -Wmissing-prototypes -Wuninitialized"
+	GCC_CFLAG="-g -Wreturn-type -Wmissing-prototypes"
+	case "$CFLAGS" in "-O"*|*" -O"*)
+		GCC_CFLAG="$GCC_CFLAG -Wuninitialized"
+		;;
+	esac
+
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
 
@@ -15942,9 +16164,11 @@ fi
 
 
 
+
 cat >>confdefs.h <<_ACEOF
 #define AUTOCONF_HOSTNAME "`$HOSTNAME`"
 _ACEOF
+
 
 cat >>confdefs.h <<_ACEOF
 #define AUTOCONF_SYSNAME "$target_os"
@@ -15973,6 +16197,15 @@ $as_echo "no" >&6; }
 else
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
+fi
+
+
+ if test "x$cross_compiling" = "xyes"; then
+  CROSS_COMPILING_TRUE=
+  CROSS_COMPILING_FALSE='#'
+else
+  CROSS_COMPILING_TRUE='#'
+  CROSS_COMPILING_FALSE=
 fi
 
 
@@ -16006,16 +16239,6 @@ $as_echo "-> Configured with Postgres libraries" >&6; }
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> No SQL library support for knowledge map" >&5
 $as_echo "-> No SQL library support for knowledge map" >&6; }
-fi
-
-if test $WITH_GVC = 1; then
- if test "x$ac_cv_lib_gvc_main" = "xyes"; then
-   { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with Graphviz libraries" >&5
-$as_echo "-> Configured with Graphviz libraries" >&6; }
- fi
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> No Graphviz libraries included" >&5
-$as_echo "-> No Graphviz libraries included" >&6; }
 fi
 
 if test "x$ac_cv_lib_ldap_ldap_get_values_len" = "xyes"; then
@@ -16059,7 +16282,17 @@ $as_echo "" >&6; }
 
 
 
-ac_config_files="$ac_config_files Makefile pub/Makefile src/Makefile src/cf3lex.l docs/Makefile tests/Makefile tests/file_masters/Makefile tests/file_operands/Makefile tests/units/Makefile inputs/Makefile"
+ac_config_files="$ac_config_files Makefile pub/Makefile src/Makefile src/cf3lex.l docs/Makefile examples/Makefile inputs/Makefile"
+
+
+ac_config_files="$ac_config_files nova/Makefile nova/src/Makefile nova/docs/Makefile nova/GUI2/Makefile nova/GUI2/images/Makefile"
+
+
+
+ac_config_files="$ac_config_files constellation/Makefile constellation/src/Makefile"
+
+
+
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -16166,6 +16399,10 @@ else
   am__EXEEXT_FALSE=
 fi
 
+if test -z "${MAINTAINER_MODE_TRUE}" && test -z "${MAINTAINER_MODE_FALSE}"; then
+  as_fn_error "conditional \"MAINTAINER_MODE\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
 if test -z "${AMDEP_TRUE}" && test -z "${AMDEP_FALSE}"; then
   as_fn_error "conditional \"AMDEP\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
@@ -16176,6 +16413,22 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${am__fastdepCC_TRUE}" && test -z "${am__fastdepCC_FALSE}"; then
   as_fn_error "conditional \"am__fastdepCC\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${HAVE_NOVA_TRUE}" && test -z "${HAVE_NOVA_FALSE}"; then
+  as_fn_error "conditional \"HAVE_NOVA\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${HAVE_CONSTELLATION_TRUE}" && test -z "${HAVE_CONSTELLATION_FALSE}"; then
+  as_fn_error "conditional \"HAVE_CONSTELLATION\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${HAVE_GALAXY_TRUE}" && test -z "${HAVE_GALAXY_FALSE}"; then
+  as_fn_error "conditional \"HAVE_GALAXY\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${CROSS_COMPILING_TRUE}" && test -z "${CROSS_COMPILING_FALSE}"; then
+  as_fn_error "conditional \"CROSS_COMPILING\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 
@@ -16775,9 +17028,9 @@ AMDEP_TRUE="$AMDEP_TRUE" ac_aux_dir="$ac_aux_dir"
 sed_quote_subst='$sed_quote_subst'
 double_quote_subst='$double_quote_subst'
 delay_variable_subst='$delay_variable_subst'
+enable_static='`$ECHO "X$enable_static" | $Xsed -e "$delay_single_quote_subst"`'
 macro_version='`$ECHO "X$macro_version" | $Xsed -e "$delay_single_quote_subst"`'
 macro_revision='`$ECHO "X$macro_revision" | $Xsed -e "$delay_single_quote_subst"`'
-enable_static='`$ECHO "X$enable_static" | $Xsed -e "$delay_single_quote_subst"`'
 enable_shared='`$ECHO "X$enable_shared" | $Xsed -e "$delay_single_quote_subst"`'
 pic_mode='`$ECHO "X$pic_mode" | $Xsed -e "$delay_single_quote_subst"`'
 enable_fast_install='`$ECHO "X$enable_fast_install" | $Xsed -e "$delay_single_quote_subst"`'
@@ -17038,11 +17291,15 @@ do
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "src/cf3lex.l") CONFIG_FILES="$CONFIG_FILES src/cf3lex.l" ;;
     "docs/Makefile") CONFIG_FILES="$CONFIG_FILES docs/Makefile" ;;
-    "tests/Makefile") CONFIG_FILES="$CONFIG_FILES tests/Makefile" ;;
-    "tests/file_masters/Makefile") CONFIG_FILES="$CONFIG_FILES tests/file_masters/Makefile" ;;
-    "tests/file_operands/Makefile") CONFIG_FILES="$CONFIG_FILES tests/file_operands/Makefile" ;;
-    "tests/units/Makefile") CONFIG_FILES="$CONFIG_FILES tests/units/Makefile" ;;
+    "examples/Makefile") CONFIG_FILES="$CONFIG_FILES examples/Makefile" ;;
     "inputs/Makefile") CONFIG_FILES="$CONFIG_FILES inputs/Makefile" ;;
+    "nova/Makefile") CONFIG_FILES="$CONFIG_FILES nova/Makefile" ;;
+    "nova/src/Makefile") CONFIG_FILES="$CONFIG_FILES nova/src/Makefile" ;;
+    "nova/docs/Makefile") CONFIG_FILES="$CONFIG_FILES nova/docs/Makefile" ;;
+    "nova/GUI2/Makefile") CONFIG_FILES="$CONFIG_FILES nova/GUI2/Makefile" ;;
+    "nova/GUI2/images/Makefile") CONFIG_FILES="$CONFIG_FILES nova/GUI2/images/Makefile" ;;
+    "constellation/Makefile") CONFIG_FILES="$CONFIG_FILES constellation/Makefile" ;;
+    "constellation/src/Makefile") CONFIG_FILES="$CONFIG_FILES constellation/src/Makefile" ;;
 
   *) as_fn_error "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac
@@ -17739,7 +17996,6 @@ $as_echo X"$file" |
 
 # `$ECHO "$ofile" | sed 's%^.*/%%'` - Provide generalized library-building support services.
 # Generated automatically by $as_me ($PACKAGE$TIMESTAMP) $VERSION
-# Libtool was configured on host `(hostname || uname -n) 2>/dev/null | sed 1q`:
 # NOTE: Changes made to this file will be lost: look at ltmain.sh.
 #
 #   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005,
@@ -17775,12 +18031,12 @@ available_tags=""
 
 # ### BEGIN LIBTOOL CONFIG
 
+# Whether or not to build static libraries.
+build_old_libs=$enable_static
+
 # Which release of libtool.m4 was used?
 macro_version=$macro_version
 macro_revision=$macro_revision
-
-# Whether or not to build static libraries.
-build_old_libs=$enable_static
 
 # Whether or not to build shared libraries.
 build_libtool_libs=$enable_shared

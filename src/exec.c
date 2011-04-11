@@ -533,7 +533,6 @@ void Apoptosis()
 { struct Promise pp = {0};
   struct Rlist *signals = NULL, *owners = NULL;
   char mypid[32],pidrange[32];
-  char *psopts = GetProcessOptions();
   static char promiserBuf[CF_SMALLBUF];
 
 if (ONCE || VSYSTEMHARDCLASS == cfnt)
@@ -585,7 +584,7 @@ AppendConstraint(&(pp.conlist),"process_result",strdup("process_owner.process_co
 
 CfOut(cf_verbose,""," -> Looking for cf-execd processes owned by %s",mypid);
 
-if (LoadProcessTable(&PROCESSTABLE,psopts))
+if (LoadProcessTable(&PROCESSTABLE))
    {
    VerifyProcessesPromise(&pp);   
    }
@@ -975,7 +974,7 @@ unlink(prev_file);
 
  if(!LinkOrCopy(filename,prev_file,true))
    {
-     CfOut(cf_inform,"","Could symlink or copy %s to %s",filename,prev_file);
+     CfOut(cf_inform,"","Could not symlink or copy %s to %s",filename,prev_file);
      rtn = 1;
    }
 
@@ -995,12 +994,6 @@ void MailResult(char *file,char *to)
   struct stat statbuf;
   time_t now = time(NULL);
   FILE *fp;
-
-if ((strlen(VMAILSERVER) == 0) || (strlen(to) == 0))
-   {
-   /* Syslog should have done this */
-   return;
-   }
 
 CfOut(cf_verbose,"","Mail result...\n");
 
@@ -1022,6 +1015,13 @@ if (statbuf.st_size == 0)
 if (CompareResult(file,prev_file) == 0) 
    {
    CfOut(cf_verbose,"","Previous output is the same as current so do not mail it\n");
+   return;
+   }
+
+if ((strlen(VMAILSERVER) == 0) || (strlen(to) == 0))
+   {
+   /* Syslog should have done this */
+   CfOut(cf_verbose, "", "Empty mail server or address - skipping");
    return;
    }
 

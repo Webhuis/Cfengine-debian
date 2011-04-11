@@ -102,6 +102,8 @@ Debug("****************************************************\n\n");
 
 DeleteScope("match"); /* in case we expand something expired accidentially */
 
+THIS_BUNDLE = scopeid;
+
 pcopy = DeRefCopyPromise(scopeid,pp);
 
 ScanRval(scopeid,&scalarvars,&listvars,pcopy->promiser,CF_SCALAR,pp);
@@ -427,6 +429,21 @@ switch (type)
    }
 
 return returnval;
+}
+
+/*********************************************************************/
+
+static int ExpandOverflow(char *str1,char *str2)
+
+{ int len = strlen(str2);
+
+if ((strlen(str1)+len) > (CF_EXPANDSIZE - CF_BUFFERMARGIN))
+   {
+   CfOut(cf_error,"","Expansion overflow constructing string. Increase CF_EXPANDSIZE macro. Tried to add %s to %s\n",str2,str1);
+   return true;
+   }
+
+return false;
 }
 
 /*********************************************************************/
@@ -922,7 +939,7 @@ if (count != 0)
    return false;
    }
 
-Debug1("IsNakedVar(%s,%c)!!\n",str,vtype);
+Debug("IsNakedVar(%s,%c)!!\n",str,vtype);
 return true;
 }
 
@@ -952,7 +969,7 @@ void ConvergeVarHashPromise(char *scope,struct Promise *pp,int allow_redefine)
 
 { struct Constraint *cp,*cp_save = NULL;
   struct Attributes a = {0};
-  char *lval,rtype,type = 'x';
+  char *lval,rtype,type = 'x',*sp = NULL;
   void *rval = NULL,*retval;
   int i = 0,ok_redefine = false,drop_undefined = false;
   struct Rval returnval; /* Must expand naked functions here for consistency */
@@ -964,6 +981,11 @@ if (pp->done)
    }
 
 if (IsExcluded(pp->classes))
+   {
+   return;
+   }
+
+if (VarClassExcluded(pp,&sp))
    {
    return;
    }
@@ -1107,11 +1129,11 @@ if (rval != NULL)
                 break;
             case CF_LIST:
                 CfOut(cf_error,""," !! Redefinition of a constant list \"%s\"",pp->promiser,retval,rval);
-                printf("%s  -- Was ",VPREFIX);
+                printf("%s>  -- Was ",VPREFIX);
                 ShowRlist(stdout,retval);      
-                printf(" now ",VPREFIX);
+                printf("%s> now ",VPREFIX);
                 ShowRlist(stdout,rval);      
-                printf("\n",VPREFIX);
+                printf("%s>\n",VPREFIX);
                 PromiseRef(cf_error,pp);
 		break;
             }

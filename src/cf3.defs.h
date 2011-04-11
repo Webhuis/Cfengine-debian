@@ -1,22 +1,25 @@
-/* 
-   Copyright (C) 2008 - Cfengine AS
+/*
+   Copyright (C) Cfengine AS
 
    This file is part of Cfengine 3 - written and maintained by Cfengine AS.
- 
+
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version. 
+   Free Software Foundation; version 3.
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
+
   You should have received a copy of the GNU General Public License
-  
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
+  To the extent this program is licensed as part of the Enterprise
+  versions of Cfengine, the applicable Commerical Open Source License
+  (COSL) may apply to this file if you as a licensee so wish it. See
+  included file COSL.txt.
 */
 
 /*****************************************************************************/
@@ -33,18 +36,9 @@
 #undef VERSION
 #undef Verbose
 
-#define CF3_REVISION "$Rev: 1718 $"
+#define CF3_REVISION "$Rev: 2014 $"
 
 #include "conf.h"
-
-#ifdef HAVE_PCRE_H
-#include <pcre.h>
-#endif
-
-#ifdef HAVE_PCRE_PCRE_H
-#include <pcre/pcre.h>
-#endif
-
 
 #ifndef NGROUPS
 # define NGROUPS 20
@@ -369,6 +363,7 @@ enum cfkcontrol
    cfk_genman,
    cfk_graph_dir,
    cfk_graph_output,
+   cfk_goalpatterns,
    cfk_htmlbanner,
    cfk_htmlfooter,
    cfk_tm_prefix,
@@ -412,6 +407,7 @@ enum cfrecontrol
 enum cfhcontrol
    {
    cfh_export_zenoss,
+   cfh_federation,
    cfh_schedule,
    cfh_port,
    cfh_notype
@@ -564,6 +560,7 @@ enum fncalltype
    cfn_getindices,
    cfn_getuid,
    cfn_getusers,
+   cfn_getvalues,
    cfn_grep,
    cfn_groupexists,
    cfn_hash,
@@ -592,6 +589,10 @@ enum fncalltype
    cfn_ldapvalue,
    cfn_now,
    cfn_date,
+   cfn_parseintarray,
+   cfn_parserealarray,
+   cfn_parsestringarray,
+   cfn_parsestringarrayidx,
    cfn_peers,
    cfn_peerleader,
    cfn_peerleaders,
@@ -776,6 +777,19 @@ struct Scope                         /* $(bundlevar) $(scope.name) */
    struct CfAssoc *hashtable[CF_HASHTABLESIZE]; /* Variable heap  */
    struct Scope *next;
    };
+
+/*******************************************************************/
+
+struct Variable  /* Used to represent contents of var in DBM file -
+		    scope.name is key */
+   {
+   struct Event e;
+   enum cfdatatype dtype;
+   char rtype;
+   char rval[CF_MAXVARSIZE];    // as string, \0-terminated
+   };
+
+#define VARSTRUCTUSAGE(v) (sizeof(v) - sizeof(v.rval) + strlen(v.rval) + 1)
 
 /*******************************************************************/
 
@@ -1061,20 +1075,34 @@ enum promiselog_rep
    plog_notkept
    };
 
+enum time_window
+   {
+   time_hour,
+   time_day,
+   time_week
+   };
+
 /*************************************************************************/
 
-// Content-Driven Policy types
-typedef enum cdp_report
-{
-  cdp_acls,
-  cdp_commands,
-  cdp_filechanges,
-  cdp_filediffs,
-  cdp_registry,
-  cdp_services,
-  cdp_unknown
-}cdp_t;
+enum cfd_menu
+   {
+   cfd_menu_delta,
+   cfd_menu_full,
+   cfd_menu_relay,
+   cfd_menu_error
+   };
 
+/*************************************************************************/
+
+enum cfl_view
+   {
+   cfl_view_sumcomp_wk,
+   cfl_view_sumrepaired_wk,
+   cfl_view_sumnotkept_wk,
+   cfl_view_repairedreason,
+   cfl_view_notkeptreason,
+   cfl_view_error
+   };
 
 
 /*************************************************************************/
@@ -1082,19 +1110,6 @@ typedef enum cdp_report
 /*************************************************************************/
 
 #define OVECCOUNT 30
-
-struct CfRegEx
-{
-#if defined HAVE_PCRE_H || defined HAVE_PCRE_PCRE_H
-   pcre *rx;
-   const char *err;
-   int err_offset;
-#else
-   regex_t rx;
-#endif
-   int failed;
-   char *regexp;
-};
 
 /*******************************************************************/
 
@@ -1224,20 +1239,17 @@ struct Occurrence
    struct Occurrence *next;
    };
 
+struct Inference
+   {
+   char *inference; // Promiser
+   char *precedent;
+   char *qualifier;
+   struct Inference *next;
+   };
 
 /*************************************************************************/
 /* SQL Database connectors                                               */
 /*************************************************************************/
-
-#ifdef HAVE_MYSQL_MYSQL_H
-#include <mysql/mysql.h>
-#endif
-
-#ifdef HAVE_PGSQL_LIBPQ_FE_H
- #include <pgsql/libpq-fe.h>
-#elif defined(HAVE_LIBPQ_FE_H)
- #include <libpq-fe.h>
-#endif
 
 enum cfdbtype
    {
@@ -1248,14 +1260,6 @@ enum cfdbtype
 
 typedef struct 
    {
-#ifdef HAVE_MYSQL_MYSQL_H
-   MYSQL my_conn;
-   MYSQL_RES *my_res;
-#endif
-#if defined HAVE_PGSQL_LIBPQ_FE_H || defined HAVE_LIBPQ_FE_H
-   PGconn *pq_conn;
-   PGresult   *pq_res;
-#endif
    int connected;
    int result;
    int row;
@@ -1265,6 +1269,7 @@ typedef struct
    char **rowdata;
    char *blank;
    enum cfdbtype type;
+   void *data; /* Generic pointer to RDBMS-specific data */
    }
 CfdbConn;
 
@@ -1832,6 +1837,8 @@ struct Attributes
 
    char *fwd_name;
    char *bwd_name;
+   struct Rlist *precedents;
+   struct Rlist *qualifiers;
    struct Rlist *associates;
    struct Rlist *represents;
    struct Rlist *synonyms;
@@ -1875,19 +1882,22 @@ meter_endmark
 
 #define EMPTY(str) ((str == NULL) || (str[0] == '\0'))
 #define BEGINSWITH(str,start) (strncmp(str,start,strlen(start)) == 0)
+#define CFSTRDUP(str) ((str != NULL) ? strdup(str) : NULL)
+#define CFFREE(ptr) if(ptr) free(ptr)
 
 // classes not interesting in reports
 #define IGNORECLASS(c)                                                         \
  (strncmp(c,"Min",3) == 0 || strncmp(c,"Hr",2) == 0 || strcmp(c,"Q1") == 0     \
   || strcmp(c,"Q2") == 0 || strcmp(c,"Q3") == 0 || strcmp(c,"Q4") == 0         \
   || strncmp(c,"GMT_Hr",6) == 0  || strncmp(c,"Yr",2) == 0                     \
-  || strncmp(c,"Day",3) == 0 || strcmp(c,"Morning") == 0                       \
-  || strcmp(c,"Afternoon") == 0 || strcmp(c,"Evening") == 0                    \
-  || strcmp(c,"Night") == 0 || strcmp(c,"license_expired") == 0)
+  || strncmp(c,"Day",3) == 0 || strcmp(c,"license_expired") == 0               \
+  || strcmp(c,"any") == 0 || strcmp(c,"from_cfexecd") == 0                     \
+  || IsStrIn(c,MONTH_TEXT,false) || IsStrIn(c,DAY_TEXT,false)                  \
+  || IsStrIn(c,SHIFT_TEXT,false))
 
 
 #include "prototypes3.h"
 
-#ifdef HAVE_LIBCFNOVA
+#ifdef HAVE_NOVA
 #include <cf.nova.h>
 #endif

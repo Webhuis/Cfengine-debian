@@ -47,6 +47,7 @@ void KeepKnowControlPromises(void);
 void KeepKnowledgePromise(struct Promise *pp);
 void VerifyTopicPromise(struct Promise *pp);
 void VerifyOccurrencePromises(struct Promise *pp);
+void VerifyInferencePromise(struct Promise *pp);
 void GenerateSQL(void);
 void LookupUniqueTopic(char *typed_topic);
 void LookupMatchingTopics(char *typed_topic);
@@ -104,6 +105,7 @@ char MANDIR[CF_BUFSIZE];
 int PASS;
 
 struct Occurrence *OCCURRENCES = NULL;
+struct Inference *INFERENCES = NULL;
 
 /*******************************************************************/
 /* Command line options                                            */
@@ -293,15 +295,6 @@ while ((c=getopt_long(argc,argv,"ghHd:vVf:S:R:st:r:mMK:k:q:Q:",OPTIONS,&optindex
           break;
 
       case 'Q':
-/*
-  { char buffer[CF_BUFSIZE];
-
-  Nova_WebTopicMap_Initialize();
-  Nova_PlotTopicCosmos(711,NULL,buffer,CF_BUFSIZE);
-  printf("GOT %s\n",buffer);
-  return;
-  }
-*/
           strcpy(TOPIC_CMD,optarg);
           CfQueryCFDB(TOPIC_CMD);
           exit(0);
@@ -379,7 +372,9 @@ strcpy(SQL_SERVER,"localhost");
 strcpy(GRAPHDIR,"");
 SHOWREPORTS = false;
 
-#ifdef HAVE_LIBCFNOVA
+PrependRScalar(&GOALS,"goal.*",CF_SCALAR);
+
+#ifdef HAVE_NOVA
 s1 = Nova_SizeCfSQLContainer();
 s2 = SizeCfSQLContainer();
 
@@ -405,7 +400,7 @@ for (cp = ControlBodyConstraints(cf_know); cp != NULL; cp=cp->next)
       {
       continue;
       }
-
+   
    if (GetVariable("control_knowledge",cp->lval,&retval,&rettype) == cf_notype)
       {
       CfOut(cf_error,""," !! Unknown lval %s in knowledge control body",cp->lval);
@@ -429,6 +424,13 @@ for (cp = ControlBodyConstraints(cf_know); cp != NULL; cp=cp->next)
       continue;
       }
 
+   if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_goalpatterns].lval) == 0)
+      {
+      GOALS = (struct Rlist *)retval;
+      CfOut(cf_verbose,"","SET goal_patterns list\n");
+      continue;
+      }
+   
    if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_sql_type].lval) == 0)
       {
       SQL_TYPE = Str2dbType(retval);
@@ -1006,6 +1008,12 @@ if (strcmp("classes",pp->agentsubtype) == 0)
    return;
    }
 
+if (strcmp("inferences",pp->agentsubtype) == 0)
+   {
+   VerifyInferencePromise(pp);
+   return;
+   }
+
 if (strcmp("topics",pp->agentsubtype) == 0)
    {
    VerifyTopicPromise(pp);
@@ -1029,13 +1037,38 @@ if (strcmp("reports",pp->agentsubtype) == 0)
 
 void CfQueryCFDB(char *query)
 {
-#ifdef HAVE_LIBCFNOVA
+#ifdef HAVE_NOVA
 Nova_CfQueryCFDB(query);
 #endif
 }
 
 /*********************************************************************/
 /* Level                                                             */
+/*********************************************************************/
+
+void VerifyInferencePromise(struct Promise *pp)
+
+{ struct Attributes a = {0};
+ struct Rlist *rpp,*rpq;
+
+if (!IsDefinedClass(pp->classes))
+   {
+   CfOut(cf_verbose,""," -> Skipping inference for \"%s\" as class \"%s\" is not defined",pp->promiser,pp->classes);
+   return;
+   }
+ 
+a = GetInferencesAttributes(pp);
+
+for (rpp = a.precedents; rpp != NULL; rpp=rpp->next)
+   {
+   for (rpq = a.qualifiers; rpq != NULL; rpq=rpq->next)
+      {
+      CfOut(cf_verbose,""," -> Add inference: (%s,%s,%s)\n",rpp->item,rpq->item,pp->promiser);
+      AddInference(&INFERENCES,pp->promiser,rpp->item,rpq->item);
+      }
+   }
+}
+
 /*********************************************************************/
 
 void VerifyTopicPromise(struct Promise *pp)
@@ -1185,6 +1218,7 @@ void GenerateSQL()
 { struct Topic *tp;
   struct TopicAssociation *ta;
   struct Occurrence *op;
+  struct Inference *ip;
   FILE *fout = stdout;
   char filename[CF_BUFSIZE],longname[CF_BUFSIZE],query[CF_BUFSIZE],safe[CF_BUFSIZE],safe2[CF_BUFSIZE];
   struct Rlist *columns = NULL,*rp;
@@ -1349,6 +1383,32 @@ if (sql_database_defined)
 DeleteRlist(columns);
 columns = NULL;
 
+snprintf(query,CF_BUFSIZE-1,
+        "CREATE TABLE inferences"
+        "("
+        "precedent varchar(256),"
+        "qualifier varchar(256),"
+        "inference varchar(256),"
+        ");\n"
+        );
+
+fprintf(fout,"%s",query);
+
+AppendRScalar(&columns,"precedent,varchar,256",CF_SCALAR);
+AppendRScalar(&columns,"qualifier,varchar,256",CF_SCALAR);
+AppendRScalar(&columns,"inference,varchar,256",CF_SCALAR);
+
+snprintf(query,CF_MAXVARSIZE-1,"%s.inferences",SQL_DATABASE);
+
+if (sql_database_defined)
+   {
+   CfVerifyTablePromise(&cfdb,query,columns,a,pp);
+   }
+
+DeleteRlist(columns);
+columns = NULL;
+
+
 /* Delete existing data and recreate */
 
 snprintf(query,CF_BUFSIZE-1,"delete from topics\n",TM_PREFIX);
@@ -1360,8 +1420,12 @@ CfVoidQueryDB(&cfdb,query);
 snprintf(query,CF_BUFSIZE-1,"delete from occurrences\n",TM_PREFIX);
 fprintf(fout,"%s",query);
 CfVoidQueryDB(&cfdb,query);
+snprintf(query,CF_BUFSIZE-1,"delete from inferences\n",TM_PREFIX);
+fprintf(fout,"%s",query);
+CfVoidQueryDB(&cfdb,query);
 
-/* Class types */
+
+/* Class types and topics */
 
 for (slot = 0; slot < CF_HASHTABLESIZE; slot++)
    {
@@ -1414,6 +1478,8 @@ for (slot = 0; slot < CF_HASHTABLESIZE; slot++)
       }
    }
 
+// Occurrences
+
 for (op = OCCURRENCES; op != NULL; op=op->next)
    {
    for (rp = op->represents; rp != NULL; rp=rp->next)
@@ -1428,6 +1494,14 @@ for (op = OCCURRENCES; op != NULL; op=op->next)
       }
    }
 
+//
+
+for (ip = INFERENCES; ip != NULL; ip=ip->next)
+   {
+   snprintf(query,CF_BUFSIZE-1,"INSERT INTO inferences (precedent,qualifier,inference) values ('%s','%s','%s')\n",ip->precedent,ip->qualifier,ip->inference);
+   fprintf(fout,"%s",query);
+   CfVoidQueryDB(&cfdb,query);
+   }
 
 /* Close channels */
 
@@ -1455,31 +1529,14 @@ if (GENERATE_MANUAL)
 
 void GenerateGraph()
 {
-struct Rlist *semantics = NULL;
-
-if (GRAPH)
+#ifdef HAVE_NOVA
+if (GRAPH && VIEWS)
    {
-#ifdef HAVE_LIBCFNOVA
-   VerifyGraph(NULL,NULL);
-   if (VIEWS)
-      { 
-      PrependRScalar(&semantics,NOVA_GIVES,CF_SCALAR);
-      PrependRScalar(&semantics,NOVA_USES,CF_SCALAR);
-      PrependRScalar(&semantics,NOVA_IMPACTS,CF_SCALAR);
-      PrependRScalar(&semantics,NOVA_ISIMPACTED,CF_SCALAR);
-      PrependRScalar(&semantics,NOVA_BUNDLE_DATA,CF_SCALAR);
-      PrependRScalar(&semantics,NOVA_BUNDLE_DATA_INV_B,CF_SCALAR);
-      PrependRScalar(&semantics,NOVA_BUNDLE_DATA_INV_P,CF_SCALAR);
-      VerifyGraph(semantics,"influence");
-      }
-#else
-# ifdef HAVE_LIBGVC
-   VerifyGraph(NULL,NULL);
-# endif
-#endif
+   struct Rlist *semantics = NULL;
+   Nova_PrimeGraph(&semantics);
+   DeleteRlist(semantics);
    }
-
-DeleteRlist(semantics);
+#endif
 }
 
 /*********************************************************************/
@@ -2580,10 +2637,5 @@ else
 
 return url;
 }
-
-
-/* EOF */
-
-
 
 

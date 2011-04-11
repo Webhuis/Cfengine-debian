@@ -37,11 +37,11 @@
 int SelectProcess(char *procentry,char **names,int *start,int *end,struct Attributes a,struct Promise *pp)
 
 { struct AlphaList proc_attr;
-  int result = true,s,e;
+ int result = true,s,e,i;
   char *criteria = NULL;
   char *column[CF_PROCCOLS];
   struct Rlist *rp;
-    
+
 Debug("SelectProcess(%s)\n",procentry);
 
 InitAlphaList(&proc_attr);
@@ -58,8 +58,7 @@ if (!SplitProcLine(procentry,names,start,end,column))
 
 if (DEBUG)
    {
-   int i;
-   for (i = 0; column[i] != NULL; i++)
+   for (i = 0; names[i] != NULL; i++)
       {
       printf("COL[%s] = \"%s\"\n",names[i],column[i]);
       }
@@ -134,7 +133,7 @@ if (SelectProcRegexMatch("TTY","TTY",a.process_select.tty,names,column))
    PrependAlphaList(&proc_attr,"tty");
    }
 
-if (result = EvaluateORString(a.process_select.process_result,proc_attr,0))
+if (result = EvalProcessResult(a.process_select.process_result,&proc_attr))
    {
    //ClassesFromString(fp->defines);
    }
@@ -153,6 +152,11 @@ if (result)
       }
    }
 
+for (i = 0; column[i] != NULL; i++)
+   {
+   free(column[i]);
+   }
+
 return result; 
 }
 
@@ -165,6 +169,11 @@ int SelectProcRangeMatch(char *name1,char *name2,int min,int max,char **names,ch
 { int i;
   long value;
 
+if (min == CF_NOINT || max == CF_NOINT)
+   {
+   return false;
+   }
+
 if ((i = GetProcColumnIndex(name1,name2,names)) != -1)
    {
    value = Str2Int(line[i]);
@@ -175,7 +184,7 @@ if ((i = GetProcColumnIndex(name1,name2,names)) != -1)
       return false;
       }
    
-   if (min < value && value < max)
+   if (min <= value && value <= max)
       {
       return true;
       }
@@ -195,6 +204,11 @@ int SelectProcTimeCounterRangeMatch(char *name1,char *name2,time_t min,time_t ma
 { int i;
   time_t value;
 
+if (min == CF_NOINT || max == CF_NOINT)
+   {
+   return false;
+   }
+
 if ((i = GetProcColumnIndex(name1,name2,names)) != -1)
    {
    value = (time_t) TimeCounter2Int(line[i]);
@@ -205,7 +219,7 @@ if ((i = GetProcColumnIndex(name1,name2,names)) != -1)
       return false;
       }
 
-   if (min < value && value < max)
+   if (min <= value && value <= max)
       {
       CfOut(cf_verbose,"","Selection filter matched counter range %s/%s = %s in [%ld,%ld] (= %ld secs)\n",name1,name2,line[i],min,max,value);
       return true;
@@ -227,6 +241,11 @@ int SelectProcTimeAbsRangeMatch(char *name1,char *name2,time_t min,time_t max,ch
 { int i;
   time_t value;
 
+if (min == CF_NOINT || max == CF_NOINT)
+   {
+   return false;
+   }
+
 if ((i = GetProcColumnIndex(name1,name2,names)) != -1)
    {
    value = (time_t)TimeAbs2Int(line[i]);
@@ -237,7 +256,7 @@ if ((i = GetProcColumnIndex(name1,name2,names)) != -1)
       return false;
       }
    
-   if (min < value && value < max)
+   if (min <= value && value <= max)
       {
       CfOut(cf_verbose,"","Selection filter matched absolute %s/%s = %s in [%ld,%ld]\n",name1,name2,line[i],min,max);
       return true;
@@ -283,6 +302,10 @@ int SplitProcLine(char *proc,char **names,int *start,int *end,char **line)
 
 { int i,s,e;
 
+char *sp = NULL;
+char cols1[CF_PROCCOLS][CF_SMALLBUF] = { "" };
+char cols2[CF_PROCCOLS][CF_SMALLBUF] = { "" };
+
 Debug("SplitProcLine(%s)\n",proc); 
 
 if (proc == NULL || strlen(proc) == 0)
@@ -290,12 +313,44 @@ if (proc == NULL || strlen(proc) == 0)
    return false;
    }
 
-for (i = 0; i < CF_PROCCOLS; i++)
+memset(line, 0, sizeof(char *) * CF_PROCCOLS);
+
+// First try looking at all the separable items
+
+sp = proc;
+
+for (i = 0; i < CF_PROCCOLS && names[i] != NULL; i++)
    {
-   line[i] = NULL;
+   while(*sp == ' ')
+      {
+      sp++;
+      }
+
+   if (strcmp(names[i],"CMD") == 0 || strcmp(names[i],"COMMAND") == 0)
+      {
+      sscanf(sp,"%127[^\n]",&(cols1[i]));
+      sp += strlen(cols1[i]);
+      }
+   else
+      {
+      sscanf(sp,"%127s",&(cols1[i]));
+      sp += strlen(cols1[i]);
+      }
+   
+   // Some ps stimes may contain spaces, e.g. "Jan 25"
+   if (strcmp(names[i],"STIME") == 0 && strlen(cols1[i]) == 3)
+      {
+      char s[CF_SMALLBUF] = {0};
+      sscanf(sp,"%127s",s);
+      strcat(cols1[i]," ");
+      strcat(cols1[i],s);
+      sp += strlen(s)+1;
+      }
    }
- 
-for (i = 0; names[i] != NULL; i++)
+
+// Now try looking at columne alignment
+
+for (i = 0; i < CF_PROCCOLS && names[i] != NULL; i++)
    {
    // Start from the header/column tab marker and count backwards until we find 0 or space
    for (s = start[i]; (s >= 0) && !isspace((int)*(proc+s)); s--)
@@ -334,17 +389,21 @@ for (i = 0; names[i] != NULL; i++)
    
    if (s <= e)
       {
-      line[i] = (char *)malloc(e-s+2);
-      memset(line[i],0,(e-s+2));
-      strncpy(line[i],(char *)(proc+s),(e-s+1));
+      strncpy(cols2[i],(char *)(proc+s),MIN(CF_SMALLBUF-1,(e-s+1)));
       }
    else
       {
-      line[i] = (char *)malloc(1);
-      line[i][0] = '\0';
+      cols2[i][0] = '\0';
       }
 
-   Chop(line[i]);
+   Chop(cols2[i]);
+
+   if (strcmp(cols2[i],cols1[i]) != 0)
+      {
+      CfOut(cf_inform,""," !! Unacceptable model uncertainty examining processes");
+      }
+
+   line[i] = strdup(cols1[i]);
    }
 
 return true;

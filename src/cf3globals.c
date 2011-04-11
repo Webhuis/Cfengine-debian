@@ -202,7 +202,8 @@ char *DAY_TEXT[] =
    "Thursday",
    "Friday",
    "Saturday",
-   "Sunday"
+   "Sunday",
+   NULL
    };
 
 char *MONTH_TEXT[] =
@@ -218,7 +219,8 @@ char *MONTH_TEXT[] =
    "September",
    "October",
    "November",
-   "December"
+   "December",
+   NULL
    };
 
 char *SHIFT_TEXT[] =
@@ -226,7 +228,8 @@ char *SHIFT_TEXT[] =
    "Night",
    "Morning",
    "Afternoon",
-   "Evening"
+   "Evening",
+   NULL
    };
 
 /*****************************************************************************/
@@ -394,6 +397,8 @@ struct AlphaList VADDCLASSES;
 struct Item *VNEGHEAP = NULL;
 struct Item *VDELCLASSES = NULL;
 struct Rlist *PRIVCLASSHEAP = NULL;
+
+struct Rlist *GOALS = NULL;
 
 /*******************************************************************/
 /*                                                                 */
@@ -625,4 +630,3 @@ char *OBS[CF_OBSERVABLES][2] =
     };
 
 char *UNITS[CF_OBSERVABLES] = {0};
-time_t DATESTAMPS[CF_OBSERVABLES] = {0};

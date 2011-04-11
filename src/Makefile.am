@@ -1,14 +1,15 @@
-AM_CFLAGS = $(GCC_CFLAG) @CFLAGS@
+AM_CFLAGS = $(GCC_CFLAG) $(NOVA_CFLAGS) $(CONSTELLATION_CFLAGS) @CFLAGS@
 AM_YFLAGS = -d
 LEXLIB = @LEXLIB@
 LDADD = libpromises.la # $(BERKELEY_DB_LDFLAGSD) $(BERKELEY_DB_LIB) $(OPENSSL_LIB_LDFLAGS) $(OPENSSL_LIB_LIB)
 INCLUDES = $(BERKELEY_DB_CFLAGS) $(OPENSSL_LIB_CPPFLAGS)
 AM_LDFLAGS = $(BERKELEY_DB_LDFLAGS) $(OPENSSL_LIB_LDFLAGS) @LDFLAGS@
+BUILT_SOURCES = cf3parse.h
 
 lib_LTLIBRARIES = libpromises.la
 
 libpromises_la_LDFLAGS = -version-info 1:0:0 -no-undefined
-libpromises_la_LIBADD = $(BERKELEY_DB_LDFLAGSD) $(BERKELEY_DB_LIB) $(OPENSSL_LIB_LDFLAGS) $(OPENSSL_LIB_LIB)
+libpromises_la_LIBADD = ../pub/libcfpub.la $(NOVA_LDADD) $(CONSTELLATION_LDADD) $(BERKELEY_DB_LDFLAGSD) $(BERKELEY_DB_LIB) $(OPENSSL_LIB_LDFLAGS) $(OPENSSL_LIB_LIB)
 libpromises_la_CFLAGS = $(AM_CFLAGS)
 
 # Separate out a library
@@ -27,6 +28,8 @@ libpromises_la_SOURCES =                                                \
         dtypes.c                                                        \
         classes.c                                                       \
         env_context.c                                                   \
+        string_expressions.c                                            \
+        logic_expressions.c                                             \
         files_interfaces.c                                              \
         files_properties.c                                              \
         files_select.c                                                  \
@@ -65,6 +68,8 @@ libpromises_la_SOURCES =                                                \
         args.c                                                          \
         hashes.c                                                        \
         crypto.c                                                        \
+        sort.c                                                          \
+        full-write.c                                                    \
         expand.c                                                        \
         matching.c                                                      \
         selfdiagnostic.c                                                \
@@ -108,8 +113,14 @@ libpromises_la_SOURCES =                                                \
 	mod_outputs.c							\
         unix.c
 
+# Automake need to be guided due to symlinking
+libpromises_la_DEPENDENCIES = ../pub/libcfpub.la $(NOVA_LDADD) $(CONSTELLATION_LDADD)
 
-sbin_PROGRAMS = cf-know cf-promises cf-agent cf-monitord cf-serverd cf-execd cf-runagent cf-key cf-report cf-hub
+sbin_PROGRAMS = cf-know cf-promises cf-agent cf-monitord cf-serverd cf-execd cf-runagent cf-key cf-report
+
+if HAVE_NOVA
+  sbin_PROGRAMS += cf-hub
+endif
 
 cf_promises_SOURCES =                                                   \
         cfpromises.c
@@ -145,15 +156,18 @@ cf_monitord_SOURCES =                                                   \
 cf_execd_SOURCES =                                                      \
         exec.c
 
-cf_hub_SOURCES =							\
-        hub.c
+if HAVE_NOVA
+cf_hub_SOURCES =
+
+cf_hub_LDADD =                                                          \
+        ../nova/src/libcfhub.la libpromises.la
+endif
 
 cf_runagent_SOURCES =                                                   \
         runagent.c
 
 cf_know_SOURCES =                                                       \
         cfknow.c                                                        \
-        graph.c                                                         \
         manual.c  
 EXTRA_DIST = cf3lex.c cf3parse.c
 
@@ -162,14 +176,18 @@ EXTRA_DIST = cf3lex.c cf3parse.c
 #
 noinst_HEADERS =                                                        \
         cf.defs.h                                                       \
-        prototypes.h                                                    \
         cf.extern.h                                                     \
         config.h                                                        \
         prototypes3.h                                                   \
         cf3.defs.h                                                      \
         cf3.server.h                                                    \
         cf3parse.h                                                      \
-        cf3.extern.h
+        cf3.extern.h                                                    \
+        cf.events.h                                                     \
+        string_expressions.h                                            \
+        logic_expressions.h                                             \
+        compiler.h                                                      \
+        bool.h
 
 #
 # Some basic clean ups
@@ -194,3 +212,8 @@ DISTCLEANFILES = cflex.c cfparse.c cfparse.h
 # "configure; make; make install"
 #
 MAINTAINERCLEANFILES = Makefile.in conf.h.in stamp-h.in
+
+SUFFIXES= .h
+cf3.defs.h:
+	cd ./../core/src; svn update
+	ln -fs ../../core/src/cf3.defs.h cf3.defs.h

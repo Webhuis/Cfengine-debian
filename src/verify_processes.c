@@ -128,7 +128,7 @@ YieldCurrentLock(thislock);
 
 /*******************************************************************/
 
-int LoadProcessTable(struct Item **procdata,char *psopts)
+int LoadProcessTable(struct Item **procdata)
 {
 if (PROCESSTABLE)
    {
@@ -139,7 +139,7 @@ if (PROCESSTABLE)
 #ifdef MINGW
 return NovaWin_LoadProcessTable(procdata);
 #else
-return Unix_LoadProcessTable(procdata,psopts);
+return Unix_LoadProcessTable(procdata);
 #endif
 }
 
@@ -200,15 +200,22 @@ if (do_signals && matches > 0)
    {
    if (a.process_stop != NULL)
       {
-      if (IsExecutable(GetArg0(a.process_stop)))
+      if (DONTDO)
          {
-         ShellCommandReturnsZero(a.process_stop,false);
+         cfPS(cf_error,CF_WARN,"",pp,a," -- Need to keep process-stop promise for %s, but only a warning is promised",pp->promiser);         
          }
       else
          {
-         cfPS(cf_verbose,CF_FAIL,"",pp,a,"Process promise to stop %s could not be kept because %s the stop operator failed",pp->promiser,a.process_stop);
-         DeleteItemList(killlist);
-         return;
+         if (IsExecutable(GetArg0(a.process_stop)))
+            {
+            ShellCommandReturnsZero(a.process_stop,false);
+            }
+         else
+            {
+            cfPS(cf_verbose,CF_FAIL,"",pp,a,"Process promise to stop %s could not be kept because %s the stop operator failed",pp->promiser,a.process_stop);
+            DeleteItemList(killlist);
+            return;
+            }
          }
       }
    else
@@ -253,7 +260,6 @@ int FindPidMatches(struct Item *procdata,struct Item **killlist,struct Attribute
   char *names[CF_PROCCOLS];      /* ps headers */
   int start[CF_PROCCOLS];
   int end[CF_PROCCOLS];
-  struct CfRegEx rex;
 
 if (procdata == NULL)
    {
@@ -273,13 +279,13 @@ for (ip = procdata->next; ip != NULL; ip=ip->next)
          continue;
          }
 
-      if(EMPTY(ip->name))
-	{
-	continue;
-	}
-
+      if (EMPTY(ip->name))
+         {
+         continue;
+         }
+      
       pid = ExtractPid(ip->name,names,start,end);
-
+      
       if (pid == -1)
          {
          CfOut(cf_verbose,"","Unable to extract pid while looking for %s\n",pp->promiser);
