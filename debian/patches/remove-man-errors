@@ -62,3 +62,14 @@ file; I'm removing all the man errors from here
  	  }
         }
      }
+--- a/src/evalfunction.c
++++ b/src/evalfunction.c
+@@ -196,7 +196,7 @@
+    return rval;
+    }
+ 
+-Debug(" | Database opened succesfully.\n");
++Debug(" | Database opened successfully.\n");
+ 
+ /* Acquire a cursor for the database. */
+ 
