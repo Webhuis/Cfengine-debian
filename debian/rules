@@ -26,6 +26,7 @@ configure: config-stamp
 
 config-stamp:
 	dh_testdir
+	dh_autoreconf
 	# Add here commands to configure the package.
 ifneq "$(wildcard /usr/share/misc/config.sub)" ""
 	cp -f /usr/share/misc/config.sub config.sub
@@ -59,6 +60,7 @@ build-stamp:  config.status
 clean: 
 	dh_testdir
 	dh_testroot
+	dh_autoreconf_clean
 	rm -f build-stamp 
 
 	# Add here commands to clean up after the build process.
