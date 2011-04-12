@@ -18,6 +18,7 @@ cfengine3 (3.1.5~b1-1) unstable; urgency=low
   * debian/cfengine3.doc-base: added a doc-base for the HTML doc distributed
   * debian/control:
     + added dh-autoreconf to Build-Depends
+  * debian/source/local-options: unapply all patches after the build
 
  -- Antonio Radici <antonio@debian.org>  Mon, 11 Apr 2011 17:45:21 +0100
 
