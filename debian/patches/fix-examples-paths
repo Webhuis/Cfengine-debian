@@ -4,8 +4,10 @@ by the fhs-compliance patch; see #552144 for more details
 I'm also removing the auto-update of the binaries because the debian package is
 supposed to update the binaries, rather than cf-execd itself
 
---- a/inputs/update.cf
-+++ b/inputs/update.cf
+Index: cfengine3/inputs/update.cf
+===================================================================
+--- cfengine3.orig/inputs/update.cf	2011-05-06 22:12:12.000000000 +0000
++++ cfengine3/inputs/update.cf	2011-05-06 22:24:30.000000000 +0000
 @@ -26,23 +26,17 @@
  {
  vars:
@@ -39,8 +41,10 @@ supposed to update the binaries, rather than cf-execd itself
 -}
 \ No newline at end of file
 +}
---- a/inputs/site.cf
-+++ b/inputs/site.cf
+Index: cfengine3/inputs/site.cf
+===================================================================
+--- cfengine3.orig/inputs/site.cf	2011-05-06 22:12:12.000000000 +0000
++++ cfengine3/inputs/site.cf	2011-05-06 22:24:30.000000000 +0000
 @@ -306,7 +306,7 @@
  
      exec_fix::
