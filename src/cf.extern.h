@@ -22,6 +22,9 @@
   included file COSL.txt.
 */
 
+#ifndef CFENGINE_CF_EXTERN_H
+#define CFENGINE_CF_EXTERN_H
+
 #include "../pub/getopt.h"
 
 #if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
@@ -44,6 +47,7 @@ extern int INSTALLALL;
 extern int ALL_SINGLECOPY;
 extern int PASS;
 extern RSA *PRIVKEY, *PUBKEY;
+extern char PUBKEY_DIGEST[CF_MAXVARSIZE];
 extern char BINDINTERFACE[CF_BUFSIZE];
 extern struct sock ECGSOCKS[ATTR];
 extern char *TCPNAMES[CF_NETATTR];
@@ -553,3 +557,5 @@ extern int CF_DIGEST_SIZES[10];
 extern unsigned int WINVER_MAJOR;
 extern unsigned int WINVER_MINOR;
 extern unsigned int WINVER_BUILD;
+
+#endif

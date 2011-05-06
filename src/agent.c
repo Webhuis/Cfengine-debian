@@ -86,12 +86,6 @@ void SetEnvironment(char *s);
 extern struct BodySyntax CFA_CONTROLBODY[];
 extern struct Rlist *SERVERLIST;
 
-#ifdef HAVE_LIBVIRT
-# include <libvirt/libvirt.h>
-# include <libvirt/virterror.h>
-extern virConnectPtr CFVC[];
-#endif
-
 /*******************************************************************/
 /* Command line options                                            */
 /*******************************************************************/
@@ -142,15 +136,16 @@ extern virConnectPtr CFVC[];
 
 int main(int argc,char *argv[])
 
-{ struct stat sar;
-
+{
 CheckOpts(argc,argv);
 GenericInitialize(argc,argv,"agent");
 PromiseManagement("agent");
 ThisAgentInit();
 KeepPromises();
 NoteClassUsage(VHEAP);
-NoteVarUsageDB();
+#ifdef HAVE_NOVA
+Nova_NoteVarUsageDB();
+#endif
 UpdateLastSeen();
 PurgeLocks();
 GenericDeInitialize();
@@ -165,7 +160,6 @@ void CheckOpts(int argc,char **argv)
 
 { extern char *optarg;
  char arg[CF_BUFSIZE],*sp;
-  struct Item *actionList;
   int optindex = 0;
   int c,alpha = false,v6 = false;
 
@@ -910,8 +904,7 @@ void CheckAgentAccess(struct Rlist *list)
 {
 }
 #else  /* NOT MINGW */
-{ char id[CF_MAXVARSIZE];
-  struct passwd *pw;
+{
   struct Rlist *rp,*rp2;
   struct stat sb;
   uid_t uid;
@@ -1119,22 +1112,16 @@ if (putenv(s) != 0)
 
 int NewTypeContext(enum typesequence type)
 
-{ int maxconnections,i;
-  struct Item *procdata = NULL;
-
+{
 // get maxconnections
 
 switch(type)
    {
    case kp_environments:
-
-#ifdef HAVE_LIBVIRT
-       for (i = 0; i < cfv_none; i++)
-          {
-          CFVC[i] = NULL;
-          }
+#ifdef HAVE_NOVA
+      Nova_NewEnvironmentsContext();
 #endif
-       break;
+      break;
        
    case kp_files:
 
@@ -1175,8 +1162,7 @@ void DeleteTypeContext(enum typesequence type)
 
 { struct Rlist *rp;
   struct ServerItem *svp;
-  struct Attributes a = {0};
-  int i;
+  struct Attributes a = {{0}};
  
 switch(type)
    {
@@ -1185,18 +1171,10 @@ switch(type)
        break;
 
    case kp_environments:
-
-#ifdef HAVE_LIBVIRT
-       for (i = 0; i < cfv_none; i++)
-          {
-          if (CFVC[i] != NULL)
-             {
-             virConnectClose(CFVC[i]);
-             CFVC[i] = NULL;
-             }
-          }
+#ifdef HAVE_NOVA
+      Nova_DeleteEnvironmentsContext();
 #endif
-       break;
+      break;
 
    case kp_files:
 

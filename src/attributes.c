@@ -36,7 +36,7 @@
 
 struct Attributes GetFilesAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
  
 memset(&attr,0,sizeof(attr));
 
@@ -128,7 +128,7 @@ return attr;
 
 struct Attributes GetOutputsAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -142,7 +142,7 @@ return attr;
 
 struct Attributes GetReportsAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -155,7 +155,7 @@ return attr;
 
 struct Attributes GetEnvironmentsAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -168,7 +168,7 @@ return attr;
 
 struct Attributes GetServicesAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -181,7 +181,7 @@ return attr;
 
 struct Attributes GetPackageAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
  
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -193,7 +193,7 @@ return attr;
 
 struct Attributes GetDatabaseAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.transaction = GetTransactionConstraints(pp);
 attr.classes = GetClassDefinitionConstraints(pp);
@@ -218,7 +218,7 @@ return a;
 
 struct Attributes GetExecAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.contain = GetExecContainConstraints(pp);
 attr.havecontain = GetBooleanConstraint("contain",pp);
@@ -241,7 +241,7 @@ return attr;
 
 struct Attributes GetProcessAttributes(struct Promise *pp)
 
-{ static struct Attributes attr = {0};
+{ static struct Attributes attr = {{0}};
 
 attr.signals = GetListConstraint("signals",pp);
 attr.process_stop = (char *)GetConstraint("process_stop",pp,CF_SCALAR);
@@ -267,7 +267,7 @@ return attr;
 
 struct Attributes GetStorageAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.mount = GetMountConstraints(pp);
 attr.volume = GetVolumeConstraints(pp);
@@ -294,7 +294,7 @@ return attr;
 
 struct Attributes GetMethodAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.havebundle = GetBundleConstraint("usebundle",pp);
 
@@ -313,7 +313,7 @@ return attr;
 
 struct Attributes GetInterfacesAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.havetcpip = GetBundleConstraint("usebundle",pp);
 attr.tcpip = GetTCPIPAttributes(pp);
@@ -333,12 +333,204 @@ return attr;
 
 struct Attributes GetTopicsAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.fwd_name = GetConstraint("forward_relationship",pp,CF_SCALAR);
 attr.bwd_name = GetConstraint("backward_relationship",pp,CF_SCALAR);
 attr.associates = GetListConstraint("associates",pp);
 attr.synonyms = GetListConstraint("synonyms",pp);
+attr.general = GetListConstraint("generalizations",pp);
+return attr;
+}
+
+/*******************************************************************/
+
+struct Attributes GetThingsAttributes(struct Promise *pp)
+
+{ struct Attributes attr = {{0}};
+  struct Rlist *rp;
+  char *cert = GetConstraint("certainty",pp,CF_SCALAR);
+  enum knowledgecertainty certainty;
+
+attr.synonyms = GetListConstraint("synonyms",pp);
+attr.general = GetListConstraint("generalizations",pp);
+
+if (cert && strcmp(cert,"possible") == 0)
+   {
+   certainty = cfk_possible;
+   }
+else if (cert && strcmp(cert,"uncertain") == 0)
+   {
+   certainty = cfk_uncertain;
+   }
+else
+   {
+   certainty = cfk_certain;
+   }
+
+// Select predefined physics
+
+if (rp = GetListConstraint("is_part_of",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_PARTOF_CERT_F;
+          attr.bwd_name = KM_PARTOF_CERT_B;
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_PARTOF_UNCERT_F;
+          attr.bwd_name = KM_PARTOF_UNCERT_B;
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_PARTOF_POSS_F;
+          attr.bwd_name = KM_PARTOF_POSS_B;
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("determines",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_DETERMINES_CERT_F;
+          attr.bwd_name = KM_DETERMINES_CERT_B;
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_DETERMINES_UNCERT_F;
+          attr.bwd_name = KM_DETERMINES_UNCERT_B;
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_DETERMINES_POSS_F;
+          attr.bwd_name = KM_DETERMINES_POSS_B;
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("is_connected_to",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_CONNECTS_CERT_F;
+          attr.bwd_name = KM_CONNECTS_CERT_B;
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_CONNECTS_UNCERT_F;
+          attr.bwd_name = KM_CONNECTS_UNCERT_B;
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_CONNECTS_POSS_F;
+          attr.bwd_name = KM_CONNECTS_POSS_B;
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("uses",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_USES_CERT_F;
+          attr.bwd_name = KM_USES_CERT_B;
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_USES_UNCERT_F;
+          attr.bwd_name = KM_USES_UNCERT_B;
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_USES_POSS_F;
+          attr.bwd_name = KM_USES_POSS_B;
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("provides",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_PROVIDES_CERT_F;
+          attr.bwd_name = KM_PROVIDES_CERT_B;   
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_PROVIDES_UNCERT_F;
+          attr.bwd_name = KM_PROVIDES_UNCERT_B;   
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_PROVIDES_POSS_F;
+          attr.bwd_name = KM_PROVIDES_POSS_B;   
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("belongs_to",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_BELONGS_CERT_F;
+          attr.bwd_name = KM_BELONGS_CERT_B;   
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_BELONGS_UNCERT_F;
+          attr.bwd_name = KM_BELONGS_UNCERT_B;   
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_BELONGS_POSS_F;
+          attr.bwd_name = KM_BELONGS_POSS_B;   
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("affects",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_AFFECTS_CERT_F;
+          attr.bwd_name = KM_AFFECTS_CERT_B;   
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_AFFECTS_UNCERT_F;
+          attr.bwd_name = KM_AFFECTS_UNCERT_B;   
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_AFFECTS_POSS_F;
+          attr.bwd_name = KM_AFFECTS_POSS_B;   
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("needs",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_NEEDS_CERT_F;
+          attr.bwd_name = KM_NEEDS_CERT_B;   
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_NEEDS_UNCERT_F;
+          attr.bwd_name = KM_NEEDS_UNCERT_B;   
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_NEEDS_POSS_F;
+          attr.bwd_name = KM_NEEDS_POSS_B;   
+          break;
+      }
+
+   attr.associates = rp;
+   }
+
 return attr;
 }
 
@@ -346,7 +538,7 @@ return attr;
 
 struct Attributes GetInferencesAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.precedents = GetListConstraint("precedents",pp);
 attr.qualifiers = GetListConstraint("qualifers",pp);
@@ -357,8 +549,7 @@ return attr;
 
 struct Attributes GetOccurrenceAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
-  char *value;
+{ struct Attributes attr = {{0}};
 
 attr.represents = GetListConstraint("represents",pp);
 attr.rep_type = GetConstraint("representation",pp,CF_SCALAR);
@@ -372,7 +563,7 @@ return attr;
 
 struct Attributes GetMeasurementAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.measure = GetMeasurementConstraint(pp);
     
@@ -1043,7 +1234,6 @@ struct Packages GetPackageConstraints(struct Promise *pp)
   enum package_actions action;
   enum version_cmp operator;
   enum action_policy change_policy;
-  char *value;
 
 p.have_package_methods = GetBooleanConstraint("havepackage_method",pp);
 p.package_version = (char *)GetConstraint("package_version",pp,CF_SCALAR);
@@ -1256,8 +1446,7 @@ printf(".....................................................\n\n");
 
 struct Attributes GetInsertionAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
-  char *value;
+{ struct Attributes attr = {{0}};
 
 attr.havelocation = GetBooleanConstraint("location",pp);
 attr.location = GetLocationAttributes(pp);
@@ -1312,7 +1501,7 @@ return e;
 
 struct Attributes GetDeletionAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.not_matching = GetBooleanConstraint("not_matching",pp);
 
@@ -1337,7 +1526,7 @@ return attr;
 
 struct Attributes GetColumnAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.havecolumn = GetBooleanConstraint("edit_field",pp);
 attr.column = GetColumnConstraints(pp);
@@ -1360,7 +1549,7 @@ return attr;
 
 struct Attributes GetReplaceAttributes(struct Promise *pp)
 
-{ struct Attributes attr = {0};
+{ struct Attributes attr = {{0}};
 
 attr.havereplace = GetBooleanConstraint("replace_patterns",pp);
 attr.replace = GetReplaceConstraints(pp);

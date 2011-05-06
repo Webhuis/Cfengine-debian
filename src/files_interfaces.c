@@ -209,10 +209,10 @@ cf_closedir(dirh);
 
 void VerifyFilePromise(char *path,struct Promise *pp)
 
-{ struct stat osb,oslb,dsb,dslb;
-  struct Attributes a = {0};
+{ struct stat osb,oslb,dsb;
+  struct Attributes a = {{0}};
   struct CfLock thislock;
-  int exists,success,rlevel = 0,isthere,save = true,isdirectory = false;
+  int exists,success,rlevel = 0;
 
 a = GetFilesAttributes(pp);
 
@@ -428,7 +428,7 @@ void VerifyCopy(char *source,char *destination,struct Attributes attr,struct Pro
   char destfile[CF_BUFSIZE];
   struct stat ssb, dsb;
   struct cfdirent *dirp;
-  int save_uid, save_gid, found;
+  int found;
   
 Debug("VerifyCopy (source=%s destination=%s)\n",source,destination);
 
@@ -609,7 +609,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
             }
          else if (S_ISDIR(sb.st_mode))
             {
-            struct Attributes purgeattr = {0};
+            struct Attributes purgeattr = {{0}};
             memset(&purgeattr,0,sizeof(purgeattr));
 
             /* Deletion is based on a files promise */
@@ -658,8 +658,7 @@ void CfCopyFile(char *sourcefile,char *destfile,struct stat ssb,struct Attribute
 
 { char *lastnode,*server;
   struct stat dsb;
-  struct Item *ptr, *ptr1;
-  int found,succeed = false;
+  int found;
   mode_t srcmode = ssb.st_mode;
 
 Debug2("CopyFile(%s,%s)\n",sourcefile,destfile);
@@ -1338,7 +1337,7 @@ return true;
 
 void LoadSetuid(struct Attributes a,struct Promise *pp)
 
-{ struct Attributes b = {0};
+{ struct Attributes b = {{0}};
   char filename[CF_BUFSIZE];
 
 b = a;
@@ -1358,7 +1357,7 @@ if (!LoadFileAsItemList(&VSETUIDLIST,filename,b,pp))
 
 void SaveSetuid(struct Attributes a,struct Promise *pp)
 
-{ struct Attributes b = {0};
+{ struct Attributes b = {{0}};
   char filename[CF_BUFSIZE];
 
 b = a;
@@ -1513,6 +1512,7 @@ lastnode=ReadLastNode(sourcefile);
 if (MatchRlistItem(attr.copy.copy_links,lastnode))
    {
    struct stat ssb;
+   ExpandLinks(linkbuf,sourcefile,0);
    CfOut(cf_verbose,"","cfengine: link item in copy %s marked for copying from %s instead\n",sourcefile,linkbuf);
    cfstat(linkbuf,&ssb);
    CfCopyFile(linkbuf,destfile,ssb,attr,pp);
@@ -1584,7 +1584,7 @@ int CopyRegularFile(char *source,char *dest,struct stat sstat,struct stat dstat,
 { char backup[CF_BUFSIZE];
   char new[CF_BUFSIZE], *linkable;
   struct cfagent_connection *conn = pp->conn;
-  int remote = false, silent, backupisdir=false, backupok=false,discardbackup;
+  int remote = false, backupisdir=false, backupok=false,discardbackup;
   struct stat s;
 #ifdef HAVE_UTIME_H
   struct utimbuf timebuf;
@@ -1996,7 +1996,7 @@ if (!FixCompressedArrayValue(i,value,&(pp->inode_cache)))
       }
    else
       {
-      if (attr.transaction.action = cfa_warn)
+      if (attr.transaction.action == cfa_warn)
          {
          CfOut(cf_verbose,""," !! Need to remove old hard link %s to preserve structure..\n",value);
          }

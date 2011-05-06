@@ -762,14 +762,8 @@ HAVE_GALAXY_FALSE
 HAVE_GALAXY_TRUE
 HAVE_CONSTELLATION_FALSE
 HAVE_CONSTELLATION_TRUE
-CONSTELLATION_LDADD
-CONSTELLATION_CFLAGS
-CONSTELLATION_SUBDIR
 HAVE_NOVA_FALSE
 HAVE_NOVA_TRUE
-NOVA_LDADD
-NOVA_CFLAGS
-NOVA_SUBDIR
 GETCONF
 GETLOADAVG_LIBS
 KMEM_GROUP
@@ -800,10 +794,10 @@ EGREP
 GREP
 SED
 LIBTOOL
-PTHREAD_CPPFLAGS
 PTHREAD_CFLAGS
 PTHREAD_LIBS
 PTHREAD_CC
+acx_pthread_config
 am__fastdepCC_FALSE
 am__fastdepCC_TRUE
 CCDEPMODE
@@ -911,19 +905,13 @@ enable_fast_install
 with_gnu_ld
 enable_libtool_lock
 with_diagnostics
-with_ldap
 with_sql
 enable_largefile
-with_nova
-with_constellation
 with_tokyocabinet
 with_qdbm
 with_berkeleydb
 with_openssl
-with_mongo
-with_libvirt
 with_pcre
-enable_DCE
 enable_selinux
 with_workdir
 '
@@ -1568,8 +1556,7 @@ Optional Features:
                           optimize for fast installation [default=yes]
   --disable-libtool-lock  avoid locking (might break parallel builds)
   --disable-largefile     omit support for large files
-  --enable-DCE            support for DCE and ACLs
-      --enable-selinux        Enable use of the SELINUX libraries
+  --enable-selinux        Enable SELinux support
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -1577,21 +1564,14 @@ Optional Packages:
   --with-pic              try to use only PIC/non-PIC objects [default=use
                           both]
   --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
-  --with-diagnostics      support test suite
-  --with-ldap             support ldap functions
-  --with-sql              support database functions
-  --without-nova          disable Nova enterprise extensions (enabled by
-                          default)
-  --without-constellation disable Constellation enterprise extensions (enabled
-                          by default)
-  --with-tokyocabinet     support database functions
-  --with-qdbm             support database functions qdbm
+  --with-diagnostics      enable test suite
+  --without-sql           disable SQL database connectors
+  --with-tokyocabinet     use Tokyo Cabinet to store runtime data
+  --with-qdbm             use QDBM to store runtime data
   --with-berkeleydb=PATH directory where BerkeleyDB exists
   --with-openssl=PATH directory where OpenSSL exists
-  --with-mongo            support client MongoDB report aggregation database
-  --with-libvirt          support virtual machine management
-  --with-pcre[=PATH]      support for Perl compatible regex (optionally search
-                          in PATH)
+  --with-pcre[=PATH]      Build with support for PCRE (optionally search in
+                          PATH)
   --with-workdir=WORKDIR  default internal for trusted cache
 
 Some influential environment variables:
@@ -2634,6 +2614,7 @@ test -n "$target_alias" &&
   program_prefix=${target_alias}-
 
 
+
 am__api_version='1.11'
 
 # Find a good install program.  We prefer a C program (faster),
@@ -3072,7 +3053,7 @@ fi
 
 # Define the identity of the package.
  PACKAGE=cfengine
- VERSION=3.1.5b1
+ VERSION=3.1.5
 
 
 cat >>confdefs.h <<_ACEOF
@@ -4193,11 +4174,9 @@ acx_pthread_ok=no
 # First of all, check if the user has set any of the PTHREAD_LIBS,
 # etcetera environment variables, and if threads linking works using
 # them:
-if test x"$PTHREAD_LIBS$PTHREAD_CFLAGS$PTHREAD_CPPFLAGS" != x; then
+if test x"$PTHREAD_LIBS$PTHREAD_CFLAGS" != x; then
         save_CFLAGS="$CFLAGS"
         CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
-        save_CPPFLAGS="$CPPFLAGS"
-        CPPFLAGS="$CPPFLAGS $PTHREAD_CPPFLAGS"
         save_LIBS="$LIBS"
         LIBS="$PTHREAD_LIBS $LIBS"
         { $as_echo "$as_me:${as_lineno-$LINENO}: checking for pthread_join in LIBS=$PTHREAD_LIBS with CFLAGS=$PTHREAD_CFLAGS" >&5
@@ -4233,7 +4212,6 @@ $as_echo "$acx_pthread_ok" >&6; }
         fi
         LIBS="$save_LIBS"
         CFLAGS="$save_CFLAGS"
-        CPPFLAGS="$save_CPPFLAGS"
 fi
 
 # We must check for the threads library under a number of different
@@ -4243,9 +4221,10 @@ fi
 
 # Create a list of thread flags to try.  Items starting with a "-" are
 # C compiler flags, and other items are library names, except for "none"
-# which indicates that we try without any flags at all.
+# which indicates that we try without any flags at all, and "pthread-config"
+# which is a program returning the flags for the Pth emulation library.
 
-acx_pthread_flags="pthreads none -Kthread -kthread lthread -pthread -pthreads -mthreads pthread --thread-safe -mt"
+acx_pthread_flags="pthreads none -Kthread -kthread lthread -pthread -pthreads -mthreads pthread --thread-safe -mt pthread-config"
 
 # The ordering *is* (sometimes) important.  Some notes on the
 # individual items follow:
@@ -4262,21 +4241,23 @@ acx_pthread_flags="pthreads none -Kthread -kthread lthread -pthread -pthreads -m
 # -mt: Sun Workshop C (may only link SunOS threads [-lthread], but it
 #      doesn't hurt to check since this sometimes defines pthreads too;
 #      also defines -D_REENTRANT)
+#      ... -mt is also the pthreads flag for HP/aCC
 # pthread: Linux, etcetera
 # --thread-safe: KAI C++
+# pthread-config: use pthread-config program (for GNU Pth library)
 
 case "${host_cpu}-${host_os}" in
         *solaris*)
 
         # On Solaris (at least, for some versions), libc contains stubbed
         # (non-functional) versions of the pthreads routines, so link-based
-        # tests will erroneously succeed.  (We need to link with -pthread or
+        # tests will erroneously succeed.  (We need to link with -pthreads/-mt/
         # -lpthread.)  (The stubs are missing pthread_cleanup_push, or rather
         # a function called by this macro, so we could check for that, but
         # who knows whether they'll stub that too in a future libc.)  So,
         # we'll just look for -pthreads and -lpthread first:
 
-        acx_pthread_flags="-pthread -pthreads pthread -mt $acx_pthread_flags"
+        acx_pthread_flags="-pthreads pthread -mt -pthread $acx_pthread_flags"
         ;;
 esac
 
@@ -4293,8 +4274,51 @@ $as_echo_n "checking whether pthreads work without any flags... " >&6; }
                 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether pthreads work with $flag" >&5
 $as_echo_n "checking whether pthreads work with $flag... " >&6; }
                 PTHREAD_CFLAGS="$flag"
-                PTHREAD_CPPFLAGS="$flag"
                 ;;
+
+		pthread-config)
+		# Extract the first word of "pthread-config", so it can be a program name with args.
+set dummy pthread-config; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if test "${ac_cv_prog_acx_pthread_config+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test -n "$acx_pthread_config"; then
+  ac_cv_prog_acx_pthread_config="$acx_pthread_config" # Let the user override the test.
+else
+as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
+    ac_cv_prog_acx_pthread_config="yes"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_prog_acx_pthread_config" && ac_cv_prog_acx_pthread_config="no"
+fi
+fi
+acx_pthread_config=$ac_cv_prog_acx_pthread_config
+if test -n "$acx_pthread_config"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $acx_pthread_config" >&5
+$as_echo "$acx_pthread_config" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+		if test x"$acx_pthread_config" = xno; then continue; fi
+		PTHREAD_CFLAGS="`pthread-config --cflags`"
+		PTHREAD_LIBS="`pthread-config --ldflags` `pthread-config --libs`"
+		;;
 
                 *)
                 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for the pthreads library -l$flag" >&5
@@ -4305,10 +4329,8 @@ $as_echo_n "checking for the pthreads library -l$flag... " >&6; }
 
         save_LIBS="$LIBS"
         save_CFLAGS="$CFLAGS"
-        save_CPPFLAGS="$CPPFLAGS"
         LIBS="$PTHREAD_LIBS $LIBS"
         CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
-        CPPFLAGS="$CFLAGS $PTHREAD_CPPFLAGS"
 
         # Check for various functions.  We must include pthread.h,
         # since some functions may be macros.  (On the Sequent, we
@@ -4340,7 +4362,6 @@ rm -f core conftest.err conftest.$ac_objext \
 
         LIBS="$save_LIBS"
         CFLAGS="$save_CFLAGS"
-        CPPFLAGS="$save_CPPFLAGS"
 
         { $as_echo "$as_me:${as_lineno-$LINENO}: result: $acx_pthread_ok" >&5
 $as_echo "$acx_pthread_ok" >&6; }
@@ -4350,7 +4371,6 @@ $as_echo "$acx_pthread_ok" >&6; }
 
         PTHREAD_LIBS=""
         PTHREAD_CFLAGS=""
-        PTHREAD_CPPFLAGS=""
 done
 fi
 
@@ -4360,86 +4380,61 @@ if test "x$acx_pthread_ok" = xyes; then
         LIBS="$PTHREAD_LIBS $LIBS"
         save_CFLAGS="$CFLAGS"
         CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
-        save_CPPFLAGS="$CPPFLAGS"
-        CPPFLAGS="$CFLAGS $PTHREAD_CPPFLAGS"
 
-        # Detect AIX lossage: threads are created detached by default
-        # and the JOINABLE attribute has a nonstandard name (UNDETACHED).
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for joinable pthread attribute" >&5
+        # Detect AIX lossage: JOINABLE attribute is called UNDETACHED.
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for joinable pthread attribute" >&5
 $as_echo_n "checking for joinable pthread attribute... " >&6; }
-        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+	attr_name=unknown
+	for attr in PTHREAD_CREATE_JOINABLE PTHREAD_CREATE_UNDETACHED; do
+	    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <pthread.h>
 int
 main ()
 {
-int attr=PTHREAD_CREATE_JOINABLE;
+int attr=$attr; return attr;
   ;
   return 0;
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
-  ok=PTHREAD_CREATE_JOINABLE
-else
-  ok=unknown
+  attr_name=$attr; break
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
-        if test x"$ok" = xunknown; then
-                cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#include <pthread.h>
-int
-main ()
-{
-int attr=PTHREAD_CREATE_UNDETACHED;
-  ;
-  return 0;
-}
+	done
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: $attr_name" >&5
+$as_echo "$attr_name" >&6; }
+        if test "$attr_name" != PTHREAD_CREATE_JOINABLE; then
+
+cat >>confdefs.h <<_ACEOF
+#define PTHREAD_CREATE_JOINABLE $attr_name
 _ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ok=PTHREAD_CREATE_UNDETACHED
-else
-  ok=unknown
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-        fi
-        if test x"$ok" != xPTHREAD_CREATE_JOINABLE; then
 
-$as_echo "#define PTHREAD_CREATE_JOINABLE \$ok" >>confdefs.h
-
-        fi
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: ${ok}" >&5
-$as_echo "${ok}" >&6; }
-        if test x"$ok" = xunknown; then
-                { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: we do not know how to create joinable pthreads" >&5
-$as_echo "$as_me: WARNING: we do not know how to create joinable pthreads" >&2;}
         fi
 
         { $as_echo "$as_me:${as_lineno-$LINENO}: checking if more special flags are required for pthreads" >&5
 $as_echo_n "checking if more special flags are required for pthreads... " >&6; }
         flag=no
         case "${host_cpu}-${host_os}" in
-                *-aix* | *-freebsd*)     flag="-D_THREAD_SAFE";;
-		# -D_REENTRANT is actually implied by -pthread in Tru64 5.1,
-		# at least.
-                *solaris* | *-osf* | *-hpux*) flag="-D_REENTRANT";;
+            *-aix* | *-freebsd* | *-darwin*) flag="-D_THREAD_SAFE";;
+            *solaris* | *-osf* | *-hpux*) flag="-D_REENTRANT";;
         esac
         { $as_echo "$as_me:${as_lineno-$LINENO}: result: ${flag}" >&5
 $as_echo "${flag}" >&6; }
         if test "x$flag" != xno; then
-                PTHREAD_CFLAGS="$flag $PTHREAD_CFLAGS"
-                PTHREAD_CPPFLAGS="$flag $PTHREAD_CPPFLAGS"
+            PTHREAD_CFLAGS="$flag $PTHREAD_CFLAGS"
         fi
 
         LIBS="$save_LIBS"
         CFLAGS="$save_CFLAGS"
-        CPPFLAGS="$save_CPPFLAGS"
 
-        # More AIX lossage: must compile with cc_r
-        # Extract the first word of "cc_r", so it can be a program name with args.
-set dummy cc_r; ac_word=$2
+        # More AIX lossage: must compile with xlc_r or cc_r
+	if test x"$GCC" != xyes; then
+          for ac_prog in xlc_r cc_r
+do
+  # Extract the first word of "$ac_prog", so it can be a program name with args.
+set dummy $ac_prog; ac_word=$2
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 $as_echo_n "checking for $ac_word... " >&6; }
 if test "${ac_cv_prog_PTHREAD_CC+set}" = set; then :
@@ -4455,7 +4450,7 @@ do
   test -z "$as_dir" && as_dir=.
     for ac_exec_ext in '' $ac_executable_extensions; do
   if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
-    ac_cv_prog_PTHREAD_CC="cc_r"
+    ac_cv_prog_PTHREAD_CC="$ac_prog"
     $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
     break 2
   fi
@@ -4463,7 +4458,6 @@ done
   done
 IFS=$as_save_IFS
 
-  test -z "$ac_cv_prog_PTHREAD_CC" && ac_cv_prog_PTHREAD_CC="${CC}"
 fi
 fi
 PTHREAD_CC=$ac_cv_prog_PTHREAD_CC
@@ -4476,10 +4470,16 @@ $as_echo "no" >&6; }
 fi
 
 
+  test -n "$PTHREAD_CC" && break
+done
+test -n "$PTHREAD_CC" || PTHREAD_CC="${CC}"
+
+        else
+          PTHREAD_CC=$CC
+	fi
 else
         PTHREAD_CC="$CC"
 fi
-
 
 
 
@@ -4504,7 +4504,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 CC=$PTHREAD_CC
 CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
-CPPFLAGS="$PTHREAD_CPPFLAGS $CPPFLAGS"
+CPPFLAGS="$PTHREAD_CFLAGS $CPPFLAGS"
 LDFLAGS="$PTHREAD_LDFLAGS $LDFLAGS"
 
 
@@ -6290,11 +6290,11 @@ irix5* | irix6* | nonstopux*)
   ;;
 
 # This must be Linux ELF.
-linux* | k*bsd*-gnu)
+linux* | k*bsd*-gnu | kopensolaris*-gnu)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
-netbsd*)
+netbsd* | netbsdelf*-gnu)
   if echo __ELF__ | $CC -E - | $GREP __ELF__ > /dev/null; then
     lt_cv_deplibs_check_method='match_pattern /lib[^/]+(\.so\.[0-9]+\.[0-9]+|_pic\.a)$'
   else
@@ -8698,7 +8698,7 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
       lt_prog_compiler_static='-non_shared'
       ;;
 
-    linux* | k*bsd*-gnu)
+    linux* | k*bsd*-gnu | kopensolaris*-gnu)
       case $cc_basename in
       # old Intel for x86_64 which still supported -KPIC.
       ecc*)
@@ -9147,6 +9147,9 @@ $as_echo_n "checking whether the $compiler linker ($LD) supports shared librarie
   openbsd*)
     with_gnu_ld=no
     ;;
+  linux* | k*bsd*-gnu)
+    link_all_deplibs=no
+    ;;
   esac
 
   ld_shlibs=yes
@@ -9168,6 +9171,7 @@ $as_echo_n "checking whether the $compiler linker ($LD) supports shared librarie
     fi
     supports_anon_versioning=no
     case `$LD -v 2>&1` in
+      *GNU\ gold*) supports_anon_versioning=yes ;;
       *\ [01].* | *\ 2.[0-9].* | *\ 2.10.*) ;; # catch versions < 2.11
       *\ 2.11.93.0.2\ *) supports_anon_versioning=yes ;; # RH7.3 ...
       *\ 2.11.92.0.12\ *) supports_anon_versioning=yes ;; # Mandrake 8.2 ...
@@ -9259,7 +9263,7 @@ _LT_EOF
       archive_expsym_cmds='sed "s,^,_," $export_symbols >$output_objdir/$soname.expsym~$CC -shared $pic_flag $libobjs $deplibs $compiler_flags ${wl}-h,$soname ${wl}--retain-symbols-file,$output_objdir/$soname.expsym ${wl}--image-base,`expr ${RANDOM-$$} % 4096 / 2 \* 262144 + 1342177280` -o $lib'
       ;;
 
-    gnu* | linux* | tpf* | k*bsd*-gnu)
+    gnu* | linux* | tpf* | k*bsd*-gnu | kopensolaris*-gnu)
       tmp_diet=no
       if test "$host_os" = linux-dietlibc; then
 	case $cc_basename in
@@ -9329,7 +9333,7 @@ _LT_EOF
       fi
       ;;
 
-    netbsd*)
+    netbsd* | netbsdelf*-gnu)
       if echo __ELF__ | $CC -E - | $GREP __ELF__ >/dev/null; then
 	archive_cmds='$LD -Bshareable $libobjs $deplibs $linker_flags -o $lib'
 	wlarc=
@@ -9504,6 +9508,7 @@ _LT_EOF
 	if test "$aix_use_runtimelinking" = yes; then
 	  shared_flag="$shared_flag "'${wl}-G'
 	fi
+	link_all_deplibs=no
       else
 	# not using gcc
 	if test "$host_cpu" = ia64; then
@@ -9830,7 +9835,7 @@ rm -f core conftest.err conftest.$ac_objext \
       link_all_deplibs=yes
       ;;
 
-    netbsd*)
+    netbsd* | netbsdelf*-gnu)
       if echo __ELF__ | $CC -E - | $GREP __ELF__ >/dev/null; then
 	archive_cmds='$LD -Bshareable -o $lib $libobjs $deplibs $linker_flags'  # a.out
       else
@@ -10720,7 +10725,7 @@ linux*oldld* | linux*aout* | linux*coff*)
   ;;
 
 # This must be Linux ELF.
-linux* | k*bsd*-gnu)
+linux* | k*bsd*-gnu | kopensolaris*-gnu)
   version_type=linux
   need_lib_prefix=no
   need_version=no
@@ -10773,6 +10778,18 @@ rm -f core conftest.err conftest.$ac_objext \
   # people can always --disable-shared, the test was removed, and we
   # assume the GNU/Linux dynamic linker is in use.
   dynamic_linker='GNU/Linux ld.so'
+  ;;
+
+netbsdelf*-gnu)
+  version_type=linux
+  need_lib_prefix=no
+  need_version=no
+  library_names_spec='${libname}${release}${shared_ext}$versuffix ${libname}${release}${shared_ext}$major ${libname}${shared_ext}'
+  soname_spec='${libname}${release}${shared_ext}$major'
+  shlibpath_var=LD_LIBRARY_PATH
+  shlibpath_overrides_runpath=no
+  hardcode_into_libs=yes
+  dynamic_linker='NetBSD ld.elf_so'
   ;;
 
 netbsd*)
@@ -11395,7 +11412,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11398 "configure"
+#line 11415 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11491,7 +11508,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11494 "configure"
+#line 11511 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -12503,7 +12520,7 @@ fi
 
 # Check whether --with-diagnostics was given.
 if test "${with_diagnostics+set}" = set; then :
-  withval=$with_diagnostics; with_diagnostics=yes
+  withval=$with_diagnostics;
 else
   with_diagnostics=no
 fi
@@ -12518,66 +12535,12 @@ fi
 
 
 
-# Check whether --with-ldap was given.
-if test "${with_ldap+set}" = set; then :
-  withval=$with_ldap;
-fi
-
-if test "x$with_ldap" = "xyes"; then :
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ldap_get_values_len in -lldap" >&5
-$as_echo_n "checking for ldap_get_values_len in -lldap... " >&6; }
-if test "${ac_cv_lib_ldap_ldap_get_values_len+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lldap  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char ldap_get_values_len ();
-int
-main ()
-{
-return ldap_get_values_len ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_ldap_ldap_get_values_len=yes
-else
-  ac_cv_lib_ldap_ldap_get_values_len=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_ldap_ldap_get_values_len" >&5
-$as_echo "$ac_cv_lib_ldap_ldap_get_values_len" >&6; }
-if test "x$ac_cv_lib_ldap_ldap_get_values_len" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBLDAP 1
-_ACEOF
-
-  LIBS="-lldap $LIBS"
-
-fi
-
-fi
-
-
-
-
 
 # Check whether --with-sql was given.
 if test "${with_sql+set}" = set; then :
   withval=$with_sql;
+else
+  with_sql=yes
 fi
 
 if test "x$with_sql" = "xyes"; then :
@@ -12921,35 +12884,6 @@ fi
 
 
 
-# Check whether --with-nova was given.
-if test "${with_nova+set}" = set; then :
-  withval=$with_nova;
-else
-  with_nova=yes
-fi
-
-
-if test "x$with_nova" != xno; then
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking presence of Nova directory" >&5
-$as_echo_n "checking presence of Nova directory... " >&6; }
-   if test -d "${srcdir}/nova"; then
-
-$as_echo "#define HAVE_NOVA 1" >>confdefs.h
-
-     NOVA_SUBDIR=nova
-     NOVA_CFLAGS='-I$(top_srcdir)/nova/src'
-     NOVA_LDADD='$(top_srcdir)/nova/src/libcfnova.la'
-     { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-   else
-     { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-   fi
-fi
-
-
-
-
  if test "x$with_nova" != xno && test -d ${srcdir}/nova; then
   HAVE_NOVA_TRUE=
   HAVE_NOVA_FALSE='#'
@@ -12957,35 +12891,6 @@ else
   HAVE_NOVA_TRUE='#'
   HAVE_NOVA_FALSE=
 fi
-
-
-# Check whether --with-constellation was given.
-if test "${with_constellation+set}" = set; then :
-  withval=$with_constellation;
-else
-  with_constellation=yes
-fi
-
-
-if test "x$with_constellation" != xno; then
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking presence of Constellation directory" >&5
-$as_echo_n "checking presence of Constellation directory... " >&6; }
-   if test -d "${srcdir}/constellation"; then
-
-$as_echo "#define HAVE_CONSTELLATION 1" >>confdefs.h
-
-     CONSTELLATION_SUBDIR=constellation
-     CONSTELLATION_CFLAGS='-I$(top_srcdir)/constellation/src'
-     CONSTELLATION_LDADD='$(top_srcdir)/constellation/src/libcfconstellation.la'
-     { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-   else
-     { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-   fi
-fi
-
-
 
 
  if test "x$with_constellation" != xno && test -d ${srcdir}/constellation; then
@@ -13578,12 +13483,13 @@ $as_echo "$BERKELEY_DB_DIR" >&6; }
         BERKELEY_DB_CFLAGS="-I$BERKELEY_DB_DIR/include"
         for v in . db48 db47 db46 db45 db44 db43 db42 db41 db40 db4 db33 db32 db3 db; do
             if test -f "$BERKELEY_DB_DIR/include/$v/db.h"; then
-                BERKELEY_DB_CFLAGS="-I$BERKELEY_DB_DIR/include/$v"
+                BERKELEY_DB_INCLUDEDIR="$BERKELEY_DB_DIR/include/$v"
+                BERKELEY_DB_CFLAGS="-I$BERKELEY_DB_INCLUDEDIR"
 		break
             fi
         done
 
-        if test -f "$BERKELEY_DB_CFLAGS/db.h"; then
+        if test -f "$BERKELEY_DB_INCLUDEDIR/db.h"; then
             BERKELEY_DB_LIB="-ldb"
             for v in db-4.8 db48 db-4.7 db4.7 db47 db-4.6 db4.6 db46 db-4.5 db4.5 db45 db-4.4 db4.4 db44; do
                 if test -f "$BERKELEY_DB_DIR/lib/lib$v.so"; then
@@ -13630,8 +13536,8 @@ $as_echo "#define USE_BERKELEY_DB 1" >>confdefs.h
     CFLAGS="$CFLAGS $BERKELEY_DB_CFLAGS"
     LIBS="$LIBS $BERKELEY_DB_LIB"
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking Berkeley DB API" >&5
-$as_echo_n "checking Berkeley DB API... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for Berkeley DB API" >&5
+$as_echo_n "checking for Berkeley DB API... " >&6; }
 
     if test "$cross_compiling" = yes; then :
   { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
@@ -13796,8 +13702,8 @@ $as_echo "#define USE_OPENSSL_LIB 1" >>confdefs.h
     CPPFLAGS="$CPPFLAGS $OPENSSL_LIB_CPPFLAGS"
     LIBS="$LIBS $OPENSSL_LIB_LIB"
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking OpenSSL Version" >&5
-$as_echo_n "checking OpenSSL Version... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for OpenSSL Version" >&5
+$as_echo_n "checking for OpenSSL Version... " >&6; }
 
     if test "$cross_compiling" = yes; then :
   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Assuming 0.9.7 or later when cross-compiling" >&5
@@ -13882,177 +13788,6 @@ fi
 # Others
 #
 
-#
-# Report database driver - MongoDB C interface
-#
-
-
-# Check whether --with-mongo was given.
-if test "${with_mongo+set}" = set; then :
-  withval=$with_mongo; with_mongo=yes
-else
-  with_mongo=no
-fi
-
-
-if test "x$with_mongo" = xyes; then
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libmongoc" >&5
-$as_echo_n "checking for libmongoc... " >&6; }
-   WITH_MONGO=1
-else
-   WITH_MONGO=0
-fi
-
-if test $WITH_MONGO = 1; then
-  for ac_header in mongo.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "mongo.h" "ac_cv_header_mongo_h" "$ac_includes_default"
-if test "x$ac_cv_header_mongo_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_MONGO_H 1
-_ACEOF
-
-fi
-
-done
-
-  for ac_header in mongo_except.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "mongo_except.h" "ac_cv_header_mongo_except_h" "$ac_includes_default"
-if test "x$ac_cv_header_mongo_except_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_MONGO_EXCEPT_H 1
-_ACEOF
-
-fi
-
-done
-
-  for ac_header in bson.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "bson.h" "ac_cv_header_bson_h" "$ac_includes_default"
-if test "x$ac_cv_header_bson_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_BSON_H 1
-_ACEOF
-
-fi
-
-done
-
-  for ac_header in platform_hacks.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "platform_hacks.h" "ac_cv_header_platform_hacks_h" "$ac_includes_default"
-if test "x$ac_cv_header_platform_hacks_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_PLATFORM_HACKS_H 1
-_ACEOF
-
-fi
-
-done
-
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lmongoc" >&5
-$as_echo_n "checking for main in -lmongoc... " >&6; }
-if test "${ac_cv_lib_mongoc_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lmongoc  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_mongoc_main=yes
-else
-  ac_cv_lib_mongoc_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_mongoc_main" >&5
-$as_echo "$ac_cv_lib_mongoc_main" >&6; }
-if test "x$ac_cv_lib_mongoc_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBMONGOC 1
-_ACEOF
-
-  LIBS="-lmongoc $LIBS"
-
-fi
-
-fi
-
-
-
-# Check whether --with-libvirt was given.
-if test "${with_libvirt+set}" = set; then :
-  withval=$with_libvirt;
-fi
-
-if test "x$with_libvirt" = "xyes"; then :
-  WITH_VIRT=1
-else
-  WITH_VIRT=0
-fi
-
-if test $WITH_VIRT = 1; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvirt" >&5
-$as_echo_n "checking for libvirt... " >&6; }
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvirt" >&5
-$as_echo_n "checking for main in -lvirt... " >&6; }
-if test "${ac_cv_lib_virt_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvirt  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_virt_main=yes
-else
-  ac_cv_lib_virt_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_virt_main" >&5
-$as_echo "$ac_cv_lib_virt_main" >&6; }
-if test "x$ac_cv_lib_virt_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVIRT 1
-_ACEOF
-
-  LIBS="-lvirt $LIBS"
-
-else
-  as_fn_error "Cannot find libvirt" "$LINENO" 5
-fi
-
-fi
-
-
 
 
 # Check whether --with-pcre was given.
@@ -14062,8 +13797,8 @@ fi
 
 if test "x$with_pcre" != "xno"; then :
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking pcre" >&5
-$as_echo_n "checking pcre... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for PCRE" >&5
+$as_echo_n "checking for PCRE... " >&6; }
     if test "x$with_pcre" = "xyes" -o "x$with_pcre" = "x" ; then
 		for d in $prefix /usr/local /usr; do
 			if test -f "$d/include/pcre.h" ; then
@@ -15410,131 +15145,6 @@ fi
 
 
 
-# Check whether --enable-DCE was given.
-if test "${enable_DCE+set}" = set; then :
-  enableval=$enable_DCE;
-fi
-
-if test "x$enable_DCE" = "xyes"; then :
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lthread" >&5
-$as_echo_n "checking for main in -lthread... " >&6; }
-if test "${ac_cv_lib_thread_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lthread  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_thread_main=yes
-else
-  ac_cv_lib_thread_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_thread_main" >&5
-$as_echo "$ac_cv_lib_thread_main" >&6; }
-if test "x$ac_cv_lib_thread_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBTHREAD 1
-_ACEOF
-
-  LIBS="-lthread $LIBS"
-
-fi
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -ldce" >&5
-$as_echo_n "checking for main in -ldce... " >&6; }
-if test "${ac_cv_lib_dce_main+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-ldce  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-int
-main ()
-{
-return main ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_dce_main=yes
-else
-  ac_cv_lib_dce_main=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_dce_main" >&5
-$as_echo "$ac_cv_lib_dce_main" >&6; }
-if test "x$ac_cv_lib_dce_main" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBDCE 1
-_ACEOF
-
-  LIBS="-ldce $LIBS"
-
-fi
-                for ac_header in dce/daclif.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "dce/daclif.h" "ac_cv_header_dce_daclif_h" "$ac_includes_default"
-if test "x$ac_cv_header_dce_daclif_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_DCE_DACLIF_H 1
-_ACEOF
-
-fi
-
-done
-
-    for ac_header in pthread.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "pthread.h" "ac_cv_header_pthread_h" "$ac_includes_default"
-if test "x$ac_cv_header_pthread_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_PTHREAD_H 1
-_ACEOF
-
-fi
-
-done
-
-    for ac_header in sched.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "sched.h" "ac_cv_header_sched_h" "$ac_includes_default"
-if test "x$ac_cv_header_sched_h" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_SCHED_H 1
-_ACEOF
-
-fi
-
-done
-
-
-fi
-
-
-
 # Check whether --enable-selinux was given.
 if test "${enable_selinux+set}" = set; then :
   enableval=$enable_selinux;
@@ -16081,8 +15691,8 @@ fi
 
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking 8-bit support in Flex" >&5
-$as_echo_n "checking 8-bit support in Flex... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for 8-bit support in Flex" >&5
+$as_echo_n "checking for 8-bit support in Flex... " >&6; }
 
 if test "$LEX" = "flex"; then
    EIGHTBIT="\200-\377"
@@ -16099,8 +15709,8 @@ fi
 
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking Checking for GCC Specific compile flags" >&5
-$as_echo_n "checking Checking for GCC Specific compile flags... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GCC specific compile flags" >&5
+$as_echo_n "checking for GCC specific compile flags... " >&6; }
 if test x"$GCC" = "xyes"; then
 
 
@@ -16177,8 +15787,8 @@ _ACEOF
 
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking Checking for Xen cpuid-based HVM detection" >&5
-$as_echo_n "checking Checking for Xen cpuid-based HVM detection... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for Xen cpuid-based HVM detection" >&5
+$as_echo_n "checking for Xen cpuid-based HVM detection... " >&6; }
 if test x"$GCC" = "xyes"; then
 	case $host_cpu in
 		i[3456]86*|x86_64*)
@@ -16217,64 +15827,52 @@ $as_echo "Summary of options..." >&6; }
 
 
 if test "x$ac_cv_lib_pcre_main" = "xyes"; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with PCRE libraries" >&5
-$as_echo "-> Configured with PCRE libraries" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> PCRE: enabled" >&5
+$as_echo "-> PCRE: enabled" >&6; }
 else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> No PCRE library support - reverting to POSIX builtins" >&5
-$as_echo "-> No PCRE library support - reverting to POSIX builtins" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> PCRE: disabled, falling back to POSIX builtins" >&5
+$as_echo "-> PCRE: disabled, falling back to POSIX builtins" >&6; }
 fi
 
-if test $WITH_SQL = 1; then
-
-  if test "x$ac_cv_lib_mysqlclient_main" = "xyes"; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with MYSQL libraries" >&5
-$as_echo "-> Configured with MYSQL libraries" >&6; }
-  fi
-
-  if test "x$ac_cv_lib_pq_main" = "xyes"; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with Postgres libraries" >&5
-$as_echo "-> Configured with Postgres libraries" >&6; }
-  fi
-
+if test "x$ac_cv_lib_mysqlclient_main" = "xyes"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> MySQL connector: enabled" >&5
+$as_echo "-> MySQL connector: enabled" >&6; }
 else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> No SQL library support for knowledge map" >&5
-$as_echo "-> No SQL library support for knowledge map" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> MySQL connector: disabled" >&5
+$as_echo "-> MySQL connector: disabled" >&6; }
 fi
 
-if test "x$ac_cv_lib_ldap_ldap_get_values_len" = "xyes"; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with LDAP libraries" >&5
-$as_echo "-> Configured with LDAP libraries" >&6; }
+if test "x$ac_cv_lib_pq_main" = "xyes"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> PostgreSQL connector: enabled" >&5
+$as_echo "-> PostgreSQL connector: enabled" >&6; }
 else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> No LDAP libraries included" >&5
-$as_echo "-> No LDAP libraries included" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> PostgreSQL connector: disabled" >&5
+$as_echo "-> PostgreSQL connector: disabled" >&6; }
+fi
+
+if test "x$ac_cv_lib_mysqlclient_main" = "xyes" || test "x$ac_cv_lib_pq_main" = "xyes"
+then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Knowledge map: enabled" >&5
+$as_echo "-> Knowledge map: enabled" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Knowledge map: disabled, no SQL connector is configured" >&5
+$as_echo "-> Knowledge map: disabled, no SQL connector is configured" >&6; }
 fi
 
 if test $WITH_TOKYO = 1; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with Tokyo Cabinet" >&5
-$as_echo "-> Configured with Tokyo Cabinet" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> DB: Tokyo Cabinet" >&5
+$as_echo "-> DB: Tokyo Cabinet" >&6; }
 elif test $WITH_QDBM = 1; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with QDBM" >&5
-$as_echo "-> Configured with QDBM" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> DB: QDBM" >&5
+$as_echo "-> DB: QDBM" >&6; }
 else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Will look for BerkeleyDB in $BERKELEY_DB_DIR" >&5
-$as_echo "-> Will look for BerkeleyDB in $BERKELEY_DB_DIR" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> DB: Berkeley DB (path: $BERKELEY_DB_DIR)" >&5
+$as_echo "-> DB: Berkeley DB (path: $BERKELEY_DB_DIR)" >&6; }
 fi
 
-if test $WITH_VIRT = 1; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with libvirt support" >&5
-$as_echo "-> Configured with libvirt support" >&6; }
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> No libvirt support included" >&5
-$as_echo "-> No libvirt support included" >&6; }
-fi
 
-if test $WITH_MONGO = 1; then
-   { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> Configured with libmongoc support" >&5
-$as_echo "-> Configured with libmongoc support" >&6; }
-else
-   { $as_echo "$as_me:${as_lineno-$LINENO}: result: -> No libmongoc support included" >&5
-$as_echo "-> No libmongoc support included" >&6; }
-fi
+
+
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: " >&5
 $as_echo "" >&6; }
@@ -16285,11 +15883,6 @@ $as_echo "" >&6; }
 ac_config_files="$ac_config_files Makefile pub/Makefile src/Makefile src/cf3lex.l docs/Makefile examples/Makefile inputs/Makefile"
 
 
-ac_config_files="$ac_config_files nova/Makefile nova/src/Makefile nova/docs/Makefile nova/GUI2/Makefile nova/GUI2/images/Makefile"
-
-
-
-ac_config_files="$ac_config_files constellation/Makefile constellation/src/Makefile"
 
 
 
@@ -17293,13 +16886,6 @@ do
     "docs/Makefile") CONFIG_FILES="$CONFIG_FILES docs/Makefile" ;;
     "examples/Makefile") CONFIG_FILES="$CONFIG_FILES examples/Makefile" ;;
     "inputs/Makefile") CONFIG_FILES="$CONFIG_FILES inputs/Makefile" ;;
-    "nova/Makefile") CONFIG_FILES="$CONFIG_FILES nova/Makefile" ;;
-    "nova/src/Makefile") CONFIG_FILES="$CONFIG_FILES nova/src/Makefile" ;;
-    "nova/docs/Makefile") CONFIG_FILES="$CONFIG_FILES nova/docs/Makefile" ;;
-    "nova/GUI2/Makefile") CONFIG_FILES="$CONFIG_FILES nova/GUI2/Makefile" ;;
-    "nova/GUI2/images/Makefile") CONFIG_FILES="$CONFIG_FILES nova/GUI2/images/Makefile" ;;
-    "constellation/Makefile") CONFIG_FILES="$CONFIG_FILES constellation/Makefile" ;;
-    "constellation/src/Makefile") CONFIG_FILES="$CONFIG_FILES constellation/src/Makefile" ;;
 
   *) as_fn_error "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac
@@ -17996,6 +17582,7 @@ $as_echo X"$file" |
 
 # `$ECHO "$ofile" | sed 's%^.*/%%'` - Provide generalized library-building support services.
 # Generated automatically by $as_me ($PACKAGE$TIMESTAMP) $VERSION
+# Libtool was configured on host `(hostname || uname -n) 2>/dev/null | sed 1q`:
 # NOTE: Changes made to this file will be lost: look at ltmain.sh.
 #
 #   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005,

@@ -36,16 +36,12 @@ host_triplet = @host@
 target_triplet = @target@
 @CROSS_COMPILING_FALSE@@HAVE_NOVA_TRUE@am__append_1 = cf-hub.8
 subdir = docs
-DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in texinfo.tex
+DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/acinclude.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/nova/options.m4 \
-	$(top_srcdir)/constellation/options.m4 \
-	$(top_srcdir)/nova/output.m4 \
-	$(top_srcdir)/constellation/output.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -100,9 +96,6 @@ BERKELEY_DB_LIB = @BERKELEY_DB_LIB@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
-CONSTELLATION_CFLAGS = @CONSTELLATION_CFLAGS@
-CONSTELLATION_LDADD = @CONSTELLATION_LDADD@
-CONSTELLATION_SUBDIR = @CONSTELLATION_SUBDIR@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
@@ -146,9 +139,6 @@ MKDIR_P = @MKDIR_P@
 NEED_SETGID = @NEED_SETGID@
 NM = @NM@
 NMEDIT = @NMEDIT@
-NOVA_CFLAGS = @NOVA_CFLAGS@
-NOVA_LDADD = @NOVA_LDADD@
-NOVA_SUBDIR = @NOVA_SUBDIR@
 NOWRAP = @NOWRAP@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
@@ -167,7 +157,6 @@ PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
-PTHREAD_CPPFLAGS = @PTHREAD_CPPFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 RANLIB = @RANLIB@
 SED = @SED@
@@ -183,6 +172,7 @@ abs_top_builddir = @abs_top_builddir@
 abs_top_srcdir = @abs_top_srcdir@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
+acx_pthread_config = @acx_pthread_config@
 am__include = @am__include@
 am__leading_dot = @am__leading_dot@
 am__quote = @am__quote@

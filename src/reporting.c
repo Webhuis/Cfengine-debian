@@ -35,47 +35,59 @@
 
 char *CFX[][2] =
    {
-    "<head>","</head>",
-    "<bundle>","</bundle>",
-    "<block>","</block>",
-    "<blockheader>","</blockheader>",
-    "<blockid>","</blockid>",
-    "<blocktype>","</blocktype>",
-    "<args>","</args>",
-    "<promise>","</promise>",
-    "<class>","</class>",
-    "<subtype>","</subtype>",
-    "<object>","</object>",
-    "<lval>","</lval>",
-    "<rval>","</rval>",
-    "<qstring>","</qstring>",
-    "<rlist>","</rlist>",
-    "<function>","</function>",
-    "\n","\n",
-    NULL,NULL
+    {"<head>","</head>"},
+    {"<bundle>","</bundle>"},
+    {"<block>","</block>"},
+    {"<blockheader>","</blockheader>"},
+    {"<blockid>","</blockid>"},
+    {"<blocktype>","</blocktype>"},
+    {"<args>","</args>"},
+    {"<promise>","</promise>"},
+    {"<class>","</class>"},
+    {"<subtype>","</subtype>"},
+    {"<object>","</object>"},
+    {"<lval>","</lval>"},
+    {"<rval>","</rval>"},
+    {"<qstring>","</qstring>"},
+    {"<rlist>","</rlist>"},
+    {"<function>","</function>"},
+    {"\n","\n"},
+    {NULL,NULL}
    };
 
 char *CFH[][2] =
    {
-    "<html><head>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"/cf_enterprise.css\" />\n</head>\n","</html>",
-    "<div id=\"bundle\"><table class=border><tr><td><h2>","</td></tr></h2></table></div>",
-    "<div id=\"block\"><table class=border cellpadding=5 width=800>","</table></div>",
-    "<tr><th>","</th></tr>",
-    "<span class=\"bodyname\">","</span>",
-    "<span class=\"bodytype\">","</span>",
-    "<span class=\"args\">","</span>",
-    "<tr><td><table class=\"border\"><tr><td>","</td></tr></table></td></tr>",
-    "<span class=\"class\">","</span>",
-    "<span class=\"subtype\">","</span>",
-    "<b>","</b>",
-    "<br><span class=\"lval\">........................","</span>",
-    "<span class=\"rval\">","</span>",
-    "<span class=\"qstring\">","</span>",
-    "<span class=\"rlist\">","</span>",
-    "","",
-    "<tr><td>","</td></tr>",
-    NULL,NULL
+    {"<html><head>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"/cf_enterprise.css\" />\n</head>\n","</html>"},
+    {"<div id=\"bundle\"><table class=border><tr><td><h2>","</td></tr></h2></table></div>"},
+    {"<div id=\"block\"><table class=border cellpadding=5 width=800>","</table></div>"},
+    {"<tr><th>","</th></tr>"},
+    {"<span class=\"bodyname\">","</span>"},
+    {"<span class=\"bodytype\">","</span>"},
+    {"<span class=\"args\">","</span>"},
+    {"<tr><td><table class=\"border\"><tr><td>","</td></tr></table></td></tr>"},
+    {"<span class=\"class\">","</span>"},
+    {"<span class=\"subtype\">","</span>"},
+    {"<b>","</b>"},
+    {"<br><span class=\"lval\">........................","</span>"},
+    {"<span class=\"rval\">","</span>"},
+    {"<span class=\"qstring\">","</span>"},
+    {"<span class=\"rlist\">","</span>"},
+    {"",""},
+    {"<tr><td>","</td></tr>"},
+    {NULL,NULL}
    };
+
+/* Prototypes */
+
+static void ShowControlBodies(void);
+static void ReportBanner(char *s);
+static void Indent(int i);
+static void ShowDataTypes(void);
+static void ShowBundleTypes(void);
+static void ShowPromiseTypesFor(char *s);
+static void ShowBodyParts(struct BodySyntax *bs);
+static void ShowRange(char *s,enum cfdatatype type);
+static void ShowBuiltinFunctions(void);
 
 /*******************************************************************/
 /* Generic                                                         */
@@ -125,7 +137,7 @@ CfOut(cf_verbose,"","");
 
 /*******************************************************************/
 
-void ShowControlBodies()
+static void ShowControlBodies()
 
 { int i;
 
@@ -146,17 +158,26 @@ for (i = 0; CF_ALL_BODIES[i].btype != NULL; i++)
 
 void ShowPromises(struct Bundle *bundles,struct Body *bodies)
 
-{ struct Bundle *bp;
-  struct Rlist *rp;
-  struct SubType *sp;
-  struct Promise *pp;
-  struct Body *bdp;
-  char *v,rettype,vbuff[CF_BUFSIZE];
-  void *retval;
-
-#if defined(HAVE_NOVA) && defined(HAVE_LIBMONGOC)
+{
+#if defined(HAVE_NOVA)
 Nova_StoreUnExpandedPromises(bundles,bodies);
-#else  
+#else
+ShowPromisesInReport(bundles, bodies);
+#endif
+}
+
+void ShowPromisesInReport(struct Bundle *bundles, struct Body *bodies)
+{
+char rettype;
+void *retval;
+char *v;
+char vbuff[CF_BUFSIZE];
+struct Bundle *bp;
+struct Rlist *rp;
+struct SubType *sp;
+struct Promise *pp;
+struct Body *bdp;
+
 if (GetVariable("control_common","version",&retval,&rettype) != cf_notype)
    {
    v = (char *)retval;
@@ -236,21 +257,15 @@ for (bdp = bodies; bdp != NULL; bdp=bdp->next)
    }
 
 CfHtmlFooter(FREPORT_HTML,FOOTER);
-#endif
 }
 
 /*******************************************************************/
 
 void ShowPromise(struct Promise *pp, int indent)
 
-{ struct Constraint *cp;
-  struct Body *bp;
-  struct FnCall *fp;
-  struct Rlist *rp;
-  char *v,rettype,vbuff[CF_BUFSIZE];
-  void *retval;
-  time_t lastseen,last;
-  double val,av,var;
+{
+char *v,rettype;
+void *retval;
 
 if (GetVariable("control_common","version",&retval,&rettype) != cf_notype)
    {
@@ -261,10 +276,24 @@ else
    v = "not specified";
    }
 
-#if defined(HAVE_NOVA) && defined(HAVE_LIBMONGOC)
-Nova_StoreExpandedPromise(pp);
-MapPromiseToTopic(FKNOW,pp,v);
+#if defined(HAVE_NOVA)
+Nova_ShowPromise(v, pp, indent);
 #else
+ShowPromiseInReport(v, pp, indent);
+#endif
+}
+
+void ShowPromiseInReport(const char *version, struct Promise* pp, int indent)
+{
+struct Constraint *cp;
+struct Body *bp;
+struct Rlist *rp;
+struct FnCall *fp;
+double av;
+double var;
+double val;
+time_t last;
+
 fprintf(FREPORT_HTML,"%s\n",CFH[cfx_line][cfb]);
 fprintf(FREPORT_HTML,"%s\n",CFH[cfx_promise][cfb]);
 fprintf(FREPORT_HTML,"Promise type is %s%s%s, ",CFH[cfx_subtype][cfb],pp->agentsubtype,CFH[cfx_subtype][cfe]);
@@ -302,7 +331,7 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
    switch (cp->type)
       {
       case CF_SCALAR:
-          if (bp = IsBody(BODIES,(char *)cp->rval))
+         if ((bp = IsBody(BODIES,(char *)cp->rval)))
              {
              ShowBody(bp,15);
              }
@@ -328,7 +357,7 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
       case CF_FNCALL:
           fp = (struct FnCall *)cp->rval;
 
-          if (bp = IsBody(BODIES,fp->name))
+          if ((bp = IsBody(BODIES,fp->name)))
              {
              ShowBody(bp,15);
              }
@@ -356,7 +385,7 @@ last = 0;
 if (pp->audit)
    {
    Indent(indent);
-   fprintf(FREPORT_HTML,"<p><small>Promise (version %s) belongs to bundle <b>%s</b> (type %s) in \'<i>%s</i>\' near line %d</small></p>\n",v,pp->bundle,pp->bundletype,pp->audit->filename,pp->lineno);
+   fprintf(FREPORT_HTML,"<p><small>Promise (version %s) belongs to bundle <b>%s</b> (type %s) in \'<i>%s</i>\' near line %d</small></p>\n",version,pp->bundle,pp->bundletype,pp->audit->filename,pp->lineno);
    }
 
 fprintf(FREPORT_HTML,"%s\n",CFH[cfx_promise][cfe]);
@@ -365,16 +394,14 @@ fprintf(FREPORT_HTML,"%s\n",CFH[cfx_line][cfe]);
 if (pp->audit)
    {
    Indent(indent);
-   fprintf(FREPORT_TXT,"Promise (version %s) belongs to bundle \'%s\' (type %s) in file \'%s\' near line %d\n",v,pp->bundle,pp->bundletype,pp->audit->filename,pp->lineno);
+   fprintf(FREPORT_TXT,"Promise (version %s) belongs to bundle \'%s\' (type %s) in file \'%s\' near line %d\n",version,pp->bundle,pp->bundletype,pp->audit->filename,pp->lineno);
    fprintf(FREPORT_TXT,"\n\n");
    }
 else
    {
    Indent(indent);
-   fprintf(FREPORT_TXT,"Promise (version %s) belongs to bundle \'%s\' (type %s) near line %d\n\n",v,pp->bundle,pp->bundletype,pp->lineno);
+   fprintf(FREPORT_TXT,"Promise (version %s) belongs to bundle \'%s\' (type %s) near line %d\n\n",version,pp->bundle,pp->bundletype,pp->lineno);
    }
-
-#endif
 }
 
 /*******************************************************************/
@@ -409,90 +436,6 @@ fprintf(FREPORT_HTML,"</div>");
 
 /*******************************************************************/
 
-void NoteVarUsageDB(void)
-
-/* WARNING: Not thread safe (access to VSCOPE) */
-
-{ struct Scope *ptr;
-  char filename[CF_BUFSIZE];
-  CF_DB *dbp;
-  CF_DBC *dbcp;
-  char key[CF_MAXVARSIZE], *keyDb;  // scope.varname
-  void *val;
-  struct Variable var = {0}, *varDb;
-  int i, keyDbSize, valSize;
-  time_t varExpireAge = CF_MONTH;  // remove vars from DB after one month
-  time_t now = time(NULL);
-
-if (MINUSF) /* Only do this for the default policy */
-   {
-   return;
-   }
- 
-snprintf(filename,sizeof(filename),"%s/state/%s",CFWORKDIR,CF_VARIABLES);
-MapName(filename);
-
-if (!OpenDB(filename,&dbp))
-   {
-   return;
-   }
-
-/* sync db with current vars */
-
-// NOTE: can extend to support avg and stddev in future
-var.e.t = now;  // all are last seen now
-
-for(ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
-   {
-   if (strcmp(ptr->scope,"this") == 0)
-      {
-      continue;
-      }
-   
-   for (i = 0; i < CF_HASHTABLESIZE; i++)
-      {
-      if(ptr->hashtable[i] != NULL)
-	 {
-         snprintf(key, sizeof(key), "%s.%s", ptr->scope, ptr->hashtable[i]->lval);
-         var.dtype = ptr->hashtable[i]->dtype;
-         var.rtype = ptr->hashtable[i]->rtype;
-         var.rval[0] = '\0';
-         PrintRval(var.rval, sizeof(var.rval), ptr->hashtable[i]->rval, ptr->hashtable[i]->rtype);
-	 
-         WriteDB(dbp,key,&var,VARSTRUCTUSAGE(var));
-	 }
-      } 
-   }
-
-/* purge old entries from DB */
-if (!NewDBCursor(dbp,&dbcp))
-   {
-   CfOut(cf_inform,""," !! Unable to purge variable db");
-   CloseDB(dbp);
-   return;
-   }
-
-
-while(NextDB(dbp,dbcp,&keyDb,&keyDbSize,&val,&valSize))
-   {
-   if (val != NULL)
-      {
-      varDb = (struct Variable *)val;
-      
-      if (varDb->e.t < now - varExpireAge)
-         {
-         Debug("Variable record %s expired\n",keyDb);
-         DeleteDB(dbp,keyDb);
-         }
-      }
-   }
-
-DeleteDBCursor(dbp,dbcp);
-CloseDB(dbp);
-}
-
-/*******************************************************************/
-
 void Banner(char *s)
 
 {
@@ -503,7 +446,7 @@ CfOut(cf_verbose,"","***********************************************************
     
 /*******************************************************************/
 
-void ReportBanner(char *s)
+static void ReportBanner(char *s)
 
 {
 fprintf(FREPORT_TXT,"***********************************************************\n");
@@ -566,7 +509,7 @@ Debug("----------------------------------------------------------------\n");
 
 /*******************************************************************/
 
-void Indent(int i)
+static void Indent(int i)
 
 { int j;
 
@@ -664,7 +607,7 @@ printf("</td></tr></table>\n");
 /* Level 2                                                         */
 /*******************************************************************/
 
-void ShowDataTypes()
+static void ShowDataTypes()
 
 { int i;
 
@@ -681,7 +624,7 @@ printf("</ol></td></tr></table>\n\n");
 
 /*******************************************************************/
 
-void ShowBundleTypes()
+static void ShowBundleTypes()
 
 { int i;
   struct SubTypeSyntax *st;
@@ -715,7 +658,7 @@ printf("</div>\n\n");
 
 /*******************************************************************/
 
-void ShowPromiseTypesFor(char *s)
+static void ShowPromiseTypesFor(char *s)
 
 { int i,j;
   struct SubTypeSyntax *st;
@@ -744,7 +687,7 @@ printf("</div>\n\n");
 
 /*******************************************************************/
 
-void ShowBodyParts(struct BodySyntax *bs)
+static void ShowBodyParts(struct BodySyntax *bs)
 
 { int i;
 
@@ -782,7 +725,7 @@ printf("</table></div>\n");
 
 /*******************************************************************/
 
-void ShowRange(char *s,enum cfdatatype type)
+static void ShowRange(char *s,enum cfdatatype type)
 
 { char *sp;
  
@@ -822,7 +765,7 @@ switch (type)
 
 /*******************************************************************/
 
-void ShowBuiltinFunctions()
+static void ShowBuiltinFunctions()
 
 { int i;
 

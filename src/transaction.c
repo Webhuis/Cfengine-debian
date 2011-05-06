@@ -440,7 +440,7 @@ mutex = NameToThreadMutex(name);
 if (pthread_mutex_unlock(mutex) != 0)
    {
    // Don't use CfOut here as it also requires locking
-   printf("pthread_mutex_unlock","pthread_mutex_unlock failed");
+   printf("pthread_mutex_unlock: pthread_mutex_unlock failed");
    return false;
    }
 
@@ -692,7 +692,7 @@ if (strlen(s) < strlen("Fri Oct 1 15:15:23 EST 2010"))
 
 for (i = 0; i < 7; i++)
    {
-   if (dayp = strstr(s,days[i]))
+   if ((dayp = strstr(s,days[i])))
       {
       *dayp = 'D';
       *(dayp+1) = 'A';
@@ -703,7 +703,7 @@ for (i = 0; i < 7; i++)
 
 for (i = 0; i < 12; i++)
    {
-   if (monthp = strstr(s,months[i]))
+   if ((monthp = strstr(s,months[i])))
       {
       *monthp = 'M';
       *(monthp+1) = 'O';
@@ -743,8 +743,8 @@ void PurgeLocks()
 
 { CF_DB *dbp = OpenLock();
   CF_DBC *dbcp;
-  char *key,name[CF_BUFSIZE];
-  int i,ksize,vsize;
+  char *key;
+  int ksize,vsize;
   struct LockData entry;
   time_t now = time(NULL);
 

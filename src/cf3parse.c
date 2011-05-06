@@ -82,10 +82,12 @@
 
 extern char *yytext;
 
+static void fatal_yyerror(const char *s);
+
 
 
 /* Line 189 of yacc.c  */
-#line 89 "cf3parse.c"
+#line 91 "cf3parse.c"
 
 /* Enabling traces.  */
 #ifndef YYDEBUG
@@ -149,7 +151,7 @@ typedef int YYSTYPE;
 
 
 /* Line 264 of yacc.c  */
-#line 153 "cf3parse.c"
+#line 155 "cf3parse.c"
 
 #ifdef short
 # undef short
@@ -457,11 +459,11 @@ static const yytype_int8 yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint16 yyrline[] =
 {
-       0,    21,    21,    22,    26,    27,    31,    32,    33,    34,
-      38,    51,    63,    71,    78,    84,    85,    86,    90,    98,
-      97,   122,   123,   127,   128,   133,   132,   149,   150,   154,
-     155,   159,   160,   167,   164,   218,   219,   223,   224,   228,
-     229,   233,   251,   246,   281,   280,   313,   314,   315,   319,
+       0,    23,    23,    24,    28,    29,    33,    34,    35,    36,
+      40,    53,    65,    73,    80,    86,    87,    88,    92,   100,
+      99,   124,   125,   129,   130,   135,   134,   151,   152,   156,
+     157,   161,   162,   169,   166,   220,   221,   225,   226,   230,
+     231,   235,   253,   248,   283,   282,   315,   316,   317,   321,
      341,   348,   357,   364,   380,   388,   395,   404,   410,   411,
      412,   416,   421,   428,   435,   444,   448,   458,   467,   475,
      474,   499,   500,   501,   505,   511,   519,   527
@@ -1437,14 +1439,14 @@ yyreduce:
         case 2:
 
 /* Line 1455 of yacc.c  */
-#line 21 "cf3parse.y"
+#line 23 "cf3parse.y"
     { yyerror("Something defined outside of a block or missing punctuation in input"); }
     break;
 
   case 10:
 
 /* Line 1455 of yacc.c  */
-#line 39 "cf3parse.y"
+#line 41 "cf3parse.y"
     {
                           DebugBanner("Bundle");
                           P.block = "bundle";
@@ -1459,7 +1461,7 @@ yyreduce:
   case 11:
 
 /* Line 1455 of yacc.c  */
-#line 52 "cf3parse.y"
+#line 54 "cf3parse.y"
     {
                           DebugBanner("Body");
                           P.block = "body";
@@ -1473,7 +1475,7 @@ yyreduce:
   case 12:
 
 /* Line 1455 of yacc.c  */
-#line 63 "cf3parse.y"
+#line 65 "cf3parse.y"
     {
                           strncpy(P.blocktype,P.currentid,CF_MAXVARSIZE);
                           Debug("Found block type %s for %s\n",P.blocktype,P.block);
@@ -1484,7 +1486,7 @@ yyreduce:
   case 13:
 
 /* Line 1455 of yacc.c  */
-#line 71 "cf3parse.y"
+#line 73 "cf3parse.y"
     {
                           strncpy(P.blockid,P.currentid,CF_MAXVARSIZE);
                           Debug("Found identifier %s for %s\n",P.currentid,P.block);
@@ -1494,7 +1496,7 @@ yyreduce:
   case 18:
 
 /* Line 1455 of yacc.c  */
-#line 91 "cf3parse.y"
+#line 93 "cf3parse.y"
     {
                           AppendRlist(&(P.useargs),P.currentid,CF_SCALAR);
                           }
@@ -1503,7 +1505,7 @@ yyreduce:
   case 19:
 
 /* Line 1455 of yacc.c  */
-#line 98 "cf3parse.y"
+#line 100 "cf3parse.y"
     {
                        if (RelevantBundle(THIS_AGENT,P.blocktype))
                           {
@@ -1524,7 +1526,7 @@ yyreduce:
   case 20:
 
 /* Line 1455 of yacc.c  */
-#line 115 "cf3parse.y"
+#line 117 "cf3parse.y"
     {
                        INSTALL_SKIP = false;
                        Debug("End promise bundle\n\n");
@@ -1534,7 +1536,7 @@ yyreduce:
   case 25:
 
 /* Line 1455 of yacc.c  */
-#line 133 "cf3parse.y"
+#line 135 "cf3parse.y"
     {
                         P.currentbody = AppendBody(&BODIES,P.blockid,P.blocktype,P.useargs);
                         P.useargs = NULL;
@@ -1546,7 +1548,7 @@ yyreduce:
   case 26:
 
 /* Line 1455 of yacc.c  */
-#line 143 "cf3parse.y"
+#line 145 "cf3parse.y"
     {
                         Debug("End promise body\n");
                         }
@@ -1555,8 +1557,8 @@ yyreduce:
   case 33:
 
 /* Line 1455 of yacc.c  */
-#line 167 "cf3parse.y"
-    { char *contextid = NULL;
+#line 169 "cf3parse.y"
+    {
  
                         CheckSelection(P.blocktype,P.blockid,P.lval,P.rval,P.rtype);
 
@@ -1608,13 +1610,13 @@ yyreduce:
   case 41:
 
 /* Line 1455 of yacc.c  */
-#line 234 "cf3parse.y"
+#line 236 "cf3parse.y"
     {
                          Debug("\n* Begin new promise type category %s in function \n\n",P.currenttype);
                                                  
                          if (strcmp(P.block,"bundle") == 0)
                             {
-                            struct SubTypeSyntax ss = CheckSubType(P.blocktype,P.currenttype);
+                            CheckSubType(P.blocktype,P.currenttype); /* FIXME: unused? */
                             P.currentstype = AppendSubType(P.currentbundle,P.currenttype);
                             }
                          }
@@ -1623,7 +1625,7 @@ yyreduce:
   case 42:
 
 /* Line 1455 of yacc.c  */
-#line 251 "cf3parse.y"
+#line 253 "cf3parse.y"
     {
                         if (P.currentclasses == NULL)
                            {
@@ -1639,7 +1641,7 @@ yyreduce:
   case 43:
 
 /* Line 1455 of yacc.c  */
-#line 263 "cf3parse.y"
+#line 265 "cf3parse.y"
     {
                         Debug("End implicit promise %s\n\n",P.promiser);
                         strcpy(P.currentid,"");
@@ -1659,7 +1661,7 @@ yyreduce:
   case 44:
 
 /* Line 1455 of yacc.c  */
-#line 281 "cf3parse.y"
+#line 283 "cf3parse.y"
     {
                         if (P.currentclasses == NULL)
                            {                           
@@ -1675,7 +1677,7 @@ yyreduce:
   case 45:
 
 /* Line 1455 of yacc.c  */
-#line 293 "cf3parse.y"
+#line 295 "cf3parse.y"
     {
                         Debug("End full promise with promisee %s\n\n",P.promiser);
 
@@ -1697,10 +1699,8 @@ yyreduce:
   case 49:
 
 /* Line 1455 of yacc.c  */
-#line 322 "cf3parse.y"
-    { struct SubTypeSyntax ss;
-                          char *contextid = NULL;
-
+#line 324 "cf3parse.y"
+    {
                         if (!INSTALL_SKIP)
                            {                           
                            AppendConstraint(&(P.currentpromise->conlist),P.lval,P.rval,P.rtype,"any",P.isbody);
@@ -1893,9 +1893,9 @@ yyreduce:
 /* Line 1455 of yacc.c  */
 #line 475 "cf3parse.y"
     {
-                           if (++P.arg_nesting > CF_MAX_NESTING)
+                           if (++P.arg_nesting >= CF_MAX_NESTING)
                               {
-                              yyerror("Nesting of functions is deeper than recommended");
+                              fatal_yyerror("Nesting of functions is deeper than recommended");
                               }
                            P.currentfnid[P.arg_nesting] = strdup(P.currentid);
                            Debug("Start FnCall %s args level %d\n",P.currentfnid[P.arg_nesting],P.arg_nesting);
@@ -2182,10 +2182,7 @@ yyreturn:
 
 /*****************************************************************/
 
-void yyerror(s)
-
-char *s;
-
+void yyerror(const char *s)
 { char *sp = yytext;
 
 if (sp == NULL)
@@ -2205,6 +2202,18 @@ if (ERRORCOUNT > 10)
    {
    FatalError("Too many errors");
    }
+}
+
+static void fatal_yyerror(const char *s)
+{
+char *sp = yytext;
+/* Skip quotation mark */
+if (sp && *sp == '\"' && sp[1])
+   {
+   sp++;
+   }
+
+FatalError("%s> %s: %d,%d: Fatal error during parsing: %s, near token \'%.20s\'\n", VPREFIX, P.filename, P.line_no, P.line_pos, s, sp ? sp : "NULL");
 }
 
 /*****************************************************************/

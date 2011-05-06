@@ -1,6 +1,6 @@
 #######################################################
 #
-# Set a class if a process does exist, partial name fails
+# Test nested functions
 #
 #######################################################
 
@@ -31,16 +31,18 @@ vars:
 
 bundle agent test
 {
-processes:
-	"agent$"
-	    process_count => test_no_such;
-}
-
-body process_count test_no_such
-{
-in_range_define => { "found" };
-out_of_range_define => { "not_found" };
-match_range => irange(0,0);
+  vars:
+    "oct2"          string => '20';
+    "oct4"          slist  => { '11', '12' };
+    "separator"     string => ",";
+    "prefix"        string => "10.${oct2}.20";
+    "temp_namelist" slist  => { " ", @(oct4) };
+    "foo"           slist => splitstring (
+        join("${separator}${prefix}", "temp_namelist"),
+        "$(separator)",
+        "99999999999"
+    );
+    "nameserv" slist  => grep ("^[^\s]+$", join(escape("${separator}${prefix}"), "temp_namelist") );
 }
 
 #######################################################
@@ -48,7 +50,7 @@ match_range => irange(0,0);
 bundle agent check
 {
 classes:
-	"ok" expression => "found.!not_found";
+    "ok" expression => "any";
 
 reports:
     ok::

@@ -200,38 +200,34 @@ return false;
 
 struct Item *IdempPrependItem(struct Item **liststart,char *itemstring,char *classes)
 
-{
-  struct Item *ip;
+{ struct Item *ip;
 
-  ip = ReturnItemIn(*liststart,itemstring);
+ip = ReturnItemIn(*liststart,itemstring);
 
-  if(ip)
-    {
-    return ip;
-    }
+if (ip)
+   {
+   return ip;
+   }
 
- PrependItem(liststart,itemstring,classes);
-
- return *liststart;
+PrependItem(liststart,itemstring,classes);
+return *liststart;
 }
 
 /*********************************************************************/
 
 struct Item *IdempPrependItemClass(struct Item **liststart,char *itemstring,char *classes)
 
-{
-  struct Item *ip;
+{ struct Item *ip;
 
-  ip = ReturnItemInClass(*liststart,itemstring,classes);
+ip = ReturnItemInClass(*liststart,itemstring,classes);
 
-  if(ip)  // already exists
-    {
-    return ip;
-    }
+if (ip)  // already exists
+   {
+   return ip;
+   }
 
-  PrependItem(liststart,itemstring,classes);
-
-  return *liststart;
+PrependItem(liststart,itemstring,classes);
+return *liststart;
 }
 
 
@@ -241,7 +237,7 @@ void IdempItemCount(struct Item **liststart,char *itemstring,char *classes)
 
 { struct Item *ip;
  
-if (ip = ReturnItemIn(*liststart,itemstring))
+if ((ip = ReturnItemIn(*liststart,itemstring)))
    {
    ip->counter++;
    }
@@ -266,7 +262,7 @@ if (!IsItemIn(*liststart,itemstring))
 
 /*********************************************************************/
 
-struct Item * PrependItem(struct Item **liststart,char *itemstring,char *classes)
+struct Item *PrependItem(struct Item **liststart,char *itemstring,char *classes)
 
 { struct Item *ip;
   char *sp,*spe = NULL;
@@ -437,11 +433,8 @@ return count;
 int RawSaveItemList(struct Item *liststart,char *file)
 
 { struct Item *ip;
-  struct stat statbuf;
   char new[CF_BUFSIZE],backup[CF_BUFSIZE];
   FILE *fp;
-  mode_t mask;
-  char stamp[CF_BUFSIZE]; 
   time_t STAMPNOW;
   STAMPNOW = time((time_t *)NULL);
 
@@ -679,7 +672,6 @@ return true;
 void InsertAfter(struct Item **filestart,struct Item *ptr,char *string)
 
 { struct Item *ip;
-  char *sp;
 
 if (*filestart == NULL || ptr == CF_UNDEFINED_ITEM)
    {
@@ -1046,7 +1038,14 @@ void DebugListItemList(struct Item *liststart)
 
 for (ptr = liststart; ptr != NULL; ptr=ptr->next)
    {
-   printf("CFDEBUG: [%s]\n",ptr->name);
+   if (ptr->classes)
+      {
+      printf("CFDEBUG: %s::[%s]\n",ptr->classes,ptr->name);
+      }
+   else
+      {
+      printf("CFDEBUG: [%s]\n",ptr->name);
+      }
    }
 }
 
@@ -1313,11 +1312,9 @@ int CompareToFile(struct Item *liststart,char *file,struct Attributes a,struct P
 
 /* returns true if file on disk is identical to file in memory */
 
-{ FILE *fp;
+{
   struct stat statbuf;
-  struct Item *ip = liststart,*cmplist = NULL;
-  unsigned char *finmem = NULL, fdata;
-  unsigned long fip = 0, tmplen, idx;
+  struct Item *cmplist = NULL;
 
 Debug("CompareToFile(%s)\n",file);
 

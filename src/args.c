@@ -62,7 +62,7 @@ int MapBodyArgs(char *scopeid,struct Rlist *give,struct Rlist *take)
   enum cfdatatype dtg = cf_notype,dtt = cf_notype;
   char *lval;
   void *rval;
-  struct Rval returnval,extra;
+  struct Rval returnval;
   int len1,len2;
   
 Debug("MapBodyArgs(begin)\n");
@@ -237,7 +237,7 @@ if (argnum != RlistLen(realargs))
    snprintf(output,CF_BUFSIZE,"Argument template mismatch handling function %s(",fp->name);
    ReportError(output);
    ShowRlist(stderr,realargs);
-   fprintf(stderr,")\n",fp->name);
+   fprintf(stderr,")\n");
 
    for (i = 0, rp = realargs; i < argnum; i++)
       {

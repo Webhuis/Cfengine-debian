@@ -28,6 +28,9 @@
 /*                                                                           */
 /*****************************************************************************/
 
+#ifndef CFENGINE_CF3_DEFS_H
+#define CFENGINE_CF3_DEFS_H
+
 /* These files are hard links to the cfengine 2 sources */
 
 #include "cf.defs.h"
@@ -35,8 +38,6 @@
 
 #undef VERSION
 #undef Verbose
-
-#define CF3_REVISION "$Rev: 2014 $"
 
 #include "conf.h"
 
@@ -72,7 +73,7 @@
 #define CF_INBODY   1
 #define CF_INBUNDLE 2
 
-#define CF_MAX_NESTING 3
+#define CF_MAX_NESTING 10
 #define CF_MAX_REPLACE 20
 #define CF_DONEPASSES  4
 
@@ -363,6 +364,7 @@ enum cfkcontrol
    cfk_genman,
    cfk_graph_dir,
    cfk_graph_output,
+   cfk_goalcategories,
    cfk_goalpatterns,
    cfk_htmlbanner,
    cfk_htmlfooter,
@@ -490,7 +492,101 @@ enum cfeditorder
 // Put this here now for caching efficiency
 
 #define NOVA_SOFTWARE_INSTALLED "software_packages.csv"
-#define NOVA_SYNONYM "has synonym"
+
+/***************************************************************************/
+/* Knowledge relationships                                                 */
+/***************************************************************************/
+
+#define KM_PARTOF_CERT_F "is/are a part of"
+#define KM_PARTOF_CERT_B "has/have as a part"
+#define KM_DETERMINES_CERT_F "determine(s)"
+#define KM_DETERMINES_CERT_B "is/are determined by"
+#define KM_CONTRIBUTES_CERT_F "contibutes to"
+#define KM_CONTRIBUTES_CERT_B "is contibuted to by"
+#define KM_USES_CERT_F "use(s)"
+#define KM_USES_CERT_B "is/are used by"
+#define KM_PROVIDES_CERT_F "provide(s)"
+#define KM_PROVIDES_CERT_B "is/are provided by"
+#define KM_BELONGS_CERT_F "belongs to"
+#define KM_BELONGS_CERT_B "owns"
+#define KM_AFFECTS_CERT_F "affects"
+#define KM_AFFECTS_CERT_B "is affected by"
+#define KM_CONNECTS_CERT_F "connects to"
+#define KM_CONNECTS_CERT_B "connects to"
+#define KM_NEEDS_CERT_F "needs"
+#define KM_NEEDS_CERT_B "is needed by"
+#define KM_EQUIV_CERT_F "is equivalent to"
+#define KM_EQUIV_CERT_B "is equivalent to"
+#define KM_SHIELD_CERT_F "denies access from"
+#define KM_SHIELD_CERT_B "is not allowed access to"
+#define KM_ACCESS_CERT_F "grants access to"
+#define KM_ACCESS_CERT_B "is allowed to access"
+#define KM_MONITOR_CERT_F "monitor(s)"
+#define KM_MONITOR_CERT_B "is/are monitored by"
+
+
+#define KM_PARTOF_POSS_F "can be a part of"
+#define KM_PARTOF_POSS_B "can have a part"
+#define KM_DETERMINES_POSS_F "can determine"
+#define KM_DETERMINES_POSS_B "can be determined by"
+#define KM_CONTRIBUTES_POSS_F "can contibute to"
+#define KM_CONTRIBUTES_POSS_B "can be contibuted to by"
+#define KM_USES_POSS_F "can use"
+#define KM_USES_POSS_B "can be used by"
+#define KM_PROVIDES_POSS_F "can provide"
+#define KM_PROVIDES_POSS_B "can be provided by"
+#define KM_BELONGS_POSS_F "can belong to"
+#define KM_BELONGS_POSS_B "can own"
+#define KM_AFFECTS_POSS_F "can affect"
+#define KM_AFFECTS_POSS_B "can be affected by"
+#define KM_CONNECTS_POSS_F "can connect to"
+#define KM_CONNECTS_POSS_B "can connect to"
+#define KM_NEEDS_POSS_F "can need"
+#define KM_NEEDS_POSS_B "can be needed by"
+#define KM_EQUIV_POSS_F "can be equivalent to"
+#define KM_EQUIV_POSS_B "can be equivalent to"
+#define KM_MONITOR_POSS_F "can monitor"
+#define KM_MONITOR_POSS_B "can be monitored by"
+#define KM_ACCESS_POSS_F "can access to"
+#define KM_ACCESS_POSS_B "can be allowed to access"
+
+#define KM_PARTOF_UNCERT_F "might be a part of"
+#define KM_PARTOF_UNCERT_B "might have a part"
+#define KM_DETERMINES_UNCERT_F "might determine"
+#define KM_DETERMINES_UNCERT_B "might be determined by"
+#define KM_CONTRIBUTES_UNCERT_F "might contibute to"
+#define KM_CONTRIBUTES_UNCERT_B "might be contibuted to by"
+#define KM_USES_UNCERT_F "might use"
+#define KM_USES_UNCERT_B "might be used by"
+#define KM_PROVIDES_UNCERT_F "might provide"
+#define KM_PROVIDES_UNCERT_B "might be provided by"
+#define KM_BELONGS_UNCERT_F "might belong to"
+#define KM_BELONGS_UNCERT_B "might own"
+#define KM_AFFECTS_UNCERT_F "might affect"
+#define KM_AFFECTS_UNCERT_B "might be affected by"
+#define KM_CONNECTS_UNCERT_F "might connect to"
+#define KM_CONNECTS_UNCERT_B "might connect to"
+#define KM_NEEDS_UNCERT_F "might need"
+#define KM_NEEDS_UNCERT_B "might be needed by"
+#define KM_EQUIV_UNCERT_F "might be equivalent to"
+#define KM_EQUIV_UNCERT_B "might be equivalent to"
+#define KM_SHIELD_UNCERT_F "might deny access from"
+#define KM_SHIELD_UNCERT_B "might not be allowed access to"
+#define KM_MONITOR_UNCERT_F "might monitor"
+#define KM_MONITOR_UNCERT_B "might be monitored by"
+#define KM_ACCESS_UNCERT_F "might grant access to"
+#define KM_ACCESS_UNCERT_B "might be allowed to access"
+
+#define KM_GENERALIZES_F "is a generalization of"
+#define KM_GENERALIZES_B "is a case of"
+#define KM_SYNONYM "is a synonym for"
+
+enum knowledgecertainty
+   {
+   cfk_certain,
+   cfk_uncertain,
+   cfk_possible
+   };
 
 /*************************************************************************/
 
@@ -1215,7 +1311,6 @@ struct Topic
    char *topic_context;
    char *topic_name;
    double evc;
-   struct Rlist *synonyms;
    struct TopicAssociation *associations;
    struct Topic *next;
    };
@@ -1225,7 +1320,7 @@ struct TopicAssociation
    char *fwd_context;
    char *fwd_name;
    char *bwd_name;
-   struct Rlist *associates;
+   struct Item *associates;
    char *bwd_context;
    struct TopicAssociation *next;
    };
@@ -1842,6 +1937,7 @@ struct Attributes
    struct Rlist *associates;
    struct Rlist *represents;
    struct Rlist *synonyms;
+   struct Rlist *general;
    char *rep_type;
    char *path_root;
    char *web_root;
@@ -1858,6 +1954,46 @@ meter_comms_hour,
 meter_anomalies_day,
 meter_endmark
 };
+
+/*************************************************************************/
+/* definitions for reporting                                            */
+/*************************************************************************/
+
+typedef enum cdp_report
+   {
+   cdp_acls,
+   cdp_commands,
+   cdp_filechanges,
+   cdp_filediffs,
+   cdp_registry,
+   cdp_services,
+   cdp_unknown
+   }
+cdp_t;
+
+typedef enum basic_reports
+   {
+   cfrep_bundle,
+   cfrep_business,
+   cfrep_classes,
+   cfrep_promise_compliance,
+   cfrep_total_compliance,
+   cfrep_change,
+   cfrep_diff,
+   cfrep_lastseen,
+   cfrep_patch_avail,
+   cfrep_patch_status,
+   cfrep_performance,
+   cfrep_repaired,
+   cfrep_repair_summary,
+   cfrep_notkept,
+   cfrep_notkept_summary,
+   cfrep_setuid,
+   cfrep_software_installed,
+   cfrep_variables,
+   cfrep_unknown
+   }
+cfrep_t;
 
 /*************************************************************************/
 /* definitions for test suite                                            */
@@ -1895,9 +2031,19 @@ meter_endmark
   || IsStrIn(c,MONTH_TEXT,false) || IsStrIn(c,DAY_TEXT,false)                  \
   || IsStrIn(c,SHIFT_TEXT,false))
 
+// Date time classes 
+#define ISCLASS_DATETIME(c)						\
+  (strncmp(c,"Min",3) == 0 || strncmp(c,"Hr",2) == 0 || strcmp(c,"Q1") == 0 \
+    || strcmp(c,"Q2") == 0 || strcmp(c,"Q3") == 0 || strcmp(c,"Q4") == 0 \
+    || strncmp(c,"GMT_Hr",6) == 0  || strncmp(c,"Yr",2) == 0                     \
+   || strncmp(c,"Day",3) == 0 || IsStrIn(c,MONTH_TEXT,false)		\
+  || IsStrIn(c,DAY_TEXT,false) || IsStrIn(c,SHIFT_TEXT,false)                 \
+  || strncmp(c,"Lcycle",6) == 0)
 
 #include "prototypes3.h"
 
 #ifdef HAVE_NOVA
 #include <cf.nova.h>
+#endif
+
 #endif

@@ -87,7 +87,7 @@ struct SubTypeSyntax CheckSubType(char *bundletype,char *subtype)
   
 if (subtype == NULL)
    {
-   snprintf(output,CF_BUFSIZE,"Missing promise type category for %s bundle",subtype,bundletype);
+   snprintf(output,CF_BUFSIZE,"Missing promise type category for %s bundle",bundletype);
    ReportError(output);
    return CF_NOSTYPE;
    }
@@ -160,7 +160,7 @@ return cf_notype;
 void CheckConstraint(char *type,char *name,char *lval,void *rval,char rvaltype,struct SubTypeSyntax ss)
 
 { int lmatch = false;
-  int i,j,k,l, allowed = false;
+  int i,l, allowed = false;
   struct BodySyntax *bs;
   char output[CF_BUFSIZE];
   
@@ -257,12 +257,10 @@ if (!lmatch || !allowed)
 
 int LvalWantsBody(char *stype,char *lval)
 
-{ int lmatch = false;
-  int i,j,k,l, allowed = false;
+{
+  int i,j,l;
   struct SubTypeSyntax *ss;
-  struct BodySyntax *bs,*bs2;
-  enum cfdatatype ltype;
-  char output[CF_BUFSIZE];
+  struct BodySyntax *bs;
 
 for  (i = 0; i < CF3_MODULES; i++)
    {
@@ -308,10 +306,9 @@ return false;
 void CheckSelection(char *type,char *name,char *lval,void *rval,char rvaltype)
 
 { int lmatch = false;
-  int i,j,k,l, allowed = false;
+  int i,j,k,l;
   struct SubTypeSyntax *ss;
   struct BodySyntax *bs,*bs2;
-  enum cfdatatype ltype;
   char output[CF_BUFSIZE];
   
 Debug("CheckSelection(%s,%s,",type,lval);
@@ -564,7 +561,7 @@ Debug("end CheckConstraintTypeMatch---------\n");
 
 enum cfdatatype StringDataType(char *scopeid,char *string)
 
-{ struct Rlist *rp;
+{
   enum cfdatatype dtype;
   char rtype;
   void *rval;
@@ -714,7 +711,7 @@ return false;
 
 void CheckParseInt(char *lval,char *s,char *range)
     
-{ struct Item *split,*ip;
+{ struct Item *split;
   int n;
   long max = CF_LOWINIT, min = CF_HIGHINIT, val;
   char output[CF_BUFSIZE];
@@ -860,7 +857,7 @@ Debug("CheckParseIntRange - syntax verified\n\n");
 
 void CheckParseReal(char *lval,char *s,char *range)
     
-{ struct Item *split,*ip;
+{ struct Item *split;
   double max = (double)CF_LOWINIT, min = (double)CF_HIGHINIT, val;
   int n;
   char output[CF_BUFSIZE];
@@ -999,7 +996,7 @@ Debug("CheckParseRealRange - syntax verified\n\n");
 
 void CheckParseOpts(char *lval,char *s,char *range)
 
-{ struct Item *split,*ip;
+{ struct Item *split;
   int err = false;
   char output[CF_BUFSIZE];
  
@@ -1040,8 +1037,8 @@ if (!err)
 int CheckParseVariableName(char *name)
 
 { char *reserved[] = { "promiser", "handle", "promise_filename", "promise_linenumber", NULL };
- char *sp,scopeid[CF_MAXVARSIZE],vlval[CF_MAXVARSIZE];
-  int count = 0;
+  char *sp,scopeid[CF_MAXVARSIZE],vlval[CF_MAXVARSIZE];
+  int count = 0, level = 0;
   
 if (IsStrIn(name,reserved,false))
    {
@@ -1054,22 +1051,43 @@ if (strchr(name,'.'))
    {
    for (sp = name; *sp != '\0'; sp++)
       {
-      if (*sp == '.')
+      switch (*sp)
          {
-         count++;
+         case '.':
+             if (++count > 1 && level != 1)
+                {
+                return false;
+                }
+             break;
+             
+         case '[':
+             level++;
+             break;
+             
+         case ']':
+             level--;
+             break;
+             
+         default:
+             break;
+         }
 
-         if (count > 1)
-            {
-            return false;
-            }
-         }      
+      if (level > 1)
+         {
+         yyerror("Too many levels of [] reserved for array use");
+         return false;
+         }
+
       }
-   
-   sscanf(name,"%[^.].%s",scopeid,vlval);
 
-   if (strlen(scopeid) == 0 || strlen(vlval) == 0)
+   if (count == 1)
       {
-      return false;
+      sscanf(name,"%[^.].%s",scopeid,vlval);
+   
+      if (strlen(scopeid) == 0 || strlen(vlval) == 0)
+         {
+         return false;
+         }
       }
    }
 

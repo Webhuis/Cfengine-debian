@@ -68,7 +68,7 @@ static struct CfRegEx CompileRegExp(const char *regexp)
 
 memset(&this,0,sizeof(struct CfRegEx)); 
 
-rx = pcre_compile(regexp,PCRE_MULTILINE,&errorstr,&erroffset,NULL);
+rx = pcre_compile(regexp,PCRE_MULTILINE|PCRE_DOTALL,&errorstr,&erroffset,NULL);
 
 if (rx == NULL)
    {
@@ -122,7 +122,7 @@ static struct CfRegEx CaseCompileRegExp(const char *regexp)
  int erroffset;
 
 memset(&this,0,sizeof(struct CfRegEx)); 
-rx = pcre_compile(regexp,PCRE_CASELESS|PCRE_MULTILINE,&errorstr,&erroffset,NULL);
+rx = pcre_compile(regexp,PCRE_CASELESS|PCRE_MULTILINE|PCRE_DOTALL,&errorstr,&erroffset,NULL);
 
 if (rx == NULL)
    {
@@ -699,7 +699,7 @@ int IsPathRegex(char *str)
 { char *sp;
   int result = false,s = 0,r = 0;
 
-if (result = IsRegex(str))
+if ((result = IsRegex(str)))
    {
    for (sp = str; *sp != '\0'; sp++)
       {
@@ -782,7 +782,7 @@ int MatchPolicy(char *camel,char *haystack,struct Attributes a,struct Promise *p
 { struct Rlist *rp;
   char *sp,*spto,*firstchar,*lastchar;
   enum insert_match opt;
-  char work[CF_BUFSIZE],final[CF_BUFSIZE],needle[CF_BUFSIZE];
+  char work[CF_BUFSIZE],final[CF_BUFSIZE];
   struct Item *list = SplitString(camel,'\n'),*ip;
   int direct_cmp = false, ok = false;
   
@@ -1178,7 +1178,6 @@ if (!(isrange||isCIDR))
  
 if (isv4)
    {
-
    if (isCIDR)
       {
       struct sockaddr_in addr1,addr2;
@@ -1242,7 +1241,7 @@ if (isv4)
             
             if ((from > cmp) || (cmp > to))
                {
-               Debug("Out of range %d > %d > %d (range %s)\n",from,cmp,to,buffer2);
+               Debug("Out of range %ld > %ld > %ld (range %s)\n",from,cmp,to,buffer2);
                return -1;
                }
             }
@@ -1326,7 +1325,7 @@ if (isv6)
             
             if ((from >= cmp) || (cmp > to))
                {
-               Debug("%x < %x < %x\n",from,cmp,to);
+               Debug("%lx < %lx < %lx\n",from,cmp,to);
                return -1;
                }
             }
@@ -1354,7 +1353,7 @@ return -1;
 
 int FuzzyHostParse(char *arg1,char *arg2)
 
-{ struct Item *args;
+{
   long start = -1, end = -1, where = -1;
   int n;
 
@@ -1373,7 +1372,7 @@ return true;
 
 int FuzzyHostMatch(char *arg0, char* arg1, char *refhost)
 
-{ struct Item *args;
+{
   char *sp, refbase[CF_MAXVARSIZE];
   long cmp = -1, start = -1, end = -1;
   char buf1[CF_BUFSIZE], buf2[CF_BUFSIZE];

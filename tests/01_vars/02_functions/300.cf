@@ -1,6 +1,6 @@
 #######################################################
 #
-# 
+# Test multiline regcmp
 #
 #######################################################
 
@@ -17,53 +17,24 @@ bundle common g
 {
 vars:
 	"testfile" string => "/tmp/TEST.cfengine";
-	"repofile" string => "_tmp_TEST.cfengine";
-	"repo" string => "/var/tmp";
 }
 
 #######################################################
 
 bundle agent init
 {
-files:
-	"$(g.repo)/$(g.repofile).*"
-	    delete => init_delete;
-
-	"$(g.testfile).*"
-	    delete => init_delete;
-
-	"$(g.testfile)"
-	    move_obstructions => "true",
-	    copy_from => init_copy;
-}
-
-body copy_from init_copy
-{
-	source => "/etc/group";
-	compare => "digest";
-}
-
-body delete init_delete
-{
-	dirlinks => "delete";
-	rmdirs   => "true";
+vars:
+        "dummy" string => "dummy";
 }
 
 #######################################################
 
 bundle agent test
 {
-files:
-	"$(g.testfile)"
-	    move_obstructions => "true",
-	    repository => "$(g.repo)",
-	    copy_from => test_copy;
-}
-
-body copy_from test_copy
-{
-	source => "/etc/motd";
-	compare => "digest";
+vars:
+        "haystack" string => "foo
+bar";
+        "needle" string => ".*";
 }
 
 #######################################################
@@ -71,15 +42,9 @@ body copy_from test_copy
 bundle agent check
 {
 classes:
-    "test" not => fileexists("$(g.testfile).cfsaved");
-    "repo" expression => fileexists("$(g.repo)/$(g.repofile).cfsaved");
-    "ok" and => { "test", "repo" };
+        "ok" and => { regcmp("$(test.needle)", "$(test.haystack)") };
 
 reports:
-    DEBUG::
-	"testfile = $(g.testfile)";
-	"repo = $(g.repo)";
-	"repofile = $(g.repofile)";
     ok::
 	"$(this.promise_filename) Pass";
     MAIN.ok::
@@ -98,5 +63,4 @@ bundle agent fini
 {
 methods:
 	"any" usebundle => default_fini("$(g.testfile)");
-	"any" usebundle => default_fini("$(g.repo)/$(g.repofile)");
 }

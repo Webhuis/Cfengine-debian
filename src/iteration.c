@@ -37,7 +37,7 @@
 struct Rlist *NewIterationContext(char *scopeid,struct Rlist *namelist)
 
 { struct Rlist *this,*rp,*rps,*deref_listoflists = NULL;
-  char *lval,rtype;
+  char rtype;
   void *returnval;
   enum cfdatatype dtype;
   struct Scope *ptr = NULL;
@@ -84,7 +84,7 @@ for (rp = namelist; rp != NULL; rp = rp->next)
          }
       }
 
-   if (new = NewAssoc(rp->item,returnval,rtype,dtype))
+   if ((new = NewAssoc(rp->item,returnval,rtype,dtype)))
       {
       this = OrthogAppendRlist(&deref_listoflists,new,CF_LIST);
       rp->state_ptr = new->rval;
@@ -121,9 +121,8 @@ if (deref != NULL)
 
 int IncrementIterationContext(struct Rlist *iterator,int level)
 
-{ struct Rlist *rp,*state_ptr,*state;
+{ struct Rlist *state;
   struct CfAssoc *cp;
-  void *vp = NULL;
   
 if (iterator == NULL)
    {

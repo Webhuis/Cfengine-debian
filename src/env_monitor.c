@@ -99,9 +99,6 @@ long LASTT[CF_OBSERVABLES];
 /* Prototypes                                                      */
 /*******************************************************************/
 
-void MonInitialize(void);
-void StartServer (int argc, char **argv);
-
 void GetDatabaseAge (void);
 void LoadHistogram  (void);
 void GetQ (void);
@@ -112,7 +109,7 @@ void OpenSniffer(void);
 void Sniff(void);
 
 void GatherProcessData (void);
-void GatherCPUData (void);
+void GatherCPUData (double *CF_THIS);
 void GatherDiskData (void);
 void GatherLoadData (void);
 void GatherSocketData (void);
@@ -145,7 +142,7 @@ void Unix_GatherProcessData (void);
 
 /****************************************************************/
 
-void MonInitialize()
+void MonInitialize(void)
    
 { int i,j,k;
  struct stat statbuf;
@@ -299,19 +296,19 @@ void LoadHistogram()
          for (day = 0; day < 7; day++)
             {
             fscanf(fp,"%lf ",&(HISTOGRAM[i][day][position]));
-            }
 
-         if (HISTOGRAM[i][day][position] < 0)
-            {
-            HISTOGRAM[i][day][position] = 0;
-            }
+            if (HISTOGRAM[i][day][position] < 0)
+               {
+               HISTOGRAM[i][day][position] = 0;
+               }
 
-         if (HISTOGRAM[i][day][position] > maxval[i])
-            {
-            maxval[i] = HISTOGRAM[i][day][position];
-            }
+            if (HISTOGRAM[i][day][position] > maxval[i])
+               {
+               maxval[i] = HISTOGRAM[i][day][position];
+               }
 
-         HISTOGRAM[i][day][position] *= 1000.0/maxval[i];
+            HISTOGRAM[i][day][position] *= 1000.0/maxval[i];
+            }
          }
       }
    
@@ -486,7 +483,7 @@ ENTROPIES = NULL;
 ZeroArrivals();
 
 GatherProcessData();
-GatherCPUData();
+GatherCPUData(CF_THIS);
 #ifndef MINGW
 GatherLoadData(); 
 GatherDiskData();
@@ -2377,7 +2374,7 @@ return true;
 
 /*****************************************************************************/
 
-void GatherCPUData()
+void GatherCPUData(double *CF_THIS)
 
 { double q,dq;
   char name[CF_MAXVARSIZE],cpuname[CF_MAXVARSIZE],buf[CF_BUFSIZE];

@@ -37,8 +37,7 @@
 int SelectProcess(char *procentry,char **names,int *start,int *end,struct Attributes a,struct Promise *pp)
 
 { struct AlphaList proc_attr;
- int result = true,s,e,i;
-  char *criteria = NULL;
+ int result = true,i;
   char *column[CF_PROCCOLS];
   struct Rlist *rp;
 
@@ -133,7 +132,7 @@ if (SelectProcRegexMatch("TTY","TTY",a.process_select.tty,names,column))
    PrependAlphaList(&proc_attr,"tty");
    }
 
-if (result = EvalProcessResult(a.process_select.process_result,&proc_attr))
+if ((result = EvalProcessResult(a.process_select.process_result,&proc_attr)))
    {
    //ClassesFromString(fp->defines);
    }
@@ -328,12 +327,12 @@ for (i = 0; i < CF_PROCCOLS && names[i] != NULL; i++)
 
    if (strcmp(names[i],"CMD") == 0 || strcmp(names[i],"COMMAND") == 0)
       {
-      sscanf(sp,"%127[^\n]",&(cols1[i]));
+      sscanf(sp,"%127[^\n]",cols1[i]);
       sp += strlen(cols1[i]);
       }
    else
       {
-      sscanf(sp,"%127s",&(cols1[i]));
+      sscanf(sp,"%127s",cols1[i]);
       sp += strlen(cols1[i]);
       }
    

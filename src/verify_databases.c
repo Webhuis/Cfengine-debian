@@ -36,7 +36,7 @@
 
 void VerifyDatabasePromises(struct Promise *pp)
 
-{ struct Attributes a = {0};
+{ struct Attributes a = {{0}};
 
 if (pp->done)
    {
@@ -73,7 +73,7 @@ void VerifySQLPromise(struct Attributes a,struct Promise *pp)
 
 { char database[CF_MAXVARSIZE],table[CF_MAXVARSIZE],query[CF_BUFSIZE];
   char *sp,sep = 'x';
-  int count = 0, need_connector = false;
+  int count = 0;
   CfdbConn cfdb;
   struct CfLock thislock;
   char lockname[CF_BUFSIZE];
@@ -92,7 +92,7 @@ table[0] = '\0';
   
 for (sp = pp->promiser; *sp != '\0'; sp++)
    {
-   if (IsIn(*sp,"./\\"))
+   if (strchr("./\\", *sp))
       {
       count++;
       sep = *sp;

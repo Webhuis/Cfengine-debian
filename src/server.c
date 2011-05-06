@@ -182,7 +182,6 @@ void CheckOpts(int argc,char **argv)
 { extern char *optarg;
   char ld_library_path[CF_BUFSIZE];
   char arg[CF_BUFSIZE];
-  struct Item *actionList;
   int optindex = 0;
   int c;
   
@@ -297,7 +296,7 @@ void StartServer(int argc,char **argv)
   struct timeval timeout;
   int ret_val;
   struct Promise *pp = NewPromise("server_cfengine","the server daemon");
-  struct Attributes dummyattr = {0};
+  struct Attributes dummyattr = {{0}};
   struct CfLock thislock;
 
 #if defined(HAVE_GETADDRINFO)
@@ -754,7 +753,7 @@ HandleConnection(conn);
 void CheckFileChanges(int argc,char **argv,int sd)
 
 { struct stat newstat;
-  char filename[CF_BUFSIZE],*sp;
+  char filename[CF_BUFSIZE];
   int ok;
 
 memset(&newstat,0,sizeof(struct stat));
@@ -1267,7 +1266,7 @@ switch (GetCommand(recvbuffer))
 
        if (plainlen < 0)
           {
-          DebugBinOut(conn->session_key,32,"Session key");
+          DebugBinOut((char *)conn->session_key,32,"Session key");
           CfOut(cf_error, "", "!! Bad decrypt (%d)",len);
           }
 
@@ -1575,9 +1574,8 @@ while (true && (count < 10))  /* arbitrary check to avoid infinite loop, DoS att
 
 void DoExec(struct cfd_connection *conn,char *sendbuffer,char *args)
 
-{ char ebuff[CF_EXPANDSIZE], line[CF_BUFSIZE], *sp,rtype;
-  int print = false,i, opt=false;
-  void *rval;
+{ char ebuff[CF_EXPANDSIZE], line[CF_BUFSIZE], *sp;
+  int print = false,i;
   FILE *pp;
 
 if ((CFSTARTTIME = time((time_t *)NULL)) == -1)
@@ -1985,7 +1983,7 @@ int AccessControl(char *oldFilename,struct cfd_connection *conn,int encrypt,stru
 
 { struct Auth *ap;
   int access = false;
-  char realname[CF_BUFSIZE],path[CF_BUFSIZE],lastnode[CF_BUFSIZE],filename[CF_BUFSIZE],*sp;
+  char realname[CF_BUFSIZE],path[CF_BUFSIZE],lastnode[CF_BUFSIZE],filename[CF_BUFSIZE];
   char transrequest[CF_BUFSIZE],transpath[CF_BUFSIZE];
   struct stat statbuf;
 
@@ -2155,8 +2153,6 @@ int LiteralAccessControl(char *in,struct cfd_connection *conn,int encrypt,struct
 
 { struct Auth *ap;
   int access = false;
-  char *sp;
-  struct stat statbuf;
   char name[CF_BUFSIZE];
 
 name[0] = '\0';
@@ -2268,12 +2264,10 @@ struct Item *ContextAccessControl(char *in,struct cfd_connection *conn,int encry
 
 { struct Auth *ap;
   int access = false;
-  char *sp;
-  struct stat statbuf;
   char client_regex[CF_BUFSIZE];
   CF_DB *dbp;
   CF_DBC *dbcp;
-  int ret,ksize,vsize;
+  int ksize,vsize;
   char *key;
   void *value;
   time_t now = time(NULL);
@@ -3014,11 +3008,10 @@ return 0;
 
 void CfGetFile(struct cfd_get_arg *args)
 
-{ int sd,fd,n_read,total=0,cipherlen,sendlen=0,count = 0,finlen;
-  char sendbuffer[CF_BUFSIZE+256],out[CF_BUFSIZE],filename[CF_BUFSIZE];
+{ int sd,fd,n_read,total=0,sendlen=0,count = 0;
+  char sendbuffer[CF_BUFSIZE+256],filename[CF_BUFSIZE];
   struct stat sb;
   int blocksize = 2048;
-  uid_t uid;
   char *key;
 
 sd         = (args->connect)->sd_reply;
@@ -3122,7 +3115,7 @@ void CfEncryptGetFile(struct cfd_get_arg *args)
    exact number of bytes transmitted, which might change during
    encryption, hence we need to handle this with transactions */
     
-{ int sd,fd,n_read,total=0,cipherlen,sendlen=0,count = 0,finlen,cnt = 0;
+{ int sd,fd,n_read,total=0,cipherlen,count = 0,finlen,cnt = 0;
   char sendbuffer[CF_BUFSIZE+256],out[CF_BUFSIZE],filename[CF_BUFSIZE];
   unsigned char iv[32] = {1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8};
   int blocksize = CF_BUFSIZE - 4*CF_INBAND_OFFSET;
@@ -3130,7 +3123,6 @@ void CfEncryptGetFile(struct cfd_get_arg *args)
   char *key,enctype;
   struct stat sb;
   int savedlen;
-  uid_t uid;
 
 sd         = (args->connect)->sd_reply;
 key        = (args->connect)->session_key;
@@ -3282,11 +3274,11 @@ else
 void GetServerLiteral(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer,int encrypted)
 
 { char handle[CF_BUFSIZE],out[CF_BUFSIZE];
-  int cipherlen, ok = false;
+  int cipherlen;
 
 sscanf(recvbuffer,"VAR %255[^\n]",handle);
  
-if (ok = ReturnLiteralData(handle,out))
+if (ReturnLiteralData(handle,out))
    {
    memset(sendbuffer,0,CF_BUFSIZE);
    snprintf(sendbuffer,CF_BUFSIZE-1,"%s",out);
@@ -3312,8 +3304,7 @@ else
 
 int GetServerQuery(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer)
 
-{ char query[CF_BUFSIZE],out[CF_BUFSIZE];
-  int cipherlen, ok = false;
+{ char query[CF_BUFSIZE];
 
 query[0] = '\0';
 sscanf(recvbuffer,"QUERY %255[^\n]",query);
@@ -3331,7 +3322,7 @@ if (cf_strncmp(query,"relay",5) == 0)
 #endif
 
 #ifdef HAVE_NOVA
-return Nova_ReturnQueryData(conn,query,sendbuffer);
+return Nova_ReturnQueryData(conn,query);
 #else
 return false;
 #endif
@@ -3342,7 +3333,7 @@ return false;
 void ReplyServerContext(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer,int encrypted,struct Item *classes)
 
 { char out[CF_BUFSIZE];
-  int cipherlen, ok = false;
+  int cipherlen;
   struct Item *ip;
 
 memset(sendbuffer,0,CF_BUFSIZE);
@@ -3746,12 +3737,12 @@ ThreadLock(cft_output);
 snprintf(udigest,CF_MAXVARSIZE-1,"%s",HashPrint(CF_DEFAULT_DIGEST,conn->digest));
 ThreadUnlock(cft_output);
 
-if (savedkey = HavePublicKey(conn->username,MapAddress(conn->ipaddr),udigest))
+if ((savedkey = HavePublicKey(conn->username,MapAddress(conn->ipaddr),udigest)))
    {
    CfOut(cf_verbose,"","A public key was already known from %s/%s - no trust required\n",conn->hostname,conn->ipaddr);
    
    CfOut(cf_verbose,"","Adding IP %s to SkipVerify - no need to check this if we have a key\n",conn->ipaddr);
-   PrependItem(&SKIPVERIFY,MapAddress(conn->ipaddr),NULL);
+   IdempPrependItem(&SKIPVERIFY,MapAddress(conn->ipaddr),NULL);
    
    if ((BN_cmp(savedkey->e,key->e) == 0) && (BN_cmp(savedkey->n,key->n) == 0))
       {

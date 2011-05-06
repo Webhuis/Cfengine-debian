@@ -85,10 +85,12 @@ int    SMOOTHHISTOGRAM[CF_OBSERVABLES][7][CF_GRAINS];
 char   ERASE[CF_BUFSIZE];
 double AGE;
 
-static struct Averages ENTRY,MAX,MIN,DET;
+static struct Averages MAX,MIN;
 
 char OUTPUTDIR[CF_BUFSIZE],*sp;
 char REMOVEHOSTS[CF_BUFSIZE];
+char NOVA_EXPORT_TYPE[CF_MAXVARSIZE] = {0};
+char NOVA_IMPORT_FILE[CF_MAXVARSIZE] = {0};
 
 FILE *FPAV=NULL,*FPVAR=NULL, *FPNOW=NULL;
 FILE *FPE[CF_OBSERVABLES],*FPQ[CF_OBSERVABLES];
@@ -106,7 +108,7 @@ struct Rlist *CSVLIST = NULL;
             "data stored in cfengine's embedded databases in human\n"
             "readable form.";
 
- struct option OPTIONS[23] =
+ struct option OPTIONS[25] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -130,10 +132,12 @@ struct Rlist *CSVLIST = NULL;
       { "no-scaling",no_argument,0,'n'},
       { "verbose",no_argument,0,'v'},
       { "remove-hosts",required_argument,0,'r'},
+      { "nova-export",required_argument,0,'x'},
+      { "nova-import",required_argument,0,'i'},
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[23] =
+ char *HINTS[25] =
       {
       "Print the help message",
       "Set debugging level 0,1,2,3",
@@ -157,6 +161,8 @@ struct Rlist *CSVLIST = NULL;
       "Do not automatically scale the axes",
       "Generate verbose output",
       "Remove comma separated list of IP address entries from the hosts-seen database",
+      "Export Nova reports to file - delta or full report",
+      "Import Nova reports from file - specify the path (only on Nova policy hub)",
       NULL
       };
 
@@ -198,53 +204,53 @@ enum cf_format
 
 char *CFRX[][2] =
    {
-    "<entry>\n","\n</entry>\n",
-    "<event>\n","\n</event>\n",
-    "<hostname>\n","\n</hostname>\n",
-    "<pm>\n","\n</pm>\n",
-    "<ip>\n","\n</ip>\n",
-    "<date>\n","\n</date>\n",
-    "<q>\n","\n</q>\n",
-    "<expect>\n","\n</expect>\n",
-    "<sigma>\n","\n</sigma>\n",
-    "<version>\n","\n</version>\n",
-    "<ref>\n","\n</ref>\n",
-    "<filename>\n","\n</filename>\n",
-    "<index>\n","\n</index>\n",
-    "<min>\n","\n</min>\n",
-    "<max>\n","\n</max>\n",
-    "<end>\n","\n</end>\n",
-    "<alias>\n","\n</alias>\n",
-    NULL,NULL
+    {"<entry>\n","\n</entry>\n"},
+    {"<event>\n","\n</event>\n"},
+    {"<hostname>\n","\n</hostname>\n"},
+    {"<pm>\n","\n</pm>\n"},
+    {"<ip>\n","\n</ip>\n"},
+    {"<date>\n","\n</date>\n"},
+    {"<q>\n","\n</q>\n"},
+    {"<expect>\n","\n</expect>\n"},
+    {"<sigma>\n","\n</sigma>\n"},
+    {"<version>\n","\n</version>\n"},
+    {"<ref>\n","\n</ref>\n"},
+    {"<filename>\n","\n</filename>\n"},
+    {"<index>\n","\n</index>\n"},
+    {"<min>\n","\n</min>\n"},
+    {"<max>\n","\n</max>\n"},
+    {"<end>\n","\n</end>\n"},
+    {"<alias>\n","\n</alias>\n"},
+    {NULL,NULL}
    };
 
 char *CFRH[][2] =
    {
-    "<tr>","</tr>\n\n",
-    "<td>","</td>\n",
-    "<td>","</td>\n",
-    "<td bgcolor=#add8e6>","</td>\n",
-    "<td bgcolor=#e0ffff>","</td>\n",
-    "<td bgcolor=#f0f8ff>","</td>\n",
-    "<td bgcolor=#fafafa>","</td>\n",
-    "<td bgcolor=#ededed>","</td>\n",
-    "<td bgcolor=#e0e0e0>","</td>\n",
-    "<td bgcolor=#add8e6>","</td>\n",
-    "<td bgcolor=#e0ffff>","</td>\n",
-    "<td bgcolor=#fafafa><small>","</small></td>\n",
-    "<td bgcolor=#fafafa><small>","</small></td>\n",
-    "<td>","</td>\n",
-    "<td>","</td>\n",
-    "<td>","</td>\n",
-    "<td>","</td>\n",
-    NULL,NULL
+    {"<tr>","</tr>\n\n"},
+    {"<td>","</td>\n"},
+    {"<td>","</td>\n"},
+    {"<td bgcolor=#add8e6>","</td>\n"},
+    {"<td bgcolor=#e0ffff>","</td>\n"},
+    {"<td bgcolor=#f0f8ff>","</td>\n"},
+    {"<td bgcolor=#fafafa>","</td>\n"},
+    {"<td bgcolor=#ededed>","</td>\n"},
+    {"<td bgcolor=#e0e0e0>","</td>\n"},
+    {"<td bgcolor=#add8e6>","</td>\n"},
+    {"<td bgcolor=#e0ffff>","</td>\n"},
+    {"<td bgcolor=#fafafa><small>","</small></td>\n"},
+    {"<td bgcolor=#fafafa><small>","</small></td>\n"},
+    {"<td>","</td>\n"},
+    {"<td>","</td>\n"},
+    {"<td>","</td>\n"},
+    {"<td>","</td>\n"},
+    {NULL,NULL}
    };
 
 /*****************************************************************************/
 
 int main(int argc,char *argv[])
 
-{
+{ 
 CheckOpts(argc,argv);
 GenericInitialize(argc,argv,"reporter");
 ThisAgentInit();
@@ -253,6 +259,8 @@ KeepReportsPromises();
 return 0;
 }
 
+
+
 /*****************************************************************************/
 /* Level 1                                                                   */
 /*****************************************************************************/
@@ -260,12 +268,10 @@ return 0;
 void CheckOpts(int argc,char **argv)
 
 { extern char *optarg;
-  struct Item *actionList;
   int optindex = 0;
   int c;
-  char ld_library_path[CF_BUFSIZE];
 
-while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:x:i:",OPTIONS,&optindex)) != EOF)
    {
    switch ((char) c)
       {
@@ -368,6 +374,24 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:",OPTIONS,&optindex)) !
           PURGE = 'y';
           break;
 
+      case 'x':
+          
+          if((String2Menu(optarg) != cfd_menu_delta) &&
+             (String2Menu(optarg) != cfd_menu_full))
+             {
+             Syntax("Wrong argument to export: should be delta or full",OPTIONS,HINTS,ID);
+             exit(1);
+             }
+          
+          snprintf(NOVA_EXPORT_TYPE, sizeof(NOVA_EXPORT_TYPE), "%s", optarg);
+
+          break;
+
+      case 'i':
+          
+          snprintf(NOVA_IMPORT_FILE, sizeof(NOVA_IMPORT_FILE), "%s", optarg);
+          break;
+
       default: Syntax("cf-report - cfengine's reporting agent",OPTIONS,HINTS,ID);
           exit(1);
 
@@ -385,8 +409,8 @@ if (argv[optind] != NULL)
 
 void ThisAgentInit()
 
-{ char vbuff[CF_BUFSIZE];
-  time_t now;
+{
+time_t now;
 
 if (strlen(OUTPUTDIR) == 0)
    {
@@ -420,6 +444,25 @@ MapName(VINPUTFILE);
 
 InitMeasurements();
 RemoveHostSeen(REMOVEHOSTS);
+
+#ifdef HAVE_NOVA
+if(!EMPTY(NOVA_EXPORT_TYPE))
+   {
+   Nova_ExportReports(NOVA_EXPORT_TYPE);
+   }
+
+if(!EMPTY(NOVA_IMPORT_FILE))
+   {
+   if(IsDefinedClass("am_policy_hub"))
+      {
+      Nova_ImportHostReports(NOVA_IMPORT_FILE);
+      }
+   else
+      {
+      CfOut(cf_error, "", "Importing reports is only possible on Nova policy hubs");
+      }
+   }
+#endif
 }
 
 /*****************************************************************************/
@@ -745,9 +788,7 @@ GrandSummary();
 void RemoveHostSeen(char *hosts)
 
 { CF_DB *dbp;
-  CF_DBC *dbcp;
-  char *key,name[CF_BUFSIZE];
-  void *value;
+  char name[CF_BUFSIZE];
   struct Item *ip,*list = SplitStringAsItemList(hosts,',');
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
@@ -786,7 +827,7 @@ void ShowLastSeen()
   double ticksperhr = (double)CF_TICKS_PER_HOUR;
   char name[CF_BUFSIZE],hostname[CF_BUFSIZE],address[CF_MAXVARSIZE];
   struct CfKeyHostSeen entry;
-  int ret,ksize,vsize;
+  int ksize,vsize;
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
 MapName(name);
@@ -971,7 +1012,7 @@ void ShowPerformance()
   double ticksperminute = 60.0;
   char name[CF_BUFSIZE],eventname[CF_BUFSIZE];
   struct Event entry;
-  int ret,ksize,vsize;
+  int ksize,vsize;
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_PERFORMANCE);
 
@@ -1036,7 +1077,7 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
    {
    double measure;
    time_t then;
-   char tbuf[CF_BUFSIZE],addr[CF_BUFSIZE];
+   char tbuf[CF_BUFSIZE];
 
    memcpy(&then,value,sizeof(then));
    strncpy(eventname,(char *)key,ksize);
@@ -1136,11 +1177,10 @@ void ShowClasses()
   FILE *fout,*fnotes;
   struct Item *already = NULL,*ip;
   double now = (double)time(NULL),average = 0, var = 0;
-  double ticksperminute = 60.0;
   char name[CF_BUFSIZE],eventname[CF_BUFSIZE];
   struct Event entry;
   struct CEnt array[1024];
-  int ret,i,ksize,vsize;
+  int i,ksize,vsize;
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_CLASSUSAGE);
 MapName(name);
@@ -1215,7 +1255,7 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
    {
    double measure;
    time_t then;
-   char tbuf[CF_BUFSIZE],addr[CF_BUFSIZE];
+   char tbuf[CF_BUFSIZE];
 
    memcpy(&then,value,sizeof(then));
    strncpy(eventname,(char *)key,CF_BUFSIZE-1);
@@ -1381,10 +1421,9 @@ void ShowChecksums()
   CF_DBC *dbcp;
   char *key;
   void *value;
-  int ret,ksize,vsize;
-  FILE *pp,*fout;
+  int ksize,vsize;
+  FILE *fout;
   char checksumdb[CF_BUFSIZE],name[CF_BUFSIZE];
-  struct stat statbuf;
 
 snprintf(checksumdb,CF_BUFSIZE,"%s/%s",CFWORKDIR,CF_CHKDB);
 
@@ -1508,7 +1547,7 @@ void ShowLocks (int active)
   char *key;
   void *value;
   FILE *fout;
-  int ret,ksize,vsize;
+  int ksize,vsize;
   char lockdb[CF_BUFSIZE],name[CF_BUFSIZE];
   struct LockData entry;
 
@@ -1672,7 +1711,7 @@ void ShowCurrentAudit()
   void *value;
   CF_DB *dbp;
   CF_DBC *dbcp;
-  int ret,ksize,vsize;
+  int ksize,vsize;
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_AUDITDB_FILE);
 MapName(name);
@@ -1914,7 +1953,7 @@ void ReadAverages()
   char timekey[CF_MAXVARSIZE];
   time_t now;
   CF_DB *dbp;
-  int i,err;
+  int i;
 
 CfOut(cf_verbose,"","\nLooking for database %s\n",VINPUTFILE);
 CfOut(cf_verbose,"","\nFinding MAXimum values...\n\n");
@@ -1971,7 +2010,7 @@ CloseDB(dbp);
 
 void EraseAverages()
 
-{ int i,err;
+{ int i;
  char timekey[CF_MAXVARSIZE],name[CF_MAXVARSIZE];
   struct Item *list = NULL;
   struct Averages entry;
@@ -2023,7 +2062,7 @@ CloseDB(dbp);
 
 void SummarizeAverages()
 
-{ int i,err;
+{ int i;
   FILE *fout;
   char name[CF_BUFSIZE];
   CF_DB *dbp;
@@ -2129,11 +2168,10 @@ fclose(fout);
 
 void WriteGraphFiles()
 
-{ int its,i,j,k, count = 0,err;
+{ int its,i,j,count = 0;
   double kept = 0, not_kept = 0, repaired = 0;
-  struct stat statbuf;
   struct Averages entry,det;
-  char timekey[CF_MAXVARSIZE],name[CF_MAXVARSIZE];
+  char timekey[CF_MAXVARSIZE];
   time_t now;
   CF_DB *dbp;
 
@@ -2269,7 +2307,7 @@ CloseFiles();
 
 void MagnifyNow()
 
-{ int its,i,j,k, count = 0,err;
+{ int its,i,j,count = 0;
   struct Averages entry,det;
   time_t now,here_and_now;
   char timekey[CF_MAXVARSIZE];
@@ -2454,7 +2492,7 @@ void DiskArrivals(void)
 { DIR *dirh;
   FILE *fp;
   struct dirent *dirp;
-  int count = 0, index = 0, i,err;
+  int count = 0, index = 0, i;
   char filename[CF_BUFSIZE],database[CF_BUFSIZE],timekey[CF_MAXVARSIZE];
   double val, maxval = 1.0, *array, grain = 0.0;
   time_t now;
@@ -2571,17 +2609,17 @@ closedir(dirh);
 
 void PeerIntermittency()
 
-{ CF_DB *dbp,*dbpent;
+{ CF_DB *dbp;
   CF_DBC *dbcp;
   char *key;
   void *value;
-  int i,ret,ksize,vsize;
+  int ksize,vsize;
   FILE *fp1,*fp2;
   char name[CF_BUFSIZE],hostname[CF_BUFSIZE],timekey[CF_MAXVARSIZE];
   char out1[CF_BUFSIZE],out2[CF_BUFSIZE];
   struct QPoint entry;
   struct Item *ip, *hostlist = NULL;
-  double entropy,average,var,sum,sum_av;
+  double average,var;
   time_t now = time(NULL), then, lastseen = CF_WEEK;
 
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
@@ -2800,6 +2838,8 @@ for (i = 0; i < CF_OBSERVABLES; i++)
    fclose(FPM[i]);
    }
 }
+
+
 
 
 /* EOF */

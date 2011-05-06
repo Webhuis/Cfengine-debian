@@ -39,8 +39,7 @@ void CfDebugBreak(void);
 
 void SelfDiagnostic()
 
-{ int intval,s1,s2,i,j;
-  char *def;
+{ int s1,s2,i,j;
  
 if (VERBOSE || DEBUG)
    {
@@ -205,7 +204,6 @@ for (i = 0; CF_FNCALL_TYPES[i].name != NULL; i++)
 void TestExpandPromise()
 
 { struct Promise pp = {0},*pcopy;
-  struct Body *bp;
 
 printf("%d. Testing promise duplication and expansion\n",++NR);
 pp.promiser = "the originator";
@@ -252,11 +250,7 @@ DeletePromise(pcopy);
 void TestExpandVariables()
 
 { struct Promise pp = {0},*pcopy;
-  struct Body *bp;
-  int i;
-  char *list_text1 = "a,b,c,d,e,f,g";
-  char *list_text2 = "1,2,3,4,5,6,7";
-  struct Rlist *rp, *args, *listvars = NULL, *scalarvars = NULL;
+  struct Rlist *args, *listvars = NULL, *scalarvars = NULL;
   struct Constraint *cp;
   struct FnCall *fp;
 
@@ -421,7 +415,7 @@ else
 
 void TestAgentPromises()
 
-{ struct Attributes a = {0};
+{ struct Attributes a = {{0}};
   struct Promise pp = {0};
 
 pp.conlist = NULL;
@@ -454,7 +448,7 @@ void SDIntegerDefault(char *ref,int cmp)
 { char *def;
   int intval;
 
-if (def = GetControlDefault(ref))
+if ((def = GetControlDefault(ref)))
    {
    sscanf(def,"%d",&intval);
    if (intval != cmp)

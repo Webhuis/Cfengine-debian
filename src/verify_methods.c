@@ -36,7 +36,7 @@
 
 void VerifyMethodsPromise(struct Promise *pp)
 
-{ struct Attributes a = {0};
+{ struct Attributes a = {{0}};
 
 a = GetMethodAttributes(pp);
 
@@ -56,17 +56,16 @@ int VerifyMethod(struct Attributes a,struct Promise *pp)
   int retval = false;
   struct CfLock thislock;
   char lockname[CF_BUFSIZE];
-  struct Rlist *expargs;
 
 if (a.havebundle)
    {
-   if (vp = GetConstraint("usebundle",pp,CF_FNCALL))
+   if ((vp = GetConstraint("usebundle",pp,CF_FNCALL)))
       {
       fp = (struct FnCall *)vp;
       ExpandScalar(fp->name,method_name);
       params = fp->args;
       }
-   else if (vp = GetConstraint("usebundle",pp,CF_SCALAR))
+   else if ((vp = GetConstraint("usebundle",pp,CF_SCALAR)))
       {
       ExpandScalar((char *)vp,method_name);
       params = NULL;
@@ -88,7 +87,7 @@ if (thislock.lock == NULL)
 
 PromiseBanner(pp);
 
-if (bp = GetBundle(method_name,"agent"))
+if ((bp = GetBundle(method_name,"agent")))
    {
    char *bp_stack = THIS_BUNDLE;
 

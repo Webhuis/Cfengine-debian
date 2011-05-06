@@ -37,7 +37,7 @@
 void BeginAudit()
 
 { struct Promise dummyp = {0};
-  struct Attributes dummyattr = {0};
+  struct Attributes dummyattr = {{0}};
 
 if (THIS_AGENT_TYPE != cf_agent)
    {
@@ -58,7 +58,7 @@ void EndAudit()
   char *sp,rettype,string[CF_BUFSIZE];
   void *retval;
   struct Promise dummyp = {0};
-  struct Attributes dummyattr = {0};
+  struct Attributes dummyattr = {{0}};
 
 if (THIS_AGENT_TYPE != cf_agent)
    {
@@ -135,7 +135,7 @@ ClassAuditLog(&dummyp,dummyattr,"Cfagent closing",CF_NOP,"");
 void ClassAuditLog(struct Promise *pp,struct Attributes attr,char *str,char status,char *reason)
 
 { time_t now = time(NULL);
-  char date[CF_BUFSIZE],lock[CF_BUFSIZE],key[CF_BUFSIZE],operator[CF_BUFSIZE],id[CF_MAXVARSIZE];
+  char date[CF_BUFSIZE],lock[CF_BUFSIZE],key[CF_BUFSIZE],operator[CF_BUFSIZE];
   struct AuditLog newaudit;
   struct Audit *ap = pp->audit;
   struct timespec t;
@@ -145,7 +145,6 @@ void ClassAuditLog(struct Promise *pp,struct Attributes attr,char *str,char stat
   char *noStatusTypes[] = { "vars", "classes", NULL };
   char *noLogTypes[] = { "insert_lines", "delete_lines", "replace_patterns", "field_edits", NULL };
   bool log = true;
-  int i;
 
   Debug("ClassAuditLog(%s)\n",str);
 
@@ -337,7 +336,7 @@ else
 
 newaudit.status = status;
 
-if (AUDITDBP && attr.transaction.audit || AUDITDBP && AUDIT)
+if (AUDITDBP && (attr.transaction.audit || AUDIT))
    {
    WriteDB(AUDITDBP,key,&newaudit,sizeof(newaudit));
    }
@@ -482,7 +481,7 @@ op[i] = '\0';
 
 void PromiseLog(char *s)
 
-{ char filename[CF_BUFSIZE],start[CF_BUFSIZE],end[CF_BUFSIZE];
+{ char filename[CF_BUFSIZE];
   time_t now = time(NULL);
   FILE *fout;
 

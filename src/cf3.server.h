@@ -28,6 +28,9 @@
 /*                                                                 */
 /*******************************************************************/
 
+#ifndef CFENGINE_CF3_SERVER_H
+#define CFENGINE_CF3_SERVER_H
+
 #ifndef HAVE_SERV_H
 #define HAVE_SERV_H 1
 #define queuesize 50
@@ -87,8 +90,6 @@ time_t CFDSTARTTIME;
 extern char *realpath(/* char *path; char resolved_path[MAXPATHLEN] */);
 #endif
 
-#ifndef INADDR_NONE
-#define INADDR_NONE ((unsigned long int) 0xffffffff)
 #endif
 
 #endif
