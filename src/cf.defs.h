@@ -28,6 +28,9 @@
 /*                                                                 */
 /*******************************************************************/
 
+#ifndef CFENGINE_CF_DEFS_H
+#define CFENGINE_CF_DEFS_H
+
 /* Hard link this file between cf2/cf3 for consistent update */
 
 #include "conf.h"
@@ -325,6 +328,18 @@ typedef int clockid_t;
 # include <selinux/selinux.h>
 #endif
 
+#ifndef MIN
+# define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef MAX
+# define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
+#ifndef INADDR_NONE
+#define INADDR_NONE ((unsigned long int) 0xffffffff)
+#endif
+
 /*******************************************************************/
 /* Various defines                                                 */
 /*******************************************************************/
@@ -577,6 +592,14 @@ typedef u_long in_addr_t;  // as seen in in_addr struct in winsock.h
 
 #ifndef ERESTARTSYS
 # define ERESTARTSYS EINTR
+#endif
+
+#ifndef EOPNOTSUPP
+# define EOPNOTSUPP EINVAL
+#endif
+
+#ifndef ENOTSUPP
+# define ENOTSUPP EINVAL
 #endif
 
 #define CF_FAILEDSTR "BAD: Unspecified server refusal (see verbose server output)"
@@ -1355,4 +1378,6 @@ struct Checksum_Value
 
 #ifdef HPuUX
 int Error;
+#endif
+
 #endif

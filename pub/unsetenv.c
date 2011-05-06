@@ -27,23 +27,79 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stddef.h>
+
+/* Under MinGW putenv('var=') will remove variable from environment */
 
 #ifdef __MINGW32__
 
 int unsetenv(const char *name)
 {
 int retval;
-char *buf = malloc(strlen(name) + 2);
+char *buf;
+
+if (name == NULL || *name == 0 || strchr(name, '=') != 0)
+   {
+   errno = EINVAL;
+   return -1;
+   }
+
+buf = malloc(strlen(name) + 2);
 
 if (!buf)
    {
-   return ENOMEM;
+   errno = ENOMEM;
+   return -1;
    }
 
 sprintf(buf, "%s=", name);
 retval = putenv(buf);
 free(buf);
 return retval;
+}
+
+#endif
+
+/* Under Solaris8/9 we need to manually update 'environ' variable */
+
+#ifdef __sun
+
+/*
+ * Note: this function will leak memory as we don't know how to free data
+ * previously used by environment variables.
+ */
+
+extern char **environ;
+
+int unsetenv(const char *name)
+{
+char **c;
+int len;
+
+if (name == NULL || *name == 0 || strchr(name, '=') != 0)
+   {
+   errno = EINVAL;
+   return -1;
+   }
+
+len = strlen(name);
+
+/* Find variable */
+for (c = environ; *c; ++c)
+   {
+   if (strncmp(name, *c, len) == 0 && ((*c)[len] == '=' || (*c)[len] == 0))
+      {
+      break;
+      }
+   }
+
+/* Shift remaining values */
+for(; *c; ++c)
+   {
+   *c = *(c+1);
+   }
+
+return 0;
 }
 
 #endif

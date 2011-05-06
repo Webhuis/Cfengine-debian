@@ -76,14 +76,13 @@ return false;
 void EnterpriseModuleTrick()
 
 {
-#if defined HAVE_LIBMONGOC && defined HAVE_NOVA
+#if defined HAVE_NOVA
 Nova_EnterpriseModuleTrick();
 #endif
 
-#if defined HAVE_LIBMONGOC && defined HAVE_CONSTELLATION
+#if defined HAVE_CONSTELLATION
 Constellation_EnterpriseModuleTrick();
 #endif
-
 }
 
 /*****************************************************************************/
@@ -247,12 +246,11 @@ CfOut(cf_verbose,"","Remote logging requires version Nova or above");
 
 /*****************************************************************************/
 
+#if !defined(HAVE_NOVA)
 void WebCache(char *s,char *t)
 {
-#if defined HAVE_NOVA && defined HAVE_LIBMONGOC
-CFDB_PutValue(s,t);
-#endif 
 }
+#endif
 
 /*****************************************************************************/
 /* Knowledge                                                                 */
@@ -316,12 +314,11 @@ return time(NULL);
 
 /*****************************************************************************/
 
-void MapPromiseToTopic(FILE *fp,struct Promise *pp,char *version)
+void MapPromiseToTopic(FILE *fp,struct Promise *pp,const char *version)
 
 {
 #ifdef HAVE_NOVA
  Nova_MapPromiseToTopic(fp,pp,version); 
-#else
 #endif
 }
 
@@ -457,7 +454,7 @@ void HistoryUpdate(struct Averages newvals)
 {
 #ifdef HAVE_NOVA  
   struct Promise *pp = NewPromise("history_db","the long term memory");
-  struct Attributes dummyattr = {0};
+  struct Attributes dummyattr = {{0}};
   struct CfLock thislock;
   time_t now = time(NULL);
   char timekey[CF_MAXVARSIZE];
@@ -757,16 +754,6 @@ void CSV2XML(struct Rlist *list)
 
 /*****************************************************************************/
 
-void NoteVarUsage()
-/* DEPRECATED: Use NoteVarUsageDB() */
-{
-#ifdef HAVE_NOVA
-Nova_NoteVarUsage();
-#endif 
-}
-
-/*****************************************************************************/
-
 void SummarizeVariables(int xml,int html,int csv,int embed,char *stylesheet,char *head,char *foot,char *web)
 
 {
@@ -820,10 +807,7 @@ void ReportSoftware(struct CfPackageManager *list)
 { FILE *fout;
   struct CfPackageManager *mp = NULL;
   struct CfPackageItem *pi;
-  char name[CF_BUFSIZE],line[CF_BUFSIZE];
-  struct Item *ip,*file = NULL;
-  char start[32];
-  int i = 0;
+  char name[CF_BUFSIZE];
 
 snprintf(name,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,NOVA_SOFTWARE_INSTALLED);
 MapName(name);
@@ -998,51 +982,39 @@ return 0;
 /* LDAP                                                                      */
 /*****************************************************************************/
 
+#if !defined(HAVE_NOVA)
+
 void *CfLDAPValue(char *uri,char *dn,char *filter,char *name,char *scope,char *sec)
 {
-#if defined HAVE_NOVA && defined HAVE_LIBLDAP
- return Nova_LDAPValue(uri,dn,filter,name,scope,sec);
-#else
- CfOut(cf_error,"","LDAP support available in Nova and above");
+CfOut(cf_error, "", "LDAP support is available in Nova and above");
 return NULL;
-#endif
 }
 
 /*****************************************************************************/
 
 void *CfLDAPList(char *uri,char *dn,char *filter,char *name,char *scope,char *sec)
 {
-#if defined HAVE_NOVA && defined HAVE_LIBLDAP
- return Nova_LDAPList(uri,dn,filter,name,scope,sec);
-#else
- CfOut(cf_error,"","LDAP support available in Nova and above");
+CfOut(cf_error,"","LDAP support available in Nova and above");
 return NULL;
-#endif
 }
 
 /*****************************************************************************/
 
 void *CfLDAPArray(char *array,char *uri,char *dn,char *filter,char *scope,char *sec)
 {
-#if defined HAVE_NOVA && defined HAVE_LIBLDAP
- return Nova_LDAPArray(array,uri,dn,filter,scope,sec);
-#else
- CfOut(cf_error,"","LDAP support available in Nova and above");
+CfOut(cf_error,"","LDAP support available in Nova and above");
 return NULL;
-#endif
 }
 
 /*****************************************************************************/
 
 void *CfRegLDAP(char *uri,char *dn,char *filter,char *name,char *scope,char *regex,char *sec)
 {
-#if defined HAVE_NOVA && defined HAVE_LIBLDAP
-return Nova_RegLDAP(uri,dn,filter,name,scope,regex,sec);
-#else
 CfOut(cf_error,"","LDAP support available in Nova and above");
 return NULL;
-#endif
 }
+
+#endif
 
 /*****************************************************************************/
 /* SQL                                                                       */
@@ -1166,7 +1138,7 @@ void NoteEfficiency(double e)
 
 {
 #ifdef HAVE_NOVA
- struct Attributes a = {0};
+ struct Attributes a = {{0}};
  struct Promise p = {0};
  
 NovaNamedEvent("Configuration model efficiency",e,a,&p);

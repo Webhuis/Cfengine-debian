@@ -108,7 +108,7 @@ if (expandregex) /* Expand one regex link and hand down */
    char nextbuffer[CF_BUFSIZE],nextbufferOrig[CF_BUFSIZE],regex[CF_BUFSIZE];
    struct dirent *dirp;
    DIR *dirh;
-   struct Attributes dummyattr = {0};
+   struct Attributes dummyattr = {{0}};
 
    memset(&dummyattr,0,sizeof(dummyattr));
    memset(regex,0,CF_BUFSIZE);
@@ -218,7 +218,7 @@ int IsNewerFileTree(char *dir,time_t reftime)
 
 { struct dirent *dirp;
   char path[CF_BUFSIZE] = {0};
-  struct Attributes dummyattr = {0};
+  struct Attributes dummyattr = {{0}};
   DIR *dirh;
   struct stat sb;
 
@@ -656,7 +656,7 @@ int CompareCSVName(char *s1,char *s2)
 { char *sp1,*sp2;
   char ch1,ch2;
 
-for (sp1 = s1,sp2 = s2; *sp1 != '\0' && *sp2 != '\0'; sp1++,sp2++)
+for (sp1 = s1,sp2 = s2; *sp1 != '\0' || *sp2 != '\0'; sp1++,sp2++)
    {
    ch1 = (*sp1 == ',') ? '_' : *sp1;
    ch2 = (*sp2 == ',') ? '_' : *sp2;
@@ -805,7 +805,7 @@ void StripTrailingNewline(char *str)
         return;
     }
 
-    for (; c > str && (*c == '\0' || *c == '\n'); --c)
+    for (; c >= str && (*c == '\0' || *c == '\n'); --c)
     {
         *c = '\0';
     }
@@ -879,22 +879,6 @@ return true;
 
 /*********************************************************************/
 
-int IsIn(char c,char *str)
-
-{ char *sp;
-
-for(sp = str; *sp != '\0'; sp++)
-   {
-   if (*sp == c)
-      {
-      return true;
-      }
-   }
-return false;
-}
-
-/*********************************************************************/
-
 int IsStrIn(char *str, char **strs, int ignoreCase)
 
 { int i;
@@ -944,7 +928,7 @@ strs = NULL;
 
 int IsAbsoluteFileName(const char *f)
 
-{ int quoted,off = 0;
+{ int off = 0;
 
 // Check for quoted strings
  
@@ -978,15 +962,20 @@ return (*f == '.') || IsAbsoluteFileName(f);
 
 /*******************************************************************/
 
-int RootDirLength(char *f)
+static int UnixRootDirLength(char *f)
+{
+if (IsFileSep(*f))
+   {
+   return 1;
+   }
 
-  /* Return length of Initial directory in path - */
-
-{ int len;
-  char *sp;
+return 0;
+}
 
 #ifdef NT
-
+static int NTRootDirLength(char *f)
+{
+int len;
 if (IsFileSep(f[0]) && IsFileSep(f[1]))
    {
    /* UNC style path */
@@ -1025,15 +1014,23 @@ if (isalpha(f[0]) && f[1] == ':')
 
    return 2;  
    }
+
+return UnixRootDirLength(f);
+}
 #endif
 
-if (IsFileSep(*f))
-   {
-   return 1;
-   }
+int RootDirLength(char *f)
 
-return 0;
+  /* Return length of Initial directory in path - */
+
+{
+#ifdef NT
+return NTRootDirLength(f);
+#else
+return UnixRootDirLength(f);
+#endif
 }
+
 
 /*********************************************************************/
 /* TOOLKIT : String                                                  */

@@ -106,7 +106,7 @@ int OUTPUT_TO_FILE = false;
 int BACKGROUND = false;
 int MAXCHILD = 50;
 char REMOTE_AGENT_OPTIONS[CF_MAXVARSIZE];
-struct Attributes RUNATTR = {0};
+struct Attributes RUNATTR = {{0}};
 struct Rlist *HOSTLIST = NULL;
 char SENDCLASSES[CF_MAXVARSIZE];
 char DEFINECLASSES[CF_MAXVARSIZE];
@@ -155,7 +155,6 @@ return 0;
 void CheckOpts(int argc,char **argv)
 
 { extern char *optarg;
-  struct Item *actionList;
   int optindex = 0;
   int c;
 
@@ -296,9 +295,10 @@ if (strstr(REMOTE_AGENT_OPTIONS,"--file")||strstr(REMOTE_AGENT_OPTIONS,"-f"))
 int HailServer(char *host,struct Attributes a,struct Promise *pp)
 
 { struct cfagent_connection *conn;
- char *sp,sendbuffer[CF_BUFSIZE],recvbuffer[CF_BUFSIZE],peer[CF_MAXVARSIZE],ipv4[CF_MAXVARSIZE],digest[CF_MAXVARSIZE],user[CF_SMALLBUF];
+ char sendbuffer[CF_BUFSIZE],recvbuffer[CF_BUFSIZE],peer[CF_MAXVARSIZE],ipv4[CF_MAXVARSIZE],digest[CF_MAXVARSIZE],user[CF_SMALLBUF];
   long gotkey;
   char reply[8];
+  struct Item *queries;
   
 a.copy.portnumber = (short)ParseHostname(host,peer);
 
@@ -417,7 +417,9 @@ if (strlen(MENU) > 0)
 
      case cfd_menu_relay:
 #ifdef HAVE_CONSTELLATION
-       Constellation_QueryRelay(conn,MENU,time(0) - 7*24*3600);
+       queries = Constellation_CreateAllQueries();
+       Constellation_QueryRelay(conn,queries);
+       DeleteItemList(queries);
 #endif
 	 break;
 
@@ -545,8 +547,7 @@ for (cp = ControlBodyConstraints(cf_runagent); cp != NULL; cp=cp->next)
 
 struct Promise *MakeDefaultRunAgentPromise()
 
-{ struct Promise *pp,*lp;
-  char *sp = NULL,*spe = NULL;
+{ struct Promise *pp;
   
 /* The default promise here is to hail associates */
 
@@ -603,7 +604,6 @@ void SendClassData(struct cfagent_connection *conn)
 
 { struct Rlist *classes,*rp;
   char sendbuffer[CF_BUFSIZE];
-  int used;
 
 classes = SplitRegexAsRList(SENDCLASSES,"[,: ]",99,false);
 

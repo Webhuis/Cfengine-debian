@@ -36,7 +36,7 @@
 
 void VerifyExecPromise(struct Promise *pp)
 
-{ struct Attributes a = {0};
+{ struct Attributes a = {{0}};
 
 a = GetExecAttributes(pp);
 ExecSanityChecks(a,pp);
@@ -95,13 +95,12 @@ void VerifyExec(struct Attributes a, struct Promise *pp)
     
 { struct CfLock thislock;
   char unsafeLine[CF_BUFSIZE], line[sizeof(unsafeLine)*2],eventname[CF_BUFSIZE];
-  char comm[20], *sp;
+  char comm[20];
   char execstr[CF_EXPANDSIZE];
   struct timespec start;
-  int print, outsourced,count = 0;
+  int outsourced,count = 0;
   mode_t maskval = 0;
   FILE *pfp;
-  int preview = false;
   char cmdOutBuf[CF_BUFSIZE];
   int cmdOutBufPos = 0;
   int lineOutLen;
@@ -110,7 +109,7 @@ if (!IsExecutable(GetArg0(pp->promiser)))
    {
    cfPS(cf_error,CF_FAIL,"",pp,a,"%s promises to be executable but isn't\n",pp->promiser);
 
-   if (IsIn(' ', pp->promiser))
+   if (strchr(pp->promiser, ' '))
      {
      CfOut(cf_verbose, "", "Paths with spaces must be inside escaped quoutes (e.g. \\\"%s\\\")", pp->promiser);
      }

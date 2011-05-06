@@ -30,6 +30,9 @@
 /*                                                                           */
 /*****************************************************************************/
 
+#ifndef CFENGINE_CF3_EXTERN_H
+#define CFENGINE_CF3_EXTERN_H
+
 /* See variables in cf3globals.c and syntax.c */
 
 extern struct Topic *TOPICHASH[CF_HASHTABLESIZE];
@@ -77,6 +80,7 @@ extern struct Rlist *CBUNDLESEQUENCE;
 extern struct Item *ROTATED;
 extern double FORGETRATE;
 extern struct Rlist *GOALS;
+extern struct Rlist *GOALCATEGORIES;
 
 extern struct Rlist *CF_STCK;
 extern int EDIT_MODEL;
@@ -136,6 +140,9 @@ extern char FILE_SEPARATOR_STR[2];
 
 extern char AGGREGATION[CF_BUFSIZE];
 extern char *UNITS[CF_OBSERVABLES];
+
+extern char *BASIC_REPORTS[cfrep_unknown][2];
+extern char *CDP_REPORTS[cdp_unknown][2];
 
 extern char SQL_DATABASE[CF_MAXVARSIZE];
 extern char SQL_OWNER[CF_MAXVARSIZE];
@@ -282,4 +289,6 @@ extern struct BodySyntax CF_MEASURE_BODIES[];
 extern struct SubTypeSyntax CF_SERVICES_SUBTYPES[];
 extern struct BodySyntax CF_SERVMETHOD_BODY[];
 extern struct BodySyntax CF_SERVICES_BODIES[];
+#endif
+
 #endif

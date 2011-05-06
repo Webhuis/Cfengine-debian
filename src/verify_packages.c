@@ -36,7 +36,7 @@
 
 void VerifyPackagesPromise(struct Promise *pp)
 
-{ struct Attributes a = {0},al = {0};
+{ struct Attributes a = {{0}},al = {{0}};
   struct CfLock thislock;
   char lockname[CF_BUFSIZE];
 
@@ -259,10 +259,7 @@ int VerifyInstalledPackages(struct CfPackageManager **all_mgrs,struct Attributes
 { struct CfPackageManager *manager = NewPackageManager(all_mgrs,a.packages.package_list_command,cfa_pa_none,cfa_no_ppolicy);
   const int reset = true, update = false;
   char vbuff[CF_BUFSIZE];
-  struct dirent *dirp;
-  struct Rlist *rp;
   FILE *prp;
-  DIR *dirh;
   
 if (manager == NULL)
    {
@@ -598,7 +595,7 @@ int ExecuteSchedule(struct CfPackageManager *schedule,enum package_actions actio
   struct CfPackageManager *pm;
   int size,estimated_size,retval = true,verify = false;
   char *command_string = NULL;
-  struct Attributes a = {0};
+  struct Attributes a = {{0}};
   struct Promise *pp;
   int ok;       
 
@@ -655,7 +652,7 @@ for (pm = schedule; pm != NULL; pm = pm->next)
 
           CfOut(cf_verbose,"","Execute scheduled package addition");
 
-          if (command_string = (malloc(estimated_size + strlen(a.packages.package_add_command) + 2)))
+          if ((command_string = (malloc(estimated_size + strlen(a.packages.package_add_command) + 2))))
              {
              strcpy(command_string,a.packages.package_add_command);
              }
@@ -671,7 +668,7 @@ for (pm = schedule; pm != NULL; pm = pm->next)
 
           CfOut(cf_verbose,"","Execute scheduled package deletion");
 
-          if (command_string = (malloc(estimated_size + strlen(a.packages.package_delete_command) + 2)))
+          if ((command_string = (malloc(estimated_size + strlen(a.packages.package_delete_command) + 2))))
              {
              strcpy(command_string,a.packages.package_delete_command);
              }
@@ -687,7 +684,7 @@ for (pm = schedule; pm != NULL; pm = pm->next)
              return false;
              }
 
-          if (command_string = (malloc(estimated_size + strlen(a.packages.package_update_command) + 2)))
+          if ((command_string = (malloc(estimated_size + strlen(a.packages.package_update_command) + 2))))
              {
              memset(command_string, 0, strlen(a.packages.package_update_command) + 2);
              strcpy(command_string,a.packages.package_update_command);
@@ -705,7 +702,7 @@ for (pm = schedule; pm != NULL; pm = pm->next)
              return false;
              }
           
-          if (command_string = (malloc(estimated_size + strlen(a.packages.package_verify_command) + 2)))
+          if ((command_string = (malloc(estimated_size + strlen(a.packages.package_verify_command) + 2))))
              {
              strcpy(command_string,a.packages.package_verify_command);
              }
@@ -844,7 +841,7 @@ int ExecutePatch(struct CfPackageManager *schedule,enum package_actions action)
   struct CfPackageManager *pm;
   int size,estimated_size,retval = true,verify = false;
   char *command_string = NULL;
-  struct Attributes a = {0};
+  struct Attributes a = {{0}};
   struct Promise *pp;
 
 for (pm = schedule; pm != NULL; pm = pm->next)
@@ -900,7 +897,7 @@ for (pm = schedule; pm != NULL; pm = pm->next)
              return false;
              }
           
-          if (command_string = (malloc(estimated_size + strlen(a.packages.package_patch_command) + 2)))
+          if ((command_string = (malloc(estimated_size + strlen(a.packages.package_patch_command) + 2))))
              {
              strcpy(command_string,a.packages.package_patch_command);
              }
@@ -1346,7 +1343,7 @@ else
 
 CfOut(cf_verbose,""," -> Package promises to refer to itself as \"%s\" to the manager\n",id);
 
-if(IsIn('*', id))
+if(strchr(id, '*'))
   {
   CfOut(cf_verbose,"","!! Package name contians '*' -- perhaps a missing attribute (name/version/arch) should be specified");
   }
@@ -1543,14 +1540,14 @@ switch(policy)
                 {
                 if (*instVer == '\0')
 		   {
-                   instVer[0] == '*';
-                   instVer[1] == '\0';
+                   instVer[0] = '*';
+                   instVer[1] = '\0';
 		   }
                 
                 if (*instArch == '\0')
 		   {
-                   instArch[0] == '*';
-                   instArch[1] == '\0';
+                   instArch[0] = '*';
+                   instArch[1] = '\0';
 		   }
                 
                 SetNewScope("cf_pack_context");
@@ -1831,11 +1828,10 @@ int ExecPackageCommand(char *command,int verify,int setCmdClasses,struct Attribu
 
 int ExecPackageCommandGeneric(char *command,int verify,int setCmdClasses,struct Attributes a,struct Promise *pp)
 
-{ int offset = 0, retval = true;
+{ int retval = true;
  char line[CF_BUFSIZE], lineSafe[CF_BUFSIZE], *cmd; 
  FILE *pfp;
  int packmanRetval = 0;
- char packmanRetvalStr[64] = {0};
 
  if (!IsExecutable(GetArg0(command)))
     {
@@ -1980,7 +1976,7 @@ for (rp_1 = separators_1,rp_2 = separators_2; rp_1 != NULL && rp_2 != NULL; rp_1
       break;
       }
 
-   if (rp_1->next != NULL && rp_2->next == NULL || rp_1->next == NULL && rp_2->next != NULL)
+   if ((rp_1->next != NULL && rp_2->next == NULL) || (rp_1->next == NULL && rp_2->next != NULL))
       {
       result = false;
       break;
@@ -1999,7 +1995,7 @@ else
 if (result != false)
    {
    for (rp_1 = numbers_1,rp_2 = numbers_2;
-        rp_1 != NULL & rp_2 != NULL;
+        rp_1 != NULL && rp_2 != NULL;
         rp_1= rp_1->next,rp_2=rp_2->next)
       {
       switch (cmp)

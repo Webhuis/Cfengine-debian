@@ -67,7 +67,6 @@ int ParseFlagString(struct Rlist *bitlist,u_long *plusmask,u_long *minusmask)
 
 { char *flag;
   struct Rlist *rp;
-  int scan;
   char operator;
 
 if (bitlist == NULL)
@@ -100,7 +99,7 @@ for (rp = bitlist; rp != NULL; rp=rp->next)
       }
    }
 
-Debug("ParseFlagString:[PLUS=%o][MINUS=%o]\n",*plusmask,*minusmask);
+Debug("ParseFlagString:[PLUS=%lo][MINUS=%lo]\n",*plusmask,*minusmask);
 return true;
 }
 

@@ -304,8 +304,7 @@ char TEST_ROOT_DIR[CF_BUFSIZE];
 
 void AgentDiagnostic(char *file)
 
-{ char cwd[CF_BUFSIZE];
-
+{
 if (VERBOSE || DEBUG)
    {
    FREPORT_TXT = stdout;
@@ -352,15 +351,8 @@ printf("!! Extensive self-diagnostic capabilities not built in\n");
 
 void TestSearchFilePromiser()
 
-{ struct Promise pp,*pcopy;
-  struct Body *bp;
-  int i;
-  char *list_text1 = "a,b,c,d,e,f,g";
-  char *list_text2 = "1,2,3,4,5,6,7";
-  struct Rlist *rp, *args, *listvars = NULL, *scalarvars = NULL;
-  struct Constraint *cp;
-  struct FnCall *fp;
-   
+{ struct Promise pp;
+
 /* Still have diagnostic scope */
 THIS_AGENT_TYPE = cf_agent;
    
@@ -533,7 +525,7 @@ return n;
 
 int MyCreate(struct line_data *p)
 
-{ struct Attributes a = {0};
+{ struct Attributes a = {{0}};
  char buf[CF_BUFSIZE];
  char file[CF_BUFSIZE];
 
@@ -572,7 +564,7 @@ int DoIt(struct line_data *p)
 
 { char buf[CF_EXPANDSIZE];
   char *pBuf = buf;
-  struct Attributes a = {0};
+  struct Attributes a = {{0}};
   char file[CF_BUFSIZE];
  
 switch(p->action)
@@ -2538,9 +2530,6 @@ void CheckInstalledLibraries(void)
   printf("---- INSTALLED LIBRARIES ----\n");
 
 
-   #ifndef HAVE_LIBLDAP
-   printf("\t->LIBLDAP not found!!\n");
-   #endif
    
    #ifndef HAVE_LIBACL
    printf("\t->LIBACL not found!!\n");
@@ -2553,11 +2542,7 @@ void CheckInstalledLibraries(void)
    #ifndef HAVE_LIBPTHREAD
    printf("\t->LIBPTHREAD not found!!\n");
    #endif
-   
-   #ifndef HAVE_LIBVIRT
-   printf("\t->LIBVIRT not found!!\n");
-   #endif
-   
+
    #if !defined(TCDB) && !defined(QDB) 
    printf("\t->TCDB and QDB  not found!!\n");
    #endif
@@ -2572,13 +2557,8 @@ void CheckInstalledLibraries(void)
      printf("\t!! LIBPQ (postgresql) not found\n");
    #endif
 
-
    #ifdef HAVE_NOVA
-   if(!Nova_HaveFIPS())
-     {
-     printf("\t->FIPS OpenSSL canister not found!!\n");
-     }
-
+   Nova_CheckInstalledLibraries();
    #else
    printf("\t->Nova not found!!\n");
    #endif

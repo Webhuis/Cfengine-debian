@@ -30,6 +30,9 @@
 /*                                                                           */
 /*****************************************************************************/
 
+#ifndef CFENGINE_PROTOTYPES3_H
+#define CFENGINE_PROTOTYPES3_H
+
 #include "compiler.h"
 
 char *Nova_GetVersion(void);
@@ -45,7 +48,7 @@ int yylex (void);
 
 /* cfparse.y */
 
-void yyerror (char *s);
+void yyerror (const char *s);
 int yyparse (void);
 
 /* Generic stubs for the agents */
@@ -101,6 +104,7 @@ struct Attributes GetProcessAttributes(struct Promise *pp);
 struct Attributes GetStorageAttributes(struct Promise *pp);
 struct Attributes GetClassContextAttributes(struct Promise *pp);
 struct Attributes GetTopicsAttributes(struct Promise *pp);
+struct Attributes GetThingsAttributes(struct Promise *pp);
 struct Attributes GetInferencesAttributes(struct Promise *pp);
 struct Attributes GetOccurrenceAttributes(struct Promise *pp);
 struct Attributes GetPackageAttributes(struct Promise *pp);
@@ -258,6 +262,8 @@ struct PromiseIdent *PromiseIdExists(char *handle);
 
 /* conversion.c */
 
+char *EscapeJson(char *s, char *out, int outSz);
+char *EscapeRegex(char *s, char *out, int outSz);
 char *EscapeQuotes(char *s, char *out, int outSz);
 char *MapAddress (char *addr);
 void IPString2KeyDigest(char *ipv4,char *result);
@@ -282,7 +288,7 @@ enum cfsbundle Type2Cfs(char *name);
 enum representations String2Representation(char *s);
 int GetBoolean(char *val);
 long Str2Int(char *s);
-long TimeCounter2Int(char *s);
+long TimeCounter2Int(const char *s);
 long TimeAbs2Int(char *s);
 void CtimeHourInterval(time_t t, char *out, int outSz);
 mode_t Str2Mode(char *s);
@@ -310,6 +316,7 @@ char *Item2String(struct Item *ip);
 int IsSpace(char *remainder);
 int IsNumber(char *s);
 int IsRealNumber(char *s);
+enum cfd_menu String2Menu(char *s);
 
 #ifndef MINGW
 struct UidList *Rlist2UidList(struct Rlist *uidnames, struct Promise *pp);
@@ -435,8 +442,7 @@ void BodyNode(FILE *fp,char *bundle,int call);
 void TypeNode(FILE *fp,char *type);
 void PromiseNode(FILE *fp,struct Promise *pp,int type);
 void RegisterBundleDependence(char *absscope,struct Promise *pp);
-void MapPromiseToTopic(FILE *fp,struct Promise *pp,char *version);
-void Nova_MapPromiseToTopic(FILE *fp,struct Promise *pp,char *version);
+void MapPromiseToTopic(FILE *fp,struct Promise *pp,const char *version);
 void ShowTopicRepresentation(FILE *fp);
 void PreSanitizePromise(struct Promise *pp);
 void Nova_ShowTopicRepresentation(FILE *fp);
@@ -538,6 +544,11 @@ void NegateClassesFromString(char *class,struct Item **heap);
 void AddPrefixedClasses(char *name,char *classlist);
 int IsHardClass (char *sp);
 void SaveClassEnvironment(void);
+
+/* env_monitor.c */
+
+void MonInitialize(void);
+void StartServer (int argc, char **argv);
 
 /* evalfunction.c */
 
@@ -781,7 +792,6 @@ char *ReadLastNode(char *str);
 int CompressPath(char *dest,char *src);
 void Chop(char *str);
 void StripTrailingNewline(char *str);
-int IsIn(char c,char *str);
 int IsStrIn(char *str, char **strs, int ignoreCase);
 void FreeStringArray(char **strs);
 int IsAbsoluteFileName(const char *f);
@@ -928,6 +938,7 @@ void OpenReports(char *agents);
 void CloseReports(char *agents);
 char *InputLocation(char *filename);
 int BadBundleSequence(enum cfagenttype agent);
+void OpenCompilationReportFiles(const char *fname);
 
 /* granules.c  */
 
@@ -1150,13 +1161,13 @@ struct Topic *InsertTopic(char *name,char *context);
 struct Topic *FindTopic(char *name);
 int GetTopicPid(char *typed_topic);
 struct Topic *AddTopic(struct Topic **list,char *name,char *type);
-void AddTopicAssociation(struct TopicAssociation **list,char *fwd_name,char *bwd_name,struct Rlist *li,int verify);
+void AddTopicAssociation(struct Topic *tp,struct TopicAssociation **list,char *fwd_name,char *bwd_name,struct Rlist *li,int ok);
 void AddOccurrence(struct Occurrence **list,char *reference,struct Rlist *represents,enum representations rtype,char *context);
 struct Topic *TopicExists(char *topic_name,char *topic_type);
 char *GetTopicContext(char *topic_name);
 struct Topic *GetCanonizedTopic(struct Topic *list,char *topic_name);
 struct Topic *GetTopic(struct Topic *list,char *topic_name);
-struct TopicAssociation *AssociationExists(struct TopicAssociation *list,char *fwd,char *bwd,int verify);
+struct TopicAssociation *AssociationExists(struct TopicAssociation *list,char *fwd,char *bwd);
 struct Occurrence *OccurrenceExists(struct Occurrence *list,char *locator,enum representations repy_type,char *s);
 int ClassifiedTopicMatch(char *ttopic1,char *ttopic2);
 void DeClassifyTopic(char *typdetopic,char *topic,char *type);
@@ -1308,23 +1319,15 @@ void ShowContext(void);
 void ShowPromises(struct Bundle *bundles,struct Body *bodies);
 void ShowPromise(struct Promise *pp, int indent);
 void ShowScopedVariables(void);
-void NoteVarUsageDB();
-void Indent(int i);
-void ReportBanner(char *s);
 void SyntaxTree(void);
-void ShowDataTypes(void);
-void ShowControlBodies(void);
-void ShowBundleTypes(void);
-void ShowPromiseTypesFor(char *s);
-void ShowBodyParts(struct BodySyntax *bs);
-void ShowRange(char *s,enum cfdatatype type);
-void ShowBuiltinFunctions(void);
 void ShowBody(struct Body *body,int ident);
 void DebugBanner(char *s);
 void ReportError(char *s);
 void BannerSubType(char *bundlename,char *type,int p);
 void BannerSubSubType(char *bundlename,char *type);
 void Banner(char *s);
+void ShowPromisesInReport(struct Bundle *bundles, struct Body *bodies);
+void ShowPromiseInReport(const char *version, struct Promise* pp, int indent);
 
 /* rlist.c */
 
@@ -1677,4 +1680,4 @@ void FriendStatus(struct Attributes a,struct Promise *pp);
 void VerifyFriendReliability(struct Attributes a,struct Promise *pp);
 void VerifyFriendConnections(int hours,struct Attributes a,struct Promise *pp);
 
-
+#endif

@@ -87,7 +87,7 @@ void SetSignals()
 void GetNameInfo3()
 
 { int i,found = false;
-  char *sp,*sp2,workbuf[CF_BUFSIZE];
+  char *sp,workbuf[CF_BUFSIZE];
   time_t tloc;
   struct hostent *hp;
   struct sockaddr_in cin;
@@ -98,7 +98,7 @@ void GetNameInfo3()
 #ifdef IRIX
   char real_version[256]; /* see <sys/syssgi.h> */
 #endif
-#ifdef HAVE_SYSINFO
+#if defined(HAVE_SYSINFO) && (defined(SI_ARCHITECTURE) || defined(SI_PLATFORM))
   long sz;
 #endif
   char *components[] = { "cf-twin", "cf-agent", "cf-serverd", "cf-monitord", "cf-know",
@@ -277,7 +277,8 @@ NewScalar("sys","nova_version",Nova_GetVersion(),cf_str);
 if (PUBKEY)
    {
    HashPubKey(PUBKEY,digest,CF_DEFAULT_DIGEST);
-   NewScalar("sys","key_digest",HashPrint(CF_DEFAULT_DIGEST,digest),cf_str);
+   snprintf(PUBKEY_DIGEST, sizeof(PUBKEY_DIGEST), "%s", HashPrint(CF_DEFAULT_DIGEST,digest));
+   NewScalar("sys","key_digest",PUBKEY_DIGEST,cf_str);
    snprintf(workbuf,CF_MAXVARSIZE-1,"PK_%s",CanonifyName(HashPrint(CF_DEFAULT_DIGEST,digest)));
    NewClass(workbuf);
    }
@@ -622,7 +623,7 @@ if (strstr(VFQNAME,".") == 0)
       {
       struct hostent *hp;
 
-      if (hp = gethostbyname(fqn))
+      if ((hp = gethostbyname(fqn)))
          {
          if (strstr(hp->h_name,"."))
             {
@@ -680,24 +681,22 @@ NewClass(VDOMAIN);
 void OSClasses()
 
 { struct stat statbuf;
-  char vbuff[CF_BUFSIZE],class[CF_BUFSIZE];
+  char vbuff[CF_BUFSIZE];
   char *sp;
-  int i = 0;
   struct passwd *pw;
+#ifndef LINUX
+  char class[CF_BUFSIZE];
+#endif
 
 NewClass("any");      /* This is a reserved word / wildcard */
 
 snprintf(vbuff,CF_BUFSIZE,"cfengine_%s",CanonifyName(VERSION));
-NewClass(vbuff);
 
-for (sp = vbuff+strlen(vbuff); i < 2; sp--)
+NewClass(vbuff);
+while ((sp = strrchr(vbuff, '_')))
    {
-   if (*sp == '_')
-      {
-      i++;
-      *sp = '\0';
-      NewClass(vbuff);
-      }
+   *sp = 0;
+   NewClass(vbuff);
    }
 
 #ifdef LINUX
@@ -938,25 +937,8 @@ else
 NewScalar("sys","crontab",vbuff,cf_str);
 #endif
 
-#if defined(HAVE_NOVA) && defined(HAVE_LIBMONGOC)
-
-if (IsDefinedClass("redhat"))
-   {
-   CfOut(cf_verbose,""," -> Recording default document root /var/www/html");
-   CFDB_PutValue("document_root","/var/www/html");
-   }
-
-if (IsDefinedClass("SuSE"))
-   {
-   CfOut(cf_verbose,""," -> Recording default document root /srv/www/htdocs");
-   CFDB_PutValue("document_root","/srv/www/htdocs");
-   }
-
-if (IsDefinedClass("debian"))
-   {
-   CfOut(cf_verbose,""," -> Recording default document root /var/www");
-   CFDB_PutValue("document_root","/var/www");
-   }
+#if defined(HAVE_NOVA)
+Nova_SaveDocumentRoot();
 #endif
 }
 
@@ -1060,6 +1042,7 @@ int Linux_Redhat_Version(void)
 #define WHITEBOX_ID "White Box Enterprise Linux"
 #define CENTOS_ID "CentOS"
 #define SCIENTIFIC_SL_ID "Scientific Linux SL"
+#define SCIENTIFIC_SL6_ID "Scientific Linux"
 #define SCIENTIFIC_CERN_ID "Scientific Linux CERN"
 #define RELEASE_FLAG "release "
 
@@ -1167,6 +1150,11 @@ else if(!strncmp(relstring, SCIENTIFIC_CERN_ID, strlen(SCIENTIFIC_CERN_ID)))
    {
    vendor = "scientific";
    edition = "cern";
+   }
+else if(!strncmp(relstring, SCIENTIFIC_SL6_ID, strlen(SCIENTIFIC_SL6_ID)))
+   {
+   vendor = "scientific";
+   edition = "sl";
    }
 else if(!strncmp(relstring, CENTOS_ID, strlen(CENTOS_ID)))
    {
@@ -1747,9 +1735,7 @@ int VM_Version(void)
 
 { FILE *fp;
   char *sp,buffer[CF_BUFSIZE],classbuf[CF_BUFSIZE],version[CF_BUFSIZE];
-  struct stat statbuf;
   int major,minor,bug;
-  int len = 0;
   int sufficient = 0;
 
 /* VMware Server ESX >= 3 has version info in /proc */
@@ -1778,8 +1764,8 @@ if ((fp = fopen("/proc/vmware/version","r")) != NULL)
 
 /* Fall back to checking for other files */
 
-if (sufficient < 1 && ((fp = fopen("/etc/vmware-release","r")) != NULL) ||
-    (fp = fopen("/etc/issue","r")) != NULL)
+if (sufficient < 1 && (((fp = fopen("/etc/vmware-release","r")) != NULL) ||
+    (fp = fopen("/etc/issue","r")) != NULL))
    {
    CfReadLine(buffer,CF_BUFSIZE,fp);
    Chop(buffer);
@@ -1909,7 +1895,7 @@ return Unix_GetCurrentUserName(userName, userNameLen);
 void Unix_GetInterfaceInfo(enum cfagenttype ag)
 
 { int fd,len,i,j,first_address = false,ipdefault = false;
-  struct ifreq ifbuf[CF_IFREQ] = {0},ifr, *ifp;
+  struct ifreq ifbuf[CF_IFREQ] = {{{{0}}}},ifr, *ifp;
   struct ifconf list;
   struct sockaddr_in *sin;
   struct hostent *hp;
@@ -1945,7 +1931,6 @@ last_name[0] = '\0';
 
 for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*ifp),j++,ifp=(struct ifreq *)((char *)ifp+SIZEOF_IFREQ(*ifp)))
    {
-   int skip = false;
 
    if (ifp->ifr_addr.sa_family == 0)
       {

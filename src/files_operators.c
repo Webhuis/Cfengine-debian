@@ -449,13 +449,13 @@ if (pp->edcontext == NULL)
 
 if (a.haveeditline)
    {
-   if (vp = GetConstraint("edit_line",pp,CF_FNCALL))
+   if ((vp = GetConstraint("edit_line",pp,CF_FNCALL)))
       {
       fp = (struct FnCall *)vp;
       edit_bundle_name = fp->name;
       params = fp->args;
       }
-   else if (vp = GetConstraint("edit_line",pp,CF_SCALAR))
+   else if ((vp = GetConstraint("edit_line",pp,CF_SCALAR)))
       {
       edit_bundle_name = (char *)vp;
       params = NULL;
@@ -471,7 +471,7 @@ if (a.haveeditline)
 
    // add current filename to context - already there?
 
-   if (bp = GetBundle(edit_bundle_name,"edit_line"))
+   if ((bp = GetBundle(edit_bundle_name,"edit_line")))
       {
       BannerSubBundle(bp,params);
 
@@ -1313,7 +1313,7 @@ if (lstat(pathbuf,&statbuf) != -1)
    {
    if (S_ISLNK(statbuf.st_mode))
       {
-      CfOut(cf_verbose,"","%s> INFO: %s is a symbolic link, not a true directory!\n",VPREFIX,pathbuf);
+      CfOut(cf_verbose,"","INFO: %s is a symbolic link, not a true directory!\n",VPREFIX,pathbuf);
       }
 
    if (force)   /* force in-the-way directories aside */
@@ -1321,7 +1321,7 @@ if (lstat(pathbuf,&statbuf) != -1)
       struct stat dir;
       stat(pathbuf,&dir);
    
-      if (!S_ISDIR(dir.st_mode))  /* if the dir exists - no problem */
+      if (!S_ISDIR(dir.st_mode) || S_ISLNK(statbuf.st_mode))  /* if the dir exists - no problem */
          {
          struct stat sbuf;
 
@@ -1478,7 +1478,7 @@ else
 void LogHashChange(char *file)
 
 { FILE *fp;
-  char fname[CF_BUFSIZE],timebuf[CF_MAXVARSIZE];
+  char fname[CF_BUFSIZE];
   time_t now = time(NULL);
   struct stat sb;
   mode_t perm = 0600;
@@ -1530,7 +1530,7 @@ void RotateFiles(char *name,int number)
 { int i, fd;
   struct stat statbuf;
   char from[CF_BUFSIZE],to[CF_BUFSIZE];
-  struct Attributes attr = {0};
+  struct Attributes attr = {{0}};
   struct Promise dummyp = {0};
 
 if (IsItemIn(ROTATED,name))
@@ -1770,8 +1770,8 @@ int Unix_VerifyOwner(char *file,struct Promise *pp,struct Attributes attr,struct
 
 { struct passwd *pw;
   struct group *gp;
-  struct UidList *ulp, *unknownulp;
-  struct GidList *glp, *unknownglp;
+  struct UidList *ulp;
+  struct GidList *glp;
   short uidmatch = false, gidmatch = false;
   uid_t uid = CF_SAME_OWNER;
   gid_t gid = CF_SAME_GROUP;
@@ -2212,11 +2212,11 @@ newflags &= ~(attr.perms.minus_flags);
 
 if ((newflags & CHFLAGS_MASK) == (dstat->st_flags & CHFLAGS_MASK))    /* file okay */
    {
-   Debug("BSD File okay, flags = %x, current = %x\n",(newflags & CHFLAGS_MASK),(dstat->st_flags & CHFLAGS_MASK));
+   Debug("BSD File okay, flags = %lx, current = %lx\n",(newflags & CHFLAGS_MASK),(dstat->st_flags & CHFLAGS_MASK));
    }
 else
    {
-   Debug("BSD Fixing %s, newflags = %x, flags = %x\n",file,(newflags & CHFLAGS_MASK),(dstat->st_flags & CHFLAGS_MASK));
+   Debug("BSD Fixing %s, newflags = %lx, flags = %lx\n",file,(newflags & CHFLAGS_MASK),(dstat->st_flags & CHFLAGS_MASK));
 
    switch (attr.transaction.action)
       {

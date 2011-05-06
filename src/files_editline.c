@@ -74,7 +74,7 @@ int ScheduleEditLineOperations(char *filename,struct Bundle *bp,struct Attribute
   struct CfLock thislock;
   int pass;
 
-snprintf(lockname,CF_BUFSIZE-1,"masterfilelock-%s",parentp->this_server);
+snprintf(lockname,CF_BUFSIZE-1,"masterfilelock-%s",filename);
 thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,a,parentp,true);
 
 if (thislock.lock == NULL)
@@ -242,8 +242,8 @@ if (strcmp("reports",pp->agentsubtype) == 0)
 
 void VerifyLineDeletions(struct Promise *pp)
 
-{ struct Item **start = &(pp->edcontext->file_start), *match, *prev;
-  struct Attributes a = {0};
+{ struct Item **start = &(pp->edcontext->file_start);
+  struct Attributes a = {{0}};
   struct Item *begin_ptr,*end_ptr;
   struct CfLock thislock;
   char lockname[CF_BUFSIZE];
@@ -293,8 +293,8 @@ YieldCurrentLock(thislock);
 
 void VerifyColumnEdits(struct Promise *pp)
 
-{ struct Item **start = &(pp->edcontext->file_start), *match, *prev;
-  struct Attributes a = {0};
+{ struct Item **start = &(pp->edcontext->file_start);
+  struct Attributes a = {{0}};
   struct Item *begin_ptr,*end_ptr;
   struct CfLock thislock;
   char lockname[CF_BUFSIZE];
@@ -360,8 +360,8 @@ YieldCurrentLock(thislock);
 
 void VerifyPatterns(struct Promise *pp)
 
-{ struct Item **start = &(pp->edcontext->file_start), *match, *prev;
-  struct Attributes a = {0};
+{ struct Item **start = &(pp->edcontext->file_start);
+  struct Attributes a = {{0}};
   struct Item *begin_ptr,*end_ptr;
   struct CfLock thislock;
   char lockname[CF_BUFSIZE];
@@ -418,7 +418,7 @@ void VerifyLineInsertions(struct Promise *pp)
 
 { struct Item **start = &(pp->edcontext->file_start), *match, *prev;
   struct Item *begin_ptr,*end_ptr;
-  struct Attributes a = {0};
+  struct Attributes a = {{0}};
   struct CfLock thislock;
   char lockname[CF_BUFSIZE];
   
@@ -889,7 +889,7 @@ return retval;
 
 int ReplacePatterns(struct Item *file_start,struct Item *file_end,struct Attributes a,struct Promise *pp)
 
-{ char *sp, *start = NULL,*end,replace[CF_EXPANDSIZE],line_buff[CF_EXPANDSIZE];
+{ char replace[CF_EXPANDSIZE],line_buff[CF_EXPANDSIZE];
   char before[CF_BUFSIZE],after[CF_BUFSIZE];
   int match_len,start_off,end_off,once_only = false,retval = false;
   struct Item *ip;
@@ -1149,7 +1149,7 @@ return ok;
 
 int InsertCompoundLineAtLocation(char *newline,struct Item **start,struct Item *location,struct Item *prev,struct Attributes a,struct Promise *pp)
 
-{ char *sp;
+{
   int result = false;
   char buf[CF_EXPANDSIZE];
 
@@ -1416,7 +1416,7 @@ int SelectLine(char *line,struct Attributes a,struct Promise *pp)
   int s,e;
   char *selector;
 
-if (c = a.line_select.startwith_from_list)
+if ((c = a.line_select.startwith_from_list))
    {
    for (rp = c; rp != NULL; rp=rp->next)
       {
@@ -1431,7 +1431,7 @@ if (c = a.line_select.startwith_from_list)
    return false;
    }
 
-if (c = a.line_select.not_startwith_from_list)
+if ((c = a.line_select.not_startwith_from_list))
    {
    for (rp = c; rp != NULL; rp=rp->next)
       {
@@ -1446,7 +1446,7 @@ if (c = a.line_select.not_startwith_from_list)
    return true;
    }
 
-if (c = a.line_select.match_from_list)
+if ((c = a.line_select.match_from_list))
    {
    for (rp = c; rp != NULL; rp=rp->next)
       {
@@ -1461,7 +1461,7 @@ if (c = a.line_select.match_from_list)
    return false;
    }
 
-if (c = a.line_select.not_match_from_list)
+if ((c = a.line_select.not_match_from_list))
    {
    for (rp = c; rp != NULL; rp=rp->next)
       {
@@ -1476,7 +1476,7 @@ if (c = a.line_select.not_match_from_list)
    return true;
    }
 
-if (c = a.line_select.contains_from_list)
+if ((c = a.line_select.contains_from_list))
    {
    for (rp = c; rp != NULL; rp=rp->next)
       {
@@ -1491,7 +1491,7 @@ if (c = a.line_select.contains_from_list)
    return false;
    }
 
-if (c = a.line_select.not_contains_from_list)
+if ((c = a.line_select.not_contains_from_list))
    {
    for (rp = c; rp != NULL; rp=rp->next)
       {
@@ -1516,11 +1516,11 @@ return true;
 int EditColumn(struct Rlist **columns,struct Attributes a,struct Promise *pp)
 
 { struct Rlist *rp, *found;
- int count = 0,retval = false;
+ int retval = false;
 
 if (a.column.column_operation && strcmp(a.column.column_operation,"delete") == 0)
    {
-   if (found = KeyInRlist(*columns,a.column.column_value))
+   if ((found = KeyInRlist(*columns,a.column.column_value)))
       {
       CfOut(cf_inform,""," -> Deleting column field sub-value %s in %s",a.column.column_value,pp->this_server);
       DeleteRlistEntry(columns,found);
