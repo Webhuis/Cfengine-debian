@@ -21,26 +21,6 @@ override_dh_clean:
 	dh_autoreconf_clean
 	dh_clean
 
-override_dh_prep:
-	# clean the cfengine share directory and copy over the needed files
-	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/*cf
-	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/NEWS
-	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/INSTALL
-	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/README
-	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/ChangeLog
-	# clean the not-needed static libraries
-	-/bin/rm -rf $(CURDIR)/debian/tmp/usr/lib
-	dh_prep
-
-#	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ \
-#                $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/
-#	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/inputs \
-#                $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/examples
-#    # install html files
-#	/bin/mkdir $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/html
-#	/bin/cp $(CURDIR)/docs/*.html $(CURDIR)/docs/*.png \
-#				$(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/html
-
 override_dh_compress:
 	dh_compress -X.cf
 
