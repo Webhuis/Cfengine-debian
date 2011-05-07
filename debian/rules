@@ -23,13 +23,13 @@ override_dh_clean:
 
 override_dh_prep:
 	# clean the cfengine share directory and copy over the needed files
-	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/*cf
-	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/NEWS
-	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/INSTALL
-	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/README
-	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ChangeLog
+	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/*cf
+	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/NEWS
+	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/INSTALL
+	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/README
+	-/bin/rm $(CURDIR)/debian/tmp/usr/share/doc/cfengine/ChangeLog
 	# clean the not-needed static libraries
-	/bin/rm -rf $(CURDIR)/debian/cfengine3/usr/lib
+	-/bin/rm -rf $(CURDIR)/debian/tmp/usr/lib
 	dh_prep
 
 #	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ \
@@ -44,3 +44,7 @@ override_dh_prep:
 override_dh_compress:
 	dh_compress -X.cf
 
+override_dh_installinfo:
+
+override_dh_strip:
+	dh_strip --dbg-package=cfengine3-dbg

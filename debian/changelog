@@ -1,6 +1,9 @@
 cfengine3 (3.1.5-1+dh1) unstable; urgency=low
 
   * test with dh
+  * debian/rules: rewritten
+  * debian/cfengine3.install: rewritten
+  * debian/control: versioned debhelper
 
  -- Antonio Radici <antonio@debian.org>  Fri, 06 May 2011 22:24:11 +0000
 
