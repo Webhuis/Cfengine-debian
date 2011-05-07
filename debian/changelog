@@ -1,17 +1,12 @@
-cfengine3 (3.1.5-1+dh1) unstable; urgency=low
-
-  * test with dh
-  * debian/rules: rewritten
-  * debian/cfengine3.install: rewritten
-  * debian/control: versioned debhelper
-
- -- Antonio Radici <antonio@debian.org>  Fri, 06 May 2011 22:24:11 +0000
-
 cfengine3 (3.1.5-1) unstable; urgency=low
 
   * New upstream release
   * debian/patches: refreshed
   * debian/control: Standards-Version bumped to 3.9.2, no changes required
+  * rewrites to use dh:
+    + debian/rules: simplified and all rm's removed
+    + debian/cfengine3.install: selectively install what we need
+    + debian/control: added a versioned debhelper
 
  -- Antonio Radici <antonio@debian.org>  Fri, 06 May 2011 22:23:11 +0000
 
