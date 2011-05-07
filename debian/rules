@@ -1,40 +1,12 @@
 #!/usr/bin/make -f
 # vim:noet:ts=4:sw=4:
-# -*- makefile -*-
-# Sample debian/rules that uses debhelper.
-# This file was originally written by Joey Hess and Craig Small.
-# As a special exception, when this file is copied by dh-make into a
-# dh-make output file, you may use that output file without restriction.
-# This special exception was added by Craig Small in version 0.37 of dh-make.
 
-# Uncomment this to turn on verbose mode.
-#export DH_VERBOSE=1
+%:
+	dh $@
 
-
-# These are used for cross-compiling and for saving the configure script
-# from having to guess our platform (since we know it already)
-DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
-DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
-ifneq ($(DEB_HOST_GNU_TYPE),$(DEB_BUILD_GNU_TYPE))
-CROSS= --build $(DEB_BUILD_GNU_TYPE) --host $(DEB_HOST_GNU_TYPE)
-else
-CROSS= --build $(DEB_BUILD_GNU_TYPE)
-endif
-
-config.status: configure
-configure: config-stamp
-
-config-stamp:
-	dh_testdir
+override_dh_auto_configure:
 	dh_autoreconf
-	# Add here commands to configure the package.
-ifneq "$(wildcard /usr/share/misc/config.sub)" ""
-	cp -f /usr/share/misc/config.sub config.sub
-endif
-ifneq "$(wildcard /usr/share/misc/config.guess)" ""
-	cp -f /usr/share/misc/config.guess config.guess
-endif
-	./configure $(CROSS) 	--enable-shared=no \
+	dh_auto_configure   	--enable-shared=no \
 							--without-nova \
 							--without-constellation \
 							--prefix=/usr \
@@ -45,91 +17,30 @@ endif
 							--htmldir=\$${prefix}/share/doc/cfengine3/html \
 							CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs"
 
-
-build: build-stamp
-
-build-stamp:  config.status 
-	dh_testdir
-
-	# Add here commands to compile the package.
-	$(MAKE)
-	#docbook-to-man debian/cfengine.sgml > cfengine.1
-
-	touch $@
-
-clean: 
-	dh_testdir
-	dh_testroot
+override_dh_clean:
 	dh_autoreconf_clean
-	rm -f build-stamp 
+	dh_clean
 
-	# Add here commands to clean up after the build process.
-	[ ! -f Makefile ] || $(MAKE) distclean
-	rm -f config.sub config.guess
-
-	dh_clean 
-
-install: build
-	dh_testdir
-	dh_testroot
-	dh_prep  
-	dh_installdirs
-
-	# Add here commands to install the package into debian/cfengine3.
-	$(MAKE) DESTDIR=$(CURDIR)/debian/cfengine3 install
-
+override_dh_prep:
 	# clean the cfengine share directory and copy over the needed files
 	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/*cf
 	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/NEWS
 	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/INSTALL
 	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/README
 	/bin/rm $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ChangeLog
-	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ \
-                $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/
-	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/inputs \
-                $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/examples
 	# clean the not-needed static libraries
 	/bin/rm -rf $(CURDIR)/debian/cfengine3/usr/lib
-    # install html files
-	/bin/mkdir $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/html
-	/bin/cp $(CURDIR)/docs/*.html $(CURDIR)/docs/*.png \
-				$(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/html
+	dh_prep
 
-# Build architecture-independent files here.
-binary-indep: install
-# We have nothing to do by default.
+#	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine/ \
+#                $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/
+#	/bin/mv $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/inputs \
+#                $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/examples
+#    # install html files
+#	/bin/mkdir $(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/html
+#	/bin/cp $(CURDIR)/docs/*.html $(CURDIR)/docs/*.png \
+#				$(CURDIR)/debian/cfengine3/usr/share/doc/cfengine3/html
 
-# Build architecture-dependent files here.
-binary-arch: install
-	dh_testdir
-	dh_testroot
-	dh_installchangelogs
-	dh_lintian
-	dh_installdocs
-	dh_installexamples
-#	dh_install
-#	dh_installmenu
-#	dh_installdebconf
-#	dh_installlogrotate
-#	dh_installemacsen
-#	dh_installpam
-#	dh_installmime
-#	dh_python
-	dh_installinit
-#	dh_installcron
-#	dh_installinfo
-	dh_installman
-	dh_link
-	dh_strip --dbg-package=cfengine3-dbg
+override_dh_compress:
 	dh_compress -X.cf
-	dh_fixperms
-#	dh_perl
-#	dh_makeshlibs
-	dh_installdeb
-	dh_shlibdeps
-	dh_gencontrol
-	dh_md5sums
-	dh_builddeb
 
-binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install 
