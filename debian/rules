@@ -6,16 +6,16 @@
 
 override_dh_auto_configure:
 	dh_autoreconf
-	dh_auto_configure   	--enable-shared=no \
-							--without-nova \
-							--without-constellation \
-							--prefix=/usr \
-							--with-sql=no \
-							--with-workdir=/var/lib/cfengine3 \
-							--mandir=\$${prefix}/share/man \
-							--infodir=\$${prefix}/share/info \
-							--htmldir=\$${prefix}/share/doc/cfengine3/html \
-							CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs"
+	./configure --enable-shared=no \
+				--without-nova \
+				--without-constellation \
+				--prefix=/usr \
+				--with-sql=no \
+				--with-workdir=/var/lib/cfengine3 \
+				--mandir=\$${prefix}/share/man \
+				--infodir=\$${prefix}/share/info \
+				--htmldir=\$${prefix}/share/doc/cfengine3/html \
+				CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs"
 
 override_dh_clean:
 	dh_autoreconf_clean
