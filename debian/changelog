@@ -5,6 +5,7 @@ cfengine3 (3.2.4) unstable; urgency=low
     + refreshed to use the new upstream URLs
   * debian/control:
     + Standards-Version updated to 3.9.3, no change required
+  * debian/patches: refreshed
 
  -- Antonio Radici <antonio@debian.org>  Sat, 17 Mar 2012 18:12:34 +0000
 

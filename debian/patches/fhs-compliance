@@ -8,9 +8,9 @@ actual creation of the inputs dir any cf-* binary will fail
 
 Index: cfengine3/src/generic_agent.c
 ===================================================================
---- cfengine3.orig/src/generic_agent.c	2011-05-06 22:24:14.000000000 +0000
-+++ cfengine3/src/generic_agent.c	2011-05-06 22:24:25.000000000 +0000
-@@ -490,7 +490,6 @@
+--- cfengine3.orig/src/generic_agent.c	2012-03-17 18:20:33.000000000 +0000
++++ cfengine3/src/generic_agent.c	2012-03-17 18:23:07.000000000 +0000
+@@ -502,7 +502,6 @@
     CfOut(cf_verbose,"","Work directory is %s\n",CFWORKDIR);
  
     snprintf(HASHDB,CF_BUFSIZE-1,"%s%c%s",CFWORKDIR,FILE_SEPARATOR,CF_CHKDB);
@@ -18,16 +18,16 @@ Index: cfengine3/src/generic_agent.c
     snprintf(vbuff,CF_BUFSIZE,"%s%cinputs%cupdate.conf",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
     MakeParentDirectory(vbuff,force);
     snprintf(vbuff,CF_BUFSIZE,"%s%cbin%ccf-agent -D from_cfexecd",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR);
-@@ -1211,7 +1210,7 @@
+@@ -1255,7 +1254,7 @@
     }
  else
     {
 -   snprintf(LOGFILE,CF_BUFSIZE,"%s%ccfagent.%s.log",CFWORKDIR,FILE_SEPARATOR,VSYSNAME.nodename);
 +   snprintf(LOGFILE,CF_BUFSIZE,"/var/log/cfagent.%s.log",VSYSNAME.nodename);
-    VSETUIDLOG = strdup(LOGFILE);
     }
  
-@@ -1762,7 +1761,7 @@
+ 
+@@ -1898,7 +1897,7 @@
  
  { FILE *fp;
  
@@ -38,9 +38,9 @@ Index: cfengine3/src/generic_agent.c
     {
 Index: cfengine3/src/agent.c
 ===================================================================
---- cfengine3.orig/src/agent.c	2011-05-06 22:12:42.000000000 +0000
-+++ cfengine3/src/agent.c	2011-05-06 22:24:25.000000000 +0000
-@@ -338,7 +338,7 @@
+--- cfengine3.orig/src/agent.c	2012-03-17 18:00:21.000000000 +0000
++++ cfengine3/src/agent.c	2012-03-17 18:21:39.000000000 +0000
+@@ -347,7 +347,7 @@
    status which we need for setting returns
  */
  
@@ -51,9 +51,9 @@ Index: cfengine3/src/agent.c
  if ((fp = fopen(filename,"a")) != NULL)
 Index: cfengine3/src/files_interfaces.c
 ===================================================================
---- cfengine3.orig/src/files_interfaces.c	2011-05-06 22:12:42.000000000 +0000
-+++ cfengine3/src/files_interfaces.c	2011-05-06 22:24:25.000000000 +0000
-@@ -1344,7 +1344,7 @@
+--- cfengine3.orig/src/files_interfaces.c	2012-03-17 18:00:21.000000000 +0000
++++ cfengine3/src/files_interfaces.c	2012-03-17 18:21:39.000000000 +0000
+@@ -1322,7 +1322,7 @@
  b.edits.backup = cfa_nobackup;
  b.edits.maxfilesize = 1000000;
  
@@ -62,7 +62,7 @@ Index: cfengine3/src/files_interfaces.c
  MapName(filename);
  
  if (!LoadFileAsItemList(&VSETUIDLIST,filename,b,pp))
-@@ -1364,7 +1364,7 @@
+@@ -1342,7 +1342,7 @@
  b.edits.backup = cfa_nobackup;
  b.edits.maxfilesize = 1000000;
  
@@ -73,9 +73,9 @@ Index: cfengine3/src/files_interfaces.c
  PurgeItemList(&VSETUIDLIST,"SETUID/SETGID");
 Index: cfengine3/src/transaction.c
 ===================================================================
---- cfengine3.orig/src/transaction.c	2011-05-06 22:12:42.000000000 +0000
-+++ cfengine3/src/transaction.c	2011-05-06 22:24:25.000000000 +0000
-@@ -158,7 +158,7 @@
+--- cfengine3.orig/src/transaction.c	2012-03-17 18:00:21.000000000 +0000
++++ cfengine3/src/transaction.c	2012-03-17 18:21:39.000000000 +0000
+@@ -174,7 +174,7 @@
     sum = (CF_MACROALPHABET * sum + cc_operand[i]) % CF_HASHTABLESIZE;
     }
  

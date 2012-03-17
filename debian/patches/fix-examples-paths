@@ -4,11 +4,11 @@ by the fhs-compliance patch; see #552144 for more details
 I'm also removing the auto-update of the binaries because the debian package is
 supposed to update the binaries, rather than cf-execd itself
 
-Index: cfengine3/inputs/update.cf
+Index: cfengine3/examples/example_config/update.cf
 ===================================================================
---- cfengine3.orig/inputs/update.cf	2011-05-06 22:12:12.000000000 +0000
-+++ cfengine3/inputs/update.cf	2011-05-06 22:24:30.000000000 +0000
-@@ -26,23 +26,17 @@
+--- cfengine3.orig/examples/example_config/update.cf	2012-03-17 18:30:58.000000000 +0000
++++ cfengine3/examples/example_config/update.cf	2012-03-17 18:31:58.000000000 +0000
+@@ -26,24 +26,16 @@
  {
  vars:
  
@@ -22,29 +22,23 @@ Index: cfengine3/inputs/update.cf
  
      perms => u_p("600"),
      copy_from => mycopy("$(master_location)","localhost"),
-     depth_search => recurse("inf"),
+     depth_search => urecurse("inf"),
      action => uimmediate;
- 
+-
 -  "/var/cfengine/bin" 
 -
 -    perms => u_p("700"),
 -    copy_from => mycopy("/usr/local/sbin","localhost"),
--    depth_search => recurse("inf"),
+-    file_select => cf3_files,
+-    depth_search => urecurse("inf"),
 -    action => uimmediate;
  }
  
  ############################################
-@@ -77,4 +71,4 @@
- body action uimmediate
- {
- ifelapsed => "1";
--}
-\ No newline at end of file
-+}
-Index: cfengine3/inputs/site.cf
+Index: cfengine3/examples/example_config/site.cf
 ===================================================================
---- cfengine3.orig/inputs/site.cf	2011-05-06 22:12:12.000000000 +0000
-+++ cfengine3/inputs/site.cf	2011-05-06 22:24:30.000000000 +0000
+--- cfengine3.orig/examples/example_config/site.cf	2012-03-17 18:32:19.000000000 +0000
++++ cfengine3/examples/example_config/site.cf	2012-03-17 18:32:31.000000000 +0000
 @@ -306,7 +306,7 @@
  
      exec_fix::

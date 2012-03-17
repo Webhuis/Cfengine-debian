@@ -3,9 +3,9 @@ file; I'm removing all the man errors from here
 
 Index: cfengine3/src/generic_agent.c
 ===================================================================
---- cfengine3.orig/src/generic_agent.c	2011-05-06 22:12:42.000000000 +0000
-+++ cfengine3/src/generic_agent.c	2011-05-06 22:24:14.000000000 +0000
-@@ -1685,7 +1685,7 @@
+--- cfengine3.orig/src/generic_agent.c	2012-03-17 18:00:21.000000000 +0000
++++ cfengine3/src/generic_agent.c	2012-03-17 18:20:33.000000000 +0000
+@@ -1758,7 +1758,7 @@
     {
     if (options[i].has_arg)
        {
@@ -14,7 +14,7 @@ Index: cfengine3/src/generic_agent.c
        }
     else
        {
-@@ -1712,12 +1712,12 @@
+@@ -1785,12 +1785,12 @@
  printf(".SH SYNOPSIS:\n\n %s [options]\n\n.SH DESCRIPTION:\n\n%s\n",GetArg0(component),id);
  
  printf(".B cfengine\n"
@@ -29,7 +29,7 @@ Index: cfengine3/src/generic_agent.c
         ".B cfengine\n"
         "is to create a one or more sets of configuration files which will"
         "classify and describe the setup of every host in a network.\n");
-@@ -1728,7 +1728,7 @@
+@@ -1801,7 +1801,7 @@
     {
     if (options[i].has_arg)
        {
@@ -38,44 +38,18 @@ Index: cfengine3/src/generic_agent.c
        }
     else
        {
-@@ -1741,10 +1741,10 @@
+@@ -1814,10 +1814,10 @@
         ".SH INFORMATION\n");
  
  printf("\nBug reports: http://bug.cfengine.com, ");
 -printf(".pp\nCommunity help: http://forum.cfengine.com\n");
--printf(".pp\nCommunity info: http://www.cfengine.org\n");
+-printf(".pp\nCommunity info: http://www.cfengine.com/pages/community\n");
 -printf(".pp\nSupport services: http://www.cfengine.com\n");
--printf(".pp\nThis software is Copyright (C) 2008- Cfengine AS.\n");
+-printf(".pp\nThis software is Copyright (C) 2008-%d CFEngine AS.\n", BUILD_YEAR);
 +printf(".PP\nCommunity help: http://forum.cfengine.com\n");
-+printf(".PP\nCommunity info: http://www.cfengine.org\n");
++printf(".PP\nCommunity info: http://www.cfengine.com/pages/community\n");
 +printf(".PP\nSupport services: http://www.cfengine.com\n");
-+printf(".PP\nThis software is Copyright (C) 2008- Cfengine AS.\n");
++printf(".PP\nThis software is Copyright (C) 2008-%d CFEngine AS.\n", BUILD_YEAR);
  }
  
  /*******************************************************************/
-Index: cfengine3/src/verify_packages.c
-===================================================================
---- cfengine3.orig/src/verify_packages.c	2011-05-06 22:12:42.000000000 +0000
-+++ cfengine3/src/verify_packages.c	2011-05-06 22:24:17.000000000 +0000
-@@ -1907,7 +1907,7 @@
- 	  }
-        else
- 	  {
--          CfOut(cf_verbose, "", " Package sucessfully verified from return code");
-+          CfOut(cf_verbose, "", " Package successfully verified from return code");
- 	  }
-        }
-     }
-Index: cfengine3/src/evalfunction.c
-===================================================================
---- cfengine3.orig/src/evalfunction.c	2011-05-06 22:12:42.000000000 +0000
-+++ cfengine3/src/evalfunction.c	2011-05-06 22:24:17.000000000 +0000
-@@ -196,7 +196,7 @@
-    return rval;
-    }
- 
--Debug(" | Database opened succesfully.\n");
-+Debug(" | Database opened successfully.\n");
- 
- /* Acquire a cursor for the database. */
- 
