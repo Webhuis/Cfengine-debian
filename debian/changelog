@@ -6,6 +6,10 @@ cfengine3 (3.2.4) unstable; urgency=low
   * debian/control:
     + Standards-Version updated to 3.9.3, no change required
   * debian/patches: refreshed
+  * debian/cfengine3.install:
+    + installing the distributed share/doc directory, exmaples included.
+  * debian/README.Debian:
+    + updated to reflect that inputs/ are now in examples_config/
 
  -- Antonio Radici <antonio@debian.org>  Sat, 17 Mar 2012 18:12:34 +0000
 
