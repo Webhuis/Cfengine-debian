@@ -35,6 +35,18 @@
 extern int CFA_MAXTHREADS;
 extern struct cfagent_connection *COMS;
 
+static void TruncateFile(char *name);
+static int VerifyFinderType(char *file,struct stat *statbuf,struct Attributes a,struct Promise *pp);
+static int TransformFile(char *file,struct Attributes attr,struct Promise *pp);
+static void VerifyName(char *path,struct stat *sb,struct Attributes attr,struct Promise *pp);
+static void VerifyDelete(char *path,struct stat *sb,struct Attributes attr,struct Promise *pp);
+static void DeleteDirectoryTree(char *path,struct Promise *pp);
+#ifndef MINGW
+static void VerifySetUidGid(char *file,struct stat *dstat,mode_t newperm,struct Promise *pp,struct Attributes attr);
+static int Unix_VerifyOwner(char *file,struct Promise *pp,struct Attributes attr,struct stat *sb);
+static void Unix_VerifyCopiedFileAttributes(char *file,struct stat *dstat,struct stat *sstat,struct Attributes attr,struct Promise *pp);
+static void Unix_VerifyFileAttributes(char *file,struct stat *dstat,struct Attributes attr,struct Promise *pp);
+#endif
 
 /*******************************************************************/
 /* File API - OS function mapping                                  */
@@ -105,6 +117,7 @@ CfOut(cf_verbose,""," -> Handling file existence constraints on %s\n",path);
 
 /* We still need to augment the scope of context "this" for commands */
 
+DeleteScalar("this","promiser");
 NewScalar("this","promiser",path,cf_str); // Parameters may only be scalars
 
 if (attr.transformer != NULL)
@@ -291,8 +304,8 @@ return true;
 
 int ScheduleLinkChildrenOperation(char *destination,char *source,int recurse,struct Attributes attr,struct Promise *pp)
 
-{ DIR *dirh;
-  struct dirent *dirp;
+{ CFDIR *dirh;
+  const struct dirent *dirp;
   char promiserpath[CF_BUFSIZE],sourcepath[CF_BUFSIZE];
   struct stat lsb;
   int ret;
@@ -318,13 +331,13 @@ if ((ret == -1 || !S_ISDIR(lsb.st_mode)) && !CfCreateFile(promiserpath,pp,attr))
    return false;
    }
 
-if ((dirh = opendir(source)) == NULL)
+if ((dirh = OpenDirLocal(source)) == NULL)
    {
    cfPS(cf_error,CF_FAIL,"opendir",pp,attr,"Can't open source of children to link %s\n",attr.link.source);
    return false;
    }
 
-for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
    {
    if (!ConsiderFile(dirp->d_name,source,attr,pp))
       {
@@ -339,7 +352,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
    if (!JoinPath(promiserpath,dirp->d_name))
       {
       cfPS(cf_error,CF_INTERPT,"",pp,attr,"Can't construct filename which verifying child links\n");
-      closedir(dirh);
+      CloseDir(dirh);
       return false;
       }
 
@@ -349,7 +362,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
    if (!JoinPath(sourcepath,dirp->d_name))
       {
       cfPS(cf_error,CF_INTERPT,"",pp,attr,"Can't construct filename while verifying child links\n");
-      closedir(dirh);
+      CloseDir(dirh);
       return false;
       }
 
@@ -376,7 +389,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
       }
    }
 
-closedir(dirh);
+CloseDir(dirh);
 return true;
 }
 
@@ -384,7 +397,8 @@ return true;
 
 int ScheduleLinkOperation(char *destination,char *source,struct Attributes attr,struct Promise *pp)
 
-{ char *lastnode;
+{
+const char *lastnode;
 
 lastnode = ReadLastNode(destination);
 
@@ -588,7 +602,7 @@ return true;
 
 #ifdef DARWIN
 
-int VerifyFinderType(char *file,struct stat *statbuf,struct Attributes a,struct Promise *pp)
+static int VerifyFinderType(char *file,struct stat *statbuf,struct Attributes a,struct Promise *pp)
 
 { /* Code modeled after hfstar's extract.c */
  typedef struct t_fndrinfo
@@ -696,7 +710,7 @@ else
 /* Level                                                             */
 /*********************************************************************/
 
-void VerifyName(char *path,struct stat *sb,struct Attributes attr,struct Promise *pp)
+static void VerifyName(char *path,struct stat *sb,struct Attributes attr,struct Promise *pp)
 
 { mode_t newperm;
   struct stat dsb;
@@ -814,8 +828,8 @@ if (attr.rename.disable)
    if ((attr.rename.plus != CF_SAMEMODE) && (attr.rename.minus != CF_SAMEMODE))
       {
       newperm = (sb->st_mode & 07777);
-      newperm |= attr.perms.plus;
-      newperm &= ~(attr.perms.minus);
+      newperm |= attr.rename.plus;
+      newperm &= ~(attr.rename.minus);
       }
    else
       {
@@ -889,9 +903,9 @@ if (attr.rename.rotate > 0)
 
 /*********************************************************************/
 
-void VerifyDelete(char *path,struct stat *sb,struct Attributes attr,struct Promise *pp)
+static void VerifyDelete(char *path,struct stat *sb,struct Attributes attr,struct Promise *pp)
 
-{ char *lastnode = ReadLastNode(path);
+{ const char *lastnode = ReadLastNode(path);
   char buf[CF_MAXVARSIZE];
 
 CfOut(cf_verbose,""," -> Verifying file deletions for %s\n",path);
@@ -1061,7 +1075,7 @@ if ((attr.change.report_changes != cfa_statschange) && (attr.change.report_chang
    return;
    }
 
-snprintf(statdb,CF_BUFSIZE,"%s/stats.db",CFWORKDIR);
+snprintf(statdb,CF_BUFSIZE,"%s/%s",CFWORKDIR,CF_CHKPDB);
 MapName(statdb);
 
 if (!OpenDB(statdb,&dbp))
@@ -1185,12 +1199,11 @@ CloseDB(dbp);
 /* Level                                                             */
 /*********************************************************************/
 
-int TransformFile(char *file,struct Attributes attr,struct Promise *pp)
+static int TransformFile(char *file,struct Attributes attr,struct Promise *pp)
 
 { char comm[CF_EXPANDSIZE],line[CF_BUFSIZE];
   FILE *pop = NULL;
   int print = false;
-  struct CfLock thislock;
   int transRetcode = 0;
 
 if (attr.transformer == NULL || file == NULL)
@@ -1214,7 +1227,7 @@ if (strncmp(comm,"/bin/echo",strlen("/bin/echo")) == 0)
 
 if (!DONTDO)
    {
-   thislock = AcquireLock(comm,VUQNAME,CFSTARTTIME,attr,pp,false);
+   struct CfLock thislock = AcquireLock(comm,VUQNAME,CFSTARTTIME,attr,pp,false);
    
    if (thislock.lock == NULL)
       {
@@ -1253,13 +1266,13 @@ if (!DONTDO)
      CfOut(cf_error,"","-> Transformer %s => %s returned error",file,comm);
      }
    
+   YieldCurrentLock(thislock);
    }
 else
    {
    CfOut(cf_error,""," -> Need to transform file \"%s\" with \"%s\"",file,comm);
    }
 
-YieldCurrentLock(thislock);
 return true;
 }
 
@@ -1267,13 +1280,14 @@ return true;
 
 int MakeParentDirectory(char *parentandchild,int force)
 
-{ char *sp,*spc;
-  char currentpath[CF_BUFSIZE];
-  char pathbuf[CF_BUFSIZE];
-  struct stat statbuf;
-  mode_t mask;
-  int rootlen;
-  char Path_File_Separator;
+{
+char *spc, *sp;
+char currentpath[CF_BUFSIZE];
+char pathbuf[CF_BUFSIZE];
+struct stat statbuf;
+mode_t mask;
+int rootlen;
+char Path_File_Separator;
 
 #ifdef DARWIN
 /* Keeps track of if dealing w. resource fork */
@@ -1282,6 +1296,9 @@ rsrcfork = 0;
 
 char * tmpstr;
 #endif
+
+Debug("Trying to create a parent directory for %s%s",
+      parentandchild, force ? " (force applied)": "");
 
 if (!IsAbsoluteFileName(parentandchild))
    {
@@ -1299,7 +1316,9 @@ if (strstr(pathbuf, _PATH_RSRCFORKSPEC) != NULL)
 #endif
 
 /* skip link name */
-sp = LastFileSeparator(pathbuf);
+/* This cast is necessary, as  you can't have (char* -> char*)
+   and (const char* -> const char*) functions in C */
+sp = (char *)LastFileSeparator(pathbuf);
 
 if (sp == NULL)
    {
@@ -1313,7 +1332,7 @@ if (lstat(pathbuf,&statbuf) != -1)
    {
    if (S_ISLNK(statbuf.st_mode))
       {
-      CfOut(cf_verbose,"","INFO: %s is a symbolic link, not a true directory!\n",VPREFIX,pathbuf);
+      CfOut(cf_verbose,"","INFO: %s is a symbolic link, not a true directory!\n",pathbuf);
       }
 
    if (force)   /* force in-the-way directories aside */
@@ -1321,7 +1340,7 @@ if (lstat(pathbuf,&statbuf) != -1)
       struct stat dir;
       stat(pathbuf,&dir);
    
-      if (!S_ISDIR(dir.st_mode) || S_ISLNK(statbuf.st_mode))  /* if the dir exists - no problem */
+      if (!S_ISDIR(dir.st_mode))  /* if the dir exists - no problem */
          {
          struct stat sbuf;
 
@@ -1451,7 +1470,7 @@ return(true);
 
 /**********************************************************************/
 
-void TruncateFile(char *name)
+static void TruncateFile(char *name)
 
 { struct stat statbuf;
   int fd;
@@ -1484,15 +1503,13 @@ void LogHashChange(char *file)
   mode_t perm = 0600;
   static char prevFile[CF_MAXVARSIZE] = {0};
 
+// we might get called twice..
+if (strcmp(file,prevFile) == 0)
+   {
+   return;
+   }
 
-  // we might get called twice..
-  if(strcmp(file,prevFile) == 0)
-    {
-    return;
-    }
-  
-  snprintf(prevFile,sizeof(prevFile),file);
-
+snprintf(prevFile,sizeof(prevFile),file);
 
 /* This is inefficient but we don't want to lose any data */
 
@@ -1521,9 +1538,7 @@ fclose(fp);
 cf_chmod(fname,perm);
 }
 
-
 /*******************************************************************/
-
 
 void RotateFiles(char *name,int number)
 
@@ -1620,7 +1635,7 @@ else
 /* Level                                                           */
 /*******************************************************************/
 
-void DeleteDirectoryTree(char *path,struct Promise *pp)
+static void DeleteDirectoryTree(char *path,struct Promise *pp)
 
 { struct Promise promise = {0};
   char s[CF_MAXVARSIZE];
@@ -1679,7 +1694,7 @@ rmdir(path);
 /* Unix-specific implementations of file functions                 */
 /*******************************************************************/
 
-void VerifySetUidGid(char *file,struct stat *dstat,mode_t newperm,struct Promise *pp,struct Attributes attr)
+static void VerifySetUidGid(char *file,struct stat *dstat,mode_t newperm,struct Promise *pp,struct Attributes attr)
 
 { int amroot = true;
 
@@ -1766,7 +1781,7 @@ if (dstat->st_uid == 0 && (dstat->st_mode & S_ISGID))
 
 /*****************************************************************************/
 
-int Unix_VerifyOwner(char *file,struct Promise *pp,struct Attributes attr,struct stat *sb)
+static int Unix_VerifyOwner(char *file,struct Promise *pp,struct Attributes attr,struct stat *sb)
 
 { struct passwd *pw;
   struct group *gp;
@@ -2082,7 +2097,7 @@ return(gidlist);
 
 /*****************************************************************************/
 
-void Unix_VerifyFileAttributes(char *file,struct stat *dstat,struct Attributes attr,struct Promise *pp)
+static void Unix_VerifyFileAttributes(char *file,struct stat *dstat,struct Attributes attr,struct Promise *pp)
 
 { mode_t newperm = dstat->st_mode, maskvalue;
 
@@ -2266,7 +2281,7 @@ Debug("Unix_VerifyFileAttributes(Done)\n");
 
 /*****************************************************************************/
 
-void Unix_VerifyCopiedFileAttributes(char *file,struct stat *dstat,struct stat *sstat,struct Attributes attr,struct Promise *pp)
+static void Unix_VerifyCopiedFileAttributes(char *file,struct stat *dstat,struct stat *sstat,struct Attributes attr,struct Promise *pp)
 
 { mode_t newplus,newminus;
   uid_t save_uid;

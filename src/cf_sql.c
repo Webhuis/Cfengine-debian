@@ -32,7 +32,9 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
-#ifdef HAVE_MYSQL_MYSQL_H
+#ifdef HAVE_MYSQL_H
+#include <mysql.h>
+#elif defined(HAVE_MYSQL_MYSQL_H)
 #include <mysql/mysql.h>
 #endif
 
@@ -41,6 +43,9 @@
 #elif defined(HAVE_LIBPQ_FE_H)
  #include <libpq-fe.h>
 #endif
+
+static char *EscapeSQL(CfdbConn *cfdb,char *query);
+static void Debugcfdb(CfdbConn *cfdb);
 
 /* Cfengine connectors for sql databases. Note that there are significant
    differences in db admin functions in the various implementations. e.g.
@@ -575,7 +580,7 @@ if (cfdb->rowdata)
 
 /*****************************************************************************/
 
-char *EscapeSQL(CfdbConn *cfdb,char *query)
+static char *EscapeSQL(CfdbConn *cfdb,char *query)
 
 {
 static char result[CF_BUFSIZE];
@@ -608,7 +613,7 @@ return result;
 
 /*****************************************************************************/
 
-void Debugcfdb(CfdbConn *cfdb)
+static void Debugcfdb(CfdbConn *cfdb)
 {
 printf("SIZE of CfdbConn: %d = %d\n",sizeof(CfdbConn),sizeof(*cfdb));
 printf( "cfdb->result = %d\n",cfdb->result);
@@ -620,11 +625,6 @@ printf( "cfdb->type = %d\n",cfdb->type);
 }
 
 /*****************************************************************************/
-
-int SizeCfSQLContainer()
-{
-return sizeof(CfdbConn);
-}
 
 /* EOF */
 

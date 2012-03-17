@@ -1,5 +1,0 @@
-debian/tmp/usr/sbin/*                      usr/sbin/
-debian/tmp/usr/share/man/*                 usr/share/man/
-debian/tmp/usr/share/doc/cfengine/inputs/* usr/share/doc/cfengine3/examples/
-docs/*.html                                usr/share/doc/cfengine3/html
-docs/*.png                                 usr/share/doc/cfengine3/html

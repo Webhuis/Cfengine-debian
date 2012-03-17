@@ -33,6 +33,8 @@
 #include "cf3.extern.h"
 #include <math.h>
 
+static char *PrintTimeSlot(int slot);
+
 /*****************************************************************************/
 
 char *ConvTimeKey(char *str)
@@ -99,8 +101,9 @@ return timekey;
 char *GenTimeKey(time_t now)
  
 { static char str[64];
-    
-snprintf(str,sizeof(str),"%s",cf_ctime(&now));
+  char timebuf[26];
+  
+  snprintf(str,sizeof(str),"%s",cf_strtimestamp_utc(now,timebuf));
 
 return ConvTimeKey(str);
 }
@@ -128,7 +131,7 @@ return -1;
 
 /*****************************************************************************/
 
-char *PrintTimeSlot(int slot)
+static char *PrintTimeSlot(int slot)
 
 { time_t now,i;
   
@@ -153,15 +156,16 @@ int GetShiftSlot(time_t here_and_now)
   char str[64];
   char buf[10],cbuf[10];
   int hour = -1;
+  char timebuf[26];
   
-snprintf(cstr,sizeof(str),"%s",cf_ctime(&here_and_now));
+  snprintf(cstr,sizeof(str),"%s",cf_strtimestamp_utc(here_and_now,timebuf));
 sscanf(cstr,"%s %*s %*s %d",cbuf,&chour);
 
 // Format Tue Sep 28 14:58:27 CEST 2010
 
 for (now = CF_MONDAY_MORNING; now < CF_MONDAY_MORNING+CF_WEEK; now += CF_SHIFT_INTERVAL,slot++)
    {
-   snprintf(str,sizeof(str),"%s",cf_ctime(&now)); 
+   snprintf(str,sizeof(str),"%s",cf_strtimestamp_utc(now,timebuf)); 
    sscanf(str,"%s %*s %*s %d",buf,&hour);
    
    if ((hour/6 == chour/6) && (strcmp(cbuf,buf) == 0))
@@ -176,47 +180,6 @@ return -1;
 /*****************************************************************************/
 
 time_t GetShiftSlotStart(time_t t)
-/**
- * Returns the absolute time_t start of the slot of the aregument.
- **/
 {
- struct tm split;
- time_t slotstart;
-
-if(!localtime_r(&t, &split))
-   {
-   printf("Error!\n");
-   CfOut(cf_error, "localtime_r", "!! Could not convert time");
-   return -1;
-   }
-
-split.tm_sec = 0;
-split.tm_min = 0;
-
-if(split.tm_hour < 6)
-   {
-   split.tm_hour = 0;
-   }
-else if(split.tm_hour < 12)
-   {
-   split.tm_hour = 6;
-   }
-else if(split.tm_hour < 18)
-   {
-   split.tm_hour = 12;
-   }
-else
-   {
-   split.tm_hour = 18;
-   }
-
-slotstart = mktime(&split);
-
-if(slotstart == -1)
-   {
-   CfOut(cf_error, "mktime", "!! Could not convert time");
-   return -1;
-   }
-
-return slotstart;
+ return (t - (t % SECONDS_PER_SHIFT));
 }

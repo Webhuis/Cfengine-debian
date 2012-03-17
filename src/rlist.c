@@ -32,6 +32,11 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int IsRegexIn(struct Rlist *list,char *s);
+static int CompareRlist(struct Rlist *list1, struct Rlist *list2);
+static void DeleteRlistNoRef(struct Rlist *list);
+static void ShowRlistState(FILE *fp,struct Rlist *list);
+
 /*******************************************************************/
 
 struct Rlist *KeyInRlist(struct Rlist *list,char *key)
@@ -113,7 +118,7 @@ return false;
 
 /*******************************************************************/
 
-int IsRegexIn(struct Rlist *list,char *regex)
+static int IsRegexIn(struct Rlist *list,char *regex)
 
 { struct Rlist *rp;
 
@@ -289,7 +294,7 @@ return true;
 
 /*******************************************************************/
 
-int CompareRlist(struct Rlist *list1, struct Rlist *list2)
+static int CompareRlist(struct Rlist *list1, struct Rlist *list2)
 
 { struct Rlist *rp1,*rp2;
 
@@ -362,41 +367,42 @@ return start;
 /*******************************************************************/
 
 void DeleteRlist(struct Rlist *list)
-/* Delete a rlist and all it references */
-{
-  struct Rlist *rl, *next;
 
-  if(list != NULL)
-    {
-      for(rl = list; rl != NULL; rl = next)
-	{
-	  next = rl->next;
-	  
-	  if (rl->item != NULL)
-	    {
-	    DeleteRvalItem(rl->item,rl->type);
-	    }
-	  
-	  free(rl);
-	}
-    }
+/* Delete an rlist and all its references */
+
+{ struct Rlist *rl, *next;
+
+if (list != NULL)
+   {
+   for(rl = list; rl != NULL; rl = next)
+      {
+      next = rl->next;
+      
+      if (rl->item != NULL)
+         {
+         DeleteRvalItem(rl->item,rl->type);
+         }
+      
+      free(rl);
+      }
+   }
 }
 
 /*******************************************************************/
 
-void DeleteRlistNoRef(struct Rlist *list)
+static void DeleteRlistNoRef(struct Rlist *list)
 /* Delete a rlist, but not its references */
-{
-  struct Rlist *rl, *next;
 
-  if(list != NULL)
-    {
-      for(rl = list; rl != NULL; rl = next)
-	{
-	  next = rl->next;
-	  free(rl);
-	}
-    }
+{ struct Rlist *rl, *next;
+
+if(list != NULL)
+   {
+   for(rl = list; rl != NULL; rl = next)
+      {
+      next = rl->next;
+      free(rl);
+      }
+   }
 }
 
 /*******************************************************************/
@@ -533,7 +539,7 @@ switch(type)
        return lp;
        
    default:
-       Debug("Cannot append %c to rval-list [%s]\n",type,item);
+       Debug("Cannot append %c to rval-list [%s]\n",type,(char *)item);
        return NULL;
    }
 
@@ -768,18 +774,34 @@ int PrintRlist(char *buffer,int bufsize,struct Rlist *list)
 { struct Rlist *rp;
 
 StartJoin(buffer,"{",bufsize);
- 
+
 for (rp = list; rp != NULL; rp=rp->next)
    {
-   Join(buffer,"\'",bufsize);
+   if(!JoinSilent(buffer,"'",bufsize))
+      {
+      EndJoin(buffer,"...TRUNCATED'}",bufsize);
+      return false;
+      }
    
-   PrintRval(buffer,bufsize,rp->item,rp->type);
+   if(!PrintRval(buffer,bufsize,rp->item,rp->type))
+      {
+      EndJoin(buffer,"...TRUNCATED'}",bufsize);
+      return false;
+      }
 
-   Join(buffer,"\'",bufsize);
+   if(!JoinSilent(buffer,"'",bufsize))
+      {
+      EndJoin(buffer,"...TRUNCATED'}",bufsize);
+      return false;
+      }
    
    if (rp->next != NULL)
       {
-      Join(buffer,",",bufsize);
+      if(!JoinSilent(buffer,",",bufsize))
+         {
+         EndJoin(buffer,"...TRUNCATED}",bufsize);
+         return false;
+         }
       }
    }
 
@@ -887,11 +909,11 @@ if (rval == NULL)
 switch (type)
    {
    case CF_SCALAR:
-       Join(buffer,(char *)rval,bufsize);
+       return JoinSilent(buffer,(char *)rval,bufsize);
        break;
        
    case CF_LIST:
-       PrintRlist(buffer,bufsize,(struct Rlist *)rval);
+       return PrintRlist(buffer,bufsize,(struct Rlist *)rval);
        break;
        
    case CF_FNCALL:
@@ -908,7 +930,7 @@ return true;
 
 /*******************************************************************/
 
-void ShowRlistState(FILE *fp,struct Rlist *list)
+static void ShowRlistState(FILE *fp,struct Rlist *list)
 
 {
 ShowRval(fp,list->state_ptr->item,list->type);

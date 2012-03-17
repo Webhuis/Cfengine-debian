@@ -34,6 +34,11 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static struct PromiseIdent *PromiseIdExists(char *handle);
+static void DeleteAllPromiseIdsRecurse(struct PromiseIdent *key);
+static int VerifyConstraintName(char *lval);
+static void PostCheckConstraint(char *type,char *bundle,char *lval,void *rval,char rvaltype);
+
 /*******************************************************************/
 
 struct Constraint *AppendConstraint(struct Constraint **conlist,char *lval, void *rval, char type,char *classes,int body)
@@ -44,6 +49,7 @@ struct Constraint *AppendConstraint(struct Constraint **conlist,char *lval, void
     
 { struct Constraint *cp,*lp;
   char *sp = NULL;
+  int i;
 
 switch(type)
    {
@@ -61,6 +67,13 @@ switch(type)
        break;
    case CF_LIST:
        Debug("   Appending a list to rhs\n");
+   }
+
+// Check class
+
+if (THIS_AGENT_TYPE == cf_common)
+   {
+   PostCheckConstraint("none","none",lval,rval,type);
    }
 
 if ((cp = (struct Constraint *)malloc(sizeof(struct Constraint))) == NULL)
@@ -192,7 +205,7 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
 
       if (cp->type != CF_SCALAR)
          {
-         CfOut(cf_error,"","Anomalous type mismatch - expected type (%c) for boolean constraint %s did not match internals\n",cp->type,lval);
+         CfOut(cf_error,""," !! Type mismatch on rhs - expected type (%c) for boolean constraint \"%s\"\n",cp->type,lval);
          PromiseRef(cf_error,pp);
          FatalError("Aborted");
          }
@@ -243,7 +256,7 @@ for (cp = list; cp != NULL; cp=cp->next)
 
       if (cp->type != CF_SCALAR)
          {
-         CfOut(cf_error,"","Anomalous type mismatch - expected type (%c) for boolean constraint %s did not match internals\n",cp->type,lval);
+         CfOut(cf_error,""," !! Type mismatch - expected type (%c) for boolean constraint \"%s\"\n",cp->type,lval);
          FatalError("Aborted");
          }
 
@@ -536,7 +549,7 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
 
       if (cp->type != CF_LIST)
          {
-         CfOut(cf_error,"","Anomalous type mismatch - expected type for list constraint %s did not match internals\n",lval);
+         CfOut(cf_error,""," !! Type mismatch on rhs - expected type for list constraint \"%s\" \n",lval);
          PromiseRef(cf_error,pp);
          FatalError("Aborted");
          }
@@ -619,6 +632,11 @@ if (strcmp(pp->agentsubtype,"reports") == 0 && strcmp(pp->classes,"any") == 0)
 
 /* Special promise type checks */
 
+if (SHOWREPORTS)
+   {
+   NewPromiser(pp);
+   }
+
 if (!IsDefinedClass(pp->classes))
    {
    return;
@@ -629,10 +647,6 @@ if (VarClassExcluded(pp,&sp))
    return;
    }
 
-if (SHOWREPORTS)
-   {
-   NewPromiser(pp);
-   }
 
 if (handle)
    {
@@ -699,7 +713,7 @@ PreSanitizePromise(pp);
 
 /*****************************************************************************/
 
-void PostCheckConstraint(char *type,char *bundle,char *lval,void *rval,char rvaltype)
+static void PostCheckConstraint(char *type,char *bundle,char *lval,void *rval,char rvaltype)
 
 { struct SubTypeSyntax ss;
   int i,j,l,m;
@@ -712,6 +726,16 @@ if (DEBUG)
    {
    ShowRval(stdout,rval,rvaltype);
    printf("\n");
+   }
+
+// Check class
+
+for (i = 0; CF_CLASSBODY[i].lval != NULL; i++)
+   {
+   if (strcmp(lval,CF_CLASSBODY[i].lval) == 0)
+      {
+      CheckConstraintTypeMatch(lval,rval,rvaltype,CF_CLASSBODY[i].dtype,CF_CLASSBODY[i].range,0);
+      }
    }
 
 for  (i = 0; i < CF3_MODULES; i++)
@@ -781,7 +805,7 @@ for (i = 0; CF_COMMON_BODIES[i].lval != NULL; i++)
 
 /*****************************************************************************/
 
-int VerifyConstraintName(char *lval)
+static int VerifyConstraintName(char *lval)
 
 { struct SubTypeSyntax ss;
   int i,j,l,m;
@@ -872,7 +896,7 @@ return ptr;
 
 /*****************************************************************************/
 
-void DeleteAllPromiseIdsRecurse(struct PromiseIdent *key)
+static void DeleteAllPromiseIdsRecurse(struct PromiseIdent *key)
 
 {
 AssertThreadLocked(cft_policy, "DeleteAllPromiseIdsRecurse");
@@ -889,7 +913,7 @@ free(key);
 
 /*****************************************************************************/
 
-void DeleteAllPromiseIds()
+void DeleteAllPromiseIds(void)
 
 {
 if (!ThreadLock(cft_policy))
@@ -909,7 +933,7 @@ ThreadUnlock(cft_policy);
 
 /*****************************************************************************/
 
-struct PromiseIdent *PromiseIdExists(char *handle)
+static struct PromiseIdent *PromiseIdExists(char *handle)
 
 { struct PromiseIdent *key;
 

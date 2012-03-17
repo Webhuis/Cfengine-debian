@@ -32,6 +32,12 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int ExecPackageCommand(char *command,int verify,int setCmdClasses,struct Attributes a,struct Promise *pp);
+static int ProcessSanityChecks(struct Attributes a,struct Promise *pp);
+static void VerifyProcessOp(struct Item *procdata,struct Attributes a,struct Promise *pp);
+static int FindPidMatches(struct Item *procdata,struct Item **killlist,struct Attributes a,struct Promise *pp);
+static int ExtractPid(char *psentry,char **names,int *start,int *end);
+
 /*****************************************************************************/
 
 void VerifyProcessesPromise(struct Promise *pp)
@@ -48,7 +54,7 @@ VerifyProcesses(a,pp);
 /* Level                                                                     */
 /*****************************************************************************/
 
-int ProcessSanityChecks(struct Attributes a,struct Promise *pp)
+static int ProcessSanityChecks(struct Attributes a,struct Promise *pp)
 
 { int promised_zero, promised_any, ret = true;
 
@@ -118,6 +124,7 @@ if (thislock.lock == NULL)
    return;
    }
 
+DeleteScalar("this","promiser");
 NewScalar("this","promiser",pp->promiser,cf_str);
 PromiseBanner(pp);
 VerifyProcessOp(PROCESSTABLE,a,pp);
@@ -145,7 +152,7 @@ return Unix_LoadProcessTable(procdata);
 
 /*******************************************************************/
 
-void VerifyProcessOp(struct Item *procdata,struct Attributes a,struct Promise *pp)
+static void VerifyProcessOp(struct Item *procdata,struct Attributes a,struct Promise *pp)
 
 {
   int matches = 0,do_signals = true,out_of_range,killed = 0,need_to_restart = true;
@@ -249,7 +256,7 @@ else
 
 /**********************************************************************************/
 
-int FindPidMatches(struct Item *procdata,struct Item **killlist,struct Attributes a,struct Promise *pp)
+static int FindPidMatches(struct Item *procdata,struct Item **killlist,struct Attributes a,struct Promise *pp)
 
 { struct Item *ip;
   char saveuid[16];
@@ -268,16 +275,16 @@ GetProcessColumnNames(procdata->name,(char **)names,start,end);
 
 for (ip = procdata->next; ip != NULL; ip=ip->next)
    {
-   CF_NODES++;
+   CF_OCCUR++;
 
    if (BlockTextMatch(pp->promiser,ip->name,&s,&e))
       {
-      if (!SelectProcess(ip->name,names,start,end,a,pp))
+      if (EMPTY(ip->name))
          {
          continue;
          }
-
-      if (EMPTY(ip->name))
+      
+      if (!SelectProcess(ip->name,names,start,end,a,pp))
          {
          continue;
          }
@@ -326,10 +333,9 @@ for (ip = procdata->next; ip != NULL; ip=ip->next)
          CfOut(cf_verbose,""," !! cf-agent will not signal itself!\n");
          continue;
          }
-      
-      snprintf(saveuid,15,"%d",(int)pid);
-      PrependItem(killlist,saveuid,"");
-      SetItemListCounter(*killlist,saveuid,pid);
+
+      PrependItem(killlist,ip->name,"");
+      (*killlist)->counter = pid;
       }
    }
 
@@ -362,7 +368,7 @@ return Unix_DoAllSignals(siglist,a,pp);
 /* Level                                                                          */
 /**********************************************************************************/
 
-int ExtractPid(char *psentry,char **names,int *start,int *end)
+static int ExtractPid(char *psentry,char **names,int *start,int *end)
 
 { char *sp;
  int col,pid = -1,offset = 0;

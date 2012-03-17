@@ -40,21 +40,14 @@ vars:
 bundle agent check
 {
 classes:
-	"ok" or =>
-		    userexists("root");
+	"ok" or => { userexists("root") };
 		    
 
 reports:
     ok::
 	"$(this.promise_filename) Pass";
-    MAIN.ok::
-	"$(this.promise_filename) Pass"
-		report_to_file => "$(G.logfile)";
     !ok::
 	"$(this.promise_filename) FAIL";
-    MAIN.!ok::
-	"$(this.promise_filename) FAIL"
-		report_to_file => "$(G.logfile)";
 }
 
 #######################################################

@@ -75,13 +75,13 @@ void Apoptosis(void);
 /* Command line options                                            */
 /*******************************************************************/
 
- char *ID = "The executor daemon is a scheduler and wrapper for\n"
-            "execution of cf-agent. It collects the output of the\n"
-            "agent and can email it to a specified address. It can\n"
-            "splay the start time of executions across the network\n"
-            "and work as a class-based clock for scheduling.";
+const char *ID = "The executor daemon is a scheduler and wrapper for\n"
+                 "execution of cf-agent. It collects the output of the\n"
+                 "agent and can email it to a specified address. It can\n"
+                 "splay the start time of executions across the network\n"
+                 "and work as a class-based clock for scheduling.";
  
- struct option OPTIONS[15] =
+const struct option OPTIONS[15] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -100,7 +100,7 @@ void Apoptosis(void);
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[15] =
+const char *HINTS[15] =
       {
       "Print the help message",
       "Set debugging level 0,1,2,3",
@@ -237,7 +237,7 @@ while ((c=getopt_long(argc,argv,"d:vnKIf:D:N:VxL:hFV1gMW",OPTIONS,&optindex)) !=
           NO_FORK = true;
           break;
 
-      case 'V': Version("cf-execd");
+      case 'V': PrintVersionBanner("cf-execd");
           exit(0);
           
       case 'h': Syntax("cf-execd - cfengine's execution agent",OPTIONS,HINTS,ID);
@@ -338,7 +338,6 @@ for (cp = ControlBodyConstraints(cf_executor); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFEX_CONTROLBODY[cfex_executorfacility].lval) == 0)
       {
       SetFacility(retval);
-      CfOut(cf_verbose,"","SET Syslog FACILITY = %s\n",retval);
       continue;
       }
 
@@ -601,17 +600,15 @@ CfOut(cf_verbose,""," !! Pruning complete");
 
 int ScheduleRun()
 
-{ time_t now;
-  char timekey[64];
-  struct Item *ip;
+{
+struct Item *ip;
 
 CfOut(cf_verbose,"","Sleeping...\n");
 sleep(CFPULSETIME);                /* 1 Minute resolution is enough */ 
-now = time(NULL);
 
 // recheck license (in case of license updates or expiry)
 
-if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY)) 
+if (EnterpriseExpiry())
   {
   CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
   exit(1);
@@ -636,10 +633,9 @@ NewScope("sys");
 
 CfGetInterfaceInfo(cf_executor);
 Get3Environment();
+BuiltinClasses();
 OSClasses();
 SetReferenceTime(true);
-snprintf(timekey,63,"%s",cf_ctime(&now)); 
-AddTimeClass(timekey); 
 ThreadUnlock(cft_system);
 
 for (ip = SCHEDULE; ip != NULL; ip = ip->next)
@@ -648,7 +644,7 @@ for (ip = SCHEDULE; ip != NULL; ip = ip->next)
 
    if (IsDefinedClass(ip->name))
       {
-      CfOut(cf_verbose,"","Waking up the agent at %s ~ %s \n",timekey,ip->name);
+      CfOut(cf_verbose,"","Waking up the agent at %s ~ %s \n",cf_ctime(&CFSTARTTIME),ip->name);
       return true;
       }
    }
@@ -947,7 +943,8 @@ else
 
 if (!ThreadLock(cft_count))
    {
-   exit(1);
+   CfOut(cf_error, "", "!! Severe lock error when mailing in exec");
+   return 1;
    }
 
 /* replace old file with new*/   
@@ -1015,16 +1012,12 @@ if (MAXLINES == 0)
  
 Debug("Mailing results of (%s) to (%s)\n",file,to);
  
-if (strlen(to) == 0)
-   {
-   return;
-   }
 
 /* Check first for anomalies - for subject header */
  
 if ((fp = fopen(file,"r")) == NULL)
    {
-   CfOut(cf_inform,"fopen","Couldn't open file %s",file);
+   CfOut(cf_inform,"fopen","!! Couldn't open file %s",file);
    return;
    }
 

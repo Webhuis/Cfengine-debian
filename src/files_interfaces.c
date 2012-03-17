@@ -32,6 +32,14 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void PurgeLocalFiles(struct Item *filelist,char *directory,struct Attributes attr,struct Promise *pp);
+static void CfCopyFile(char *sourcefile,char *destfile,struct stat sourcestatbuf,struct Attributes attr, struct Promise *pp);
+static int CompareForFileCopy(char *sourcefile,char *destfile,struct stat *ssb, struct stat *dsb,struct Attributes attr,struct Promise *pp);
+static void RegisterAHardLink(int i,char *value,struct Attributes attr, struct Promise *pp);
+static void FileAutoDefine(char *destfile);
+static void LoadSetuid(struct Attributes a,struct Promise *pp);
+static void SaveSetuid(struct Attributes a,struct Promise *pp);
+
 /*****************************************************************************/
 
 /* File copying is a special case, particularly complex - cannot be integrated */
@@ -42,7 +50,7 @@ void SourceSearchAndCopy(char *from,char *to,int maxrecurse,struct Attributes at
   char newfrom[CF_BUFSIZE];
   char newto[CF_BUFSIZE];
   struct Item *namecache = NULL;
-  struct cfdirent *dirp;
+  const struct dirent *dirp;
   CFDIR *dirh;
 
 if (maxrecurse == 0)  /* reached depth limit */
@@ -51,7 +59,7 @@ if (maxrecurse == 0)  /* reached depth limit */
    return;
    }
 
-Debug("RecursiveCopy(%s,lev=%d)\n",from,maxrecurse);
+Debug("RecursiveCopy(%s,%s,lev=%d)\n",from,to,maxrecurse);
 
 if (strlen(from) == 0)     /* Check for root dir */
    {
@@ -60,26 +68,69 @@ if (strlen(from) == 0)     /* Check for root dir */
 
   /* Check that dest dir exists before starting */
 
-strncpy(newto,to,CF_BUFSIZE-2);
+strncpy(newto,to,CF_BUFSIZE-10);
 AddSlash(newto);
 strcat(newto,"dummy");
 
 if (attr.transaction.action != cfa_warn)
    {
+   struct stat tostat;
+
    if (!MakeParentDirectory(newto,attr.move_obstructions))
       {
       cfPS(cf_error,CF_FAIL,"",pp,attr,"Unable to make directory for %s in file-copy %s to %s\n",newto,attr.copy.source,attr.copy.destination);
       return;
       }
+
+   DeleteSlash(to);
+
+   /* Set aside symlinks */
+
+   if (lstat(to, &tostat) != 0)
+      {
+      cfPS(cf_error, CF_WARN, "lstat", pp, attr, "Unable to stat newly created directory %s", to);
+      return;
+      }
+
+   if (S_ISLNK(tostat.st_mode))
+      {
+      char backup[CF_BUFSIZE];
+      mode_t mask;
+
+      if (!attr.move_obstructions)
+         {
+         CfOut(cf_inform, "", "Path %s is a symlink. Unable to move it aside without move_obstructions is set");
+         return;
+         }
+
+      strcpy(backup, to);
+      DeleteSlash(to);
+      strcat(backup, ".cf-moved");
+
+      if (cf_rename(to, backup) == -1)
+         {
+         CfOut(cf_inform, "", "Unable to backup old %s", to);
+         unlink(to);
+         }
+
+      mask = umask(0);
+      if (cf_mkdir(to, DEFAULTMODE) == -1)
+         {
+         CfOut(cf_error, "cf_mkdir", "Unable to make directory %s", to);
+         umask(mask);
+         return;
+         }
+      umask(mask);
+      }
    }
 
-if ((dirh = cf_opendir(from,attr,pp)) == NULL)
+if ((dirh = OpenDirForPromise(from,attr,pp)) == NULL)
    {
    cfPS(cf_inform,CF_INTERPT,"",pp,attr,"copy can't open directory [%s]\n",from);
    return;
    }
 
-for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,pp))
+for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
    {
    if (!ConsiderFile(dirp->d_name,from,attr,pp))
       {
@@ -96,7 +147,7 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
 
    if (!JoinPath(newfrom,dirp->d_name))
       {
-      cf_closedir(dirh);
+      CloseDir(dirh);
       return;
       }
 
@@ -126,7 +177,7 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
       {
       if (!S_ISDIR(sb.st_mode) && !JoinPath(newto,dirp->d_name))
          {
-         cf_closedir(dirh);
+         CloseDir(dirh);
          return;
          }      
       }
@@ -134,7 +185,7 @@ for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,
       {
       if (!JoinPath(newto,dirp->d_name))
          {
-         cf_closedir(dirh);
+         CloseDir(dirh);
          return;
          }
       }
@@ -200,7 +251,7 @@ if (attr.copy.purge)
  
 DeleteCompressedArray(pp->inode_cache);
 pp->inode_cache = NULL;
-cf_closedir(dirh);
+CloseDir(dirh);
 }
 
 /*******************************************************************/
@@ -228,7 +279,7 @@ if (thislock.lock == NULL)
    return;
    }
 
-CF_NODES++;
+CF_OCCUR++;
 
 LoadSetuid(a,pp);
 
@@ -318,7 +369,7 @@ else
       {
       if (a.havedepthsearch)
          {
-         CfOut(cf_error,"","Warning: depth_search (recursion) is promised for a base object %s that is not a directory",path);
+         CfOut(cf_inform,"","Warning: depth_search (recursion) is promised for a base object %s that is not a directory",path);
          SaveSetuid(a,pp);
          YieldCurrentLock(thislock);
          return;
@@ -410,7 +461,7 @@ if (a.haveedit)
 
 if (cfstat(path,&osb) != -1 && S_ISREG(osb.st_mode))
    {
-   VerifyFileLeaf(path,&oslb,a,pp);
+   VerifyFileLeaf(path,&osb,a,pp);
    }
 
 SaveSetuid(a,pp);
@@ -427,7 +478,7 @@ void VerifyCopy(char *source,char *destination,struct Attributes attr,struct Pro
   char destdir[CF_BUFSIZE];
   char destfile[CF_BUFSIZE];
   struct stat ssb, dsb;
-  struct cfdirent *dirp;
+  const struct dirent *dirp;
   int found;
   
 Debug("VerifyCopy (source=%s destination=%s)\n",source,destination);
@@ -461,9 +512,9 @@ if (S_ISDIR(ssb.st_mode))
    strcpy(destdir,destination);
    AddSlash(destdir);
 
-   if ((dirh = cf_opendir(sourcedir,attr,pp)) == NULL)
+   if ((dirh = OpenDirForPromise(sourcedir,attr,pp)) == NULL)
       {
-      CfOut(cf_verbose,"opendir","Can't open directory %s\n",sourcedir);
+      cfPS(cf_verbose,CF_FAIL,"opendir",pp,attr,"Can't open directory %s\n",sourcedir);
       DeleteClientCache(attr,pp);
       return;
       }
@@ -472,14 +523,14 @@ if (S_ISDIR(ssb.st_mode))
    
    if (cfstat(destdir,&dsb) == -1)
       {
-      CfOut(cf_error,"stat","Can't stat directory %s\n",destdir);
+      cfPS(cf_error,CF_FAIL,"stat",pp,attr,"Can't stat directory %s\n",destdir);
       }
    else
       {
       VerifyCopiedFileAttributes(destdir,&dsb,&ssb,attr,pp);
       }
    
-   for (dirp = cf_readdir(dirh,attr,pp); dirp != NULL; dirp = cf_readdir(dirh,attr,pp))
+   for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
       {
       if (!ConsiderFile(dirp->d_name,sourcedir,attr,pp))
          {
@@ -504,7 +555,7 @@ if (S_ISDIR(ssb.st_mode))
          {
          if (cf_stat(sourcefile,&ssb,attr,pp) == -1)
             {
-            CfOut(cf_inform,"stat","Can't stat source file (notlinked) %s\n",sourcefile);
+            cfPS(cf_inform,CF_FAIL,"stat",pp,attr,"Can't stat source file (notlinked) %s\n",sourcefile);
             DeleteClientCache(attr,pp);       
             return;
             }
@@ -513,7 +564,7 @@ if (S_ISDIR(ssb.st_mode))
          {
          if (cf_lstat(sourcefile,&ssb,attr,pp) == -1)
             {
-            CfOut(cf_inform,"lstat","Can't stat source file %s\n",sourcefile);
+            cfPS(cf_inform,CF_FAIL,"lstat",pp,attr,"Can't stat source file %s\n",sourcefile);
             DeleteClientCache(attr,pp);       
             return;
             }
@@ -522,7 +573,7 @@ if (S_ISDIR(ssb.st_mode))
       CfCopyFile(sourcefile,destfile,ssb,attr,pp);
       }
    
-   cf_closedir(dirh);
+   CloseDir(dirh);
    DeleteClientCache(attr,pp);
    return;
    }
@@ -536,11 +587,11 @@ DeleteClientCache(attr,pp);
 
 /*********************************************************************/
 
-void PurgeLocalFiles(struct Item *filelist,char *localdir,struct Attributes attr,struct Promise *pp)
+static void PurgeLocalFiles(struct Item *filelist,char *localdir,struct Attributes attr,struct Promise *pp)
 
-{ DIR *dirh;
+{ CFDIR *dirh;
   struct stat sb; 
-  struct dirent *dirp;
+  const struct dirent *dirp;
   char filename[CF_BUFSIZE] = {0};
 
 Debug("PurgeLocalFiles(%s)\n",localdir);
@@ -573,13 +624,13 @@ if (chdir(localdir) == -1)
    return;
    }
 
-if ((dirh = opendir(".")) == NULL)
+if ((dirh = OpenDirLocal(".")) == NULL)
    {
    CfOut(cf_verbose,"opendir","Can't open local directory %s\n",localdir);
    return;
    }
 
-for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
    {
    if (!ConsiderFile(dirp->d_name,localdir,attr,pp))
       {
@@ -648,18 +699,20 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
       }
    }
  
-closedir(dirh);
+CloseDir(dirh);
 }
 
 
 /*********************************************************************/
 
-void CfCopyFile(char *sourcefile,char *destfile,struct stat ssb,struct Attributes attr, struct Promise *pp)
+static void CfCopyFile(char *sourcefile,char *destfile,struct stat ssb,struct Attributes attr, struct Promise *pp)
 
-{ char *lastnode,*server;
-  struct stat dsb;
-  int found;
-  mode_t srcmode = ssb.st_mode;
+{
+char *server;
+const char *lastnode;
+struct stat dsb;
+int found;
+mode_t srcmode = ssb.st_mode;
 
 Debug2("CopyFile(%s,%s)\n",sourcefile,destfile);
 
@@ -1097,93 +1150,6 @@ return -1;
 
 /*********************************************************************/
 
-CFDIR *cf_opendir(char *name,struct Attributes attr,struct Promise *pp)
-
-{ CFDIR *returnval;
-
-if (attr.copy.servers == NULL || strcmp(attr.copy.servers->item,"localhost") == 0)
-   {
-   if ((returnval = (CFDIR *)malloc(sizeof(CFDIR))) == NULL)
-      {
-      FatalError("Can't allocate memory in cfopendir()\n");
-      }
-   
-   returnval->cf_list = NULL;
-   returnval->cf_listpos = NULL;
-   returnval->cf_dirh = opendir(name);
-
-   if (returnval->cf_dirh != NULL)
-      {
-      return returnval;
-      }
-   else
-      {
-      free ((char *)returnval);
-      return NULL;
-      }
-   }
-else
-   {
-   return cf_remote_opendir(name,attr,pp);
-   }
-}
-
-/*********************************************************************/
-
-struct cfdirent *cf_readdir(CFDIR *cfdirh,struct Attributes attr,struct Promise *pp)
-
-  /* We need this cfdirent type to handle the weird hack */
-  /* used in SVR4/solaris dirent structures              */
-
-{ static struct cfdirent dir;
-  struct dirent *dirp;
-
-memset(dir.d_name,0,CF_BUFSIZE);
-
-if (attr.copy.servers == NULL || strcmp(attr.copy.servers->item,"localhost") == 0)
-   {
-   dirp = readdir(cfdirh->cf_dirh);
-
-   if (dirp == NULL)
-      {
-      return NULL;
-      }
-
-   strncpy(dir.d_name,dirp->d_name,CF_BUFSIZE-1);
-   return &dir;
-   }
-else
-   {
-   if (cfdirh->cf_listpos != NULL)
-      {
-      strncpy(dir.d_name,(cfdirh->cf_listpos)->name,CF_BUFSIZE);
-      cfdirh->cf_listpos = cfdirh->cf_listpos->next;
-      return &dir;
-      }
-   else
-      {
-      return NULL;
-      }
-   }
-}
- 
-/*********************************************************************/
-
-void cf_closedir(CFDIR *dirh)
-
-{
-if ((dirh != NULL) && (dirh->cf_dirh != NULL))
-   {
-   closedir(dirh->cf_dirh);
-   }
-
-Debug("cfclosedir()\n");
-DeleteItemList(dirh->cf_list);
-free((char *)dirh); 
-}
-
-/*********************************************************************/
-
 int CfReadLine(char *buff,int size,FILE *fp)
 
 { char ch;
@@ -1246,6 +1212,18 @@ if (a.havelink && !a.link.source)
    PromiseRef(cf_error,pp);
    return false;
    }
+
+/* We can't do this verification during parsing as we did not yet read the body,
+ * so we can't distinguish between link and copy source. In post-verification
+ * all bodies are already expanded, so we don't have the information either */
+
+if (a.havecopy && a.copy.source && !FullTextMatch(CF_ABSPATHRANGE, a.copy.source))
+   {
+   CfOut(cf_error,""," !! Non-absolute path in source attribute (have no invariant meaning): %s",path);
+   PromiseRef(cf_error,pp);
+   FatalError("");
+   }
+
 
 if (a.haveeditline && a.haveeditxml)
    {
@@ -1335,7 +1313,7 @@ return true;
 
 /*********************************************************************/
 
-void LoadSetuid(struct Attributes a,struct Promise *pp)
+static void LoadSetuid(struct Attributes a,struct Promise *pp)
 
 { struct Attributes b = {{0}};
   char filename[CF_BUFSIZE];
@@ -1355,7 +1333,7 @@ if (!LoadFileAsItemList(&VSETUIDLIST,filename,b,pp))
 
 /*********************************************************************/
 
-void SaveSetuid(struct Attributes a,struct Promise *pp)
+static void SaveSetuid(struct Attributes a,struct Promise *pp)
 
 { struct Attributes b = {{0}};
   char filename[CF_BUFSIZE];
@@ -1382,7 +1360,7 @@ VSETUIDLIST = NULL;
 /* Level 4                                                           */
 /*********************************************************************/
 
-int CompareForFileCopy(char *sourcefile,char *destfile,struct stat *ssb, struct stat *dsb,struct Attributes attr,struct Promise *pp)
+static int CompareForFileCopy(char *sourcefile,char *destfile,struct stat *ssb, struct stat *dsb,struct Attributes attr,struct Promise *pp)
 
 { int ok_to_copy;
  
@@ -1477,9 +1455,11 @@ CfOut(cf_verbose, "", "Windows does not support symbolic links");
 cfPS(cf_error,CF_FAIL,"",pp,attr,"Windows can't link \"%s\" to \"%s\"",sourcefile, destfile);
 }
 #else  /* NOT MINGW */
-{ char linkbuf[CF_BUFSIZE],*lastnode;
-  int status = CF_UNKNOWN;
-  struct stat dsb;
+{
+char linkbuf[CF_BUFSIZE];
+const char *lastnode;
+int status = CF_UNKNOWN;
+struct stat dsb;
 
 linkbuf[0] = '\0';
   
@@ -1756,12 +1736,10 @@ if (!discardbackup)
          return false;
          }
       }
-   else
+
+   if (!JoinSuffix(backup,CF_SAVED))
       {
-      if (!JoinSuffix(backup,CF_SAVED))
-         {
-         return false;
-         }
+      return false;
       }
    
    /* Now in case of multiple copies of same object, try to avoid overwriting original backup */
@@ -1801,18 +1779,19 @@ else
 
 if (lstat(new,&dstat) == -1)
    {
-   CfOut(cf_inform,"stat","Can't stat new file %s - another agent has picked it up?\n",new);
+   cfPS(cf_inform,CF_FAIL,"stat",pp,attr,"Can't stat new file %s - another agent has picked it up?\n",new);
    return false;
    }
 
 if (S_ISREG(dstat.st_mode) && dstat.st_size != sstat.st_size)
    {
-   CfOut(cf_error,""," !! New file %s seems to have been corrupted in transit (dest %d and src %d), aborting!\n",new, (int) dstat.st_size, (int) sstat.st_size);
+   cfPS(cf_error,CF_FAIL,"",pp,attr," !! New file %s seems to have been corrupted in transit (dest %d and src %d), aborting!\n",new, (int) dstat.st_size, (int) sstat.st_size);
 
    if (backupok)
       {
-      cf_rename(backup,dest); /* ignore failure */
+      cf_rename(backup,dest); /* ignore failure of this call, as there is nothing more we can do */
       }
+   
    return false;
    }
 
@@ -1822,12 +1801,13 @@ if (attr.copy.verify)
 
    if (CompareFileHashes(source,new,&sstat,&dstat,attr,pp))
       {
-      CfOut(cf_verbose,""," !! New file %s seems to have been corrupted in transit, aborting!\n",new);
+      cfPS(cf_verbose,CF_FAIL,"",pp,attr," !! New file %s seems to have been corrupted in transit, aborting!\n",new);
 
       if (backupok)
          {
-         cf_rename(backup,dest); /* ignore failure */
+         cf_rename(backup,dest);
          }
+      
       return false;
       }
    else
@@ -1917,7 +1897,7 @@ else
    
    if (cf_rename(new,dest) == -1)
       {
-      CfOut(cf_error,"cf_rename"," !! Could not install copy file as %s, directory in the way?\n",dest);
+      cfPS(cf_error,CF_FAIL,"cf_rename",pp,attr," !! Could not install copy file as %s, directory in the way?\n",dest);
 
       if (backupok)
          {
@@ -1971,7 +1951,7 @@ return true;
 
 /*********************************************************************/
 
-void FileAutoDefine(char *destfile)
+static void FileAutoDefine(char *destfile)
 
 { char class[CF_MAXVARSIZE];
 
@@ -1984,7 +1964,7 @@ CfOut(cf_inform,"","Auto defining class %s\n",class);
 /* Level 3                                                           */
 /*********************************************************************/
 
-void RegisterAHardLink(int i,char *value,struct Attributes attr,struct Promise *pp)
+static void RegisterAHardLink(int i,char *value,struct Attributes attr,struct Promise *pp)
 
 {
 if (!FixCompressedArrayValue(i,value,&(pp->inode_cache)))

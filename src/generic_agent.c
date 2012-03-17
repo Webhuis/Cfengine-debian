@@ -35,11 +35,29 @@
 
 extern FILE *yyin;
 extern char *CFH[][2];
+
+static void VerifyPromises(enum cfagenttype ag);
+static void SetAuditVersion(void);
+static void CheckWorkingDirectories(void);
+static void Cf3ParseFile(char *filename);
+static void Cf3ParseFiles(void);
+static int MissingInputFile(void);
+static void UnHashVariables(void);
+static void CheckControlPromises(char *scope,char *agent,struct Constraint *controllist);
+static void CheckVariablePromises(char *scope,struct Promise *varlist);
+static void CheckCommonClassPromises(struct Promise *classlist);
+static void PrependAuditFile(char *file);
+static void OpenReports(char *agents);
+static void CloseReports(char *agents);
+static char *InputLocation(char *filename);
 extern void CheckOpts(int argc,char **argv);
+static void Cf3OpenLog(int facility);
+static bool VerifyBundleSequence(enum cfagenttype agent);
 
 /*****************************************************************************/
 
 static void SanitizeEnvironment()
+
 {
  /* ps(1) and other utilities invoked by Cfengine may be affected */
 unsetenv("COLUMNS");
@@ -80,25 +98,33 @@ THIS_AGENT_TYPE = ag;
 // need scope sys to set vars in expiry function
 SetNewScope("sys");
 
-if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY)) 
+if (EnterpriseExpiry())
    {
    CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
    exit(1);
    }
 
-if (!NOHARDCLASSES)
+if (AM_NOVA)
    {
-   NewScope("const");
-   NewScope("match");
-   NewScope("mon");
-   GetNameInfo3();
-   CfGetInterfaceInfo(ag);
-      
-   if (ag != cf_know)
-      {
-      Get3Environment();
-      OSClasses();
-      }
+   CfOut(cf_verbose,""," -> This is CFE Nova\n");
+   }
+
+if (AM_CONSTELLATION)
+   {
+   CfOut(cf_verbose,""," -> This is CFE Constellation\n");
+   }
+
+NewScope("const");
+NewScope("match");
+NewScope("mon");
+GetNameInfo3();
+CfGetInterfaceInfo(ag);
+
+if (ag != cf_know)
+   {
+   Get3Environment();
+   BuiltinClasses();
+   OSClasses();
    }
 
 LoadPersistentContext();
@@ -146,7 +172,7 @@ if (ag != cf_keygen)
       if (NewPromiseProposals())
          {
          check_promises = true;
-         CfOut(cf_verbose, "", " -> Input file is changed since last valiadtion, validating it");
+         CfOut(cf_verbose, "", " -> Input file is changed since last validation, validating it");
          }
 
       if (check_promises)
@@ -164,7 +190,7 @@ if (ag != cf_keygen)
          ok = true;
          }
       }
-   
+
    if (ok)
       {
       ReadPromises(ag,agents);
@@ -175,7 +201,7 @@ if (ag != cf_keygen)
       snprintf(VINPUTFILE,CF_BUFSIZE-1,"failsafe.cf");
       ReadPromises(ag,agents);
       }
-
+   
    if (SHOWREPORTS)
       {
       CompilationReport(VINPUTFILE);
@@ -206,7 +232,7 @@ CloseAllDB();
 
 int CheckPromises(enum cfagenttype ag)
 
-{ char cmd[CF_BUFSIZE];
+{ char cmd[CF_BUFSIZE], cfpromises[CF_MAXVARSIZE];
   char filename[CF_MAXVARSIZE];
   struct stat sb;
   int fd;
@@ -218,9 +244,9 @@ if ((ag != cf_agent) && (ag != cf_executor) && (ag != cf_server))
 
 CfOut(cf_verbose,""," -> Verifying the syntax of the inputs...\n");
 
-snprintf(cmd,CF_BUFSIZE-1,"%s%cbin%ccf-promises%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX);
+snprintf(cfpromises,sizeof(cfpromises),"%s%cbin%ccf-promises%s",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX);
 
-if (cfstat(cmd,&sb) == -1)
+if (cfstat(cfpromises,&sb) == -1)
    {
    CfOut(cf_error,"","cf-promises%s needs to be installed in %s%cbin for pre-validation of full configuration",EXEC_SUFFIX,CFWORKDIR,FILE_SEPARATOR);
    return false;
@@ -228,16 +254,38 @@ if (cfstat(cmd,&sb) == -1)
 
 /* If we are cf-agent, check syntax before attempting to run */
 
+snprintf(cmd, sizeof(cmd), "\"%s\" -f \"", cfpromises);
+
+
 if (IsFileOutsideDefaultRepository(VINPUTFILE))
    {
-   snprintf(cmd,CF_BUFSIZE-1,"\"%s%cbin%ccf-promises%s\" -f \"%s\"",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX,VINPUTFILE);
+   strlcat(cmd, VINPUTFILE, CF_BUFSIZE);
    }
 else
    {
-   snprintf(cmd,CF_BUFSIZE-1,"\"%s%cbin%ccf-promises%s\" -f \"%s%cinputs%c%s\"",CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,EXEC_SUFFIX,CFWORKDIR,FILE_SEPARATOR,FILE_SEPARATOR,VINPUTFILE);
+   strlcat(cmd, CFWORKDIR, CF_BUFSIZE);
+   strlcat(cmd, FILE_SEPARATOR_STR "inputs" FILE_SEPARATOR_STR, CF_BUFSIZE);
+   strlcat(cmd, VINPUTFILE, CF_BUFSIZE);
+   }
+
+strlcat(cmd, "\"", CF_BUFSIZE);
+
+if (CBUNDLESEQUENCE)
+   {
+   strlcat(cmd, " -b \"", CF_BUFSIZE);
+   strlcat(cmd, CBUNDLESEQUENCE_STR, CF_BUFSIZE);
+   strlcat(cmd, "\"", CF_BUFSIZE);
+   }
+
+if(BOOTSTRAP)
+   {
+   // avoids license complains from commercial cf-promises during bootstrap - see Nova_CheckLicensePromise
+   strlcat(cmd, " -D bootstrap_mode", CF_BUFSIZE);
    }
 
 /* Check if reloading policy will succeed */
+
+CfOut(cf_verbose, "", "Checking policy with command \"%s\"", cmd);
 
 if (ShellCommandReturnsZero(cmd,true))
    {
@@ -337,13 +385,13 @@ CloseReports(agents);
 
 /*****************************************************************************/
 
-void Cf3OpenLog()
+void Cf3OpenLog(int facility)
 
 {
 #ifdef MINGW
-NovaWin_OpenLog();
+NovaWin_OpenLog(facility);
 #else
-openlog(VPREFIX,LOG_PID|LOG_NOWAIT|LOG_ODELAY,FACILITY);
+openlog(VPREFIX,LOG_PID|LOG_NOWAIT|LOG_ODELAY,facility);
 #endif
 }
 
@@ -357,28 +405,6 @@ NovaWin_CloseLog();
 #else
 closelog();
 #endif
-}
-
-/*****************************************************************************/
-
-void PromiseManagement(char *agent)
-
-{ enum cfagenttype ag = Agent2Type(agent);
-
-switch (ag)
-   {
-   case cf_common:
-       break;
-
-   case cf_agent:
-       break;
-
-   case cf_server:
-       break;
-
-   case cf_monitor:
-       break;
-   }
 }
 
 /*******************************************************************/
@@ -397,25 +423,11 @@ void InitializeGA(int argc,char *argv[])
 SHORT_CFENGINEPORT =  htons((unsigned short)5308);
 snprintf(STR_CFENGINEPORT,15,"5308");
 
-#ifdef NT
-if (cfstat("/cygdrive",&statbuf) == 0)
-   {
-   FILE_SEPARATOR = '/';
-   strcpy(FILE_SEPARATOR_STR,"/");
-   }
-else
-   {
-   FILE_SEPARATOR = '\\';
-   strcpy(FILE_SEPARATOR_STR,"\\");
-   }
-#else
-FILE_SEPARATOR = '/';
-strcpy(FILE_SEPARATOR_STR,"/");
-#endif
-
 NewClass("any");
 
-#ifdef HAVE_NOVA
+#if defined HAVE_CONSTELLATION
+NewClass("constellation_edition");
+#elif defined HAVE_NOVA
 NewClass("nova_edition");
 #else
 NewClass("community_edition");
@@ -483,7 +495,7 @@ _fmode = _O_BINARY;
 strcpy(SYSLOGHOST,"localhost");
 SYSLOGPORT = htons(514);
 
-Cf3OpenLog();
+Cf3OpenLog(LOG_USER);
 
 if (!LOOKUP) /* cf-know should not do this in lookup mode */
    {
@@ -591,12 +603,10 @@ if (BOOTSTRAP)
 
    if (!IsEnterprise() && cfstat(vbuff,&statbuf) == -1)
       {
-      CfOut(cf_inform,"","Didn't find established file %s, so looking for one in current directory\n",vbuff);
       snprintf(VINPUTFILE,CF_BUFSIZE-1,".%cfailsafe.cf",FILE_SEPARATOR);
       }
    else
       {
-      CfOut(cf_inform,"","Found an established failsafe file %s, so using it.\n",vbuff);
       strncpy(VINPUTFILE,vbuff,CF_BUFSIZE-1);
       }
    }
@@ -604,16 +614,13 @@ if (BOOTSTRAP)
 
 /*******************************************************************/
 
-void Cf3ParseFiles()
+static void Cf3ParseFiles()
 
 { struct Rlist *rp,*sl;
 
 PARSING = true;
 
-if ((PROMISETIME = time((time_t *)NULL)) == -1)
-   {
-   printf("Couldn't read system clock\n");
-   }
+PROMISETIME = time(NULL);
 
 Cf3ParseFile(VINPUTFILE);
 
@@ -632,7 +639,14 @@ if (VINPUTLIST != NULL)
          }
       else
          {
-         struct Rval returnval = EvaluateFinalRval("sys",rp->item,rp->type,true,NULL);
+         struct Rval returnval;
+
+         if (strcmp(rp->item,CF_NULL_VALUE) == 0)
+            {
+            continue;
+            }
+
+         returnval = EvaluateFinalRval("sys",rp->item,rp->type,true,NULL);
 
          switch (returnval.rtype)
             {
@@ -663,7 +677,7 @@ PARSING = false;
 
 /*******************************************************************/
 
-int MissingInputFile()
+static int MissingInputFile()
 
 { struct stat sb;
 
@@ -703,6 +717,22 @@ if (stat(filename,&sb) != -1)
 else
    {
    PROMISETIME = 0;
+   }
+
+
+// sanity check
+
+if(PROMISETIME > time(NULL))
+   {
+   CfOut(cf_inform, "", "!! Clock seems to have jumped back in time - mtime of %s is newer than current time - touching it", filename);
+   
+   if(utime(filename,NULL) == -1)
+      {
+      CfOut(cf_error, "utime", "!! Could not touch %s", filename);
+      }
+
+   PROMISETIME = 0;
+   return true;
    }
 
 if (cfstat(InputLocation(VINPUTFILE),&sb) == -1)
@@ -791,12 +821,21 @@ if (VINPUTLIST != NULL)
       }
    }
 
+// did policy server change (used in $(sys.policy_hub))?
+snprintf(filename,CF_MAXVARSIZE,"%s/policy_server.dat",CFWORKDIR);
+MapName(filename);
+
+if ((cfstat(filename,&sb) != -1) && (sb.st_mtime > PROMISETIME))
+   {
+   result = true;
+   }
+
 return result | ALWAYS_VALIDATE;
 }
 
 /*******************************************************************/
 
-void OpenReports(char *agents)
+static void OpenReports(char *agents)
 
 { char name[CF_BUFSIZE];
 
@@ -865,7 +904,7 @@ fprintf(FKNOW,"}\n\nbundle knowledge CfengineSiteConfiguration\n{\n");
 
 /*******************************************************************/
 
-void CloseReports(char *agents)
+static void CloseReports(char *agents)
 
 { char name[CF_BUFSIZE];
 
@@ -893,7 +932,7 @@ chmod(name,0644);
 /* Level                                                           */
 /*******************************************************************/
 
-void Cf3ParseFile(char *filename)
+static void Cf3ParseFile(char *filename)
 
 {
   struct stat statbuf;
@@ -985,52 +1024,57 @@ return NULL;
 
 /*******************************************************************/
 
-void SetFacility(char *retval)
-
+static int ParseFacility(const char *name)
 {
-if (strcmp(retval,"LOG_USER") == 0)
+if (strcmp(name,"LOG_USER") == 0)
    {
-   FACILITY = LOG_USER;
+   return LOG_USER;
    }
-else if (strcmp(retval,"LOG_DAEMON") == 0)
+if (strcmp(name,"LOG_DAEMON") == 0)
    {
-   FACILITY = LOG_DAEMON;
+   return LOG_DAEMON;
    }
-else if (strcmp(retval,"LOG_LOCAL0") == 0)
+if (strcmp(name,"LOG_LOCAL0") == 0)
    {
-   FACILITY = LOG_LOCAL0;
+   return LOG_LOCAL0;
    }
-else if (strcmp(retval,"LOG_LOCAL1") == 0)
+if (strcmp(name,"LOG_LOCAL1") == 0)
    {
-   FACILITY = LOG_LOCAL1;
+   return LOG_LOCAL1;
    }
-else if (strcmp(retval,"LOG_LOCAL2") == 0)
+if (strcmp(name,"LOG_LOCAL2") == 0)
    {
-   FACILITY = LOG_LOCAL2;
+   return LOG_LOCAL2;
    }
-else if (strcmp(retval,"LOG_LOCAL3") == 0)
+if (strcmp(name,"LOG_LOCAL3") == 0)
    {
-   FACILITY = LOG_LOCAL3;
+   return LOG_LOCAL3;
    }
-else if (strcmp(retval,"LOG_LOCAL4") == 0)
+if (strcmp(name,"LOG_LOCAL4") == 0)
    {
-   FACILITY = LOG_LOCAL4;
+   return LOG_LOCAL4;
    }
-else if (strcmp(retval,"LOG_LOCAL5") == 0)
+if (strcmp(name,"LOG_LOCAL5") == 0)
    {
-   FACILITY = LOG_LOCAL5;
+   return LOG_LOCAL5;
    }
-else if (strcmp(retval,"LOG_LOCAL6") == 0)
+if (strcmp(name,"LOG_LOCAL6") == 0)
    {
-   FACILITY = LOG_LOCAL6;
+   return LOG_LOCAL6;
    }
-else if (strcmp(retval,"LOG_LOCAL7") == 0)
+if (strcmp(name,"LOG_LOCAL7") == 0)
    {
-   FACILITY = LOG_LOCAL7;
+   return LOG_LOCAL7;
    }
+return -1;
+}
+
+void SetFacility(const char *retval)
+{
+CfOut(cf_verbose, "", "SET Syslog FACILITY = %s\n", retval);
 
 Cf3CloseLog();
-Cf3OpenLog();
+Cf3OpenLog(ParseFacility(retval));
 }
 
 /**************************************************************/
@@ -1194,7 +1238,7 @@ CfOut(cf_verbose,"","\n");
 
 /*********************************************************************/
 
-void CheckWorkingDirectories()
+static void CheckWorkingDirectories()
     
 /* NOTE: We do not care about permissions (ACLs) in windows */
 
@@ -1212,7 +1256,6 @@ if (uname(&VSYSNAME) == -1)
 else
    {
    snprintf(LOGFILE,CF_BUFSIZE,"%s%ccfagent.%s.log",CFWORKDIR,FILE_SEPARATOR,VSYSNAME.nodename);
-   VSETUIDLOG = strdup(LOGFILE);
    }
 
 
@@ -1319,7 +1362,7 @@ else
 /* Level 2                                                         */
 /*******************************************************************/
 
-char *InputLocation(char *filename)
+static char *InputLocation(char *filename)
 
 { static char wfilename[CF_BUFSIZE], path[CF_BUFSIZE];
 
@@ -1394,7 +1437,7 @@ if ((FREPORT_HTML = fopen(filename,"w")) == NULL)
 
 /*******************************************************************/
 
-void VerifyPromises(enum cfagenttype agent)
+static void VerifyPromises(enum cfagenttype agent)
 
 { struct Bundle *bp;
   struct SubType *sp;
@@ -1404,7 +1447,6 @@ void VerifyPromises(enum cfagenttype agent)
   struct FnCall *fp;
   char *scope;
 
-Debug("\n\nVerifyPromises()\n");
 
 if (REQUIRE_COMMENTS == CF_UNDEFINED)
    {
@@ -1482,7 +1524,11 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
       if (strcmp(sp->name,"classes") == 0)
          {
          /* these should not be evaluated here */
-         continue;
+
+	 if (agent != cf_common)
+	    {
+	    continue;
+	    }
          }
 
       for (pp = sp->promiselist; pp != NULL; pp=pp->next)
@@ -1497,7 +1543,7 @@ HashControls();
 
 /* Now look once through the sequences bundles themselves */
 
-if (BadBundleSequence(agent))
+if (VerifyBundleSequence(agent) == false)
    {
    FatalError("Errors in promise bundles");
    }
@@ -1505,7 +1551,7 @@ if (BadBundleSequence(agent))
 
 /********************************************************************/
 
-void PrependAuditFile(char *file)
+static void PrependAuditFile(char *file)
 
 { struct stat statbuf;
 
@@ -1535,7 +1581,7 @@ VAUDIT = AUDITPTR;
 /* Level 3                                                         */
 /*******************************************************************/
 
-void CheckVariablePromises(char *scope,struct Promise *varlist)
+static void CheckVariablePromises(char *scope,struct Promise *varlist)
 
 { struct Promise *pp;
   int allow_redefine = false;
@@ -1550,7 +1596,7 @@ for (pp = varlist; pp != NULL; pp=pp->next)
 
 /*******************************************************************/
 
-void CheckCommonClassPromises(struct Promise *classlist)
+static void CheckCommonClassPromises(struct Promise *classlist)
 
 { struct Promise *pp;
 
@@ -1564,12 +1610,15 @@ for (pp = classlist; pp != NULL; pp=pp->next)
 
 /*******************************************************************/
 
-void CheckControlPromises(char *scope,char *agent,struct Constraint *controllist)
+static void CheckControlPromises(char *scope,char *agent,struct Constraint *controllist)
 
 { struct Constraint *cp;
   struct BodySyntax *bp = NULL;
+  struct Rlist *rp;
   int i = 0;
   struct Rval returnval;
+  char rettype;
+  void *retval;
 
 Debug("CheckControlPromises(%s)\n",agent);
 
@@ -1641,13 +1690,37 @@ for (cp = controllist; cp != NULL; cp=cp->next)
       IGNORE_MISSING_BUNDLES = GetBoolean(cp->rval);
       }
 
+   if (strcmp(cp->lval,CFG_CONTROLBODY[cfg_goalpatterns].lval) == 0)
+      {
+      GOALS = NULL;
+      for (rp = (struct Rlist *)returnval.item; rp != NULL; rp=rp->next)
+         {
+         PrependRScalar(&GOALS,rp->item,CF_SCALAR);
+         }
+      CfOut(cf_verbose,"","SET goal_patterns list\n");
+      continue;
+      }
+
+   if (strcmp(cp->lval,CFG_CONTROLBODY[cfg_goalcategories].lval) == 0)
+      {
+      GOALCATEGORIES = NULL;
+      for (rp = (struct Rlist *)returnval.item; rp != NULL; rp=rp->next)
+         {
+         PrependRScalar(&GOALCATEGORIES,rp->item,CF_SCALAR);
+         }
+
+      CfOut(cf_verbose,"","SET goal_categories list\n");
+      continue;
+      }
+
+   
    DeleteRvalItem(returnval.item,returnval.rtype);
    }
 }
 
 /*******************************************************************/
 
-void SetAuditVersion()
+static void SetAuditVersion()
 
 { void *rval;
   char rtype = 'x';
@@ -1672,7 +1745,7 @@ switch (GetVariable("control_common","cfinputs_version",&rval,&rtype))
 
 /*******************************************************************/
 
-void Syntax(char *component,struct option options[],char *hints[],char *id)
+void Syntax(const char *component, const struct option options[], const char *hints[], const char *id)
 
 { int i;
 
@@ -1695,14 +1768,14 @@ for (i=0; options[i].name != NULL; i++)
 
 printf("\nBug reports: http://bug.cfengine.com, ");
 printf("Community help: http://forum.cfengine.com\n");
-printf("Community info: http://www.cfengine.org, ");
+printf("Community info: http://www.cfengine.com/pages/community, ");
 printf("Support services: http://www.cfengine.com\n\n");
-printf("This software is Copyright (C) 2008,2010-present Cfengine AS.\n");
+printf("This software is Copyright (C) 2008,2010-present CFEngine AS.\n");
 }
 
 /*******************************************************************/
 
-void ManPage(char *component,struct option options[],char *hints[],char *id)
+void ManPage(const char *component, const struct option options[], const char *hints[], const char *id)
 
 { int i;
 
@@ -1737,23 +1810,86 @@ for (i=0; options[i].name != NULL; i++)
    }
 
 printf(".SH AUTHOR\n"
-       "Mark Burgess and Cfengine AS\n"
+       "Mark Burgess and CFEngine AS\n"
        ".SH INFORMATION\n");
 
 printf("\nBug reports: http://bug.cfengine.com, ");
 printf(".pp\nCommunity help: http://forum.cfengine.com\n");
-printf(".pp\nCommunity info: http://www.cfengine.org\n");
+printf(".pp\nCommunity info: http://www.cfengine.com/pages/community\n");
 printf(".pp\nSupport services: http://www.cfengine.com\n");
-printf(".pp\nThis software is Copyright (C) 2008- Cfengine AS.\n");
+printf(".pp\nThis software is Copyright (C) 2008-%d CFEngine AS.\n", BUILD_YEAR);
 }
 
 /*******************************************************************/
 
-void Version(char *component)
+static const char *banner_lines[] = {
+"   @@@      ",
+"   @@@      ",
+"            ",
+" @ @@@ @    ",
+" @ @@@ @    ",
+" @ @@@ @    ",
+" @     @    ",
+"   @@@      ",
+"   @ @      ",
+"   @ @      ",
+"   @ @      ",
+NULL
+};
 
+static void AgentBanner(const char **text)
 {
-printf("This comprises %s core community version %s - Copyright %s%s\n",component,VERSION,CF3COPYRIGHT,VYEAR);
-EnterpriseVersion();
+const char **b = banner_lines;
+
+while (*b)
+   {
+   printf("%s%s\n", *b, *text ? *text : "");
+   b++;
+   if (*text)
+      {
+      text++;
+      }
+   }
+}
+
+/*******************************************************************/
+
+void PrintVersionBanner(const char *component)
+{
+const char *text[] =
+   {
+   "",
+   component,
+   "",
+   NameVersion(),
+#ifdef HAVE_NOVA
+   Nova_NameVersion(),
+#endif
+#ifdef HAVE_CONSTELLATION
+   Constellation_NameVersion(),
+#endif
+   NULL
+   };
+
+printf("\n");
+AgentBanner(text);
+printf("\n");
+printf("Copyright (C) CFEngine AS 2008-%d\n", BUILD_YEAR);
+printf("See Licensing at http://cfengine.com/3rdpartylicenses\n");
+}
+
+/*******************************************************************/
+
+const char *Version(void)
+{
+return VERSION;
+}
+
+/*******************************************************************/
+
+const char *NameVersion(void)
+{
+return "CFEngine Core " VERSION;
 }
 
 /********************************************************************/
@@ -1840,7 +1976,7 @@ for (bdp = BODIES; bdp != NULL; bdp = bdp->next) /* get schedule */
 
 /*******************************************************************/
 
-void UnHashVariables()
+static void UnHashVariables()
 
 { struct Bundle *bp;
 
@@ -1852,7 +1988,7 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
 
 /********************************************************************/
 
-int BadBundleSequence(enum cfagenttype agent)
+static bool VerifyBundleSequence(enum cfagenttype agent)
 
 { struct Rlist *rp,*params;
   char rettype,*name;
@@ -1864,26 +2000,18 @@ if ((THIS_AGENT_TYPE != cf_agent) &&
     (THIS_AGENT_TYPE != cf_know) && 
     (THIS_AGENT_TYPE != cf_common))
    {
-   return false;
+   return true;
    }
 
 if (CBUNDLESEQUENCE)
    {
-   return false;
+   return true;
    }
 
 if (GetVariable("control_common","bundlesequence",&retval,&rettype) == cf_notype)
    {
    CfOut(cf_error,""," !!! No bundlesequence in the common control body");
-
-   if (agent == cf_common)
-      {
-      return false;
-      }
-   else
-      {
-      return true;
-      }
+   return false;
    }
 
 if (rettype != CF_LIST)
@@ -1891,56 +2019,49 @@ if (rettype != CF_LIST)
    FatalError("Promised bundlesequence was not a list");
    }
 
-if ((agent == cf_agent) || (agent == cf_common))
+if ((agent != cf_agent) && (agent != cf_common))
    {
-   for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
+   return true;
+   }
+
+for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
+   {
+   switch (rp->type)
       {
-      switch (rp->type)
-         {
-         case CF_SCALAR:
-             name = (char *)rp->item;
-             params = NULL;
-             break;
+      case CF_SCALAR:
+         name = (char *)rp->item;
+         params = NULL;
+         break;
 
-         case CF_FNCALL:
-             fp = (struct FnCall *)rp->item;
-             name = (char *)fp->name;
-             params = (struct Rlist *)fp->args;
-             break;
+      case CF_FNCALL:
+         fp = (struct FnCall *)rp->item;
+         name = (char *)fp->name;
+         params = (struct Rlist *)fp->args;
+         break;
 
-         default:
-             name = NULL;
-             params = NULL;
-             CfOut(cf_error,"","Illegal item found in bundlesequence: ");
-             ShowRval(stdout,rp->item,rp->type);
-             printf(" = %c\n",rp->type);
-             ok = false;
-             break;
-         }
-
-      if (strcmp(name,CF_NULL_VALUE) == 0)
-         {
-         continue;
-         }             
-
-      if (!IGNORE_MISSING_BUNDLES && !GetBundle(name,NULL))
-         {
-         CfOut(cf_error,"","Bundle \"%s\" listed in the bundlesequence is not a defined bundle\n",name);
+      default:
+         name = NULL;
+         params = NULL;
+         CfOut(cf_error,"","Illegal item found in bundlesequence: ");
+         ShowRval(stdout,rp->item,rp->type);
+         printf(" = %c\n",rp->type);
          ok = false;
-         }
+         break;
       }
 
-   if (!ok)
+   if (strcmp(name,CF_NULL_VALUE) == 0)
       {
-      return true;
+      continue;
       }
-   else
+
+   if (!IGNORE_MISSING_BUNDLES && !GetBundle(name,NULL))
       {
-      return false;
+      CfOut(cf_error,"","Bundle \"%s\" listed in the bundlesequence is not a defined bundle\n",name);
+      ok = false;
       }
    }
 
-return false;
+return ok;
 }
 
 /*******************************************************************/

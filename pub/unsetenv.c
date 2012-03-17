@@ -23,11 +23,19 @@
 
 */
 
+#ifdef HAVE_CONFIG_H
+#include "../src/conf.h"
+#endif
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
 #include <stddef.h>
+
+#if !HAVE_DECL_UNSETENV
+int unsetenv(const char *name);
+#endif
 
 /* Under MinGW putenv('var=') will remove variable from environment */
 
@@ -60,9 +68,12 @@ return retval;
 
 #endif
 
-/* Under Solaris8/9 we need to manually update 'environ' variable */
+/*
+ * Under SVR4 (Solaris 8/9, HP-UX 11.11) we need to manually update 'environ'
+ * variable
+ */
 
-#ifdef __sun
+#if defined(__sun) || defined (__hpux)
 
 /*
  * Note: this function will leak memory as we don't know how to free data

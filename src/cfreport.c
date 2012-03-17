@@ -69,7 +69,6 @@ extern struct BodySyntax CFRE_CONTROLBODY[];
 
 extern struct BodySyntax CFRP_CONTROLBODY[];
 
-int CSV = false;
 int HTML = false;
 int GRAPH = false;
 int TITLES = false;
@@ -88,9 +87,16 @@ double AGE;
 static struct Averages MAX,MIN;
 
 char OUTPUTDIR[CF_BUFSIZE],*sp;
-char REMOVEHOSTS[CF_BUFSIZE];
+char REMOVEHOSTS[CF_BUFSIZE] = {0};
 char NOVA_EXPORT_TYPE[CF_MAXVARSIZE] = {0};
 char NOVA_IMPORT_FILE[CF_MAXVARSIZE] = {0};
+
+int HUBQUERY = false;
+char PROMISEHANDLE[CF_MAXVARSIZE] = {0};
+char HOSTKEY[CF_MAXVARSIZE] = {0};
+char CLASSREGEX[CF_MAXVARSIZE] = {0};
+char LSDATA[CF_MAXVARSIZE] = {0};
+char NAME[CF_MAXVARSIZE] = {0};
 
 FILE *FPAV=NULL,*FPVAR=NULL, *FPNOW=NULL;
 FILE *FPE[CF_OBSERVABLES],*FPQ[CF_OBSERVABLES];
@@ -103,66 +109,78 @@ struct Rlist *CSVLIST = NULL;
 /* Command line options                                            */
 /*******************************************************************/
 
- char *ID = "The reporting agent is a merger between the older\n"
-            "cfengine programs cfshow and cfenvgraph. It outputs\n"
-            "data stored in cfengine's embedded databases in human\n"
-            "readable form.";
+const char *ID = "The reporting agent is a merger between the older\n"
+                 "cfengine programs cfshow and cfenvgraph. It outputs\n"
+                 "data stored in cfengine's embedded databases in human\n"
+                 "readable form.";
 
- struct option OPTIONS[25] =
+const struct option OPTIONS[32] =
       {
       { "help",no_argument,0,'h' },
+      { "class-regex",required_argument,0,'c'},
+      { "csv",no_argument,0,'C'},
       { "debug",optional_argument,0,'d' },
       { "verbose",no_argument,0,'v' },
       { "inform",no_argument,0,'I' },
       { "version",no_argument,0,'V' },
       { "no-lock",no_argument,0,'K'},
       { "file",required_argument,0,'f' },
+      { "hostkey",required_argument,0,'k'},
       { "html",no_argument,0,'H'},
       { "xml",no_argument,0,'X'},
       { "version",no_argument,0,'V'},
       { "purge",no_argument,0,'P'},
       { "erasehistory",required_argument,0,'E' },
+      { "nova-export",required_argument,0,'x'},
+      { "nova-import",required_argument,0,'i'},
       { "outputdir",required_argument,0,'o' },
+      { "promise-handle",required_argument,0,'p'},
+      { "query-hub",optional_argument,0,'q'},
       { "titles",no_argument,0,'t'},
       { "timestamps",no_argument,0,'T'},
       { "resolution",no_argument,0,'R'},
+      { "show",required_argument,0,'1'},      
       { "syntax",no_argument,0,'S'},
       { "syntax-export",no_argument,0,'s'},
       { "no-error-bars",no_argument,0,'e'},
       { "no-scaling",no_argument,0,'n'},
       { "verbose",no_argument,0,'v'},
       { "remove-hosts",required_argument,0,'r'},
-      { "nova-export",required_argument,0,'x'},
-      { "nova-import",required_argument,0,'i'},
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[25] =
+const char *HINTS[32] =
       {
       "Print the help message",
+      "Specify a class regular expression to search for",
+      "Enable CSV output mode in hub queries",
       "Set debugging level 0,1,2,3",
       "Output verbose information about the behaviour of the agent",
       "Output information about actions performed by the agent",
       "Output the version of the software",
       "Ignore ifelapsed locks",
       "Specify an alternative input file than the default",
+      "Specify a hostkey to lookup",
       "Print output in HTML",
       "Print output in XML",
       "Print version string for software",
       "Purge data about peers not seen beyond the threshold horizon for assumed-dead",
       "Erase historical data from the cf-monitord monitoring database",
+      "Export Nova reports to file - delta or full report",
+      "Import Nova reports from file - specify the path (only on Nova policy hub)",
       "Set output directory for printing graph data",
+      "Specify a promise-handle to look up",
+      "Query hub database interactively with optional regex search string",
       "Add title data to generated graph files",
       "Add a time stamp to directory name for graph file data",
       "Print graph data in high resolution",
+      "Show data matching named criteria (software,variables,classes)",
       "Print a syntax summary for this cfengine version",
       "Export a syntax tree in Javascript format",
       "Do not add error bars to the printed graphs",
       "Do not automatically scale the axes",
       "Generate verbose output",
-      "Remove comma separated list of IP address entries from the hosts-seen database",
-      "Export Nova reports to file - delta or full report",
-      "Import Nova reports from file - specify the path (only on Nova policy hub)",
+      "Remove comma separated list of key hash entries from the hosts-seen database",
       NULL
       };
 
@@ -256,6 +274,7 @@ GenericInitialize(argc,argv,"reporter");
 ThisAgentInit();
 KeepReportsControlPromises();
 KeepReportsPromises();
+GenericDeInitialize();
 return 0;
 }
 
@@ -271,7 +290,7 @@ void CheckOpts(int argc,char **argv)
   int optindex = 0;
   int c;
 
-while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:x:i:",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"Cghd:vVf:st:ar:PXHLMIRSKE:x:i:q:1:p:k:c:",OPTIONS,&optindex)) != EOF)
    {
    switch ((char) c)
       {
@@ -320,7 +339,7 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:x:i:",OPTIONS,&optindex
           break;
 
       case 'V':
-          Version("cf-report");
+          PrintVersionBanner("cf-report");
           exit(0);
 
       case 'h':
@@ -350,7 +369,11 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:x:i:",OPTIONS,&optindex
          break;
 
       case 'r':
-          strncpy(REMOVEHOSTS,optarg,CF_BUFSIZE-1);
+          if(snprintf(REMOVEHOSTS, sizeof(REMOVEHOSTS), "%s", optarg) >= sizeof(REMOVEHOSTS))
+             {
+             CfOut(cf_error, "", "List of hosts to remove is too long");
+             exit(1);
+             }
           break;         
 
       case 'e': ERRORBARS = false;
@@ -370,12 +393,15 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:x:i:",OPTIONS,&optindex
           HTML = true;
           break;
 
+      case 'C':
+          CSV = true;
+          break;
+          
       case 'P':
           PURGE = 'y';
           break;
 
-      case 'x':
-          
+      case 'x':          
           if((String2Menu(optarg) != cfd_menu_delta) &&
              (String2Menu(optarg) != cfd_menu_full))
              {
@@ -384,13 +410,33 @@ while ((c=getopt_long(argc,argv,"ghd:vVf:st:ar:PXHLMISKE:x:i:",OPTIONS,&optindex
              }
           
           snprintf(NOVA_EXPORT_TYPE, sizeof(NOVA_EXPORT_TYPE), "%s", optarg);
-
           break;
 
-      case 'i':
-          
+      case 'i':          
           snprintf(NOVA_IMPORT_FILE, sizeof(NOVA_IMPORT_FILE), "%s", optarg);
           break;
+
+      /* Some options for querying hub data - only on commercial hubs */
+
+      case 'q':
+          HUBQUERY = true;
+          if (optarg)
+             {
+             strcpy(NAME,optarg);
+             }
+          break;
+      case '1':
+          strcpy(LSDATA,optarg);
+          break;
+      case 'p':
+          strcpy(PROMISEHANDLE,optarg);
+          break;
+      case 'k':
+          strcpy(HOSTKEY,optarg);
+          break;
+      case 'c':
+          strcpy(CLASSREGEX,optarg);
+          break;          
 
       default: Syntax("cf-report - cfengine's reporting agent",OPTIONS,HINTS,ID);
           exit(1);
@@ -438,24 +484,77 @@ strcpy(STYLESHEET,"");
 strcpy(WEBDRIVER,"#");
 strcpy(BANNER,"");
 strcpy(FOOTER,"");
-strcpy(AGGREGATION,"");
 snprintf(VINPUTFILE,CF_MAXVARSIZE,"%s/state/%s",CFWORKDIR,CF_AVDB_FILE);
 MapName(VINPUTFILE);
 
-InitMeasurements();
-RemoveHostSeen(REMOVEHOSTS);
-
-#ifdef HAVE_NOVA
-if(!EMPTY(NOVA_EXPORT_TYPE))
+if (!EMPTY(REMOVEHOSTS))
    {
-   Nova_ExportReports(NOVA_EXPORT_TYPE);
+   RemoveHostSeen(REMOVEHOSTS);
+   GenericDeInitialize();
+   exit(0);
    }
 
-if(!EMPTY(NOVA_IMPORT_FILE))
+#ifdef HAVE_NOVA
+if (HUBQUERY)
    {
-   if(IsDefinedClass("am_policy_hub"))
+   int count = 0;
+
+   if (strlen(PROMISEHANDLE) > 0)
       {
-      Nova_ImportHostReports(NOVA_IMPORT_FILE);
+      count++;
+      }
+
+   if (strlen(HOSTKEY) > 0)
+      {
+      count++;
+      }
+
+   if (strlen(CLASSREGEX) > 0)
+      {
+      count++;
+      }
+
+   if (count > 1)
+      {
+      CfOut(cf_error,""," !! You can only specify one of the following at a time: --promise");
+      FatalError("Aborted");
+      }
+
+   Nova_CommandAPI(LSDATA,NAME,PROMISEHANDLE,HOSTKEY,CLASSREGEX);
+   exit(0);
+   }
+
+#endif
+
+#ifdef HAVE_NOVA
+if (!EMPTY(NOVA_EXPORT_TYPE))
+   {
+   if(Nova_ExportReports(NOVA_EXPORT_TYPE))
+      {
+      GenericDeInitialize();
+      exit(0);
+      }
+   else
+      {
+      GenericDeInitialize();
+      exit(1);
+      }
+   }
+
+if (!EMPTY(NOVA_IMPORT_FILE))
+   {
+   if (IsDefinedClass("am_policy_hub"))
+      {
+      if(Nova_ImportHostReports(NOVA_IMPORT_FILE))
+         {
+         GenericDeInitialize();
+         exit(0);
+         }
+      else
+         {
+         GenericDeInitialize();
+         exit(1);
+         }
       }
    else
       {
@@ -543,7 +642,7 @@ for (cp = ControlBodyConstraints(cf_report); cp != NULL; cp=cp->next)
 
    if (strcmp(cp->lval,CFRE_CONTROLBODY[cfre_aggregation_point].lval) == 0)
       {
-      strncpy(AGGREGATION,retval,CF_MAXVARSIZE);
+      /* Ignore for backward compatibility */
       continue;
       }
 
@@ -788,25 +887,33 @@ GrandSummary();
 void RemoveHostSeen(char *hosts)
 
 { CF_DB *dbp;
-  char name[CF_BUFSIZE];
+  char name[CF_MAXVARSIZE];
   struct Item *ip,*list = SplitStringAsItemList(hosts,',');
 
-snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
+snprintf(name,sizeof(name),"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
 MapName(name);
 
 if (!OpenDB(name,&dbp))
    {
+   CfOut(cf_error, "", "!! Could not open hosts-seen database for removal of hosts");
    return;
    }
 
 for (ip = list; ip != NULL; ip=ip->next)
    {
-   snprintf(name,CF_MAXVARSIZE,"+%s",ip->name);
-   DeleteDB(dbp,name);
+   snprintf(name,sizeof(name),"+%s",ip->name);
    CfOut(cf_inform,""," -> Deleting requested host-seen entry for %s\n",name);
-   snprintf(name,CF_MAXVARSIZE,"-%s",ip->name);
-   DeleteDB(dbp,name);
+   if(!DeleteDB(dbp,name))
+      {
+      CfOut(cf_inform, "", " !! Entry %s not found - skipping", name);
+      }
+
+   snprintf(name,sizeof(name),"-%s",ip->name);
    CfOut(cf_inform,""," -> Deleting requested host-seen entry for %s\n",name);
+   if(!DeleteDB(dbp,name))
+      {
+      CfOut(cf_inform, "", " !! Entry %s not found - skipping", name);
+      }
    }
 
 CloseDB(dbp);
@@ -824,7 +931,7 @@ void ShowLastSeen()
   FILE *fout;
   time_t tid = time(NULL);
   double now = (double)tid,average = 0, var = 0;
-  double ticksperhr = (double)CF_TICKS_PER_HOUR;
+  double ticksperhr = (double)SECONDS_PER_HOUR;
   char name[CF_BUFSIZE],hostname[CF_BUFSIZE],address[CF_MAXVARSIZE];
   struct CfKeyHostSeen entry;
   int ksize,vsize;
@@ -878,6 +985,7 @@ else if (XML)
 if (!NewDBCursor(dbp,&dbcp))
    {
    CfOut(cf_inform,""," !! Unable to scan last-seen database");
+   CloseDB(dbp);
    return;
    }
 
@@ -2324,7 +2432,7 @@ OpenMagnifyFiles();
 its = 1; /* detailed view */
 
 now = time(NULL);
-here_and_now = now - (time_t)(4 * CF_TICKS_PER_HOUR);
+here_and_now = now - (time_t)(4 * SECONDS_PER_HOUR);
 
 while (here_and_now < now)
    {
@@ -2489,15 +2597,15 @@ for (i = 0; i < CF_OBSERVABLES; i++)
 
 void DiskArrivals(void)
 
-{ DIR *dirh;
+{ CFDIR *dirh;
   FILE *fp;
-  struct dirent *dirp;
   int count = 0, index = 0, i;
   char filename[CF_BUFSIZE],database[CF_BUFSIZE],timekey[CF_MAXVARSIZE];
   double val, maxval = 1.0, *array, grain = 0.0;
   time_t now;
   void *value;
   CF_DB *dbp = NULL;
+  const struct dirent *dirp;
 
 if ((array = (double *)malloc((int)CF_WEEK)) == NULL)
    {
@@ -2505,15 +2613,16 @@ if ((array = (double *)malloc((int)CF_WEEK)) == NULL)
    return;
    }
 
-if ((dirh = opendir(CFWORKDIR)) == NULL)
+if ((dirh = OpenDirLocal(CFWORKDIR)) == NULL)
    {
    CfOut(cf_error,"opendir","Can't open directory %s\n",CFWORKDIR);
+   free(array);
    return;
    }
 
 CfOut(cf_verbose,"","\n\nLooking for filesystem arrival process data in %s\n",CFWORKDIR);
 
-for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
    {
    if (strncmp(dirp->d_name,"scan:",5) == 0)
       {
@@ -2577,8 +2686,9 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
 
       if ((fp = fopen(filename,"w")) == NULL)
          {
-         CfOut(cf_verbose,"","Unable to open %s for writing\n",filename);
-         perror("fopen");
+         CfOut(cf_verbose,"fopen","Unable to open %s for writing\n",filename);
+         CloseDir(dirh);
+         free(array);
          return;
          }
 
@@ -2602,7 +2712,13 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
       }
    }
 
-closedir(dirh);
+if (errno != 0)
+   {
+   CfOut(cf_error, "ReadDir", "Unable to traverse workdir");
+   }
+
+CloseDir(dirh);
+free(array);
 }
 
 /***************************************************************/

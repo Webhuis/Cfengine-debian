@@ -162,9 +162,11 @@ void ShowPromises(struct Bundle *bundles,struct Body *bodies)
 #if defined(HAVE_NOVA)
 Nova_StoreUnExpandedPromises(bundles,bodies);
 #else
-ShowPromisesInReport(bundles, bodies);
+ShowPromisesInReport(bundles,bodies);
 #endif
 }
+
+/*******************************************************************/
 
 void ShowPromisesInReport(struct Bundle *bundles, struct Body *bodies)
 {
@@ -282,6 +284,8 @@ Nova_ShowPromise(v, pp, indent);
 ShowPromiseInReport(v, pp, indent);
 #endif
 }
+
+/*******************************************************************/
 
 void ShowPromiseInReport(const char *version, struct Promise* pp, int indent)
 {
@@ -423,12 +427,8 @@ for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
 
    fprintf(FREPORT_HTML,"<h4>\nScope %s:<h4>",ptr->scope);
    fprintf(FREPORT_TXT,"\nScope %s:\n",ptr->scope);
-   
-   if (ptr->hashtable)
-      {
-      PrintHashes(FREPORT_HTML,ptr->hashtable,1);
-      PrintHashes(FREPORT_TXT,ptr->hashtable,0);
-      }
+   PrintHashes(FREPORT_HTML,ptr->hashtable,1);
+   PrintHashes(FREPORT_TXT,ptr->hashtable,0);
    }
 
 fprintf(FREPORT_HTML,"</div>");
@@ -593,7 +593,7 @@ fprintf(FREPORT_TXT,"}\n");
 void SyntaxTree(void)
 
 {
-printf("<h1>CFENGINE %s SYNTAX</h1><p>",VERSION);
+printf("<h1>CFENGINE %s SYNTAX</h1><p>",Version());
 
 printf("<table class=\"frame\"><tr><td>\n");
 ShowDataTypes();
@@ -785,6 +785,76 @@ for (i = 0; CF_FNCALL_TYPES[i].name != NULL; i++)
    }
 
 printf("</table></center>\n");
+}
+
+/*******************************************************************/
+
+void ShowAllReservedWords()
+
+{ int i,j,k,l;
+ struct Item *ip,*list = NULL;
+  struct SubTypeSyntax *ss;
+  struct BodySyntax *bs,*bs2;
+
+for (i = 0; CF_ALL_BODIES[i].subtype != NULL; i++)
+   {
+   IdempPrependItem(&list,CF_ALL_BODIES[i].subtype,NULL);
+
+   bs = CF_ALL_BODIES[i].bs;
+   
+   for (l = 0; bs[l].lval != NULL; l++)
+      {
+      IdempPrependItem(&list,bs[l].lval,NULL);
+      }   
+   }
+
+
+/* Now check the functional modules - extra level of indirection */
+
+for  (i = 0; i < CF3_MODULES; i++)
+   {
+   if ((ss = CF_ALL_SUBTYPES[i]) == NULL)
+      {
+      continue;
+      }
+  
+   for (j = 0; ss[j].subtype != NULL; j++)
+      {
+      if ((bs = ss[j].bs) == NULL)
+         {
+         continue;
+         }
+
+      IdempPrependItem(&list,ss[j].subtype,NULL);
+
+      for (l = 0; bs[l].range != NULL; l++)
+         {
+         if (bs[l].dtype == cf_body)
+            {
+            bs2 = (struct BodySyntax *)(bs[l].range);
+
+            if (bs2 == NULL || bs2 == (void *)CF_BUNDLE)
+               {
+               continue;
+               }
+
+            for (k = 0; bs2[k].dtype != cf_notype; k++)
+               {
+               /* Either module defined or common */
+
+               IdempPrependItem(&list,bs2[k].lval,NULL);
+               }
+            }
+         }
+      }
+   }
+
+for (ip = list; ip != NULL; ip=ip->next)
+   {
+   printf(" \"%s\",",ip->name);
+   }
+
+DeleteItemList(list);
 }
 
 /*******************************************************************/

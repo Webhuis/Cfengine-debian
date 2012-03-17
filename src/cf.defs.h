@@ -202,7 +202,7 @@ extern int errno;
 #define bzero(s, n)     memset ((s), 0, (n))
 #endif
 
-#ifndef HAVE_STRNDUP
+#if !HAVE_DECL_STRNDUP
 char *strndup(const char *s, size_t n);
 #endif
 
@@ -210,6 +210,13 @@ char *strndup(const char *s, size_t n);
 #include <unistd.h>
 #endif
 
+#if !HAVE_DECL_STRLCPY
+size_t strlcpy(char *destination, const char *source, size_t size);
+#endif
+
+#if !HAVE_DECL_STRLCAT
+size_t strlcat(char *destination, const char *source, size_t size);
+#endif
 
 #ifdef DARWIN
 #include <sys/malloc.h>
@@ -339,12 +346,83 @@ typedef int clockid_t;
 #ifndef INADDR_NONE
 #define INADDR_NONE ((unsigned long int) 0xffffffff)
 #endif
+#ifndef HAVE_SETEGID
+int setegid (gid_t gid);
+#endif
+#ifndef HAVE_DRAND48
+double drand48(void);
+void srand48(long seed);
+#endif
+#if !HAVE_DECL_CLOCK_GETTIME
+int clock_gettime(clockid_t clock_id,struct timespec *tp);
+#endif
+#ifdef MINGW
+unsigned int alarm(unsigned int seconds);
+#endif
+#if !HAVE_DECL_REALPATH
+char *realpath(const char *path, char *resolved_path);
+#endif
+
+#ifndef HAVE_GETNETGRENT
+int setnetgrent (const char *netgroup);
+int getnetgrent (char **host, char **user, char **domain);
+void endnetgrent (void);
+#endif
+#ifndef HAVE_UNAME
+int uname  (struct utsname *name);
+#endif
+#ifndef HAVE_STRSTR
+char *strstr (char *s1,char *s2);
+#endif
+#if !HAVE_DECL_STRDUP
+char *strdup (const char *str);
+#endif
+#ifndef HAVE_STRRCHR
+char *strrchr (char *str,char ch);
+#endif
+#ifndef HAVE_STRERROR
+char *strerror (int err);
+#endif
+#ifndef HAVE_STRSEP
+char *strsep(char **stringp, const char *delim);
+#endif
+#ifndef HAVE_PUTENV
+int putenv  (char *s);
+#endif
+#if !HAVE_DECL_UNSETENV
+int unsetenv(const char *name);
+#endif
+#ifndef HAVE_SETEUID
+int seteuid (uid_t euid);
+#endif
+#ifndef HAVE_SETEUID
+int setegid (gid_t egid);
+#endif
+#if !HAVE_DECL_SETLINEBUF
+void setlinebuf(FILE *stream);
+#endif
+#ifdef MINGW
+const char *inet_ntop(int af, const void *src, char *dst, socklen_t cnt);
+int inet_pton(int af, const char *src, void *dst);
+#endif
+
+/*******************************************************************/
+/* Preprocessor tricks                                             */
+/*******************************************************************/
+
+/* Convert integer constant to string */
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
 
 /*******************************************************************/
 /* Various defines                                                 */
 /*******************************************************************/
 
 #define CF_BUFSIZE 4096
+/* max size of plaintext in one transaction, see
+   net.c:SendTransaction(), leave space for encryption padding
+   (assuming max 64*8 = 512-bit cipher block size)*/
+#define CF_MAXTRANSSIZE (CF_BUFSIZE - CF_INBAND_OFFSET - 64)
 #define CF_BILLION 1000000000L
 #define CF_EXPANDSIZE (2*CF_BUFSIZE)
 #define CF_ALLCLASSSIZE (4*CF_BUFSIZE)
@@ -352,7 +430,7 @@ typedef int clockid_t;
 #define CF_BLOWFISHSIZE 16
 #define CF_SMALLBUF 128
 #define CF_MAXVARSIZE 1024
-#define CF_MAXSIDSIZE 2048  /* Windows only: Max size (bytes) of security identifers */
+#define CF_MAXSIDSIZE 2048  /* Windows only: Max size (bytes) of security identifiers */
 #define CF_NONCELEN (CF_BUFSIZE/16)
 #define CF_MAXLINKSIZE 256
 #define CF_MAXLINKLEVEL 4
@@ -373,16 +451,24 @@ typedef int clockid_t;
 #define CF_NOSIZE    -1
 #define CF_EXTRASPC 8      /* pads items during AppendItem for eol handling in editfiles */
 #define CF_INFINITY ((int)999999999)
-#define CF_TICKS_PER_DAY 86400 /* 60 * 60 *24 */
-#define CF_TICKS_PER_HOUR 3600 /* 60 * 60 */
-#define CF_HALF_HOUR 1800      /* 60 * 30 */
 #define CF_NOT_CONNECTED -1
 #define CF_COULD_NOT_CONNECT -2
 #define CF_RECURSION_LIMIT 100
-#define CF_MONDAY_MORNING 342000
+#define CF_MONDAY_MORNING 345600
 #define CF_NOVAL -0.7259285297502359
 #define CF_UNUSED_CHAR (char)127
 
+#define SECONDS_PER_MINUTE 60
+#define SECONDS_PER_HOUR (60 * SECONDS_PER_MINUTE)
+#define SECONDS_PER_DAY (24 * SECONDS_PER_HOUR)
+#define SECONDS_PER_WEEK (7 * SECONDS_PER_DAY)
+
+/* Long-term monitoring constants */
+
+#define HOURS_PER_SHIFT 6
+#define SECONDS_PER_SHIFT (HOURS_PER_SHIFT * SECONDS_PER_HOUR)
+#define SHIFTS_PER_DAY 4
+#define SHIFTS_PER_WEEK (4*7)
 
 
 #define CF_INDEX_FIELD_LEN 7
@@ -397,7 +483,11 @@ typedef int clockid_t;
 /* these should be >0 to prevent contention */
 
 #define CF_EXEC_IFELAPSED 0
-#define CF_EDIT_IFELAPSED 5
+#define CF_EDIT_IFELAPSED 3  /* NOTE: If doing copy template then edit working copy,
+                              the edit ifelapsed must not be higher than
+                              the copy ifelapsed. This will make the working
+                              copy equal to the copied template file - not the
+                              copied + edited file. */
 #define CF_EXEC_EXPIREAFTER 1
 
 #define MAXIP4CHARLEN 16
@@ -455,7 +545,16 @@ CF_QDBC;
 # define DB_FEXT "qdbm"
 
 
-#else
+#elif defined(SQLITE3)
+
+#include <sqlite3.h>
+
+typedef sqlite3 CF_DB;
+typedef sqlite3_stmt CF_DBC;
+
+#define DB_FEXT "sqlite3"
+
+#else /* Berkeley DB */
 
 # ifdef SOLARIS
 #  ifndef u_int32_t
@@ -537,13 +636,58 @@ typedef u_long in_addr_t;  // as seen in in_addr struct in winsock.h
 #define CF_VARIABLES      "cf_variables" "." DB_FEXT
 #define CF_PERFORMANCE    "performance" "." DB_FEXT
 #define CF_CHKDB          "checksum_digests" "." DB_FEXT
+#define CF_CHKPDB         "stats" "." DB_FEXT
 #define CF_AVDB_FILE      "cf_observations" "." DB_FEXT
 #define CF_STATEDB_FILE   "cf_state" "." DB_FEXT
 #define CF_LASTDB_FILE    "cf_lastseen" "." DB_FEXT
 #define CF_AUDITDB_FILE   "cf_Audit" "." DB_FEXT
 #define CF_LOCKDB_FILE    "cf_lock" "." DB_FEXT
 
+#define NOVA_HISTORYDB "history" "." DB_FEXT
+#define NOVA_MEASUREDB "nova_measures" "." DB_FEXT
+#define NOVA_STATICDB  "nova_static" "." DB_FEXT
+#define NOVA_PSCALARDB  "nova_pscalar" "." DB_FEXT
+#define NOVA_COMPLIANCE "promise_compliance" "." DB_FEXT
+#define NOVA_REGISTRY "mswin" "." DB_FEXT
+#define NOVA_CACHE "nova_cache" "." DB_FEXT
+#define NOVA_LICENSE "nova_track" "." DB_FEXT
+#define NOVA_VALUE "nova_value" "." DB_FEXT
+#define NOVA_NETWORK "nova_network" "." DB_FEXT
+#define NOVA_GLOBALCOUNTERS "nova_counters" "." DB_FEXT
+
+#define NOVA_BUNDLE_LOG "bundles" "." DB_FEXT
+
 /* end database file names */
+
+/* database enums */
+typedef enum
+{
+    cfdb_classes,
+    cfdb_variables,
+    cfdb_performance,
+    cfdb_cheksums_content,
+    cfdb_cheksums_stats,
+    cfdb_observations,
+    cfdb_observations_year,
+    cfdb_measurements,
+    cfdb_state,
+    cfdb_hostsseen,
+    cfdb_audit,
+    cfdb_locks,
+    cfdb_static,
+    cfdb_pscalar,
+    cfdb_compliance,
+    cfdb_winregistry,
+    cfdb_cache,
+    cfdb_license,
+    cfdb_value,
+    cfdb_network,
+    cfdb_counters,
+    cfdb_bundles
+}cfdb_t;
+
+/* end database enums */
+
 
 #define CF_VALUE_LOG      "cf_value.log"
 #define CF_FILECHANGE     "file_change.log"
@@ -613,16 +757,12 @@ typedef u_long in_addr_t;  // as seen in in_addr struct in winsock.h
 /* Output control defines */
 
 #define Verbose if (VERBOSE || DEBUG || D2) printf
-#define EditVerbose  if (EDITVERBOSE || DEBUG || D2) printf
 #define Debug4  if (D4) printf
 #define Debug3  if (D3 || DEBUG || D2) printf
 #define Debug2  if (DEBUG || D2) printf
 #define Debug1  if (DEBUG || D1) printf
 #define Debug   if (DEBUG || D1 || D2) printf
 #define DebugVoid if (false) printf
-#define Silent if (! SILENT || VERBOSE || DEBUG || D2) printf
-#define DaemonOnly if (ISCFENGINE) yyerror("This belongs in cfservd.conf")
-#define CfengineOnly if (! ISCFENGINE) yyerror("This belongs in cfagent.conf")
 
 /* GNU REGEX */
 
@@ -647,7 +787,7 @@ typedef u_long in_addr_t;  // as seen in in_addr struct in winsock.h
 
 #define CFGRACEPERIOD 4.0     /* training period in units of counters (weeks,iterations)*/
 #define cf_noise_threshold 6  /* number that does not warrent large anomaly status */
-#define big_number 100000
+#define MON_THRESHOLD_HIGH 1000000  // samples should stay below this threshold
 #define LDT_BUFSIZE 10
 #define CF_GRAINS   64
 #define ATTR     11
@@ -839,21 +979,16 @@ struct cfstat
 
 struct cfdir
    {
-   DIR         *cf_dirh;
-   struct Item *cf_list;
-   struct Item *cf_listpos;  /* current pos */
+   /* Local directories */
+   void *dirh; /* DIR* or HANDLE */
+   struct dirent *entrybuf;
+
+   /* Remote directories */
+   struct Item *list;
+   struct Item *listpos;  /* current pos */
    };
 
 typedef struct cfdir CFDIR;
-
-/*******************************************************************/
-
-struct cfdirent
-   {
-   struct dirent *cf_dirp;
-   char   d_name[CF_BUFSIZE];   /* This is bigger than POSIX */
-   };
-
 
 /*******************************************************************/
 

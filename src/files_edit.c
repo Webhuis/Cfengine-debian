@@ -57,6 +57,7 @@ ec->empty_first = a.edits.empty_before_use;
 
 if (!LoadFileAsItemList(&(ec->file_start),filename,a,pp))
    {
+   free(ec);
    return NULL;
    }
 
@@ -84,7 +85,7 @@ if (DONTDO || a.transaction.action == cfa_warn)
    {
    if (ec && !CompareToFile(ec->file_start,ec->filename,a,pp) && ec->num_edits > 0)
       {
-      cfPS(cf_error,CF_WARN,"",pp,a," -> Need to edit file %s but only a warning promised",ec->filename);
+      cfPS(cf_error,CF_WARN,"",pp,a," -> Should edit file %s but only a warning promised",ec->filename);
       }
    return;
    }

@@ -23,21 +23,14 @@
 # included file COSL.txt.
 #
 
-#
-# Simple stuipd test runner which is
-#  - stupid (overwrites full test logs with single test log)
-#  - fast (2.5 times faster than MAIN.cf)
-#  - runs tests as root automatically (needs passwordless sudo)
-#  - produces test logs with sane permissions
-#  - portable POSIX shell
-#
-
 LOG=test.log
-TESTRESULT=testresult.log
+SUMMARY=summary.log
 QUIET=
 NOVA=
 STAGING=
-AGENT=/var/cfengine/bin/cf-agent
+NETWORK=1
+DEFAGENT=/var/cfengine/bin/cf-agent
+AGENT=${DEFAGENT}
 
 PASSED_TESTS=0
 FAILED_TESTS=0
@@ -45,19 +38,24 @@ FAILED_TO_CRASH_TESTS=0
 SKIPPED_TESTS=0
 
 usage() {
-  echo "testall [-q] [--no-nova] [--staging] [<test> <test>...]"
+  echo "testall [-q] [--no-nova] [--staging] [--no-network] [--agent=<agent>] [<test> <test>...]"
   echo
-  echo "If no test is given, all tests in subdirectories are run:"
+  echo "If no test is given, all tests are run:"
   echo "  Tests with names of form NNN.cf are expected to run succesfully"
   echo "  Tests with names of form NNNx.cf are expected to crash"
   echo "  Tests with names of form NNNn.cf and NNNnx.cf are run only under Nova"
   echo "    (and may be disabled by --no-nova option)"
   echo "  Tests inside directories called 'staging' are not run"
   echo "    (unless --staging option is passed)"
+  echo "  Tests inside directories called 'network' are not run"
+  echo "    if --no-network option is passed"
   echo
   echo "If arguments are given, those are executed as tests"
   echo
   echo " -q makes script much quieter"
+  echo
+  echo " --agent provides a way to specify non-default cf-agent location,"
+  echo "         and defaults to $DEFAGENT."
 }
 
 runtest() {
@@ -80,13 +78,16 @@ runtest() {
   elif [ -z "$STAGING" ] && echo "$TEST" | grep -q -e 'staging'; then
     SKIP=1
     SKIPREASON="Staging tests are disabled"
+  elif [ -z "$NETWORK" ] && echo "$TEST" | grep -q -e 'network'; then
+    SKIP=1
+    SKIPREASON="Network-dependent tests are disabled"
   else
     SKIP=
     SKIPREASON=
   fi
 
   ( echo ----------------------------------------------------------------------
-    echo "$TEST"${EXPECTED_CRASH:+ \(expected to crash\)}${SKIPREASON:+ \(skipped due to $SKIPREASON\)}
+    echo "$TEST"${EXPECTED_CRASH:+ \(expected to crash\)}${SKIPREASON:+ \($SKIPREASON\)}
     echo ----------------------------------------------------------------------
   ) >> $LOG
 
@@ -111,12 +112,12 @@ runtest() {
       fi
     fi
 
-    FLATNAME=$(echo "$TEST" | sed 's,/,_,g')
+    FLATNAME=$(echo "$TEST" | sed 's,[./],_,g')
 
     if [ "$RESULT" != Pass ] && [ -e .succeeded/"$FLATNAME" ]; then
-      echo $TEST $RESULT '(UNEXPECTED FAILURE)' >> $TESTRESULT
+      echo $TEST $RESULT '(UNEXPECTED FAILURE)' >> $SUMMARY
     else
-      echo $TEST $RESULT >> $TESTRESULT
+      echo $TEST $RESULT >> $SUMMARY
     fi
 
     if [ -z "$QUIET" ]; then
@@ -154,20 +155,16 @@ runtest() {
       FAILED_TO_CRASH_TESTS=$(($FAILED_TO_CRASH_TESTS + 1))
     fi
   else
-    echo $TEST Skipped >> $TESTRESULT
+    echo $TEST Skipped >> $SUMMARY
 
     if [ -z "$QUIET" ]; then
       echo Skipped
     else
-      echo -- '-'
+      printf '-'
     fi
     SKIPPED_TESTS=$(($SKIPPED_TESTS + 1))
   fi
 }
-
-if $AGENT -V | grep -q 'Nova'; then
-  NOVA=1
-fi
 
 while true; do
   case "$1" in
@@ -180,6 +177,10 @@ while true; do
       NOVA=;;
     --staging)
       STAGING=1;;
+    --no-network)
+      NETWORK=;;
+    --agent=*)
+      AGENT=${1#--agent=};;
     -*)
       echo "Unknown option: $1"
       exit 1;;
@@ -189,24 +190,33 @@ while true; do
   shift
 done
 
-# Check for nova
+if $AGENT -V | grep -q 'Nova'; then
+  NOVA=1
+fi
 
 if [ $# -gt 0 ]; then
   for test in "$@"; do
-    if expr "$test" : '^[/.]' >/dev/null; then
+    if ! expr "$test" : '[/.]' >/dev/null; then
+      test="./$test"
+    fi
+
+    if [ -f $test ]; then
       TESTS="$TESTS $test"
+    elif [ -d $test ]; then
+      ADDTESTS=$(find $test -name '[0-9][0-9][0-9]*.cf' | sort)
+      TESTS="$TESTS $ADDTESTS"
     else
-      TESTS="$TESTS ./$test"
+      echo "Unable to open test file/directory: $test"
     fi
   done
 else
-  TESTS=$(find . -name '[0-9][0-9][0-9]*.cf' | sort)
+  TESTS=$(find $(dirname $0) -name '[0-9][0-9][0-9]*.cf' | sort)
 fi
 
 TESTS_COUNT=$(echo $TESTS | wc -w)
 START_TIME=$(date +%s)
 
-: > $TESTRESULT
+: > $SUMMARY
 
 ( echo ======================================================================
   echo Testsuite started at $(date "+%F %T")
@@ -233,3 +243,9 @@ END_TIME=$(date +%s)
   echo Failed to crash tests: $FAILED_TO_CRASH_TESTS
   echo Skipped tests: $SKIPPED_TESTS
 ) | tee -a $LOG
+
+if [ "$FAILED_TESTS" -ne 0 ] || [ "$FAILED_TO_CRASH_TESTS" -ne 0 ]; then
+  exit 1
+else
+  exit 0
+fi

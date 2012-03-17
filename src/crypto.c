@@ -32,6 +32,9 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void MD5Random (unsigned char digest[EVP_MAX_MD_SIZE+1]);
+static char *KeyPrint(RSA *key);
+
 /**********************************************************************/
 
 void RandomSeed()
@@ -223,13 +226,13 @@ if (BN_num_bits(PUBKEY->e) < 2 || !BN_is_odd(PUBKEY->e))
    FatalError("RSA Exponent too small or not odd");
    }
 
-if(EMPTY(POLICY_SERVER))
+if (EMPTY(POLICY_SERVER))
   {
   snprintf(name,CF_MAXVARSIZE-1,"%s%cpolicy_server.dat",CFWORKDIR,FILE_SEPARATOR);
 
   if ((fp = fopen(name,"r")) != NULL)
      {
-     fscanf(fp,"%s",POLICY_SERVER);
+     fscanf(fp,"%4095s",POLICY_SERVER);
      fclose(fp);
      }
   }
@@ -254,7 +257,6 @@ if (stat(name,&sb) == -1 && stat(guard,&sb) != -1)
   // copy localhost.pub to root-HASH.pub on policy server
    {
    LastSaw("root",POLICY_SERVER,digest,cf_connect);
-   UpdateLastSeen();
 
    if (!LinkOrCopy(source,name,false))
       {
@@ -293,14 +295,7 @@ Debug("HavePublickey(%s)\n",keyname);
 snprintf(newname,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,keyname);   
 MapName(newname);
 
-// Check memory cache rlist
-
-if ((newkey = SelectKeyRing(keyname)))
-   {
-   CfOut(cf_verbose,""," -> Retrieved %s from cache",keyname);
-   return newkey;
-   }
-else if (cfstat(newname,&statbuf) == -1)
+if (cfstat(newname,&statbuf) == -1)
    {
    CfOut(cf_verbose,""," -> Did not find new key format %s",newname);
    snprintf(oldname,CF_BUFSIZE,"%s/ppkeys/%s-%s.pub",CFWORKDIR,username,ipaddress);   
@@ -318,10 +313,10 @@ else if (cfstat(newname,&statbuf) == -1)
       {
       CfOut(cf_inform,""," -> Renaming old key from %s to %s",oldname,newname);
 
-      if(rename(oldname,newname) != 0)
-	{
-	CfOut(cf_error, "rename", "!! Could not rename from old key format (%s) to new (%s)",oldname,newname);
-	}
+      if (rename(oldname,newname) != 0)
+         {
+         CfOut(cf_error, "rename", "!! Could not rename from old key format (%s) to new (%s)",oldname,newname);
+         }
       }
    else  // we don't know the digest (e.g. because we are a client and
 	 // have no lastseen-map and/or root-SHA...pub of the server's key
@@ -331,8 +326,6 @@ else if (cfstat(newname,&statbuf) == -1)
      snprintf(newname,sizeof(newname),"%s",oldname);
      }
    }
-
-CfOut(cf_verbose,""," -> Going to secondary storage for key");
 
 if ((fp = fopen(newname,"r")) == NULL)
    {
@@ -355,7 +348,6 @@ if (BN_num_bits(newkey->e) < 2 || !BN_is_odd(newkey->e))
    FatalError("RSA Exponent too small or not odd");
    }
 
-IdempAddToKeyRing(keyname,ipaddress,newkey);
 return newkey;
 }
 
@@ -371,8 +363,6 @@ void SavePublicKey(char *user,char *ipaddress,char *digest,RSA *key)
 Debug("SavePublicKey %s\n",ipaddress); 
 
 snprintf(keyname,CF_MAXVARSIZE,"%s-%s",user,digest);
-
-IdempAddToKeyRing(keyname,ipaddress,key);
 
 snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s.pub",CFWORKDIR,keyname);
 MapName(filename);
@@ -404,22 +394,102 @@ fclose(fp);
 
 /*********************************************************************/
 
-void DeletePublicKey(char *user,char *ipaddress,char *digest)
+/*
+ * Returns:
+ *  amount of keys removed
+ *  -1 if there was an error
+ */
+static int RemovePublicKey(const char *id)
+{
+char keysdir[CF_BUFSIZE];
+snprintf(keysdir, CF_BUFSIZE, "%s/ppkeys", CFWORKDIR);
+MapName(keysdir);
+CFDIR *dirh;
+const struct dirent *dirp;
+char suffix[CF_BUFSIZE];
+int removed = 0;
 
-{ char filename[CF_BUFSIZE];
+if ((dirh = OpenDirLocal(keysdir)) == NULL)
+   {
+   if (errno == ENOENT)
+      {
+      return 0;
+      }
+   else
+      {
+      CfOut(cf_error, "opendir", "Unable to open keys directory");
+      return -1;
+      }
+   }
 
-snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s-%s.pub",CFWORKDIR,user,ipaddress);
-MapName(filename);
-unlink(filename);
+snprintf(suffix, CF_BUFSIZE, "-%s.pub", id);
 
-snprintf(filename,CF_BUFSIZE,"%s/ppkeys/%s-%s.pub",CFWORKDIR,user,digest);
-MapName(filename);
-unlink(filename);
+while ((dirp = ReadDir(dirh)) != NULL)
+   {
+   char *c = strstr(dirp->d_name, suffix);
+   if (c && c[strlen(suffix)] == '\0') /* dirp->d_name ends with suffix */
+      {
+      char keyfilename[CF_BUFSIZE];
+      snprintf(keyfilename, CF_BUFSIZE, "%s/%s", keysdir, dirp->d_name);
+      MapName(keyfilename);
+
+      if (unlink(keyfilename) < 0)
+         {
+         if (errno != ENOENT)
+            {
+            CfOut(cf_error, "unlink", "Unable to remove key file %s", dirp->d_name);
+            CloseDir(dirh);
+            return -1;
+            }
+         }
+      else
+         {
+         removed++;
+         }
+      }
+   }
+
+if (errno)
+   {
+   CfOut(cf_error, "ReadDir", "Unable to enumerate files in keys directory");
+   CloseDir(dirh);
+   return -1;
+   }
+
+CloseDir(dirh);
+return removed;
 }
 
 /*********************************************************************/
 
-void MD5Random(unsigned char digest[EVP_MAX_MD_SIZE+1])
+/*
+ * Returns number of keys removed, -1 in case of error
+ */
+int RemovePublicKeys(const char *hostname)
+{
+char ip[CF_BUFSIZE];
+char digest[CF_BUFSIZE];
+int removed_by_digest, removed_by_ip;
+
+strcpy(ip, Hostname2IPString(hostname));
+IPString2KeyDigest(ip, digest);
+
+removed_by_digest = RemovePublicKey(digest);
+removed_by_ip = RemovePublicKey(ip);
+
+if (removed_by_digest >= 0 && removed_by_ip >= 0)
+   {
+   return removed_by_digest + removed_by_ip;
+   }
+else
+   {
+   return -1;
+   }
+}
+
+/*********************************************************************/
+
+static void MD5Random(unsigned char digest[EVP_MAX_MD_SIZE+1])
 
    /* Make a decent random number by crunching some system states & garbage through
       MD5. We can use this as a seed for pseudo random generator */
@@ -559,7 +629,7 @@ CfOut(cf_verbose, "", "BinaryBuffer(%d bytes => %s) -> [%s]",len,comment,buf);
 
 /*********************************************************************/
 
-char *KeyPrint(RSA *pubkey)
+static char *KeyPrint(RSA *pubkey)
 
 { unsigned char digest[EVP_MAX_MD_SIZE+1];
  int i;

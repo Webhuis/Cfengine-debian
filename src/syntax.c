@@ -34,17 +34,25 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int CheckParseString(char *lv,char *s,char *range);
+static void CheckParseInt(char *lv,char *s,char *range);
+static void CheckParseReal(char *lv,char *s,char *range);
+static void CheckParseRealRange(char *lval,char *s,char *range);
+static void CheckParseIntRange(char *lval,char *s,char *range);
+static void CheckParseOpts(char *lv,char *s,char *range);
+static void CheckFnCallType(char *lval,const char *s,enum cfdatatype dtype,char *range);
+
 /*********************************************************/
 
 void CheckBundle(char *name,char *type)
 
 { struct Bundle *bp;
   char output[CF_BUFSIZE];
-  char *reserved[] = { "sys", "const", "mon", "edit", "match", "mon", "this", NULL };
+  const char *reserved[] = { "sys", "const", "mon", "edit", "match", "mon", "this", NULL };
 
 Debug("Checking for bundle (%s,%s)\n",name,type);
   
-if (IsStrIn(name,reserved,false))
+if (IsStrIn(name,reserved))
    {
    snprintf(output,CF_BUFSIZE,"Use of a reserved context as a bundle name \"%s\" ",name);
    ReportError(output);      
@@ -56,6 +64,7 @@ for (bp = BUNDLES; bp != NULL; bp=bp->next)
       {
       snprintf(output,CF_BUFSIZE,"Redefinition of bundle %s for %s is a broken promise",name,type);
       ReportError(output);
+      ERRORCOUNT++;
       }
    }
 }
@@ -73,6 +82,7 @@ for (bp = BODIES; bp != NULL; bp=bp->next)
       {
       snprintf(output,CF_BUFSIZE,"Redefinition of body \"%s\" for \"%s\" is a broken promise",name,type);
       ReportError(output);
+      ERRORCOUNT++;
       }
    }
 }
@@ -163,7 +173,7 @@ void CheckConstraint(char *type,char *name,char *lval,void *rval,char rvaltype,s
   int i,l, allowed = false;
   struct BodySyntax *bs;
   char output[CF_BUFSIZE];
-  
+
 Debug("CheckConstraint(%s,%s,",type,lval);
 
 if (DEBUG)
@@ -172,6 +182,7 @@ if (DEBUG)
    }
 
 Debug(")\n");
+
 
 if (ss.subtype != NULL) /* In a bundle */
    {
@@ -393,8 +404,6 @@ for  (i = 0; i < CF3_MODULES; i++)
                {
                /* Either module defined or common */
 
-               Debug1("CMP-module-subtypes (%s): %s,%s\n",ss[j].btype,ss[j].subtype,type);
-               
                if (strcmp(ss[j].subtype,type) == 0 && strcmp(ss[j].subtype,"*") != 0)
                   {
                   snprintf(output,CF_BUFSIZE,"lval %s belongs to promise type \'%s:\' but this is '\%s\'\n",lval,ss[j].subtype,type);
@@ -462,7 +471,7 @@ switch(rvaltype)
           case cf_olist:
               if (level == 0)
                  {
-                 snprintf(output,CF_BUFSIZE,"rhs is a scalar, but lhs (%s) is not a scalar type",CF_DATATYPES[dt]);
+                 snprintf(output,CF_BUFSIZE," !! Type mismatch -- rhs is a scalar, but lhs (%s) is not a scalar type",CF_DATATYPES[dt]);
                  ReportError(output);
                  }
               break;
@@ -480,7 +489,7 @@ switch(rvaltype)
           case cf_olist:
               break;
           default:
-              snprintf(output,CF_BUFSIZE,"rhs is a list, but lhs (%s) is not a list type",CF_DATATYPES[dt]);
+              snprintf(output,CF_BUFSIZE,"!! Type mistach -- rhs is a list, but lhs (%s) is not a list type",CF_DATATYPES[dt]);
               ReportError(output);
               break;
           }
@@ -624,7 +633,7 @@ return cf_str;
 /* Level 1                                                                  */
 /****************************************************************************/
 
-int CheckParseString(char *lval,char *s,char *range)
+static int CheckParseString(char *lval,char *s,char *range)
 
 { char output[CF_BUFSIZE];
   
@@ -709,7 +718,7 @@ return false;
 
 /****************************************************************************/
 
-void CheckParseInt(char *lval,char *s,char *range)
+static void CheckParseInt(char *lval,char *s,char *range)
     
 { struct Item *split;
   int n;
@@ -771,7 +780,7 @@ Debug("CheckParseInt - syntax verified\n\n");
 
 /****************************************************************************/
 
-void CheckParseIntRange(char *lval,char *s,char *range)
+static void CheckParseIntRange(char *lval,char *s,char *range)
     
 { struct Item *split,*ip,*rangep;
   int n;
@@ -855,7 +864,7 @@ Debug("CheckParseIntRange - syntax verified\n\n");
 
 /****************************************************************************/
 
-void CheckParseReal(char *lval,char *s,char *range)
+static void CheckParseReal(char *lval,char *s,char *range)
     
 { struct Item *split;
   double max = (double)CF_LOWINIT, min = (double)CF_HIGHINIT, val;
@@ -914,7 +923,7 @@ Debug("CheckParseReal - syntax verified\n\n");
 
 /****************************************************************************/
 
-void CheckParseRealRange(char *lval,char *s,char *range)
+static void CheckParseRealRange(char *lval,char *s,char *range)
     
 { struct Item *split,*rangep,*ip;
   double max = (double)CF_LOWINIT, min = (double)CF_HIGHINIT, val;
@@ -994,7 +1003,7 @@ Debug("CheckParseRealRange - syntax verified\n\n");
 
 /****************************************************************************/
 
-void CheckParseOpts(char *lval,char *s,char *range)
+static void CheckParseOpts(char *lval,char *s,char *range)
 
 { struct Item *split;
   int err = false;
@@ -1036,11 +1045,11 @@ if (!err)
 
 int CheckParseVariableName(char *name)
 
-{ char *reserved[] = { "promiser", "handle", "promise_filename", "promise_linenumber", NULL };
+{ const char *reserved[] = { "promiser", "handle", "promise_filename", "promise_linenumber", NULL };
   char *sp,scopeid[CF_MAXVARSIZE],vlval[CF_MAXVARSIZE];
   int count = 0, level = 0;
   
-if (IsStrIn(name,reserved,false))
+if (IsStrIn(name,reserved))
    {
    return false;
    }
@@ -1096,11 +1105,12 @@ return true;
 
 /****************************************************************************/
 
-void CheckFnCallType(char *lval,char *s,enum cfdatatype dtype,char *range)
+static void CheckFnCallType(char *lval,const char *s,enum cfdatatype dtype,char *range)
 
 { int i;
   enum cfdatatype dt;
   char output[CF_BUFSIZE];
+  FnCallType *fn;
 
 Debug("CheckFnCallType(%s => %s/%s)\n",lval,s,range);
 
@@ -1109,54 +1119,55 @@ if (s == NULL)
    return;
    }
 
-for (i = 0; CF_FNCALL_TYPES[i].name != NULL; i++)
+fn = FindFunction(s);
+
+if (fn)
    {
-   if (strcmp(CF_FNCALL_TYPES[i].name,s) == 0)
+   dt = fn->dtype;
+
+   if (dtype != dt)
       {
-      dt = CF_FNCALL_TYPES[i].dtype;
-
-      if (dtype != dt)
-         {
-         /* Ok to allow fn calls of correct element-type in lists */
+      /* Ok to allow fn calls of correct element-type in lists */
          
-         if (dt == cf_str && dtype == cf_slist)
-            {
-            return;
-            }
-
-         if (dt == cf_int && dtype == cf_ilist)
-            {
-            return;
-            }
-
-         if (dt == cf_real && dtype == cf_rlist)
-            {
-            return;
-            }
-         
-         if (dt == cf_opts && dtype == cf_olist)
-            {
-            return;
-            }
-         
-         if (dt == cf_class && dtype == cf_clist)
-            {
-            return;
-            }
-
-         snprintf(output,CF_BUFSIZE,"function %s() returns type %s but lhs requires %s",s,CF_DATATYPES[dt],CF_DATATYPES[dtype]);
-         ReportError(output);
-         return;
-         }
-      else
+      if (dt == cf_str && dtype == cf_slist)
          {
          return;
          }
+
+      if (dt == cf_int && dtype == cf_ilist)
+         {
+         return;
+         }
+
+      if (dt == cf_real && dtype == cf_rlist)
+         {
+         return;
+         }
+         
+      if (dt == cf_opts && dtype == cf_olist)
+         {
+         return;
+         }
+         
+      if (dt == cf_class && dtype == cf_clist)
+         {
+         return;
+         }
+
+      snprintf(output,CF_BUFSIZE,"function %s() returns type %s but lhs requires %s",s,CF_DATATYPES[dt],CF_DATATYPES[dtype]);
+      ReportError(output);
+      return;
+      }
+   else
+      {
+      return;
       }
    }
-
-snprintf(output,CF_BUFSIZE,"Unknown built-in function %s()",s);
-ReportError(output);
+else
+   {
+   snprintf(output,CF_BUFSIZE,"Unknown built-in function %s()",s);
+   ReportError(output);
+   }
 }
 
 

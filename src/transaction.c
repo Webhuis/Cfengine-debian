@@ -32,6 +32,21 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void WaitForCriticalSection(void);
+static void ReleaseCriticalSection(void);
+static time_t FindLock(char *last);
+static int WriteLock(char *lock);
+static int RemoveLock(char *name);
+static void LogLockCompletion(char *cflog,int pid,char *str,char *operator,char *operand);
+static time_t FindLockTime(char *name);
+static pid_t FindLockPid(char *name);
+static CF_DB *OpenLock(void);
+static void CloseLock(CF_DB *dbp);
+#if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
+static pthread_mutex_t *NameToThreadMutex(enum cf_thread_mutex name);
+#endif
+static void RemoveDates(char *s);
+
 /*****************************************************************************/
 
 void SummarizeTransaction(struct Attributes attr,struct Promise *pp,char *logname)
@@ -141,7 +156,8 @@ if (IGNORELOCK)
 
 promise = BodyName(pp);
 snprintf(cc_operator,CF_MAXVARSIZE-1,"%s-%s",promise,host);
-strncpy(cc_operand,CanonifyName(operand),CF_BUFSIZE-1);
+strncpy(cc_operand, operand, CF_BUFSIZE-1);
+CanonifyNameInPlace(cc_operand);
 RemoveDates(cc_operand);
 
 free(promise);
@@ -339,7 +355,7 @@ for (rp = params; rp != NULL; rp=rp->next)
 
 #if defined HAVE_PTHREAD_H && (defined HAVE_LIBPTHREAD || defined BUILDTIN_GCC_THREAD)
 
-pthread_mutex_t *NameToThreadMutex(enum cf_thread_mutex name)
+static pthread_mutex_t *NameToThreadMutex(enum cf_thread_mutex name)
 
 {
 switch(name)
@@ -386,6 +402,10 @@ switch(name)
 
    case cft_server_keyseen:
        return &MUTEX_SERVER_KEYSEEN;
+       break;
+
+   case cft_server_children:
+       return &MUTEX_SERVER_CHILDREN;
        break;
 
        
@@ -481,7 +501,7 @@ if (status != EBUSY && status != EDEADLK)
 /* Level                                                                     */
 /*****************************************************************************/
 
-time_t FindLock(char *last)
+static time_t FindLock(char *last)
 
 { time_t mtime;
 
@@ -505,32 +525,34 @@ else
 
 /************************************************************************/
 
-int WriteLock(char *name)
+static int WriteLock(char *name)
 
 { CF_DB *dbp;
   struct LockData entry;
 
 Debug("WriteLock(%s)\n",name);
 
+ThreadLock(cft_lock);
 if ((dbp = OpenLock()) == NULL)
    {
+   ThreadUnlock(cft_lock);
    return -1;
    }
 
 entry.pid = getpid();
 entry.time = time((time_t *)NULL);
 
-ThreadLock(cft_lock);
 WriteDB(dbp,name,&entry,sizeof(entry));
-ThreadUnlock(cft_lock);
 
 CloseLock(dbp);
+ThreadUnlock(cft_lock);
+
 return 0;
 }
 
 /*****************************************************************************/
 
-void LogLockCompletion(char *cflog,int pid,char *str,char *operator,char *operand)
+static void LogLockCompletion(char *cflog,int pid,char *str,char *operator,char *operand)
 
 { FILE *fp;
   char buffer[CF_MAXVARSIZE];
@@ -594,7 +616,7 @@ return 0;
 
 /************************************************************************/
 
-time_t FindLockTime(char *name)
+static time_t FindLockTime(char *name)
 
 { CF_DB *dbp;
   struct LockData entry;
@@ -620,7 +642,7 @@ else
 
 /************************************************************************/
 
-pid_t FindLockPid(char *name)
+static pid_t FindLockPid(char *name)
 
 { CF_DB *dbp;
   struct LockData entry;
@@ -644,7 +666,7 @@ else
 
 /************************************************************************/
 
-CF_DB *OpenLock()
+static CF_DB *OpenLock()
 
 { char name[CF_BUFSIZE];
   CF_DB *dbp;
@@ -664,7 +686,7 @@ return dbp;
 
 /************************************************************************/
 
-void CloseLock(CF_DB *dbp)
+static void CloseLock(CF_DB *dbp)
 
 {
 if (dbp)
@@ -675,7 +697,7 @@ if (dbp)
 
 /*****************************************************************************/
 
-void RemoveDates(char *s)
+static void RemoveDates(char *s)
 
 { int i,a = 0,b = 0,c = 0,d = 0;
   char *dayp = NULL, *monthp = NULL, *sp;
@@ -794,7 +816,7 @@ CloseLock(dbp);
 /* Release critical section                                             */
 /************************************************************************/
 
-void WaitForCriticalSection()
+static void WaitForCriticalSection()
 
 { time_t now = time(NULL), then = FindLockTime("CF_CRITICAL_SECTION");
 
@@ -813,8 +835,23 @@ WriteLock("CF_CRITICAL_SECTION");
 
 /************************************************************************/
 
-void ReleaseCriticalSection()
+static void ReleaseCriticalSection()
 
 {
 RemoveLock("CF_CRITICAL_SECTION");
+}
+
+/************************************************************************/
+
+int ShiftChange(void)
+
+{
+ if (IsDefinedClass("(Hr00|Hr06|Hr12|Hr16|Hr18).Min00_05"))
+   {
+   return true;
+   }
+else
+   {
+   return false;
+   }
 }

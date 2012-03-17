@@ -32,6 +32,10 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void ExtractOperationLock(char *op);
+static void AddAllClasses(struct Rlist *list,int persist,enum statepolicy policy);
+static void DeleteAllClasses(struct Rlist *list);
+
 /*****************************************************************************/
 
 void BeginAudit()
@@ -142,20 +146,20 @@ void ClassAuditLog(struct Promise *pp,struct Attributes attr,char *str,char stat
   double keyval;
   int lineno = pp->lineno;
   char name[CF_BUFSIZE];
-  char *noStatusTypes[] = { "vars", "classes", NULL };
-  char *noLogTypes[] = { "insert_lines", "delete_lines", "replace_patterns", "field_edits", NULL };
+  const char *noStatusTypes[] = { "vars", "classes", NULL };
+  const char *noLogTypes[] = { "insert_lines", "delete_lines", "replace_patterns", "field_edits", NULL };
   bool log = true;
 
   Debug("ClassAuditLog(%s)\n",str);
 
   // never count vars or classes as repaired (creates messy reports)
 
-if (pp && (pp->agentsubtype == NULL || IsStrIn(pp->agentsubtype,noStatusTypes,false)))
+if (pp && (pp->agentsubtype == NULL || IsStrIn(pp->agentsubtype,noStatusTypes)))
    {
    return;
    }
 
-if (pp && IsStrIn(pp->agentsubtype,noLogTypes,false))
+if (pp && IsStrIn(pp->agentsubtype,noLogTypes))
    {
    log = false;
    }
@@ -185,7 +189,7 @@ switch(status)
        PR_NOTKEPT++;
        VAL_NOTKEPT += attr.transaction.value_notkept;
        
-       if(log)
+       if (log)
           {
           NotePromiseCompliance(pp,1.0,cfn_notkept,reason);
           }
@@ -346,7 +350,7 @@ CloseDB(AUDITDBP);
 
 /*****************************************************************************/
 
-void AddAllClasses(struct Rlist *list,int persist,enum statepolicy policy)
+static void AddAllClasses(struct Rlist *list,int persist,enum statepolicy policy)
 
 { struct Rlist *rp;
   int slot;
@@ -359,31 +363,30 @@ if (list == NULL)
 
 for (rp = list; rp != NULL; rp=rp->next)
    {
-   if (IsHardClass((char *)rp->item))
-      {
-      CfOut(cf_error,""," !! You cannot use reserved hard class \"%s\" as post-condition class",CanonifyName(rp->item));
-      }
+   char *classname = strdup(rp->item);
+   CanonifyNameInPlace(classname);
 
-   string = (char *)(rp->item);
-   slot = (int)*string;
+   if (IsHardClass(classname))
+      {
+      CfOut(cf_error,""," !! You cannot use reserved hard class \"%s\" as post-condition class",classname);
+      }
 
    if (persist > 0)
       {
-      CfOut(cf_verbose,""," ?> defining persistent promise result class %s\n",(char *)CanonifyName(rp->item));
+      CfOut(cf_verbose,""," ?> defining persistent promise result class %s\n", classname);
       NewPersistentContext(CanonifyName(rp->item),persist,policy);
-      IdempPrependItem(&(VHEAP.list[slot]),CanonifyName((char *)rp->item),NULL);
       }
    else
       {
-      CfOut(cf_verbose,""," ?> defining promise result class %s\n",(char *)CanonifyName(rp->item));
-      IdempPrependItem(&(VHEAP.list[slot]),CanonifyName((char *)rp->item),NULL);
+      CfOut(cf_verbose,""," ?> defining promise result class %s\n", classname);
       }
+   IdempPrependAlphaList(&VHEAP, classname);
    }
 }
 
 /*****************************************************************************/
 
-void DeleteAllClasses(struct Rlist *list)
+static void DeleteAllClasses(struct Rlist *list)
 
 { struct Rlist *rp;
   char *string;
@@ -419,7 +422,7 @@ for (rp = list; rp != NULL; rp=rp->next)
 
 /************************************************************************/
 
-void ExtractOperationLock(char *op)
+static void ExtractOperationLock(char *op)
 
 { char *sp, lastch = 'x'; 
   int i = 0, dots = 0;

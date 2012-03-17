@@ -31,8 +31,6 @@
 #ifndef CFENGINE_CF3_SERVER_H
 #define CFENGINE_CF3_SERVER_H
 
-#ifndef HAVE_SERV_H
-#define HAVE_SERV_H 1
 #define queuesize 50
 #define connection 1
 #define RFC931_PORT 113
@@ -75,21 +73,11 @@ struct cfd_get_arg
 /* PARSER                                                          */
 /*******************************************************************/
 
-char CFRUNCOMMAND[CF_BUFSIZE];
-time_t CFDSTARTTIME;
+extern char CFRUNCOMMAND[];
+extern time_t CFDSTARTTIME;
 
 #ifdef RE_DUP_MAX
 # undef RE_DUP_MAX
-#endif
-
-/*******************************************************************
- * Sunos4.1.4 need these prototypes
- *******************************************************************/
-
-#if defined(SUN4)
-extern char *realpath(/* char *path; char resolved_path[MAXPATHLEN] */);
-#endif
-
 #endif
 
 #endif

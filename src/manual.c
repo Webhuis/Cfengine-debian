@@ -35,15 +35,17 @@
 extern char BUILD_DIR[CF_BUFSIZE];
 extern char MANDIR[CF_BUFSIZE];
 
-void TexinfoHeader(FILE *fout);
-void TexinfoFooter(FILE *fout);
-void TexinfoBodyParts(FILE *fout,struct BodySyntax *bs,char *context);
-void TexinfoSubBodyParts(FILE *fout,struct BodySyntax *bs);
-void TexinfoShowRange(FILE *fout,char *s,enum cfdatatype type);
-void IncludeManualFile(FILE *fout,char *filename);
-void TexinfoPromiseTypesFor(FILE *fout,struct SubTypeSyntax *st);
-void TexinfoSpecialFunction(FILE *fout,struct FnCallType fn);
-void TexinfoVariables(FILE *fout,char *scope);
+static void TexinfoHeader(FILE *fout);
+static void TexinfoFooter(FILE *fout);
+static void TexinfoBodyParts(FILE *fout,struct BodySyntax *bs,char *context);
+static void TexinfoSubBodyParts(FILE *fout,struct BodySyntax *bs);
+static void TexinfoShowRange(FILE *fout,char *s,enum cfdatatype type);
+static void IncludeManualFile(FILE *fout,char *filename);
+static void TexinfoPromiseTypesFor(FILE *fout,struct SubTypeSyntax *st);
+static void TexinfoSpecialFunction(FILE *fout,struct FnCallType fn);
+static void TexinfoVariables(FILE *fout,char *scope);
+static char *TexInfoEscape(char *s);
+static void PrintPattern(FILE *fout,char *pattern);
 
 /*****************************************************************************/
 
@@ -71,7 +73,7 @@ fprintf(fout,"@c *****************************************************\n");
 fprintf(fout,"@c * CHAPTER \n");
 fprintf(fout,"@c *****************************************************\n");
 
-fprintf(fout,"@node Getting started\n@chapter Cfengine %s -- Getting started\n\n",VERSION);
+fprintf(fout,"@node Getting started\n@chapter CFEngine %s -- Getting started\n\n",Version());
 IncludeManualFile(fout,"reference_basics.texinfo");
 
 /* Control promises */
@@ -188,15 +190,15 @@ fclose(fout);
 /* Level                                                                     */
 /*****************************************************************************/
 
-void TexinfoHeader(FILE *fout)
+static void TexinfoHeader(FILE *fout)
 
 {
 fprintf(fout,
-        "@c \\input texinfo-altfont\n"
-        "@c \\input texinfo-logo\n"
+        "\\input texinfo-altfont\n"
+        "\\input texinfo-logo\n"
         "\\input texinfo\n"
-        "@c @selectaltfont{cmbright}\n"
-        "@c @setlogo{CfengineLogo}\n"
+        "@selectaltfont{cmbright}\n"
+        "@setlogo{CFEngineFrontPage}\n"
         "@c *********************************************************************\n"
         "@c\n"
         "@c  This is an AUTO_GENERATED TEXINFO file. Do not submit patches against it.\n"
@@ -205,14 +207,17 @@ fprintf(fout,
         "@c ***********************************************************************\n"
         "@c %%** start of header\n"
         "@setfilename cf3-reference.info\n"
-        "@settitle Cfengine reference manual\n"
+        "@settitle CFEngine reference manual\n"
         "@setchapternewpage odd\n"
         "@c %%** end of header\n"
         "@titlepage\n"
-        "@title Cfengine Reference Manual\n"
+        "@title CFEngine Reference Manual\n"
         "@subtitle Auto generated, self-healing knowledge\n"
-        "@subtitle Documentation for core version %s\n"
+        "@subtitle %s\n"
 #ifdef HAVE_NOVA
+        "@subtitle %s\n"
+#endif
+#ifdef HAVE_CONSTELLATION
         "@subtitle %s\n"
 #endif
         "@author cfengine.com\n"
@@ -221,18 +226,18 @@ fprintf(fout,
         "@page\n"
         "@vskip 0pt plus 1filll\n"
         "@cartouche\n"
-        "Under no circumstances shall Cfengine AS be liable for errors or omissions\n"
+        "Under no circumstances shall CFEngine AS be liable for errors or omissions\n"
         "in this document. All efforts have been made to ensure the correctness of\n"
         "the information contained herein.\n"
         "@end cartouche\n"
-        "Copyright @copyright{} 2008,2010 to the year of issue Cfengine AS\n"
+        "Copyright @copyright{} 2008,2010 to the year of issue CFEngine AS\n"
         "@end titlepage\n"
         "@c *************************** File begins here ************************\n"
         "@ifinfo\n"
-        "@dircategory Cfengine Training\n"
+        "@dircategory CFEngine Training\n"
         "@direntry\n"
         "* cfengine Reference:\n"
-        "                        Cfengine is a language based framework\n"
+        "                        CFEngine is a language based framework\n"
         "                        designed for configuring and maintaining\n"
         "                        Unix-like operating systems attached\n"
         "                        to a TCP/IP network.\n"
@@ -241,7 +246,7 @@ fprintf(fout,
         
         "@ifnottex\n"
         "@node Top, Modularization, (dir), (dir)\n"
-        "@top Cfengine-AutoReference\n"
+        "@top CFEngine-AutoReference\n"
         "@end ifnottex\n"
         
         "@ifhtml\n"
@@ -255,22 +260,26 @@ fprintf(fout,
         "@iftex\n"
         "@contents\n"
         "@end iftex\n",
-        VERSION
+        NameVersion()
 #ifdef HAVE_NOVA
         ,
-        Nova_StrVersion()
+        Nova_NameVersion()
+#endif
+#ifdef HAVE_CONSTELLATION
+        ,
+        Constellation_NameVersion()
 #endif
         );
 }
 
 /*****************************************************************************/
 
-void TexinfoFooter(FILE *fout)
+static void TexinfoFooter(FILE *fout)
 
 {
  fprintf(fout,
          "@c =========================================================================\n"
-         "@c @node Index,  , Cfengine Methods, Top\n"
+         "@c @node Index,  , CFEngine Methods, Top\n"
          "@c @unnumbered Concept Index\n"
          "@c @printindex cp\n"
          "@c =========================================================================\n"
@@ -307,7 +316,7 @@ void TexinfoFooter(FILE *fout)
 
 /*****************************************************************************/
 
-void TexinfoPromiseTypesFor(FILE *fout,struct SubTypeSyntax *st)
+static void TexinfoPromiseTypesFor(FILE *fout,struct SubTypeSyntax *st)
 
 { int j;
   char filename[CF_BUFSIZE];
@@ -343,7 +352,7 @@ for (j = 0; st[j].btype != NULL; j++)
 /* Level                                                                     */
 /*****************************************************************************/
 
-void TexinfoBodyParts(FILE *fout,struct BodySyntax *bs,char *context)
+static void TexinfoBodyParts(FILE *fout,struct BodySyntax *bs,char *context)
 
 { int i;
  char filename[CF_BUFSIZE],*res;
@@ -363,7 +372,7 @@ for (i = 0; bs[i].lval != NULL; i++)
       }
    else if (bs[i].dtype == cf_body)
       {
-      fprintf(fout,"\n\n@node %s in %s\n@subsection @code{%s} (compound body)\n@noindent @b{Type}: %s\n\n",bs[i].lval,context,bs[i].lval,CF_DATATYPES[bs[i].dtype]);
+      fprintf(fout,"\n\n@node %s in %s\n@subsection @code{%s} (body template)\n@noindent @b{Type}: %s\n\n",bs[i].lval,context,bs[i].lval,CF_DATATYPES[bs[i].dtype]);
       TexinfoSubBodyParts(fout,(struct BodySyntax *)bs[i].range);
       }
    else
@@ -393,10 +402,23 @@ for (i = 0; bs[i].lval != NULL; i++)
 
 /*******************************************************************/
 
-void TexinfoVariables(FILE *fout,char *scope)
+static void AppendVariables(struct Scope *sp, struct Rlist **list)
+{
+HashIterator i = HashIteratorInit(sp->hashtable);
+CfAssoc *assoc;
 
-{ struct Scope *sp;
-  struct CfAssoc **ap;
+while ((assoc = HashIteratorNext(&i)))
+   {
+   CfOut(cf_verbose,"","Appending variable documentation for %s (%c)\n",assoc->lval,assoc->rtype);
+   PrependRScalar(list,assoc->lval,CF_SCALAR);
+   }
+}
+
+/*******************************************************************/
+
+static void TexinfoVariables(FILE *fout,char *scope)
+
+{
   char filename[CF_BUFSIZE],varname[CF_BUFSIZE];
   struct Rlist *rp,*list = NULL;
   int i;
@@ -405,18 +427,7 @@ fprintf(fout,"\n\n@node Variable context %s\n@section Variable context @code{%s}
 snprintf(filename,CF_BUFSIZE-1,"varcontext_%s_intro.texinfo",scope);
 IncludeManualFile(fout,filename);
 
-sp = GetScope(scope);
-
-for (i = 0; i < CF_HASHTABLESIZE; i++)
-   {
-   ap = sp->hashtable;
-   
-   if (ap[i] != NULL)
-      {
-      CfOut(cf_verbose,"","Appending variable documentation for %s (%c)\n",ap[i]->lval,ap[i]->rtype);
-      PrependRScalar(&list,ap[i]->lval,CF_SCALAR);
-      }
-   }
+AppendVariables(GetScope(scope), &list);
 
 for (rp = AlphaSortRListNames(list); rp != NULL; rp = rp->next)
    {
@@ -456,7 +467,7 @@ if (strcmp(scope,"mon") == 0)
 /* Level                                                           */
 /*******************************************************************/
 
-void TexinfoShowRange(FILE *fout,char *s,enum cfdatatype type)
+static void TexinfoShowRange(FILE *fout,char *s,enum cfdatatype type)
 
 {
 struct Rlist *list = NULL,*rp;
@@ -489,7 +500,7 @@ else
 
 /*****************************************************************************/
 
-void TexinfoSubBodyParts(FILE *fout,struct BodySyntax *bs)
+static void TexinfoSubBodyParts(FILE *fout,struct BodySyntax *bs)
 
 { int i;
  char filename[CF_BUFSIZE],*res;
@@ -541,7 +552,7 @@ fprintf(fout,"@end table\n");
 
 /*****************************************************************************/
 
-void IncludeManualFile(FILE *fout,char *file)
+static void IncludeManualFile(FILE *fout,char *file)
 
 { struct stat sb;
  char buffer[CF_BUFSIZE],filename[CF_BUFSIZE];
@@ -561,9 +572,11 @@ if (cfstat(filename,&sb) == -1)
       }
 
 #ifdef HAVE_CONSTELLATION
-   fprintf(fp,"\n@i{History}: Was introduced in version %s, Nova %s, Constellation %s (%s)\n\n",VERSION,Nova_GetVersion(),Constellation_GetVersion(),VYEAR);
+   fprintf(fp,"\n@i{History}: Was introduced in %s, Nova %s, Constellation %s (%d)\n\n",Version(),Nova_Version(),Constellation_Version(), BUILD_YEAR);
 #elif HAVE_NOVA
-   fprintf(fp,"\n@i{History}: Was introduced in version %s, Nova %s (%s)\n\n",VERSION,Nova_GetVersion(),VYEAR);
+   fprintf(fp,"\n@i{History}: Was introduced in %s, Nova %s (%d)\n\n",Version(),Nova_Version(), BUILD_YEAR);
+#else
+   fprintf(fp,"\n@i{History}: Was introduced in %s (%d)\n\n", Version(), BUILD_YEAR);
 #endif
    fprintf(fp,"\n@verbatim\n\nFill me in (%s)\n\"\"\n@end verbatim\n",filename);
    fclose(fp);
@@ -591,7 +604,7 @@ fprintf(fout,"\n");
 
 /*****************************************************************************/
 
-void TexinfoSpecialFunction(FILE *fout,struct FnCallType fn)
+static void TexinfoSpecialFunction(FILE *fout,struct FnCallType fn)
 
 { char filename[CF_BUFSIZE];
   struct FnCallArg *args = fn.args;
@@ -607,6 +620,14 @@ for (i = 0; args[i].pattern != NULL; i++)
       {
       fprintf(fout,",");
       }
+   }
+if (fn.numargs == CF_VARARGS)
+   {
+   if (i != 0)
+      {
+      fprintf(fout,",");
+      }
+   fprintf(fout, "...");
    }
 
 fprintf(fout,") returns type @b{%s}\n\n@*\n",CF_DATATYPES[fn.dtype]);
@@ -631,7 +652,7 @@ IncludeManualFile(fout,filename);
 
 /*****************************************************************************/
 
-void PrintPattern(FILE *fout,char *pattern)
+static void PrintPattern(FILE *fout,char *pattern)
 
 { char *sp;
 

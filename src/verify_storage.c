@@ -32,6 +32,16 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void FindStoragePromiserObjects(struct Promise *pp);
+static int VerifyFileSystem(char *name,struct Attributes a,struct Promise *pp);
+static int VerifyFreeSpace(char *file,struct Attributes a,struct Promise *pp);
+static void VolumeScanArrivals(char *file,struct Attributes a,struct Promise *pp);
+static int FileSystemMountedCorrectly(struct Rlist *list,char *name,char *options,struct Attributes a,struct Promise *pp);
+static int IsForeignFileSystem (struct stat *childstat,char *dir);
+#ifndef MINGW
+static int VerifyMountPromise(char *file,struct Attributes a,struct Promise *pp);
+#endif  /* NOT MINGW */
+
 /*****************************************************************************/
 
 void *FindAndVerifyStoragePromises(struct Promise *pp)
@@ -45,7 +55,7 @@ return (void *)NULL;
 
 /*****************************************************************************/
 
-void FindStoragePromiserObjects(struct Promise *pp)
+static void FindStoragePromiserObjects(struct Promise *pp)
 
 {
 /* Check if we are searching over a regular expression */
@@ -62,7 +72,7 @@ void VerifyStoragePromise(char *path,struct Promise *pp)
 
 a = GetStorageAttributes(pp);
 
-CF_NODES++;
+CF_OCCUR++;
 
 #ifdef MINGW
 if(!a.havemount)
@@ -137,11 +147,11 @@ YieldCurrentLock(thislock);
 /** Level                                                          */
 /*******************************************************************/
 
-int VerifyFileSystem(char *name,struct Attributes a,struct Promise *pp)
+static int VerifyFileSystem(char *name,struct Attributes a,struct Promise *pp)
 
 { struct stat statbuf, localstat;
-  DIR *dirh;
-  struct dirent *dirp;
+  CFDIR *dirh;
+  const struct dirent *dirp;
   off_t sizeinbytes = 0;
   long filecount = 0;
   char buff[CF_BUFSIZE];
@@ -161,13 +171,13 @@ if (S_ISLNK(statbuf.st_mode))
 
 if (S_ISDIR(statbuf.st_mode))
    {
-   if ((dirh = opendir(name)) == NULL)
+   if ((dirh = OpenDirLocal(name)) == NULL)
       {
       CfOut(cf_error,"opendir","Can't open directory %s which checking required/disk\n",name);
       return false;
       }
 
-   for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+   for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
       {
       if (!ConsiderFile(dirp->d_name,name,a,pp))
          {
@@ -200,7 +210,7 @@ if (S_ISDIR(statbuf.st_mode))
       sizeinbytes += localstat.st_size;
       }
 
-   closedir(dirh);
+   CloseDir(dirh);
 
    if (sizeinbytes < 0)
       {
@@ -227,10 +237,9 @@ return(true);
 
 /*******************************************************************/
 
-int VerifyFreeSpace(char *file,struct Attributes a,struct Promise *pp)
+static int VerifyFreeSpace(char *file,struct Attributes a,struct Promise *pp)
 
 { struct stat statbuf;
-  off_t free;
   long kilobytes;
   
 #ifdef MINGW
@@ -261,23 +270,23 @@ kilobytes = a.volume.freespace;
 
 if (kilobytes < 0)
    {
-   free = GetDiskUsage(file,cfpercent);
+   int free = (int)GetDiskUsage(file,cfpercent);
    kilobytes = -1 * kilobytes;
 
    if (free < (int)kilobytes)
       {
-      cfPS(cf_error,CF_FAIL,"",pp,a," !! Free disk space is under %d% for volume containing %s (%d% free)\n",kilobytes,file,free);
+      cfPS(cf_error,CF_FAIL,"",pp,a," !! Free disk space is under %ld%% for volume containing %s (%d%% free)\n",kilobytes,file,free);
       return false;
       }
    }
 else
    {
-   free = GetDiskUsage(file, cfabs);
+   off_t free = GetDiskUsage(file, cfabs);
    kilobytes = kilobytes / 1024;
 
    if (free < kilobytes)
       {
-      cfPS(cf_error,CF_FAIL,"",pp,a," !! Disk space under %d kB for volume containing %s (%d kB free)\n",kilobytes,file,free);
+      cfPS(cf_error,CF_FAIL,"",pp,a," !! Disk space under %ld kB for volume containing %s (%lld kB free)\n",kilobytes,file,(long long)free);
       return false;
       }
    }
@@ -287,7 +296,7 @@ return true;
 
 /*******************************************************************/
 
-void VolumeScanArrivals(char *file,struct Attributes a,struct Promise *pp)
+static void VolumeScanArrivals(char *file,struct Attributes a,struct Promise *pp)
 
 {
  CfOut(cf_verbose,"","Scan arrival sequence . not yet implemented\n");
@@ -295,7 +304,7 @@ void VolumeScanArrivals(char *file,struct Attributes a,struct Promise *pp)
 
 /*******************************************************************/
 
-int FileSystemMountedCorrectly(struct Rlist *list,char *name,char *options,struct Attributes a,struct Promise *pp)
+static int FileSystemMountedCorrectly(struct Rlist *list,char *name,char *options,struct Attributes a,struct Promise *pp)
 
 { struct Rlist *rp;
   struct CfMount *mp;
@@ -347,7 +356,7 @@ return found;
 /* Mounting */
 /*********************************************************************/
 
-int IsForeignFileSystem (struct stat *childstat,char *dir)
+static int IsForeignFileSystem (struct stat *childstat,char *dir)
 
  /* Is FS NFS mounted ? */
 
@@ -403,7 +412,7 @@ return(false);
 
 #ifndef MINGW
 
-int VerifyMountPromise(char *name,struct Attributes a,struct Promise *pp)
+static int VerifyMountPromise(char *name,struct Attributes a,struct Promise *pp)
 
 { char *options;
   char dir[CF_BUFSIZE];
@@ -451,7 +460,6 @@ if (!FileSystemMountedCorrectly(MOUNTEDFSLIST,name,options,a,pp))
    if (changes)
       {
       CF_MOUNTALL = true;
-      CF_SAVEFSTAB = true;
       }
    }
 else
@@ -461,10 +469,7 @@ else
       VerifyUnmount(name,a,pp);
       if (a.mount.editfstab)
          {
-         if (VerifyNotInFstab(name,a,pp))
-            {
-            CF_SAVEFSTAB = true;
-            }
+         VerifyNotInFstab(name,a,pp);
          }
       }
    else

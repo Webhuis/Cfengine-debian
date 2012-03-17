@@ -32,18 +32,31 @@ vars:
 bundle agent test
 {
 vars:
-    linux::
-	"gid_0" int => getgid("root");
-    freebsd::
-	"gid_0" int => getgid("wheel");
-    !(linux|freebsd)::
-	"gid_0" string => "fixme";
-    any::
-	"gid_daemon" int => getgid("daemon");
-	"gid_sys" int => getgid("sys");
+  linux|freebsd::
+    "gid_daemon" int => getgid("daemon");
+    "gid_sys" int => getgid("sys");
+  !linux.!freebsd::
+    "gid_daemon" string => "fixme";
+    "gid_sys" string => "fixme";
 
-	"num_daemon" int => "1";
-	"num_sys" int => "3";
+  linux::
+    "gid_0" int => getgid("root");
+  freebsd::
+    "gid_0" int => getgid("wheel");
+  !linux.!freebsd::
+    "gid_0" string => "fixme";
+
+  SuSE|redhat::
+    "num_daemon" int => "2";
+  (linux.!SuSE.!redhat)|freebsd::
+    "num_daemon" int => "1";
+  !linux.!freebsd::
+    "num_daemon" string => "fixme";
+
+  linux|freebsd::
+    "num_sys" int => "3";
+  !linux.!freebsd::
+    "num_sys" string => "fixme";
 }
 
 #######################################################
@@ -64,14 +77,8 @@ reports:
 	"sys is GID $(test.gid_sys), expected $(test.num_sys)";
     ok::
 	"$(this.promise_filename) Pass";
-    MAIN.ok::
-	"$(this.promise_filename) Pass"
-		report_to_file => "$(G.logfile)";
     !ok::
 	"$(this.promise_filename) FAIL";
-    MAIN.!ok::
-	"$(this.promise_filename) FAIL"
-		report_to_file => "$(G.logfile)";
 }
 
 #######################################################

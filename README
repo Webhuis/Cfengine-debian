@@ -1,4 +1,5 @@
 
+PLEASE READ THIS CAREFULLY
 
 This is version of cfengine 3. Please read the documentation carefully
 before installing it. This software is NOT a drop-in upgrade for
@@ -7,4 +8,3 @@ of cfengine which offers a path to upgrading gradually while
 supporting an existing cfengine 2 base.
 
 Please see the INSTALL file for build instructions.
-

@@ -35,6 +35,7 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void NewClientCache(struct cfstat *data,struct Promise *pp);
 static void CacheServerConnection(struct cfagent_connection *conn,char *server);
 static int TryConnect(struct cfagent_connection *conn, struct timeval *tvp, struct sockaddr *cinp, int cinpSz);
 static void MarkServerOffline(char *server);
@@ -294,6 +295,7 @@ if (SendTransaction(conn->sd,sendbuffer,tosend,CF_DONE) == -1)
 
 if (ReceiveTransaction(conn->sd,recvbuffer,NULL) == -1)
    {
+   DestroyServerConnection(conn);
    return -1;
    }
 
@@ -344,6 +346,7 @@ if (OKProtoReply(recvbuffer))
    
    if (ReceiveTransaction(conn->sd,recvbuffer,NULL) == -1)
       {
+      DestroyServerConnection(conn);
       return -1;
       }
    
@@ -423,16 +426,16 @@ return -1;
 
 /*********************************************************************/
 
-CFDIR *cf_remote_opendir(char *dirname,struct Attributes attr,struct Promise *pp)
-
+CFDIR *OpenDirRemote(const char *dirname,struct Attributes attr,struct Promise *pp)
 { struct cfagent_connection *conn = pp->conn;
   char sendbuffer[CF_BUFSIZE];
   char recvbuffer[CF_BUFSIZE];
   char in[CF_BUFSIZE];
   char out[CF_BUFSIZE];
-  int n, done=false, cipherlen = 0,plainlen = 0,tosend;
+  int n, cipherlen = 0,plainlen = 0,tosend;
   CFDIR *cfdirh;
   char *sp;
+  struct Item *files = NULL;
 
 Debug("CfOpenDir(%s:%s)\n",pp->this_server,dirname);
 
@@ -442,15 +445,11 @@ if (strlen(dirname) > CF_BUFSIZE - 20)
    return NULL;
    }
 
-if ((cfdirh = (CFDIR *)malloc(sizeof(CFDIR))) == NULL)
+if ((cfdirh = calloc(1, sizeof(CFDIR))) == NULL)
    {
    CfOut(cf_error,""," !! Couldn't allocate memory in cf_remote_opendir\n");
    exit(1);
    }
-
-cfdirh->cf_list = NULL;
-cfdirh->cf_listpos = NULL;
-cfdirh->cf_dirh = NULL;
 
 if (attr.copy.encrypt)
    {
@@ -458,6 +457,7 @@ if (attr.copy.encrypt)
       {
       cfPS(cf_error,CF_INTERPT,"",pp,attr," !! Cannot do encrypted copy without keys (use cf-key)");
       return NULL;
+      free(cfdirh);
       }
    
    snprintf(in,CF_BUFSIZE,"OPENDIR %s",dirname);
@@ -478,15 +478,11 @@ if (SendTransaction(conn->sd,sendbuffer,tosend,CF_DONE) == -1)
    return NULL;
    }
 
-while (!done)
+while (true)
    {
    if ((n = ReceiveTransaction(conn->sd,recvbuffer,NULL)) == -1)
       {
-      if (errno == EINTR) 
-         {
-         continue;
-         }
-
+      DestroyServerConnection(conn);
       free((char *)cfdirh);
       return NULL;
       }
@@ -518,13 +514,30 @@ while (!done)
 
    for (sp = recvbuffer; *sp != '\0'; sp++)
       {
+      struct Item *ip;
+
       if (strncmp(sp,CFD_TERMINATOR,strlen(CFD_TERMINATOR)) == 0)    /* End transmission */
          {
-         cfdirh->cf_listpos = cfdirh->cf_list;
+         cfdirh->listpos = cfdirh->list;
          return cfdirh;
          }
 
-      AppendItem(&(cfdirh->cf_list),sp,NULL);
+      if ((ip = calloc(1, sizeof(struct Item))) == NULL)
+         {
+         FatalError("Failed to alloc in OpenDirRemote");
+         }
+      ip->name = (char*)AllocateDirentForFilename(sp);
+
+      if (files == NULL) /* First element */
+         {
+         cfdirh->list = ip;
+         files = ip;
+         }
+      else
+         {
+         files->next = ip;
+         files = ip;
+         }
 
       while(*sp != '\0')
          {
@@ -533,13 +546,13 @@ while (!done)
       }
    }
  
-cfdirh->cf_listpos = cfdirh->cf_list;
+cfdirh->listpos = cfdirh->list;
 return cfdirh;
 }
 
 /*********************************************************************/
 
-void NewClientCache(struct cfstat *data,struct Promise *pp)
+static void NewClientCache(struct cfstat *data,struct Promise *pp)
 
 { struct cfstat *sp;
 
@@ -628,6 +641,7 @@ if (SendTransaction(conn->sd,sendbuffer,tosend,CF_DONE) == -1)
 
 if (ReceiveTransaction(conn->sd,recvbuffer,NULL) == -1)
    {
+   DestroyServerConnection(conn);
    cfPS(cf_error,CF_INTERPT,"recv",pp,attr,"Failed send");
    CfOut(cf_verbose,"","No answer from host, assuming checksum ok to avoid remote copy for now...\n");
    return false;
@@ -663,7 +677,7 @@ snprintf(cfchangedstr,255,"%s%s",CF_CHANGEDSTR1,CF_CHANGEDSTR2);
   
 if ((strlen(new) > CF_BUFSIZE-20))
    {
-   CfOut(cf_error,"","Filename too long");
+   cfPS(cf_error,CF_INTERPT,"",pp,attr,"Filename too long");               
    return false;
    }
  
@@ -671,7 +685,7 @@ unlink(new);  /* To avoid link attacks */
   
 if ((dd = open(new,O_WRONLY|O_CREAT|O_TRUNC|O_EXCL|O_BINARY, 0600)) == -1)
    {
-   CfOut(cf_error,"open"," !! NetCopy to destination %s:%s security - failed attempt to exploit a race? (Not copied)\n",pp->this_server,new);
+   cfPS(cf_error,CF_INTERPT,"open",pp,attr," !! NetCopy to destination %s:%s security - failed attempt to exploit a race? (Not copied)\n",pp->this_server,new);
    unlink(new);
    return false;
    }
@@ -715,11 +729,7 @@ while (!done)
    
    if ((n_read = RecvSocketStream(conn->sd,buf,toget,0)) == -1)
       {
-      if (errno == EINTR) 
-         {
-         continue;
-         }
-      
+      DestroyServerConnection(conn);
       cfPS(cf_error,CF_INTERPT,"recv",pp,attr,"Error in client-server stream");
       close(dd);
       free(buf);
@@ -752,7 +762,7 @@ while (!done)
    
    if ((value > 0) && strncmp(buf+CF_INBAND_OFFSET,"BAD: ",5) == 0)
       {
-      CfOut(cf_inform,"","Network access to cleartext %s:%s denied\n",pp->this_server,source);      
+      cfPS(cf_inform,CF_INTERPT,"",pp,attr,"Network access to cleartext %s:%s denied\n",pp->this_server,source);      
       close(dd);
       free(buf);
       return false;
@@ -817,7 +827,7 @@ snprintf(cfchangedstr,255,"%s%s",CF_CHANGEDSTR1,CF_CHANGEDSTR2);
   
 if ((strlen(new) > CF_BUFSIZE-20))
    {
-   CfOut(cf_error,"","Filename too long");
+   cfPS(cf_error,CF_INTERPT,"",pp,attr,"Filename too long");               
    return false;
    }
  
@@ -825,7 +835,7 @@ unlink(new);  /* To avoid link attacks */
   
 if ((dd = open(new,O_WRONLY|O_CREAT|O_TRUNC|O_EXCL|O_BINARY, 0600)) == -1)
    {
-   CfOut(cf_error,"open"," !! NetCopy to destination %s:%s security - failed attempt to exploit a race? (Not copied)\n",pp->this_server,new);
+   cfPS(cf_error,CF_INTERPT,"open",pp,attr," !! NetCopy to destination %s:%s security - failed attempt to exploit a race? (Not copied)\n",pp->this_server,new);
    unlink(new);
    return false;
    }
@@ -863,6 +873,7 @@ while (more)
    {
    if ((cipherlen = ReceiveTransaction(conn->sd,buf,&more)) == -1)
       {
+      DestroyServerConnection(conn);
       free(buf);
       return false;
       }
@@ -1145,6 +1156,24 @@ return false;
 
 /*********************************************************************/
 
+/*
+ * We need to destroy connection as it has got an fatal (or non-fatal) error
+ */
+void DestroyServerConnection(struct cfagent_connection *conn)
+{
+struct Rlist *entry = KeyInRlist(SERVERLIST, conn->remoteip);
+
+ServerDisconnection(conn);
+
+if (entry != NULL)
+   {
+   entry->item = NULL; /* Has been freed by ServerDisconnection */
+   DeleteRlistEntry(&SERVERLIST, entry);
+   }
+}
+
+/*********************************************************************/
+
 static struct cfagent_connection *ServerConnectionReady(char *server)
 
 { struct Rlist *rp;
@@ -1284,7 +1313,7 @@ if (!ThreadLock(cft_getaddr))
    exit(1);
    }
 
-strncpy(ipname,Hostname2IPString(server),CF_MAXVARSIZE-1);
+strlcpy(ipname,Hostname2IPString(server),CF_MAXVARSIZE);
 
 rp = PrependRlist(&SERVERLIST,"nothing",CF_SCALAR);
 free(rp->item);

@@ -32,6 +32,8 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static char *IPString2UQHostname(char *ipaddress);
+
 /*********************************************************************/
 
 struct cfagent_connection *NewAgentConn()
@@ -233,7 +235,7 @@ return true;
 
 /*****************************************************************************/
 
-char *Hostname2IPString(char *hostname)
+const char *Hostname2IPString(const char *hostname)
 
 { static char ipbuffer[CF_SMALLBUF];
   int err;
@@ -362,7 +364,7 @@ return hostbuffer;
 
 /*****************************************************************************/
 
-char *IPString2UQHostname(char *ipaddress)
+static char *IPString2UQHostname(char *ipaddress)
 
 /* Return an unqualified hostname */
     

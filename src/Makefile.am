@@ -1,15 +1,14 @@
 AM_CFLAGS = $(GCC_CFLAG) $(NOVA_CFLAGS) $(CONSTELLATION_CFLAGS) @CFLAGS@
 AM_YFLAGS = -d
 LEXLIB = @LEXLIB@
-LDADD = libpromises.la # $(BERKELEY_DB_LDFLAGSD) $(BERKELEY_DB_LIB) $(OPENSSL_LIB_LDFLAGS) $(OPENSSL_LIB_LIB)
-INCLUDES = $(BERKELEY_DB_CFLAGS) $(OPENSSL_LIB_CPPFLAGS)
-AM_LDFLAGS = $(BERKELEY_DB_LDFLAGS) $(OPENSSL_LIB_LDFLAGS) @LDFLAGS@
+LDADD = libpromises.la
 BUILT_SOURCES = cf3parse.h
 
 lib_LTLIBRARIES = libpromises.la
 
 libpromises_la_LDFLAGS = -version-info 1:0:0 -no-undefined
-libpromises_la_LIBADD = ../pub/libcfpub.la $(NOVA_LDADD) $(CONSTELLATION_LDADD) $(BERKELEY_DB_LDFLAGSD) $(BERKELEY_DB_LIB) $(OPENSSL_LIB_LDFLAGS) $(OPENSSL_LIB_LIB)
+libpromises_la_LIBADD = ../pub/libcfpub.la $(NOVA_LDADD) $(CONSTELLATION_LDADD)
+
 libpromises_la_CFLAGS = $(AM_CFLAGS)
 
 # Separate out a library
@@ -17,6 +16,7 @@ libpromises_la_CFLAGS = $(AM_CFLAGS)
 libpromises_la_SOURCES =                                                \
         cf3parse.y                                                      \
         cf3lex.l                                                        \
+        alloc.c                                                         \
         patches.c                                                       \
         attributes.c                                                    \
         install.c                                                       \
@@ -25,6 +25,8 @@ libpromises_la_SOURCES =                                                \
         dbm_berkeley.c                                                  \
         dbm_quick.c                                                     \
         dbm_tokyocab.c                                                  \
+        dbm_sqlite3.c                                                   \
+        dir.c                                                           \
         dtypes.c                                                        \
         classes.c                                                       \
         env_context.c                                                   \
@@ -69,6 +71,7 @@ libpromises_la_SOURCES =                                                \
         hashes.c                                                        \
         crypto.c                                                        \
         sort.c                                                          \
+	keyring.c							\
         full-write.c                                                    \
         expand.c                                                        \
         matching.c                                                      \
@@ -93,7 +96,7 @@ libpromises_la_SOURCES =                                                \
         verify_reports.c                                                \
         verify_processes.c                                              \
         enterprise_stubs.c                                              \
-	mod_functions.c							\
+	bootstrap.c							\
 	mod_defaults.c							\
         mod_common.c                                                    \
         mod_access.c                                                    \
@@ -151,7 +154,20 @@ cf_serverd_SOURCES =                                                    \
 cf_monitord_SOURCES =                                                   \
         verify_measurements.c                                           \
         env_monitor.c                                                   \
+        mon_cpu.c                                                       \
+        mon_disk.c                                                      \
+        mon_entropy.c                                                   \
+        mon_load.c                                                      \
+        mon_network_sniffer.c                                           \
+        mon_network.c                                                   \
+        mon_processes.c                                                 \
+        mon_temp.c                                                      \
         monitor.c
+
+cf_monitord_LDADD = libpromises.la
+if HAVE_NOVA
+cf_monitord_LDADD += ../nova/src/libcfmonitord.la
+endif
 
 cf_execd_SOURCES =                                                      \
         exec.c
@@ -187,6 +203,7 @@ noinst_HEADERS =                                                        \
         string_expressions.h                                            \
         logic_expressions.h                                             \
         compiler.h                                                      \
+        monitoring.h                                                    \
         bool.h
 
 #

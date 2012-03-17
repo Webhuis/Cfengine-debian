@@ -34,9 +34,10 @@
 
 #include "logic_expressions.h"
 
-extern char *DAY_TEXT[];
-
 static bool ValidClassName(const char *str);
+static int GetORAtom(char *start,char *buffer);
+static int HasBrackets(char *s,struct Promise *pp);
+static int IsBracketed(char *s);
 
 /*****************************************************************************/
 /* Level                                                                     */
@@ -337,13 +338,15 @@ if (strcmp(pp->bundletype,THIS_AGENT) == 0 || FullTextMatch("edit_.*",pp->bundle
 
 /*******************************************************************/
 
-void NewClass(char *oclass)
+void NewClass(const char *oclass)
 
-{ struct Item *ip;
-  char class[CF_MAXVARSIZE];
+{
+struct Item *ip;
+char class[CF_MAXVARSIZE];
 
-Chop(oclass);
-strncpy(class,CanonifyName(oclass),CF_MAXVARSIZE);  
+strncpy(class, oclass, CF_MAXVARSIZE);
+Chop(class);
+CanonifyNameInPlace(class);
 
 Debug("NewClass(%s)\n",class);
 
@@ -580,7 +583,7 @@ return list;
 
 /*********************************************************************/
 
-int IsBracketed(char *s)
+static int IsBracketed(char *s)
 
  /* return true if the entire string is bracketed, not just if
     if contains brackets */
@@ -645,7 +648,7 @@ return true;
 
 /*********************************************************************/
 
-int GetORAtom(char *start,char *buffer)
+static int GetORAtom(char *start,char *buffer)
 
 { char *sp = start;
   char *spc = buffer;
@@ -678,7 +681,7 @@ return len;
 
 /*********************************************************************/
 
-int HasBrackets(char *s,struct Promise *pp)
+static int HasBrackets(char *s,struct Promise *pp)
 
  /* return true if contains brackets */
 
@@ -859,7 +862,7 @@ free(errmsg);
 /**********************************************************************/
 
 /* To be used from parser only (uses yyerror) */
-void ValidateClassSyntax(char *str)
+void ValidateClassSyntax(const char *str)
 {
 ParseResult res = ParseExpression(str, 0, strlen(str));
 
@@ -931,7 +934,7 @@ return NULL;
 
 /**********************************************************************/
 
-int IsDefinedClass(char *class)
+bool IsDefinedClass(const char *class)
 {
 ParseResult res;
 
@@ -965,7 +968,7 @@ else
 
 /**********************************************************************/
 
-int IsExcluded(char *exception)
+bool IsExcluded(const char *exception)
 {
 return !IsDefinedClass(exception);
 }
@@ -1312,10 +1315,17 @@ int IsHardClass(char *sp)  /* true if string matches a hardwired class e.g. hpux
   static char *names[] =
      {
      "any","agent","Morning","Afternoon","Evening","Night","Q1","Q2","Q3","Q4",
-     "SuSE","suse","fedora","Ubuntu","cfengine_","ipv4","lsb_compliant","localhost",
+     "SuSE","suse","fedora","Ubuntu","lsb_compliant","localhost",
      NULL
      };
- 
+
+  static char *prefixes[] =
+     {
+     "cfengine_","ipv4",
+     NULL
+     };
+
+  
 for (i = 2; CLASSTEXT[i] != '\0'; i++)
    {
    if (strcmp(CLASSTEXT[i],sp) == 0)
@@ -1342,7 +1352,15 @@ for (i = 0; i < 12; i++)
 
 for (i = 0; names[i] != NULL; i++)
    {
-   if (strncmp(names[i],sp,strlen(names[i])) == 0)
+   if (strcmp(names[i],sp) == 0)
+      {
+      return true;
+      }
+   }
+
+for (i = 0; prefixes[i] != NULL; i++)
+   {
+   if (strncmp(prefixes[i],sp,strlen(prefixes[i])) == 0)
       {
       return true;
       }

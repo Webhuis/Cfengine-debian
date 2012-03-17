@@ -43,9 +43,13 @@ void VerifyOccurrencePromises(struct Promise *pp);
 void VerifyInferencePromise(struct Promise *pp);
 void WriteKMDB(void);
 void GenerateManual(void);
-void CfGenerateStories(char *query);
+void CfGenerateStories(char *query,enum storytype type);
 void VerifyOccurrenceGroup(char *file,struct Promise *pp);
-void CfQueryCFDB(char *query);
+void CfGenerateTestData(int count);
+void CfRemoveTestData(void);
+void CfUpdateTestData(void);
+void ShowSingletons(void);
+void ShowWords(void);
 
 /*******************************************************************/
 /* GLOBAL VARIABLES                                                */
@@ -76,11 +80,11 @@ char *TYPESEQUENCE[] =
 char BUILD_DIR[CF_BUFSIZE];
 char TOPIC_CMD[CF_MAXVARSIZE];
 
+int WORDS = false;
 int HTML = false;
 int WRITE_KMDB = false;
 int GENERATE_MANUAL = false;
 char MANDIR[CF_BUFSIZE];
-int PASS;
 
 struct Occurrence *OCCURRENCES = NULL;
 struct Inference *INFERENCES = NULL;
@@ -89,16 +93,16 @@ struct Inference *INFERENCES = NULL;
 /* Command line options                                            */
 /*******************************************************************/
 
- char *ID = "The knowledge management agent is capable of building\n"
-            "and analysing a semantic knowledge network. It can\n"
-            "configure a relational database to contain an ISO\n"
-            "standard topic map and permit regular-expression based\n"
-            "searching of the map. Analysis of the semantic network\n"
-            "can be performed providing graphical output of the data,\n"
-            "and cf-know can assemble and converge the reference manual\n"
-            "for the current version of the Cfengine software.";
+const char *ID = "The knowledge management agent is capable of building\n"
+                 "and analysing a semantic knowledge network. It can\n"
+                 "configure a relational database to contain an ISO\n"
+                 "standard topic map and permit regular-expression based\n"
+                 "searching of the map. Analysis of the semantic network\n"
+                 "can be performed providing graphical output of the data,\n"
+                 "and cf-know can assemble and converge the reference manual\n"
+                 "for the current version of the Cfengine software.";
  
- struct option OPTIONS[12] =
+const  struct option OPTIONS[15] =
       {
       { "help",no_argument,0,'h' },
       { "build",no_argument,0,'b'},
@@ -108,13 +112,16 @@ struct Inference *INFERENCES = NULL;
       { "file",required_argument,0,'f' },
       { "manual",no_argument,0,'m'},
       { "manpage",no_argument,0,'M'},
-      { "query_cfdb",required_argument,0,'Q'},
-      { "stories",required_argument,0,'s'},
+      { "stories",required_argument,0,'z'},
       { "syntax",required_argument,0,'S'},
+      { "topics",no_argument,0,'T'},
+      { "test",required_argument,0,'t'},
+      { "removetest",no_argument,0,'r'},
+      { "updatetest",no_argument,0,'u'},
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[12] =
+const char *HINTS[15] =
       {
       "Print the help message",
       "Build and store topic map in the CFDB",
@@ -124,9 +131,12 @@ struct Inference *INFERENCES = NULL;
       "Specify an alternative input file than the default",
       "Generate reference manual from internal data",
       "Generate reference manpage from internal data",
-      "Query the CFDB for testing, etc",
       "Look up stories for a given topic on the command line",
       "Print a syntax summary of the optional keyword or this cfengine version",
+      "Show all topic names in CFEngine",
+      "Generate test data",
+      "Remove test data",
+      "Update test data",
       NULL
       };
 
@@ -147,10 +157,14 @@ if (strlen(TOPIC_CMD) == 0)
    KeepPromiseBundles();
    WriteKMDB();
    GenerateManual();
+   ShowWords();
+   ShowSingletons();
    
-   complete = (double)CF_NODES*(CF_NODES-1);
+   complete = (double)CF_TOPICS*(CF_TOPICS-1);
    percent = 100.0 * (double)CF_EDGES/(double)complete;
-   CfOut(cf_inform,""," -> Complexity of knowledge model yields %d/%d = %.4lf%%\n",CF_EDGES,complete,percent);
+   CfOut(cf_inform,""," -> Association density yields %d/%d = %.4lf%%\n",CF_EDGES,complete,percent);
+   percent = 100.0 * (double)CF_OCCUR/(double)CF_TOPICS;
+   CfOut(cf_inform,""," -> Hit probability (efficiency) yields %d/%d = %.4lf%%\n",CF_OCCUR,CF_TOPICS,percent);
    }
 
 return 0;
@@ -169,7 +183,7 @@ void CheckOpts(int argc,char **argv)
 
 LOOKUP = false;
 
-while ((c=getopt_long(argc,argv,"hbd:vVf:mMQ:s:S",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"hbd:vVf:mMz:St:ruT",OPTIONS,&optindex)) != EOF)
   {
   switch ((char) c)
       {
@@ -204,16 +218,11 @@ while ((c=getopt_long(argc,argv,"hbd:vVf:mMQ:s:S",OPTIONS,&optindex)) != EOF)
              }
           break;
 
-      case 'Q':
-          strcpy(TOPIC_CMD,optarg);
-          CfQueryCFDB(TOPIC_CMD);
-          exit(0);
-          break;
+      case 'z':
 
-      case 's':
 #ifdef HAVE_CONSTELLATION
           strcpy(TOPIC_CMD,optarg);
-          CfGenerateStories(TOPIC_CMD);
+          CfGenerateStories(TOPIC_CMD,cfi_cause);
 #endif
           exit(0);
           break;
@@ -227,7 +236,7 @@ while ((c=getopt_long(argc,argv,"hbd:vVf:mMQ:s:S",OPTIONS,&optindex)) != EOF)
           break;
           
       case 'V':
-          Version("cf-know");
+          PrintVersionBanner("cf-know");
           exit(0);
           
       case 'h':
@@ -253,10 +262,29 @@ while ((c=getopt_long(argc,argv,"hbd:vVf:mMQ:s:S",OPTIONS,&optindex)) != EOF)
       case 'm':
           GENERATE_MANUAL = true;
           break;
+
+      case 't':
+          if (atoi(optarg))
+             {
+             CfGenerateTestData(atoi(optarg));
+             exit(0);
+             }
+          break;
+
+      case 'r':
+          CfRemoveTestData();
+          exit(0);
+
+      case 'u':
+          CfUpdateTestData();
+          exit(0);
+
+      case 'T':
+          WORDS = true;
+          break;
           
       default: Syntax("cf-know - knowledge agent",OPTIONS,HINTS,ID);
-          exit(1);
-          
+          exit(1);   
       }
   }
 
@@ -279,9 +307,6 @@ strcpy(SQL_DATABASE,"cf_kmdb");
 strcpy(GRAPHDIR,"");
 SHOWREPORTS = false;
 
-PrependRScalar(&GOALS,"goal.*",CF_SCALAR);
-PrependRScalar(&GOALCATEGORIES,"goals",CF_SCALAR);
-
 if (InsertTopic("any","any"))
    {
    struct Rlist *list = NULL;
@@ -289,7 +314,6 @@ if (InsertTopic("any","any"))
    AddOccurrence(&OCCURRENCES,"The generic knowledge context - any time, any place, anywhere",list,cfk_literal,"any");
    DeleteRlist(list);
    }
-
 }
 
 /*****************************************************************************/
@@ -297,6 +321,7 @@ if (InsertTopic("any","any"))
 void KeepKnowControlPromises()
 
 { struct Constraint *cp;
+  struct Rlist *rp;
   char rettype;
   void *retval;
 
@@ -327,20 +352,6 @@ for (cp = ControlBodyConstraints(cf_know); cp != NULL; cp=cp->next)
          {
          strncpy(MANDIR,retval,CF_BUFSIZE);
          }
-      continue;
-      }
-
-   if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_goalpatterns].lval) == 0)
-      {
-      GOALS = (struct Rlist *)retval;
-      CfOut(cf_verbose,"","SET goal_patterns list\n");
-      continue;
-      }
-
-   if (strcmp(cp->lval,CFK_CONTROLBODY[cfk_goalcategories].lval) == 0)
-      {
-      GOALCATEGORIES = (struct Rlist *)retval;
-      CfOut(cf_verbose,"","SET goal_categories list\n");
       continue;
       }
 
@@ -515,8 +526,6 @@ if (!ok)
 
 /* If all is okay, go ahead and evaluate */
 
-PASS = 1;
-
 for (type = 0; TYPESEQUENCE[type] != NULL; type++)
    {
    for (rp = (struct Rlist *)retval; rp != NULL; rp=rp->next)
@@ -607,20 +616,97 @@ if (strcmp("reports",pp->agentsubtype) == 0)
 
 /*********************************************************************/
 
-void CfQueryCFDB(char *query)
+void CfGenerateStories(char *query,enum storytype type)
 {
-#ifdef HAVE_NOVA
-Nova_CfQueryCFDB(query);
+#ifdef HAVE_CONSTELLATION
+Constellation_CfGenerateStories(query,type);
 #endif
 }
 
 /*********************************************************************/
 
-void CfGenerateStories(char *query)
+void CfGenerateTestData(int count)
 {
-#ifdef HAVE_CONSTELLATION
-Constellation_CfGenerateStories(query);
+#ifdef HAVE_NOVA
+ Nova_GenerateTestData(count);
 #endif
+}
+
+/*********************************************************************/
+
+void CfUpdateTestData(void)
+{
+#ifdef HAVE_NOVA
+ Nova_UpdateTestData();
+#endif
+}
+
+/*********************************************************************/
+
+void CfRemoveTestData(void)
+{
+#ifdef HAVE_NOVA
+ Nova_RemoveTestData();
+#endif
+}
+
+/*********************************************************************/
+
+void ShowWords()
+
+{  struct Topic *tp;
+   struct Item *ip,*list = NULL;
+   int slot;
+
+if (!WORDS)
+   {
+   return;
+   }
+
+for (slot = 0; slot < CF_HASHTABLESIZE; slot++)
+   {  
+   for (tp = TOPICHASH[slot]; tp != NULL; tp=tp->next)
+      {
+      IdempPrependItem(&list,tp->topic_name,tp->topic_context);
+      }
+   }
+
+list = SortItemListNames(list);
+
+for (ip = list; ip != NULL; ip=ip->next)
+   {
+   printf("%s::%s\n",ip->classes,ip->name);
+   }
+}
+
+/*********************************************************************/
+
+void ShowSingletons()
+
+{  struct Topic *tp;
+   struct Item *ip,*list = NULL;
+   int slot;
+
+if (VERBOSE || DEBUG)
+   {   
+   for (slot = 0; slot < CF_HASHTABLESIZE; slot++)
+      {  
+      for (tp = TOPICHASH[slot]; tp != NULL; tp=tp->next)
+         {
+         if (tp->associations == NULL)
+            {
+            PrependItem(&list,tp->topic_name,tp->topic_context);
+            }
+         }
+      }
+   
+   list = SortItemListNames(list);
+
+   for (ip = list; ip != NULL; ip=ip->next)
+      {
+      printf(" ! Warning, topic \"%s::%s\" is a singleton with no connection to the map\n",ip->classes,ip->name);
+      }
+   }
 }
 
 /*********************************************************************/
@@ -680,7 +766,8 @@ for (rp = contexts; rp != NULL; rp = rp->next)
    if (a.fwd_name && a.bwd_name)
       {
       CfOut(cf_verbose,""," -> New thing \"%s\" has a relation \"%s/%s\"",pp->promiser,a.fwd_name,a.bwd_name);
-      AddTopicAssociation(tp,&(tp->associations),a.fwd_name,a.bwd_name,a.associates,true);
+
+      AddTopicAssociation(tp,&(tp->associations),a.fwd_name,a.bwd_name,a.associates,true,rp->item,pp->promiser);
       }
 
    // Handle all synonyms as associations
@@ -697,12 +784,13 @@ for (rp = contexts; rp != NULL; rp = rp->next)
    
    if (a.synonyms)
       {
-      for (rps = a.general; rps != NULL; rps=rps->next)
+      for (rps = a.synonyms; rps != NULL; rps=rps->next)
          {
          otp = IdempInsertTopic(rps->item);
+         CfOut(cf_verbose,""," ---> %s is a synonym for %s",rps->item,tp->topic_name);
          }
-      
-      AddTopicAssociation(tp,&(tp->associations),KM_SYNONYM,KM_SYNONYM,a.synonyms,true);
+
+      AddTopicAssociation(tp,&(tp->associations),KM_SYNONYM,KM_SYNONYM,a.synonyms,true,rp->item,pp->promiser);
       }
 
    // Handle all generalizations as associations
@@ -712,9 +800,10 @@ for (rp = contexts; rp != NULL; rp = rp->next)
       for (rps = a.general; rps != NULL; rps=rps->next)
          {
          otp = IdempInsertTopic(rps->item);
+         CfOut(cf_verbose,""," ---> %s is a generalization for %s",rps->item,tp->topic_name);
          }
       
-      AddTopicAssociation(tp,&(tp->associations),KM_GENERALIZES_F,KM_GENERALIZES_B,a.general,true);
+      AddTopicAssociation(tp,&(tp->associations),KM_GENERALIZES_B,KM_GENERALIZES_F,a.general,true,rp->item,pp->promiser);
       }
 
    // Treat comments as occurrences of information.
@@ -732,7 +821,7 @@ for (rp = contexts; rp != NULL; rp = rp->next)
       {
       struct Rlist *list = NULL;
       PrependRScalar(&list,handle,CF_SCALAR);
-      AddTopicAssociation(tp,&(tp->associations),"is the promise of","stands for",list,true);
+      AddTopicAssociation(tp,&(tp->associations),"is the promise of","stands for",list,true,rp->item,pp->promiser);
       DeleteRlist(list);
       list = NULL;
       snprintf(id,CF_MAXVARSIZE,"%s.%s",pp->classes,handle);
@@ -771,22 +860,23 @@ for (rp = contexts; rp != NULL; rp = rp->next)
       }
 
    CfOut(cf_verbose,""," -> New topic promise for \"%s\" about context \"%s\"",pp->promiser,rp->item);
-   
+
    if (a.fwd_name && a.bwd_name)
       {
-      AddTopicAssociation(tp,&(tp->associations),a.fwd_name,a.bwd_name,a.associates,true);
+      AddTopicAssociation(tp,&(tp->associations),a.fwd_name,a.bwd_name,a.associates,true,rp->item,pp->promiser);
       }
 
    // Handle all synonyms as associations
 
    if (a.synonyms)
       {
-      for (rps = a.general; rps != NULL; rps=rps->next)
+      for (rps = a.synonyms; rps != NULL; rps=rps->next)
          {
          otp = IdempInsertTopic(rps->item);
+         CfOut(cf_verbose,""," ---> %s is a synonym for %s",rps->item,tp->topic_name);
          }
       
-      AddTopicAssociation(tp,&(tp->associations),KM_SYNONYM,KM_SYNONYM,a.synonyms,true);
+      AddTopicAssociation(tp,&(tp->associations),KM_SYNONYM,KM_SYNONYM,a.synonyms,true,rp->item,pp->promiser);
       }
 
    // Handle all generalizations as associations
@@ -796,9 +886,10 @@ for (rp = contexts; rp != NULL; rp = rp->next)
       for (rps = a.general; rps != NULL; rps=rps->next)
          {
          otp = IdempInsertTopic(rps->item);
+         CfOut(cf_verbose,""," ---> %s is a generalization for %s",rps->item,tp->topic_name);
          }
       
-      AddTopicAssociation(tp,&(tp->associations),KM_GENERALIZES_F,KM_GENERALIZES_B,a.general,true);
+      AddTopicAssociation(tp,&(tp->associations),KM_GENERALIZES_B,KM_GENERALIZES_F,a.general,true,rp->item,pp->promiser);
       }
    
    if (handle)
@@ -824,7 +915,7 @@ for (rp = contexts; rp != NULL; rp = rp->next)
       {
       struct Rlist *list = NULL;
       PrependRScalar(&list,handle,CF_SCALAR);
-      AddTopicAssociation(tp,&(tp->associations),"is the promise of","stands for",list,true);
+      AddTopicAssociation(tp,&(tp->associations),"is the promise of","stands for",list,true,rp->item,pp->promiser);
       DeleteRlist(list);
       list = NULL;
       snprintf(id,CF_MAXVARSIZE,"%s.%s",pp->classes,handle);
@@ -900,7 +991,7 @@ for (rp = contexts; rp != NULL; rp = rp->next)
           break;
           
       default:
-          
+
           AddOccurrence(&OCCURRENCES,pp->promiser,a.represents,rep_type,rp->item);
           break;
       }
@@ -989,4 +1080,3 @@ CfOut(cf_verbose,""," -> File %s matched and being logged at %s",file,url);
 DeleteRlist((struct Rlist *)retval.item);
 }
 
- 

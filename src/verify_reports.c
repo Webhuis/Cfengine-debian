@@ -32,6 +32,12 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void FriendStatus(struct Attributes a,struct Promise *pp);
+static void VerifyFriendReliability(struct Attributes a,struct Promise *pp);
+static void VerifyFriendConnections(int hours,struct Attributes a,struct Promise *pp);
+static void ShowState(char *type,struct Attributes a,struct Promise *pp);
+static void PrintFile(struct Attributes a,struct Promise *pp);
+
 /*******************************************************************/
 /* Agent reporting                                                 */
 /*******************************************************************/
@@ -44,6 +50,12 @@ void VerifyReportPromise(struct Promise *pp)
   char unique_name[CF_EXPANDSIZE];
 
 a = GetReportsAttributes(pp);
+
+if (strcmp(pp->classes,"any") == 0)
+   {
+   CfOut(cf_verbose,""," --> Reports promises may not be in class \"any\"");
+   return;
+   }
 
 snprintf(unique_name,CF_EXPANDSIZE-1,"%s_%d",pp->promiser,pp->lineno);
 thislock = AcquireLock(unique_name,VUQNAME,CFSTARTTIME,a,pp,false);
@@ -91,7 +103,7 @@ YieldCurrentLock(thislock);
 /* Level                                                           */
 /*******************************************************************/
 
-void PrintFile(struct Attributes a,struct Promise *pp)
+static void PrintFile(struct Attributes a,struct Promise *pp)
 
 { FILE *fp;
   char buffer[CF_BUFSIZE];
@@ -123,7 +135,7 @@ fclose(fp);
 
 /*********************************************************************/
 
-void ShowState(char *type,struct Attributes a,struct Promise *pp)
+static void ShowState(char *type,struct Attributes a,struct Promise *pp)
 
 { struct stat statbuf;
   char buffer[CF_BUFSIZE],vbuff[CF_BUFSIZE],assemble[CF_BUFSIZE];
@@ -330,7 +342,7 @@ if (dist)
 
 /*********************************************************************/
 
-void FriendStatus(struct Attributes a,struct Promise *pp)
+static void FriendStatus(struct Attributes a,struct Promise *pp)
 
 {
 VerifyFriendConnections(a.report.lastseen,a,pp);
@@ -341,7 +353,7 @@ VerifyFriendReliability(a,pp);
 /* Level                                                             */
 /*********************************************************************/
 
-void VerifyFriendConnections(int hours,struct Attributes a,struct Promise *pp)
+static void VerifyFriendConnections(int hours,struct Attributes a,struct Promise *pp)
 
 /* Go through the database of recent connections and check for
    Long Time No See ...*/
@@ -351,13 +363,13 @@ void VerifyFriendConnections(int hours,struct Attributes a,struct Promise *pp)
   char *key;
   void *value;
   int ksize,vsize;
-  int secs = CF_TICKS_PER_HOUR*hours, criterion, overdue;
+  int secs = SECONDS_PER_HOUR*hours, criterion, overdue;
   time_t now = time(NULL),lsea = (time_t)CF_WEEK, tthen, then;
   char name[CF_BUFSIZE],hostname[CF_BUFSIZE],datebuf[CF_MAXVARSIZE];
   char addr[CF_BUFSIZE],type[CF_BUFSIZE],output[CF_BUFSIZE];
   struct QPoint entry;
   double average = 0.0, var = 0.0, ticksperminute = 60.0;
-  double ticksperhour = (double)CF_TICKS_PER_HOUR;
+  double ticksperhour = (double)SECONDS_PER_HOUR;
 
 CfOut(cf_verbose,"","CheckFriendConnections(%d)\n",hours);
 snprintf(name,CF_BUFSIZE-1,"%s/lastseen/%s",CFWORKDIR,CF_LASTDB_FILE);
@@ -497,7 +509,7 @@ CloseDB(dbp);
 
 /***************************************************************/
 
-void VerifyFriendReliability(struct Attributes a,struct Promise *pp)
+static void VerifyFriendReliability(struct Attributes a,struct Promise *pp)
 
 { CF_DB *dbp;
   CF_DBC *dbcp;

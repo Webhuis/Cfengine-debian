@@ -33,6 +33,14 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int ReadHash(CF_DB *dbp,enum cfhashes type,char *name,unsigned char digest[EVP_MAX_MD_SIZE+1]);
+static int WriteHash(CF_DB *dbp,enum cfhashes type,char *name,unsigned char digest[EVP_MAX_MD_SIZE+1]);
+static char *NewIndexKey(char type,char *name, int *size);
+static void DeleteIndexKey(char *key);
+static void DeleteHashValue(struct Checksum_Value *value);
+static void HashList(struct Item *list,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhashes type);
+static int FileHashSize(enum cfhashes id);
+
 /*******************************************************************/
 
 int RefHash(char *name) // This function wants HASHTABLESIZE to be prime
@@ -75,10 +83,10 @@ return (h & (hashtablesize-1));
 
 /*******************************************************************/
 
-int OatHash(char *key)
+int OatHash(const char *key)
 
 { unsigned int hashtablesize = CF_HASHTABLESIZE;
-  unsigned char *p = key;
+  unsigned const char *p = key;
   unsigned h = 0;
   int i, len = strlen(key);
   
@@ -167,11 +175,13 @@ if (ReadHash(dbp,type,filename,dbdigest))
    }
 else
    {
+   char s[CF_BUFSIZE];
+   snprintf(s,CF_BUFSIZE," !! File %s was not in %s database - new file found",filename,FileHashName(type));
    /* Key was not found, so install it */
-   cfPS(warnlevel,CF_CHG,"",pp,attr," !! File %s was not in %s database - new file found",filename,FileHashName(type));   
+   cfPS(warnlevel,CF_CHG,"",pp,attr,s);   
    Debug("Storing checksum for %s in database %s\n",filename,HashPrint(type,digest));
    WriteHash(dbp,type,filename,digest);
-   
+   LogHashChange(s);
    CloseDB(dbp);
    return false;
    }
@@ -297,7 +307,7 @@ else
 
 /*******************************************************************/
 
-void HashList(struct Item *list,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhashes type)
+static void HashList(struct Item *list,unsigned char digest[EVP_MAX_MD_SIZE+1],enum cfhashes type)
 
 { struct Item *ip;
   EVP_MD_CTX context;
@@ -524,17 +534,23 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
 
    if (cfstat(obj,&statbuf) == -1)
       {
+      char s[CF_BUFSIZE];
+
+      snprintf(s,CF_BUFSIZE,"ALERT: %s file no longer exists!",obj);
+      
       if (attr.change.update)
          {         
          if (DeleteComplexKeyDB(dbp,key,ksize))
             {
-            cfPS(cf_error,CF_CHG,"",pp,attr,"ALERT: %s file no longer exists!",obj);
+            cfPS(cf_error,CF_CHG,"",pp,attr,s);
             }
          }
       else
          {
-         cfPS(cf_error,CF_WARN,"",pp,attr,"ALERT: %s file no longer exists!",obj);
+         cfPS(cf_error,CF_WARN,"",pp,attr,s);
          }
+
+      LogHashChange(s);
       }
 
    memset(&key,0,sizeof(key));
@@ -547,7 +563,7 @@ CloseDB(dbp);
 
 /*****************************************************************************/
 
-int ReadHash(CF_DB *dbp,enum cfhashes type,char *name,unsigned char digest[EVP_MAX_MD_SIZE+1])
+static int ReadHash(CF_DB *dbp,enum cfhashes type,char *name,unsigned char digest[EVP_MAX_MD_SIZE+1])
 
 { char *key;
   int size;
@@ -571,7 +587,7 @@ else
 
 /*****************************************************************************/
 
-int WriteHash(CF_DB *dbp,enum cfhashes type,char *name,unsigned char digest[EVP_MAX_MD_SIZE+1])
+static int WriteHash(CF_DB *dbp,enum cfhashes type,char *name,unsigned char digest[EVP_MAX_MD_SIZE+1])
 
 { char *key;
   struct Checksum_Value *value;
@@ -601,7 +617,7 @@ DeleteIndexKey(key);
 /* level                                                                     */
 /*****************************************************************************/
 
-char *NewIndexKey(char type,char *name, int *size)
+static char *NewIndexKey(char type,char *name, int *size)
 
 { char *chk_key;
 
@@ -625,7 +641,7 @@ return chk_key;
 
 /*****************************************************************************/
 
-void DeleteIndexKey(char *key)
+static void DeleteIndexKey(char *key)
 
 {
 free(key);
@@ -652,7 +668,7 @@ return chk_val;
 
 /*****************************************************************************/
 
-void DeleteHashValue(struct Checksum_Value *chk_val)
+static void DeleteHashValue(struct Checksum_Value *chk_val)
 
 {
 free((char *)chk_val);
@@ -668,7 +684,7 @@ return CF_DIGEST_TYPES[id][0];
 
 /***************************************************************************/
 
-int FileHashSize(enum cfhashes id)
+static int FileHashSize(enum cfhashes id)
 
 {
 return CF_DIGEST_SIZES[id];

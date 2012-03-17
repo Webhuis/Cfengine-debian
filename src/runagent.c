@@ -46,18 +46,18 @@ void DeleteStream(FILE *fp);
 /* Command line options                                            */
 /*******************************************************************/
 
- char *ID = "The run agent connects to a list of running instances of\n"
-            "the cf-serverd service. The agent allows a user to\n"
-            "forego the usual scheduling interval for the agent and\n"
-            "activate cf-agent on a remote host. Additionally, a user\n"
-            "can send additional classes to be defined on the remote\n"
-            "host. Two kinds of classes may be sent: classes to decide\n"
-            "on which hosts the agent will be started, and classes that\n"
-            "the user requests the agent should define on execution.\n"
-            "The latter type is regulated by cf-serverd's role based\n"
-            "access control.";
+const char *ID = "The run agent connects to a list of running instances of\n"
+                 "the cf-serverd service. The agent allows a user to\n"
+                 "forego the usual scheduling interval for the agent and\n"
+                 "activate cf-agent on a remote host. Additionally, a user\n"
+                 "can send additional classes to be defined on the remote\n"
+                 "host. Two kinds of classes may be sent: classes to decide\n"
+                 "on which hosts the agent will be started, and classes that\n"
+                 "the user requests the agent should define on execution.\n"
+                 "The latter type is regulated by cf-serverd's role based\n"
+                 "access control.";
  
- struct option OPTIONS[17] =
+const struct option OPTIONS[17] =
       {
       { "help",no_argument,0,'h' },
       { "background",optional_argument,0,'b' },
@@ -78,7 +78,7 @@ void DeleteStream(FILE *fp);
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[17] =
+const char *HINTS[17] =
       {
       "Print the help message",
       "Parallelize connections (50 by default)",
@@ -103,6 +103,7 @@ extern struct BodySyntax CFR_CONTROLBODY[];
 
 int INTERACTIVE = false;
 int OUTPUT_TO_FILE = false;
+char OUTPUT_DIRECTORY[CF_BUFSIZE]; 
 int BACKGROUND = false;
 int MAXCHILD = 50;
 char REMOTE_AGENT_OPTIONS[CF_MAXVARSIZE];
@@ -118,7 +119,9 @@ int main(int argc,char *argv[])
 
 { struct Rlist *rp;
   struct Promise *pp;
-  int count = 1;
+  int count = 0;
+  int status;
+  int pid;
 
 CheckOpts(argc,argv);  
 GenericInitialize(argc,argv,"runagent");
@@ -133,20 +136,65 @@ if (BACKGROUND && INTERACTIVE)
 
 pp = MakeDefaultRunAgentPromise();
 
+/* HvB */
 if (HOSTLIST)
    {
-   for (rp = HOSTLIST; rp != NULL; rp=rp->next)
-      {
-      HailServer(rp->item,RUNATTR,pp);
+   rp  = HOSTLIST;
 
-      if (count++ >= MAXCHILD)
+   while ( rp != NULL )
+      {
+
+#ifdef MINGW
+      if (BACKGROUND)
          {
+	 CfOut(cf_verbose, "", "Windows does not support starting processes in the background - starting in foreground");
          BACKGROUND = false;
+	 }
+#else
+      if (BACKGROUND) /* parallel */
+         {
+	 if (count <= MAXCHILD)
+            {
+	    if (fork() == 0) /* child process */
+               {
+      	       HailServer(rp->item,RUNATTR,pp);
+	       exit(0);
+	       }
+            else /* parent process */
+               {
+	       rp = rp->next;
+	       count++; 
+               }
+	    }
+         else
+            {
+            pid = wait(&status);
+            Debug("child = %d, child number = %d\n", pid, count);
+            count--;
+            }
          }
+      else /* serial */
+#endif  /* MINGW */
+         {
+      	 HailServer(rp->item,RUNATTR,pp);
+         rp = rp->next;
+         }
+      } /* end while */
+   } /* end if HOSTLIST */
+
+#ifndef MINGW
+if (BACKGROUND)
+   {
+   printf("Waiting for child processes to finish\n");
+   while (count > 1)
+      {
+      pid = wait(&status);
+      CfOut(cf_verbose, "", "Child = %d ended, number = %d\n", pid, count);
+      count--;
       }
    }
+#endif
 
-UpdateLastSeen();
 return 0;
 }
 
@@ -255,7 +303,7 @@ while ((c=getopt_long(argc,argv,"t:q:d:b:vnKhIif:D:VSxo:s:MH:",OPTIONS,&optindex
              CONNTIMEOUT = atoi(optarg);
           break;
           
-      case 'V': Version("cf-runagent Run agent");
+      case 'V': PrintVersionBanner("cf-runagent");
           exit(0);
           
       case 'h': Syntax("cf-runagent - Run agent",OPTIONS,HINTS,ID);
@@ -351,11 +399,6 @@ if (INTERACTIVE)
 
 #ifdef MINGW
 
-if (BACKGROUND)
-  {
-  CfOut(cf_verbose, "", "Windows does not support starting processes in the background - starting in foreground");
-  }
-
 CfOut(cf_inform,"","...........................................................................\n");
 CfOut(cf_inform,""," * Hailing %s : %u, with options \"%s\" (serial)\n",peer,a.copy.portnumber,REMOTE_AGENT_OPTIONS);
 CfOut(cf_inform,"","...........................................................................\n");  
@@ -365,10 +408,6 @@ CfOut(cf_inform,"","............................................................
 if (BACKGROUND)
    {
    CfOut(cf_inform,"","Hailing %s : %u, with options \"%s\" (parallel)\n",peer,a.copy.portnumber,REMOTE_AGENT_OPTIONS);
-   if (fork() != 0)
-      {
-      return true; /* Child continues*/
-      }   
    }
 else
    {
@@ -411,8 +450,10 @@ if (strlen(MENU) > 0)
    switch(menu)
      {
      case cfd_menu_delta:
+         Nova_QueryForKnowledgeMap(conn,MENU,time(0) - SECONDS_PER_MINUTE * 10);
+         break;
      case cfd_menu_full:
-       Nova_QueryForKnowledgeMap(conn,MENU,time(0) - 7*24*3600);
+         Nova_QueryForKnowledgeMap(conn,MENU,time(0) - SECONDS_PER_WEEK);
        break;
 
      case cfd_menu_relay:
@@ -437,14 +478,6 @@ else
 ServerDisconnection(conn);
 DeleteRlist(a.copy.servers);
 
-#ifndef MINGW
-if (BACKGROUND)
-   {
-   /* Close parallel connection*/
-   exit(0);
-   }
-#endif   /* NOT MINGW */
-   
 return true;
 }
 
@@ -508,7 +541,18 @@ for (cp = ControlBodyConstraints(cf_runagent); cp != NULL; cp=cp->next)
 
    if (strcmp(cp->lval,CFR_CONTROLBODY[cfr_background].lval) == 0)
       {
-      BACKGROUND = GetBoolean(retval);
+      /*
+       * Only process this option if are is no -b or -i options specified on
+       * command line.
+       */
+      if (BACKGROUND || INTERACTIVE)
+         {
+         CfOut(cf_error, "", "Warning: 'background_children' setting from 'body runagent control' is overriden by command-line option.");
+         }
+      else
+         {
+         BACKGROUND = GetBoolean(retval);
+         }
       continue;
       }
    
@@ -524,13 +568,25 @@ for (cp = ControlBodyConstraints(cf_runagent); cp != NULL; cp=cp->next)
       continue;
       }
 
+   /*
+    * HvB: add variabele output directory
+   */
+   if (strcmp(cp->lval,CFR_CONTROLBODY[cfr_output_directory].lval) == 0)
+      {
+      if ( IsAbsPath(retval) )
+        {
+	strncpy(OUTPUT_DIRECTORY,retval,CF_BUFSIZE-1);
+        CfOut(cf_verbose,"","SET output direcory to = %s\n", OUTPUT_DIRECTORY);
+	}
+      continue;
+      }
+
    if (strcmp(cp->lval,CFR_CONTROLBODY[cfr_timeout].lval) == 0)
       {
       RUNATTR.copy.timeout = (short)Str2Int(retval);
       continue;
       }
 
-   
    if (strcmp(cp->lval,CFR_CONTROLBODY[cfr_hosts].lval) == 0)
       {
       if (HOSTLIST == NULL) // Don't override if command line setting
@@ -556,8 +612,6 @@ if ((pp = (struct Promise *)malloc(sizeof(struct Promise))) == NULL)
    CfOut(cf_error,"malloc","Unable to allocate Promise");
    FatalError("");
    }
-
-
 
 pp->audit = NULL;
 pp->lineno = 0;
@@ -658,11 +712,7 @@ while (true)
 
    if ((n_read = ReceiveTransaction(conn->sd,recvbuffer,NULL)) == -1)
       {
-      if (errno == EINTR) 
-         {
-         continue;
-         }
-      
+      DestroyServerConnection(conn);
       break;
       }
 
@@ -709,7 +759,15 @@ FILE *NewStream(char *name)
 { FILE *fp;
   char filename[CF_BUFSIZE];
 
-snprintf(filename,CF_BUFSIZE,"%s/outputs/%s_runagent.out",CFWORKDIR,name);
+
+if ( OUTPUT_DIRECTORY[0] != '\0')
+  {
+  snprintf(filename,CF_BUFSIZE,"%s/%s_runagent.out",OUTPUT_DIRECTORY,name);
+  }
+else
+  {
+  snprintf(filename,CF_BUFSIZE,"%s/outputs/%s_runagent.out",CFWORKDIR,name);
+  }
 
 if (OUTPUT_TO_FILE)
    {

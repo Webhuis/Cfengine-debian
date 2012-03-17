@@ -32,6 +32,13 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int SelectProcRangeMatch(char *name1,char *name2,int min,int max,char **names,char **line);
+static int SelectProcRegexMatch(char *name1,char *name2,char *regex,char **colNames,char **line);
+static int SplitProcLine(char *proc,char **names,int *start,int *end,char **line);
+static int SelectProcTimeCounterRangeMatch(char *name1,char *name2,time_t min,time_t max,char **names,char **line);
+static int SelectProcTimeAbsRangeMatch(char *name1,char *name2,time_t min,time_t max,char **names,char **line);
+static int GetProcColumnIndex(char *name1,char *name2,char **names);
+
 /***************************************************************************/
 
 int SelectProcess(char *procentry,char **names,int *start,int *end,struct Attributes a,struct Promise *pp)
@@ -163,7 +170,7 @@ return result;
 /* Level                                                                   */
 /***************************************************************************/
 
-int SelectProcRangeMatch(char *name1,char *name2,int min,int max,char **names,char **line)
+static int SelectProcRangeMatch(char *name1,char *name2,int min,int max,char **names,char **line)
 
 { int i;
   long value;
@@ -198,7 +205,7 @@ return false;
 
 /***************************************************************************/
 
-int SelectProcTimeCounterRangeMatch(char *name1,char *name2,time_t min,time_t max,char **names,char **line)
+static int SelectProcTimeCounterRangeMatch(char *name1,char *name2,time_t min,time_t max,char **names,char **line)
 
 { int i;
   time_t value;
@@ -235,7 +242,7 @@ return false;
 
 /***************************************************************************/
 
-int SelectProcTimeAbsRangeMatch(char *name1,char *name2,time_t min,time_t max,char **names,char **line)
+static int SelectProcTimeAbsRangeMatch(char *name1,char *name2,time_t min,time_t max,char **names,char **line)
 
 { int i;
   time_t value;
@@ -271,7 +278,7 @@ return false;
 
 /***************************************************************************/
 
-int SelectProcRegexMatch(char *name1,char *name2,char *regex,char **names,char **line)
+static int SelectProcRegexMatch(char *name1,char *name2,char *regex,char **colNames,char **line)
 
 { int i;
 
@@ -280,14 +287,15 @@ if (regex == NULL)
    return false;
    }
 
-if ((i = GetProcColumnIndex(name1,name2,names)) != -1)
+if ((i = GetProcColumnIndex(name1,name2,colNames)) != -1)
    {
+   
    if (FullTextMatch(regex,line[i]))
       {
       return true;
       }
    else
-      {   
+      {
       return false;
       }
    }
@@ -297,7 +305,7 @@ return false;
 
 /*******************************************************************/
 
-int SplitProcLine(char *proc,char **names,int *start,int *end,char **line)
+static int SplitProcLine(char *proc,char **names,int *start,int *end,char **line)
 
 { int i,s,e;
 
@@ -410,7 +418,7 @@ return true;
 
 /*******************************************************************/
 
-int GetProcColumnIndex(char *name1,char *name2,char **names)
+static int GetProcColumnIndex(char *name1,char *name2,char **names)
 
 { int i;
  
@@ -424,4 +432,48 @@ for (i = 0; names[i] != NULL; i++)
 
 CfOut(cf_verbose,""," INFO - process column %s/%s was not supported on this system",name1,name2);
 return -1;
+}
+
+
+/**********************************************************************************/
+
+bool IsProcessNameRunning(char *procNameRegex)
+{
+ char *colHeaders[CF_PROCCOLS];
+ struct Item *ip;
+ int start[CF_PROCCOLS] = {0};
+ int end[CF_PROCCOLS] = {0};
+ bool matched = false;
+ 
+ if (PROCESSTABLE == NULL)
+   {
+   CfOut(cf_error, "", "!! IsProcessNameRunning: PROCESSTABLE is empty");
+   return false;
+   }
+ 
+ GetProcessColumnNames(PROCESSTABLE->name,(char **)colHeaders,start,end); 
+
+ for (ip = PROCESSTABLE->next; ip != NULL; ip=ip->next)  // iterate over ps lines
+    {
+    if(EMPTY(ip->name))
+       {
+       continue;
+       }
+    
+    char *lineSplit[CF_PROCCOLS];
+    
+    if (!SplitProcLine(ip->name,colHeaders,start,end,lineSplit))
+       {
+       CfOut(cf_error, "", "!! IsProcessNameRunning: Could not split process line \"%s\"", ip->name);
+       continue;
+       }
+
+    if (SelectProcRegexMatch("CMD","COMMAND",procNameRegex,colHeaders,lineSplit))
+       {
+       matched = true;
+       break;
+       }
+    }
+
+ return matched;
 }

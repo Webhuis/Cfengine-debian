@@ -36,39 +36,57 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+/* Arbitrary cutoff while trying to open blocked database */
+#define MAXATTEMPTS 1000
+
+static long GetSleepTime(void);
+
 #ifdef TCDB
 
 /*****************************************************************************/
 
 int TCDB_OpenDB(char *filename, CF_TCDB **hdbp)
 
-{ int errCode;
+{
+int attempts = MAXATTEMPTS;
 
-ThreadLock(cft_system);
-*hdbp = malloc(sizeof(CF_TCDB));
-ThreadUnlock(cft_system);
-
-if (*hdbp == NULL)
-   {
-   FatalError("Memory allocation in TCDB_OpenDB(");
-   }
-
+*hdbp = xcalloc(1, sizeof(CF_TCDB));
 (*hdbp)->hdb = tchdbnew();
 
-if (!tchdbopen((*hdbp)->hdb, filename, HDBOWRITER | HDBOCREAT))
+while (attempts--)
    {
-   errCode = tchdbecode((*hdbp)->hdb);
-   CfOut(cf_error, "", "!! tchdbopen: Opening database \"%s\" failed: %s", filename, tchdberrmsg(errCode));
+   /*
+    * Note: tchdbsetmutex is not called before tchdbopen, so the created
+    * connection must not be shared by a several threads.
+    */
+   if (tchdbopen((*hdbp)->hdb, filename, HDBOWRITER | HDBOCREAT))
+      {
+      return true;
+      }
 
-   ThreadLock(cft_system);
-   free(*hdbp);
-   *hdbp = NULL;
-   ThreadUnlock(cft_system);
-   return false;
+   int err_code = tchdbecode((*hdbp)->hdb);
+
+   if (err_code != TCETHREAD)
+      {
+      CfOut(cf_error, "", "!! tchdbopen: Unable to open database \"%s\": %s",
+            filename, tchdberrmsg(err_code));
+      tchdbdel((*hdbp)->hdb);
+      free(*hdbp);
+      return false;
+      }
+
+   struct timespec ts =
+      {
+      .tv_nsec = GetSleepTime()
+      };
+   nanosleep(&ts, NULL);
    }
 
-(*hdbp)->valmemp = NULL;
-return true;
+CfOut(cf_error, "", "!! TCDB_OpenDB: Unable to lock database \"%s\", lock is held by another thread", filename);
+
+tchdbdel((*hdbp)->hdb);
+free(*hdbp);
+return false;
 }
 
 /*****************************************************************************/
@@ -91,8 +109,6 @@ if (!tchdbclose(hdbp->hdb))
 
 tchdbdel(hdbp->hdb);
 
-ThreadLock(cft_system);
-
 if (hdbp->valmemp != NULL)
    {
    free(hdbp->valmemp);
@@ -100,8 +116,6 @@ if (hdbp->valmemp != NULL)
 
 free(hdbp);
 hdbp = NULL;
-
-ThreadUnlock(cft_system);
 
 return true;
 }
@@ -136,15 +150,11 @@ int TCDB_RevealDB(CF_TCDB *hdbp, char *key, void **result, int *rsize)
 
 { int errCode;
 
-ThreadLock(cft_system);
-
 if (hdbp->valmemp != NULL)
    {
    free(hdbp->valmemp);
    hdbp->valmemp = NULL;
    }
-
-ThreadUnlock(cft_system);
 
 *result = tchdbget(hdbp->hdb, key, strlen(key), rsize);
 
@@ -162,7 +172,7 @@ return true;
 
 /*****************************************************************************/
 
-int TCDB_WriteComplexKeyDB(CF_TCDB *hdbp, char *key, int keySz, void *src, int srcSz)
+int TCDB_WriteComplexKeyDB(CF_TCDB *hdbp, char *key, int keySz, const void *src, int srcSz)
 
 { int errCode;
   int res;
@@ -209,19 +219,7 @@ if (!tchdbiterinit(hdbp->hdb))
    return false;
    }
 
-ThreadLock(cft_system);
-
-*hdbcp = malloc(sizeof(CF_TCDBC));
-
-ThreadUnlock(cft_system);
-
-if (*hdbcp == NULL)
-   {
-   FatalError("Memory allocation in TCDB_NewDBCursor()");
-   }
-
-(*hdbcp)->curkey = NULL;
-(*hdbcp)->curval = NULL;
+*hdbcp = xcalloc(1, sizeof(CF_TCDBC));
 
 return true;  
 }
@@ -231,8 +229,6 @@ return true;
 int TCDB_NextDB(CF_TCDB *hdbp,CF_TCDBC *hdbcp,char **key,int *ksize,void **value,int *vsize)
 
 { int errCode;
-
-ThreadLock(cft_system);
 
 if (hdbcp->curkey != NULL)
    {
@@ -246,8 +242,6 @@ if(hdbcp->curval != NULL)
    hdbcp->curval = NULL;
    }
 
-ThreadUnlock(cft_system);
-
 *key = tchdbiternext(hdbp->hdb, ksize);
 
 if (*key == NULL)
@@ -260,9 +254,7 @@ if (*key == NULL)
 
 if (*value == NULL)
    {
-   ThreadLock(cft_system);
    free(*key);
-   ThreadUnlock(cft_system);
    
    *key = NULL;
    errCode = tchdbecode(hdbp->hdb);
@@ -282,8 +274,6 @@ return true;
 int TCDB_DeleteDBCursor(CF_TCDB *hdbp,CF_TCDBC *hdbcp)
 
 {
-ThreadLock(cft_system);
-
 if (hdbcp->curkey != NULL)
    {
    free(hdbcp->curkey);
@@ -298,9 +288,17 @@ if (hdbcp->curval != NULL)
 
 free(hdbcp);
 
-ThreadUnlock(cft_system);
-
 return true;
+}
+
+/*****************************************************************************/
+
+/*
+ * 10^7 usec +- 10^7 usec
+ */
+static long GetSleepTime(void)
+{
+return lrand48() % (2*10*1000*1000);
 }
 
 #endif

@@ -84,10 +84,13 @@ struct BodySyntax CF_THING_BODIES[] =
    {"synonyms",cf_slist,"","A list of words to be treated as equivalents in the defined context"},
    {"affects",cf_slist,"","Special fixed relation for describing topics that are things"},
    {"belongs_to",cf_slist,"","Special fixed relation for describing topics that are things"},
+   {"caused_by",cf_slist,"","Special fixed relation for describing topics that are things"},
+   {"causes",cf_slist,"","Special fixed relation for describing topics that are things"},
    {"certainty",cf_opts,"certain,uncertain,possible","Selects the level of certainty for the proposed knowledge, for use in inferential reasoning"},
    {"determines",cf_slist,"","Special fixed relation for describing topics that are things"},
    {"generalizations",cf_slist,"","A list of words to be treated as super-sets for the current topic, used when reasoning"},
    {"is_connected_to",cf_slist,"","Special fixed relation for describing topics that are things"},
+   {"is_located_in",cf_slist,"","Special fixed relation for describing topics that are things"},
    {"is_part_of",cf_slist,"","Special fixed relation for describing topics that are things"},
    {"needs",cf_slist,"","Special fixed relation for describing topics that are things"},
    {"provides",cf_slist,"","Special fixed relation for describing topics that are things"},
@@ -110,10 +113,10 @@ struct BodySyntax CF_INFER_BODIES[] =
 
 struct SubTypeSyntax CF_KNOWLEDGE_SUBTYPES[] =
   {
-  {"knowledge","topics",CF_TOPICS_BODIES},
-  {"knowledge","things",CF_THING_BODIES},
-  {"knowledge","occurrences",CF_OCCUR_BODIES},
   {"knowledge","inferences",CF_INFER_BODIES},
+  {"knowledge","things",CF_THING_BODIES},
+  {"knowledge","topics",CF_TOPICS_BODIES},
+  {"knowledge","occurrences",CF_OCCUR_BODIES},
   {NULL,NULL,NULL},
   };
 

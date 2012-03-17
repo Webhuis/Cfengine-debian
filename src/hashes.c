@@ -32,6 +32,8 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void EditHashValue(char *scopeid,char *lval,void *rval);
+
 /*******************************************************************/
 /* Hashes                                                          */
 /*******************************************************************/
@@ -61,9 +63,10 @@ for (i = 0; i < CF_HASHTABLESIZE; i++)
 
 /******************************************************************/
 
-void EditHashValue(char *scopeid,char *lval,void *rval)
+static void EditHashValue(char *scopeid,char *lval,void *rval)
 
-{ int found, slot, i = slot = GetHash(lval);
+{ int found, slot = GetHash(lval);
+  int i = slot;
   struct Scope *ptr = GetScope(scopeid);
   struct CfAssoc *ap;
 
@@ -167,7 +170,7 @@ if (html)
 
 /*******************************************************************/
 
-int GetHash(char *name)
+int GetHash(const char *name)
 
 {
 return OatHash(name);
@@ -175,231 +178,118 @@ return OatHash(name);
 
 /*******************************************************************/
 
-int AddVariableHash(char *scope,char *lval,void *rval,char rtype,enum cfdatatype dtype,char *fname,int lineno)
+bool HashInsertElement(CfAssoc **hashtable, const char *element,
+                       void *rval, char rtype, enum cfdatatype dtype)
+{
+int bucket = GetHash(element);
+int i = bucket;
 
-{ struct Scope *ptr;
-  struct CfAssoc *ap;
-  struct Rlist *rp;
-  int slot,sslot;
-
-if (rtype == CF_SCALAR)
+do
    {
-   Debug("AddVariableHash(%s.%s=%s (%s) rtype=%c)\n",scope,lval,rval,CF_DATATYPES[dtype],rtype);
-   }
-else
-   {
-   Debug("AddVariableHash(%s.%s=(list) (%s) rtype=%c)\n",scope,lval,CF_DATATYPES[dtype],rtype);
-   }
-
-if (lval == NULL || scope == NULL)
-   {
-   CfOut(cf_error,"","scope.value = %s.%s = %s",scope,lval,rval);
-   ReportError("Bad variable or scope in a variable assignment");
-   FatalError("Should not happen - forgotten to register a function call in fncall.c?");
-   }
-
-if (rval == NULL)
-   {
-   Debug("No value to assignment - probably a parameter in an unused bundle/body\n");
-   return false;
-   }
-
-if (strlen(lval) > CF_MAXVARSIZE)
-   {
-   ReportError("variable lval too long");
-   return false;
-   }
-
-/* If we are not expanding a body template, check for recursive singularities */
-
-if (strcmp(scope,"body") != 0)
-   {
-   switch (rtype)
+   /* Collision -- this element already exists */
+   if (CompareVariable(element, hashtable[i]) == 0)
       {
-      case CF_SCALAR:
-          
-          if (StringContainsVar((char *)rval,lval))
-             {
-             CfOut(cf_error,"","Scalar variable %s.%s contains itself (non-convergent): %s",scope,lval,(char *)rval);
-             return false;
-             }
-          break;
-          
-      case CF_LIST:
-          
-          for (rp = rval; rp != NULL; rp=rp->next)
-             {
-             if (StringContainsVar((char *)rp->item,lval))
-                {
-                CfOut(cf_error,"","List variable %s contains itself (non-convergent)",lval);
-                return false;
-                }
-             }
-          break;
-          
+      return false;
       }
-   }
 
-ptr = GetScope(scope);
-ap = NewAssoc(lval,rval,rtype,dtype);
-slot = GetHash(lval);
-
-if (ptr == NULL)
-   {
-   return false;
-   }
-
-// Look for outstanding lists in variable rvals
-
-if (THIS_AGENT_TYPE == cf_common)
-   {
-   struct Rlist *listvars = NULL, *scalarvars = NULL;
-
-   if (strcmp(CONTEXTID,"this") != 0)
+   /* Free bucket is found */
+   if (hashtable[i] == NULL)
       {
-      ScanRval(CONTEXTID,&scalarvars,&listvars,rval,rtype,NULL);
-      
-      if (listvars != NULL)
-         {
-         CfOut(cf_error,""," !! Redefinition of variable \"%s\" (embedded list in RHS) in context \"%s\"",lval,CONTEXTID);
-         }
-   
-      DeleteRlist(scalarvars);
-      DeleteRlist(listvars);
-      }
-   }
-
-sslot = slot;
-
-while (ptr->hashtable[slot])
-   {
-   Debug("Hash table Collision! - slot %d = (%s|%s)\n",slot,lval,ptr->hashtable[slot]->lval);
-
-   if (CompareVariable(lval,ptr->hashtable[slot]) == 0)
-      {
-      if (CompareVariableValue(rval,rtype,ptr->hashtable[slot]) == 0)
-         {
-	 DeleteAssoc(ap);
-         return true;
-         }
-
-      if (!UnresolvedVariables(ptr->hashtable[slot],rtype))
-         {
-         CfOut(cf_inform,""," !! Duplicate selection of value for variable \"%s\" in scope %s",lval,ptr->scope);
-      
-         if (fname)
-            {
-            CfOut(cf_inform,""," !! Rule from %s at/before line %d\n",fname,lineno);
-            }
-         else
-            {
-            CfOut(cf_inform,""," !! in bundle parameterization\n",fname,lineno);
-            }
-         }
-
-      DeleteAssoc(ptr->hashtable[slot]);
-      ptr->hashtable[slot] = ap;
-      Debug("Stored \"%s\" in context %s at position %d\n",lval,scope,slot);
+      hashtable[i] = NewAssoc(element, rval, rtype, dtype);
       return true;
       }
-   else
-      {
-      if (++slot >= CF_HASHTABLESIZE-1)
-         {
-         slot = 0;
-         }
 
-      if (slot == sslot)
-         {
-         CfOut(cf_error,""," !! Out of variable allocation in context \"%s\"",scope);
-         return false;
-         }
-      }
+   i = (i + 1) % CF_HASHTABLESIZE;
    }
+while (i != bucket);
 
-ptr->hashtable[slot] = ap;
-
-Debug("Added Variable %s at hash address %d in scope %s with value (omitted)\n",lval,slot,scope);
-return true;
+/* Hash table is full */
+return false;
 }
-
 
 /*******************************************************************/
 
-void DeRefListsInHashtable(char *scope,struct Rlist *namelist,struct Rlist *dereflist)
+bool HashDeleteElement(CfAssoc **hashtable, const char *element)
+{
+int bucket = GetHash(element);
+int i = bucket;
 
-{ int i, len;
-  struct Scope *ptr;
-  struct Rlist *rp,*state;
-  struct CfAssoc *cphash,*cplist;
-
-if ((len = RlistLen(namelist)) != RlistLen(dereflist))
+do
    {
-   CfOut(cf_error,""," !! Name list %d, dereflist %d\n",len, RlistLen(dereflist));
-   FatalError("Software Error DeRefLists... correlated lists not same length");
-   }
-
-if (len == 0)
-   {
-   return;
-   }
-
-ptr = GetScope(scope);
-
-for (i = 0; i < CF_HASHTABLESIZE; i++)
-   {
-   cphash = ptr->hashtable[i];
-   
-   if (cphash != NULL)
+   /* Element is found */
+   if (hashtable[i] && strcmp(element, hashtable[i]->lval) == 0)
       {
-      for (rp = dereflist; rp != NULL; rp = rp->next)
-        {
-        cplist = (struct CfAssoc *)rp->item;
+      DeleteAssoc(hashtable[i]);
+      hashtable[i] = NULL;
+      return true;
+      }
 
-        if (strcmp(cplist->lval,cphash->lval) == 0)
-           {
-           /* Link up temp hash to variable lol */
+   i = (i + 1) % CF_HASHTABLESIZE;
+   }
+while (i != bucket);
 
-           state = (struct Rlist *)(cplist->rval);
-
-           if (rp->state_ptr == NULL || rp->state_ptr->type == CF_FNCALL)
-              {
-              /* Unexpanded function, or blank variable must be skipped.*/
-              return;
-              }
-                  
-           if (rp->state_ptr)
-              {
-              Debug("Rewriting expanded type for %s from %s to %s\n",cphash->lval,CF_DATATYPES[cphash->dtype],rp->state_ptr->item);
-
-              // must first free existing rval in scope, then allocate new (should always be string)
-              DeleteRvalItem(cphash->rval,cphash->rtype);
-                    
-              // avoids double free - borrowing value from lol (freed in DeleteScope())
-              cphash->rval = strdup(rp->state_ptr->item);
-              }
-
-           switch(cphash->dtype)
-                {
-                case cf_slist:
-                  cphash->dtype = cf_str;
-                  cphash->rtype = CF_SCALAR;
-                  break;
-                case cf_ilist:
-                  cphash->dtype = cf_int;
-                  cphash->rtype = CF_SCALAR;
-                  break;
-                case cf_rlist:
-                  cphash->dtype = cf_real;
-                  cphash->rtype = CF_SCALAR;
-                  break;
-                }
-
-               Debug(" to %s\n",CF_DATATYPES[cphash->dtype]);
-               }
-        }
-     }
-  }
+/* Looped through whole hashtable and did not find needed element */
+return false;
 }
 
+/*******************************************************************/
 
+CfAssoc *HashLookupElement(CfAssoc **hashtable, const char *element)
+{
+int bucket = GetHash(element);
+int i = bucket;
+
+do
+   {
+   /* Element is found */
+   if (CompareVariable(element, hashtable[i]) == 0)
+      {
+      return hashtable[i];
+      }
+
+   i = (i + 1) % CF_HASHTABLESIZE;
+   }
+while (i != bucket);
+
+/* Looped through whole hashtable and did not find needed element */
+return NULL;
+}
+
+/*******************************************************************/
+
+void HashClear(CfAssoc **hashtable)
+{
+int i;
+for (i = 0; i < CF_HASHTABLESIZE; i++)
+   {
+   if (hashtable[i] != NULL)
+      {
+      DeleteAssoc(hashtable[i]);
+      hashtable[i] = NULL;
+      }
+   }
+}
+
+/*******************************************************************/
+
+HashIterator HashIteratorInit(CfAssoc **hashtable)
+{
+return (HashIterator) { hashtable, 0 };
+}
+
+/*******************************************************************/
+
+CfAssoc *HashIteratorNext(HashIterator *i)
+{
+while (i->bucket < CF_HASHTABLESIZE && i->hash[i->bucket] == NULL)
+    i->bucket++;
+
+if (i->bucket == CF_HASHTABLESIZE)
+   {
+   return NULL;
+   }
+else
+   {
+   return i->hash[i->bucket++];
+   }
+}

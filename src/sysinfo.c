@@ -38,18 +38,24 @@
 #include <sys/syssgi.h>
 #endif
 
-#ifdef HAVE_STRUCT_SOCKADDR_SA_LEN
-# ifdef _SIZEOF_ADDR_IFREQ
-#  define SIZEOF_IFREQ(x) _SIZEOF_ADDR_IFREQ(x)
-# else
-#  define SIZEOF_IFREQ(x) \
-          ((x).ifr_addr.sa_len > sizeof(struct sockaddr) ? \
-           (sizeof(struct ifreq) - sizeof(struct sockaddr) + \
-            (x).ifr_addr.sa_len) : sizeof(struct ifreq))
-# endif
-#else
-# define SIZEOF_IFREQ(x) sizeof(struct ifreq)
-#endif
+static void FindDomainName(char *hostname);
+static int Linux_Fedora_Version(void);
+static int Linux_Redhat_Version(void);
+static void Linux_Oracle_VM_Server_Version(void);
+static void Linux_Oracle_Version(void);
+static int Linux_Suse_Version(void);
+static int Linux_Slackware_Version(char *filename);
+static int Linux_Debian_Version(void);
+static int Linux_Mandrake_Version(void);
+static int Linux_Mandriva_Version(void);
+static int Linux_Mandriva_Version_Real(char *filename, char *relstring, char *vendor);
+static int VM_Version(void);
+static int Xen_Domain(void);
+static void Xen_Cpuid(uint32_t idx, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
+static int Xen_Hv_Check(void);
+
+static FILE *ReadFirstLine(const char *filename, char *buf, int bufsize);
+static bool ReadLine(const char *filename, char *buf, int bufsize);
 
 /**********************************************************************/
 
@@ -168,15 +174,7 @@ for (i = 0; CLASSATTRIBUTES[i][0] != '\0'; i++)
          {
          if (FullTextMatch(CLASSATTRIBUTES[i][2],VSYSNAME.release))
             {
-            if (UNDERSCORE_CLASSES)
-               {
-               snprintf(workbuf,CF_BUFSIZE,"_%s",CLASSTEXT[i]);
-               NewClass(workbuf);
-               }
-            else
-               {
-               NewClass(CLASSTEXT[i]);
-               }
+            NewClass(CLASSTEXT[i]);
 
             found = true;
 
@@ -231,16 +229,9 @@ if ((tloc = time((time_t *)NULL)) == -1)
    printf("Couldn't read system clock\n");
    }
 
-if (UNDERSCORE_CLASSES)
-   {
-   snprintf(workbuf,CF_BUFSIZE,"_%s",CLASSTEXT[i]);
-   }
-else
-   {
-   snprintf(workbuf,CF_BUFSIZE,"%s",CLASSTEXT[i]);
-   }
+snprintf(workbuf,CF_BUFSIZE,"%s",CLASSTEXT[i]);
 
-CfOut(cf_verbose,"","Cfengine - %s %s\n\n",VERSION,CF3COPYRIGHT);
+CfOut(cf_verbose,"",NameVersion());
 
 CfOut(cf_verbose,"","------------------------------------------------------------------------\n\n");
 CfOut(cf_verbose,"","Host name is: %s\n",VSYSNAME.nodename);
@@ -269,9 +260,15 @@ NewScalar("sys","resolv",VRESOLVCONF[VSYSTEMHARDCLASS],cf_str);
 NewScalar("sys","maildir",VMAILDIR[VSYSTEMHARDCLASS],cf_str);
 NewScalar("sys","exports",VEXPORTS[VSYSTEMHARDCLASS],cf_str);
 NewScalar("sys","expires",EXPIRY,cf_str);
-NewScalar("sys","cf_version",VERSION,cf_str);
+/* FIXME: type conversion */
+NewScalar("sys","cf_version",(char*)Version(),cf_str);
 #ifdef HAVE_NOVA
-NewScalar("sys","nova_version",Nova_GetVersion(),cf_str);
+/* FIXME: type conversion */
+NewScalar("sys","nova_version",(char*)Nova_Version(),cf_str);
+#endif
+#ifdef HAVE_CONSTELLATION
+/* FIXME: type conversion */
+NewScalar("sys","constellation_version",(char*)Constellation_Version(),cf_str);
 #endif
 
 if (PUBKEY)
@@ -607,7 +604,7 @@ return false;
 
 /*********************************************************************/
 
-void FindDomainName(char *hostname)
+static void FindDomainName(char *hostname)
 
 { char fqn[CF_MAXVARSIZE] = {0};
   char *ptr;
@@ -678,6 +675,25 @@ NewClass(VDOMAIN);
 
 /*******************************************************************/
 
+void BuiltinClasses(void)
+{
+char vbuff[CF_BUFSIZE];
+char *sp;
+
+NewClass("any");      /* This is a reserved word / wildcard */
+
+snprintf(vbuff,CF_BUFSIZE,"cfengine_%s",CanonifyName(Version()));
+
+NewClass(vbuff);
+while ((sp = strrchr(vbuff, '_')))
+   {
+   *sp = 0;
+   NewClass(vbuff);
+   }
+}
+
+/*******************************************************************/
+
 void OSClasses()
 
 { struct stat statbuf;
@@ -688,51 +704,38 @@ void OSClasses()
   char class[CF_BUFSIZE];
 #endif
 
-NewClass("any");      /* This is a reserved word / wildcard */
-
-snprintf(vbuff,CF_BUFSIZE,"cfengine_%s",CanonifyName(VERSION));
-
-NewClass(vbuff);
-while ((sp = strrchr(vbuff, '_')))
-   {
-   *sp = 0;
-   NewClass(vbuff);
-   }
-
 #ifdef LINUX
 
-/* {Mandrake,Fedora} has a symlink at /etc/redhat-release pointing to
- * /etc/{mandrake,fedora}-release, so we else-if around that
- */
+/* Mandrake/Mandriva, Fedora and Oracle VM Server supply /etc/redhat-release, so
+   we test for those distributions first */
 
 if (cfstat("/etc/mandriva-release",&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a mandriva system.\n");
-   NewClass("Mandrake");
-   NewClass("Mandriva");
-   Linux_New_Mandriva_Version();
+   Linux_Mandriva_Version();
    }
-
 else if (cfstat("/etc/mandrake-release",&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a mandrake system.\n");
-   NewClass("Mandrake");
-   Linux_Old_Mandriva_Version();
+   Linux_Mandrake_Version();
    }
-
 else if (cfstat("/etc/fedora-release",&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a fedora system.\n");
-   NewClass("redhat");
-   NewClass("fedora");
    Linux_Fedora_Version();
    }
-
+else if (cfstat("/etc/ovs-release",&statbuf) != -1)
+   {
+   Linux_Oracle_VM_Server_Version();
+   }
 else if (cfstat("/etc/redhat-release",&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a redhat system.\n");
-   NewClass("redhat");
    Linux_Redhat_Version();
+   }
+
+/* Oracle Linux >= 6 supplies separate /etc/oracle-release alongside
+   /etc/redhat-release, use it to precisely identify version */
+
+if (cfstat("/etc/oracle-release",&statbuf) != -1)
+   {
+   Linux_Oracle_Version();
    }
 
 if (cfstat("/etc/generic-release",&statbuf) != -1)
@@ -743,8 +746,6 @@ if (cfstat("/etc/generic-release",&statbuf) != -1)
 
 if (cfstat("/etc/SuSE-release",&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a SuSE system.\n");
-   NewClass("SuSE");
    Linux_Suse_Version();
    }
 
@@ -752,14 +753,10 @@ if (cfstat("/etc/SuSE-release",&statbuf) != -1)
 #define SLACKWARE_VERSION_FILENAME "/etc/slackware-version"
 if (cfstat(SLACKWARE_VERSION_FILENAME,&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a slackware system.\n");
-   NewClass("slackware");
    Linux_Slackware_Version(SLACKWARE_VERSION_FILENAME);
    }
 else if (cfstat(SLACKWARE_ANCIENT_VERSION_FILENAME,&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be an ancient slackware system.\n");
-   NewClass("slackware");
    Linux_Slackware_Version(SLACKWARE_ANCIENT_VERSION_FILENAME);
    }
 
@@ -771,8 +768,6 @@ if (cfstat("/etc/generic-release",&statbuf) != -1)
 
 if (cfstat("/etc/debian_version",&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a debian system.\n");
-   NewClass("debian");
    Linux_Debian_Version();
    }
 
@@ -816,24 +811,15 @@ NewScalar("sys","flavor",class,cf_str);
 if (cfstat("/proc/vmware/version",&statbuf) != -1 ||
     cfstat("/etc/vmware-release",&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a VMware Server ESX system.\n");
-   NewClass("VMware");
    VM_Version();
    }
-else if (cfstat("/etc/vmware",&statbuf) != -1)
+else if (cfstat("/etc/vmware",&statbuf) != -1 && S_ISDIR(statbuf.st_mode))
    {
-   if (S_ISDIR(statbuf.st_mode))
-      {
-      CfOut(cf_verbose,"","This appears to be a VMware xSX system.\n");
-      NewClass("VMware");
-      VM_Version();
-      }
+   VM_Version();
    }
 
 if (cfstat("/proc/xen/capabilities",&statbuf) != -1)
    {
-   CfOut(cf_verbose,"","This appears to be a xen pv system.\n");
-   NewClass("xen");
    Xen_Domain();
    }
 
@@ -944,7 +930,112 @@ Nova_SaveDocumentRoot();
 
 /*********************************************************************************/
 
-int Linux_Fedora_Version(void)
+static void Linux_Oracle_VM_Server_Version(void)
+{
+char relstring[CF_MAXVARSIZE];
+char *r;
+int major, minor, patch;
+int revcomps;
+
+#define ORACLE_VM_SERVER_REL_FILENAME "/etc/ovs-release"
+#define ORACLE_VM_SERVER_ID "Oracle VM server"
+
+CfOut(cf_verbose,"","This appears to be Oracle VM Server");
+NewClass("redhat");
+NewClass("oraclevmserver");
+
+if (!ReadLine(ORACLE_VM_SERVER_REL_FILENAME, relstring, sizeof(relstring)))
+   {
+   return;
+   }
+
+if (strncmp(relstring, ORACLE_VM_SERVER_ID, strlen(ORACLE_VM_SERVER_ID)))
+   {
+   CfOut(cf_verbose, "", "Could not identify distribution from %s\n",
+         ORACLE_VM_SERVER_REL_FILENAME);
+   return;
+   }
+
+if ((r = strstr(relstring, "release ")) == NULL)
+   {
+   CfOut(cf_verbose, "", "Could not find distribution version in %s\n",
+         ORACLE_VM_SERVER_REL_FILENAME);
+   return;
+   }
+
+revcomps = sscanf(r + strlen("release "), "%d.%d.%d", &major, &minor, &patch);
+
+if (revcomps > 0)
+   {
+   char buf[CF_BUFSIZE];
+   snprintf(buf, CF_BUFSIZE, "oraclevmserver_%d", major);
+   NewClass(buf);
+   NewScalar("sys", "flavour", buf, cf_str);
+   NewScalar("sys", "flavor", buf, cf_str);
+   }
+
+if (revcomps > 1)
+   {
+   char buf[CF_BUFSIZE];
+   snprintf(buf, CF_BUFSIZE, "oraclevmserver_%d_%d", major, minor);
+   NewClass(buf);
+   }
+
+if (revcomps > 2)
+   {
+   char buf[CF_BUFSIZE];
+   snprintf(buf, CF_BUFSIZE, "oraclevmserver_%d_%d_%d", major, minor, patch);
+   NewClass(buf);
+   }
+}
+
+/*********************************************************************************/
+
+static void Linux_Oracle_Version(void)
+{
+char relstring[CF_MAXVARSIZE];
+char *r;
+int major, minor;
+
+#define ORACLE_REL_FILENAME "/etc/oracle-release"
+#define ORACLE_ID "Oracle Linux Server"
+
+CfOut(cf_verbose,"","This appears to be Oracle Linux");
+NewClass("oracle");
+
+if (!ReadLine(ORACLE_REL_FILENAME, relstring, sizeof(relstring)))
+    {
+    return;
+    }
+
+if (strncmp(relstring, ORACLE_ID, strlen(ORACLE_ID)))
+   {
+   CfOut(cf_verbose, "", "Could not identify distribution from %s\n", ORACLE_REL_FILENAME);
+   return;
+   }
+
+if ((r = strstr(relstring, "release ")) == NULL)
+   {
+   CfOut(cf_verbose, "", "Could not find distribution version in %s\n", ORACLE_REL_FILENAME);
+   return;
+   }
+
+if (sscanf(r + strlen("release "), "%d.%d", &major, &minor) == 2)
+   {
+   char buf[CF_BUFSIZE];
+   snprintf(buf, CF_BUFSIZE, "oracle_%d", major);
+   NewClass(buf);
+   NewScalar("sys", "flavour", buf, cf_str);
+   NewScalar("sys", "flavor", buf, cf_str);
+
+   snprintf(buf, CF_BUFSIZE, "oracle_%d_%d", major, minor);
+   NewClass(buf);
+   }
+}
+
+/*********************************************************************************/
+
+static int Linux_Fedora_Version(void)
 {
 #define FEDORA_ID "Fedora"
 #define RELEASE_FLAG "release "
@@ -957,25 +1048,24 @@ int Linux_Fedora_Version(void)
 
 #define FEDORA_REL_FILENAME "/etc/fedora-release"
 
- FILE *fp;
-
 /* The full string read in from fedora-release */
- char relstring[CF_MAXVARSIZE];
- char classbuf[CF_MAXVARSIZE];
- char *vendor="";
- char *release=NULL;
- int major = -1;
- char strmajor[CF_MAXVARSIZE];
+char relstring[CF_MAXVARSIZE];
+char classbuf[CF_MAXVARSIZE];
+char *vendor="";
+char *release=NULL;
+int major = -1;
+char strmajor[CF_MAXVARSIZE];
+
+CfOut(cf_verbose,"","This appears to be a fedora system.\n");
+NewClass("redhat");
+NewClass("fedora");
 
 /* Grab the first line from the file and then close it. */
 
-if ((fp = fopen(FEDORA_REL_FILENAME,"r")) == NULL)
+if (!ReadLine(FEDORA_REL_FILENAME, relstring, sizeof(relstring)))
    {
    return 1;
    }
-
-fgets(relstring, sizeof(relstring), fp);
-fclose(fp);
 
 CfOut(cf_verbose,"","Looking for fedora core linux info...\n");
 
@@ -1027,7 +1117,7 @@ return 0;
 
 /*********************************************************************************/
 
-int Linux_Redhat_Version(void)
+static int Linux_Redhat_Version(void)
 {
 #define REDHAT_ID "Red Hat Linux"
 #define REDHAT_AS_ID "Red Hat Enterprise Linux AS"
@@ -1045,6 +1135,7 @@ int Linux_Redhat_Version(void)
 #define SCIENTIFIC_SL6_ID "Scientific Linux"
 #define SCIENTIFIC_CERN_ID "Scientific Linux CERN"
 #define RELEASE_FLAG "release "
+#define ORACLE_4_5_ID "Enterprise Linux Enterprise Linux Server"
 
 /* We are looking for one of the following strings...
  *
@@ -1063,8 +1154,6 @@ int Linux_Redhat_Version(void)
 
 #define RH_REL_FILENAME "/etc/redhat-release"
 
-FILE *fp;
-
 /* The full string read in from redhat-release */
 char relstring[CF_MAXVARSIZE];
 char classbuf[CF_MAXVARSIZE];
@@ -1081,15 +1170,15 @@ char strmajor[CF_MAXVARSIZE];
 int minor = -1;
 char strminor[CF_MAXVARSIZE];
 
+CfOut(cf_verbose,"","This appears to be a redhat (or redhat-based) system.\n");
+NewClass("redhat");
+
 /* Grab the first line from the file and then close it. */
 
-if ((fp = fopen(RH_REL_FILENAME,"r")) == NULL)
-    {
-    return 1;
-    }
-
-fgets(relstring, sizeof(relstring), fp);
-fclose(fp);
+if (!ReadLine(RH_REL_FILENAME, relstring, sizeof(relstring)))
+   {
+   return 1;
+   }
 
 CfOut(cf_verbose,"","Looking for redhat linux info in \"%s\"\n",relstring);
 
@@ -1159,6 +1248,11 @@ else if(!strncmp(relstring, SCIENTIFIC_SL6_ID, strlen(SCIENTIFIC_SL6_ID)))
 else if(!strncmp(relstring, CENTOS_ID, strlen(CENTOS_ID)))
    {
    vendor = "centos";
+   }
+else if (!strncmp(relstring, ORACLE_4_5_ID, strlen(ORACLE_4_5_ID)))
+   {
+   vendor = "oracle";
+   edition = "s";
    }
 else
    {
@@ -1258,7 +1352,7 @@ return 0;
 
 /******************************************************************/
 
-int Linux_Suse_Version(void)
+static int Linux_Suse_Version(void)
 {
 #define SUSE_REL_FILENAME "/etc/SuSE-release"
 /* Check if it's a SuSE Enterprise version (all in lowercase) */
@@ -1281,15 +1375,17 @@ int minor = -1;
 char strminor[CF_MAXVARSIZE];
 FILE *fp;
 
+CfOut(cf_verbose,"","This appears to be a SuSE system.\n");
+NewClass("SuSE");
+
 /* Grab the first line from the file and then close it. */
 
-if ((fp = fopen(SUSE_REL_FILENAME,"r")) == NULL)
+fp = ReadFirstLine(SUSE_REL_FILENAME, relstring, sizeof(relstring));
+if (fp == NULL)
    {
    return 1;
    }
 
-fgets(relstring, sizeof(relstring), fp);
-Chop(relstring);
 strversion[0] = '\0';
 strpatch[0] = '\0';
 
@@ -1453,21 +1549,24 @@ return 0;
 
 /******************************************************************/
 
-int Linux_Slackware_Version(char *filename)
+static int Linux_Slackware_Version(char *filename)
 {
 int major = -1;
 int minor = -1;
 int release = -1;
 char classname[CF_MAXVARSIZE] = "";
-FILE *fp;
+char buffer[CF_MAXVARSIZE];
 
-if ((fp = fopen(filename,"r")) == NULL)
+CfOut(cf_verbose,"","This appears to be a slackware system.\n");
+NewClass("slackware");
+
+if (!ReadLine(filename, buffer, sizeof(buffer)))
    {
    return 1;
    }
 
 CfOut(cf_verbose,"","Looking for Slackware version...\n");
-switch (fscanf(fp, "Slackware %d.%d.%d", &major, &minor, &release))
+switch (sscanf(buffer, "Slackware %d.%d.%d", &major, &minor, &release))
     {
     case 3:
         CfOut(cf_verbose,"","This appears to be a Slackware %u.%u.%u system.", major, minor, release);
@@ -1486,16 +1585,14 @@ switch (fscanf(fp, "Slackware %d.%d.%d", &major, &minor, &release))
         break;
     case 0:
         CfOut(cf_verbose,"","No Slackware version number found.\n");
-        fclose(fp);
         return 2;
     }
-fclose(fp);
 return 0;
 }
 
 /******************************************************************/
 
-int Linux_Debian_Version(void)
+static int Linux_Debian_Version(void)
 {
 #define DEBIAN_VERSION_FILENAME "/etc/debian_version"
 #define DEBIAN_ISSUE_FILENAME "/etc/issue"
@@ -1503,19 +1600,18 @@ int major = -1;
 int release = -1;
 int result;
 char classname[CF_MAXVARSIZE],buffer[CF_MAXVARSIZE],os[CF_MAXVARSIZE],version[CF_MAXVARSIZE];
-FILE *fp;
+
+CfOut(cf_verbose,"","This appears to be a debian system.\n");
+NewClass("debian");
 
 buffer[0] = classname[0] = '\0';
 
 CfOut(cf_verbose,"","Looking for Debian version...\n");
 
-if ((fp = fopen(DEBIAN_VERSION_FILENAME,"r")) == NULL)
+if (!ReadLine(DEBIAN_VERSION_FILENAME, buffer, sizeof(buffer)))
    {
    return 1;
    }
-
-fgets(buffer,CF_MAXVARSIZE,fp);
-fclose(fp);
 
 result = sscanf(buffer,"%d.%d", &major, &release); 
 
@@ -1550,13 +1646,10 @@ switch (result)
         break;
     }
 
-if ((fp = fopen(DEBIAN_ISSUE_FILENAME,"r")) == NULL)
+if (!ReadLine(DEBIAN_ISSUE_FILENAME, buffer, sizeof(buffer)))
    {
    return 1;
    }
-
-fgets(buffer,CF_MAXVARSIZE,fp);
-fclose(fp);
 
 os[0] = '\0';
 sscanf(buffer,"%250s",os);
@@ -1590,7 +1683,7 @@ return 0;
 
 /******************************************************************/
 
-int Linux_Old_Mandriva_Version(void)
+static int Linux_Mandrake_Version(void)
 
 {
 /* We are looking for one of the following strings... */
@@ -1600,17 +1693,16 @@ int Linux_Old_Mandriva_Version(void)
 
 #define MANDRAKE_REL_FILENAME "/etc/mandrake-release"
 
- FILE *fp;
- char relstring[CF_MAXVARSIZE];
- char *vendor=NULL;
+char relstring[CF_MAXVARSIZE];
+char *vendor=NULL;
 
-if ((fp = fopen(MANDRAKE_REL_FILENAME,"r")) == NULL)
+CfOut(cf_verbose,"","This appears to be a mandrake system.\n");
+NewClass("Mandrake");
+
+if (!ReadLine(MANDRAKE_REL_FILENAME, relstring, sizeof(relstring)))
    {
    return 1;
    }
-
-fgets(relstring, sizeof(relstring), fp);
-fclose(fp);
 
 CfOut(cf_verbose,"","Looking for Mandrake linux info in \"%s\"\n",relstring);
 
@@ -1640,7 +1732,7 @@ return Linux_Mandriva_Version_Real(MANDRAKE_REL_FILENAME, relstring, vendor);
 
 /******************************************************************/
 
-int Linux_New_Mandriva_Version(void)
+static int Linux_Mandriva_Version(void)
 
 {
 /* We are looking for the following strings... */
@@ -1648,17 +1740,17 @@ int Linux_New_Mandriva_Version(void)
 
 #define MANDRIVA_REL_FILENAME "/etc/mandriva-release"
 
- FILE *fp;
- char relstring[CF_MAXVARSIZE];
- char *vendor=NULL;
+char relstring[CF_MAXVARSIZE];
+char *vendor=NULL;
 
-if ((fp = fopen(MANDRIVA_REL_FILENAME,"r")) == NULL)
+CfOut(cf_verbose,"","This appears to be a mandriva system.\n");
+NewClass("Mandrake");
+NewClass("Mandriva");
+
+if (!ReadLine(MANDRIVA_REL_FILENAME, relstring, sizeof(relstring)))
    {
    return 1;
    }
-
-fgets(relstring, sizeof(relstring), fp);
-fclose(fp);
 
 CfOut(cf_verbose,"","Looking for Mandriva linux info in \"%s\"\n",relstring);
 
@@ -1678,7 +1770,7 @@ return Linux_Mandriva_Version_Real(MANDRIVA_REL_FILENAME, relstring, vendor);
 
 /******************************************************************/
 
-int Linux_Mandriva_Version_Real(char *filename, char *relstring, char *vendor)
+static int Linux_Mandriva_Version_Real(char *filename, char *relstring, char *vendor)
 
 {
  char *release=NULL;
@@ -1731,18 +1823,19 @@ return 0;
 
 /******************************************************************/
 
-int VM_Version(void)
+static int VM_Version(void)
 
-{ FILE *fp;
-  char *sp,buffer[CF_BUFSIZE],classbuf[CF_BUFSIZE],version[CF_BUFSIZE];
-  int major,minor,bug;
-  int sufficient = 0;
+{
+char *sp,buffer[CF_BUFSIZE],classbuf[CF_BUFSIZE],version[CF_BUFSIZE];
+int major,minor,bug;
+int sufficient = 0;
+
+CfOut(cf_verbose,"","This appears to be a VMware Server ESX/xSX system.\n");
+NewClass("VMware");
 
 /* VMware Server ESX >= 3 has version info in /proc */
-if ((fp = fopen("/proc/vmware/version","r")) != NULL)
+if (ReadLine("/proc/vmware/version", buffer, sizeof(buffer)))
    {
-   CfReadLine(buffer,CF_BUFSIZE,fp);
-   Chop(buffer);
    if (sscanf(buffer,"VMware ESX Server %d.%d.%d",&major,&minor,&bug) > 0)
       {
       snprintf(classbuf,CF_BUFSIZE,"VMware ESX Server %d",major);
@@ -1759,16 +1852,13 @@ if ((fp = fopen("/proc/vmware/version","r")) != NULL)
       NewClass(classbuf);
       sufficient = 1;
       }
-   fclose(fp);
    }
 
 /* Fall back to checking for other files */
 
-if (sufficient < 1 && (((fp = fopen("/etc/vmware-release","r")) != NULL) ||
-    (fp = fopen("/etc/issue","r")) != NULL))
+if (sufficient < 1 && (ReadLine("/etc/vmware-release", buffer, sizeof(buffer))
+                       || ReadLine("/etc/issue", buffer, sizeof(buffer))))
    {
-   CfReadLine(buffer,CF_BUFSIZE,fp);
-   Chop(buffer);
    NewClass(buffer);
 
    /* Strip off the release code name e.g. "(Dali)" */
@@ -1779,7 +1869,6 @@ if (sufficient < 1 && (((fp = fopen("/etc/vmware-release","r")) != NULL) ||
       NewClass(buffer);
       }
    sufficient = 1;
-   fclose(fp);
    }
 
 return sufficient < 1 ? 1 : 0;
@@ -1787,11 +1876,15 @@ return sufficient < 1 ? 1 : 0;
 
 /******************************************************************/
 
-int Xen_Domain(void)
+static int Xen_Domain(void)
 
-{ FILE *fp;
-  char buffer[CF_BUFSIZE];
-  int sufficient = 0;
+{
+FILE *fp;
+char buffer[CF_BUFSIZE];
+int sufficient = 0;
+
+CfOut(cf_verbose,"","This appears to be a xen pv system.\n");
+NewClass("xen");
 
 /* xen host will have "control_d" in /proc/xen/capabilities, xen guest will not */
 
@@ -1825,7 +1918,7 @@ return sufficient < 1 ? 1 : 0;
 
 /* borrowed from Xen source/tools/libxc/xc_cpuid_x86.c */
 
-void Xen_Cpuid(uint32_t idx, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
+static void Xen_Cpuid(uint32_t idx, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
 {
 asm (
     /* %ebx register need to be saved before usage and restored thereafter
@@ -1842,7 +1935,7 @@ asm (
 
 /******************************************************************/
 
-int Xen_Hv_Check(void)
+static int Xen_Hv_Check(void)
 
 { uint32_t eax, ebx, ecx, edx;
   char signature[13];
@@ -1866,17 +1959,41 @@ return 1;
 
 /******************************************************************/
 
-char *Cf_GetVersion(void)
-
+static bool ReadLine(const char *filename, char *buf, int bufsize)
 {
-return VERSION;
+FILE *fp = ReadFirstLine(filename, buf, bufsize);
+if (fp == NULL)
+   {
+   return false;
+   }
+else
+   {
+   fclose(fp);
+   return true;
+   }
 }
 
+static FILE *ReadFirstLine(const char *filename, char *buf, int bufsize)
+{
+FILE *fp = fopen(filename, "r");
+if (fp == NULL)
+   {
+   return NULL;
+   }
 
+if (fgets(buf, bufsize, fp) == NULL)
+   {
+   free(fp);
+   return NULL;
+   }
+
+StripTrailingNewline(buf);
+
+return fp;
+}
 
 /******************************************************************/
 /* User info                                                      */
-/******************************************************************/
 /******************************************************************/
 
 int GetCurrentUserName(char *userName, int userNameLen)
@@ -1891,356 +2008,10 @@ return Unix_GetCurrentUserName(userName, userNameLen);
 /******************************************************************/
 
 #ifndef MINGW
-
-void Unix_GetInterfaceInfo(enum cfagenttype ag)
-
-{ int fd,len,i,j,first_address = false,ipdefault = false;
-  struct ifreq ifbuf[CF_IFREQ] = {{{{0}}}},ifr, *ifp;
-  struct ifconf list;
-  struct sockaddr_in *sin;
-  struct hostent *hp;
-  char *sp, workbuf[CF_BUFSIZE];
-  char ip[CF_MAXVARSIZE];
-  char name[CF_MAXVARSIZE];
-  char last_name[CF_BUFSIZE];
-
-Debug("Unix_GetInterfaceInfo()\n");
-
-last_name[0] = '\0';
-
-if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-   {
-   CfOut(cf_error,"socket","Couldn't open socket");
-   exit(1);
-   }
-
-list.ifc_len = sizeof(ifbuf);
-list.ifc_req = ifbuf;
-
-#ifdef SIOCGIFCONF
-if (ioctl(fd, SIOCGIFCONF, &list) == -1 || (list.ifc_len < (sizeof(struct ifreq))))
-#else
-if (ioctl(fd, OSIOCGIFCONF, &list) == -1 || (list.ifc_len < (sizeof(struct ifreq))))
-#endif
-   {
-   CfOut(cf_error,"ioctl","Couldn't get interfaces - old kernel? Try setting CF_IFREQ to 1024");
-   exit(1);
-   }
-
-last_name[0] = '\0';
-
-for (j = 0,len = 0,ifp = list.ifc_req; len < list.ifc_len; len+=SIZEOF_IFREQ(*ifp),j++,ifp=(struct ifreq *)((char *)ifp+SIZEOF_IFREQ(*ifp)))
-   {
-
-   if (ifp->ifr_addr.sa_family == 0)
-      {
-      continue;
-      }
-
-   if (ifp->ifr_name == NULL || strlen(ifp->ifr_name) == 0)
-      {
-      continue;
-      }
-
-   /* Skip virtual network interfaces for Linux, which seems to be a problem */
-   
-   if (strstr(ifp->ifr_name,":"))
-      {
-      if (VSYSTEMHARDCLASS == linuxx)
-         {
-         CfOut(cf_verbose,"","Skipping apparent virtual interface %d: %s\n",j+1,ifp->ifr_name);
-         continue;
-         }
-      }
-   else
-      {
-      CfOut(cf_verbose,"","Interface %d: %s\n",j+1,ifp->ifr_name);
-      }
-
-   // Ignore the loopback
-   
-   if (strcmp(ifp->ifr_name,"lo") == 0)
-      {
-      continue;
-      }
-   
-   if (strncmp(last_name,ifp->ifr_name,sizeof(ifp->ifr_name)) == 0)
-      {
-      first_address = false;
-      }
-   else
-      {
-      strncpy(last_name,ifp->ifr_name,sizeof(ifp->ifr_name));
-
-      if (!first_address)
-         {
-         NewScalar("sys","interface",last_name,cf_str);
-         first_address = true;
-         }
-      }
-
-   if (UNDERSCORE_CLASSES)
-      {
-      snprintf(workbuf,CF_BUFSIZE, "_net_iface_%s", CanonifyName(ifp->ifr_name));
-      }
-   else
-      {
-      snprintf(workbuf,CF_BUFSIZE, "net_iface_%s", CanonifyName(ifp->ifr_name));
-      }
-
-   NewClass(workbuf);
-
-   if (ifp->ifr_addr.sa_family == AF_INET)
-      {
-      strncpy(ifr.ifr_name,ifp->ifr_name,sizeof(ifp->ifr_name));
-
-      if (ioctl(fd,SIOCGIFFLAGS,&ifr) == -1)
-         {
-         CfOut(cf_error,"ioctl","No such network device");
-         //close(fd);
-         //return;
-         continue;
-         }
-
-      if ((ifr.ifr_flags & IFF_BROADCAST) && !(ifr.ifr_flags & IFF_LOOPBACK))
-         {
-         sin=(struct sockaddr_in *)&ifp->ifr_addr;
-         Debug("Adding hostip %s..\n",inet_ntoa(sin->sin_addr));
-         NewClass(inet_ntoa(sin->sin_addr));
-
-         if ((hp = gethostbyaddr((char *)&(sin->sin_addr.s_addr),sizeof(sin->sin_addr.s_addr),AF_INET)) == NULL)
-            {
-            Debug("No hostinformation for %s not found\n", inet_ntoa(sin->sin_addr));
-            }
-         else
-            {
-            if (hp->h_name != NULL)
-               {
-               Debug("Adding hostname %s..\n",hp->h_name);
-               NewClass(hp->h_name);
-
-               if (hp->h_aliases != NULL)
-                  {
-                  for (i=0; hp->h_aliases[i] != NULL; i++)
-                     {
-                     CfOut(cf_verbose,"","Adding alias %s..\n",hp->h_aliases[i]);
-                     NewClass(hp->h_aliases[i]);
-                     }
-                  }
-               }
-            }
-
-         if (strcmp(inet_ntoa(sin->sin_addr),"0.0.0.0") == 0)
-            {
-            // Maybe we need to do something windows specific here?
-            CfOut(cf_verbose,""," !! Cannot discover hardware IP, using DNS value");
-            strcpy(ip,"ipv4_");
-            strcat(ip,VIPADDRESS);
-            AppendItem(&IPADDRESSES,VIPADDRESS,"");
-
-            for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
-               {
-               if (*sp == '.')
-                  {
-                  *sp = '\0';
-                  NewClass(ip);
-                  }
-               }
-
-            strcpy(ip,VIPADDRESS);
-            i = 3;
-
-            for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
-               {
-               if (*sp == '.')
-                  {
-                  *sp = '\0';
-                  snprintf(name,CF_MAXVARSIZE-1,"ipv4_%d[%s]",i--,CanonifyName(VIPADDRESS));
-                  NewScalar("sys",name,ip,cf_str);
-                  }
-               }
-            //close(fd);
-            //return;
-            continue;
-            }
-
-         strncpy(ip,"ipv4_",CF_MAXVARSIZE);
-         strncat(ip,inet_ntoa(sin->sin_addr),CF_MAXVARSIZE-6);
-         NewClass(ip);         
-
-         if (!ipdefault)
-            {
-            ipdefault = true;
-            NewScalar("sys","ipv4",inet_ntoa(sin->sin_addr),cf_str);
-
-            strcpy(VIPADDRESS,inet_ntoa(sin->sin_addr));
-            }
-
-         AppendItem(&IPADDRESSES,inet_ntoa(sin->sin_addr),"");
-
-         for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
-            {
-            if (*sp == '.')
-               {
-               *sp = '\0';
-               NewClass(ip);
-               }
-            }
-
-         strcpy(ip,inet_ntoa(sin->sin_addr));
-
-         if (ag != cf_know)
-            {
-            snprintf(name,CF_MAXVARSIZE-1,"ipv4[%s]",CanonifyName(ifp->ifr_name));
-            }
-         else
-            {
-            snprintf(name,CF_MAXVARSIZE-1,"ipv4[interface_name]");
-            }
-         
-         NewScalar("sys",name,ip,cf_str);
-
-         i = 3;
-
-         for (sp = ip+strlen(ip)-1; (sp > ip); sp--)
-            {
-            if (*sp == '.')
-               {
-               *sp = '\0';
-               
-               if (ag != cf_know)
-                  {                  
-                  snprintf(name,CF_MAXVARSIZE-1,"ipv4_%d[%s]",i--,CanonifyName(ifp->ifr_name));
-                  }
-               else
-                  {
-                  snprintf(name,CF_MAXVARSIZE-1,"ipv4_%d[interface_name]",i--);
-                  }
-               
-               NewScalar("sys",name,ip,cf_str);
-               }
-            }
-         }
-      }
-   }
-
-close(fd);
-}
-
-/*******************************************************************/
-
-void Unix_FindV6InterfaceInfo(void)
-
-{ FILE *pp = NULL;
-  char buffer[CF_BUFSIZE];
-
-/* Whatever the manuals might say, you cannot get IPV6
-   interface configuration from the ioctls. This seems
-   to be implemented in a non standard way across OSes
-   BSDi has done getifaddrs(), solaris 8 has a new ioctl, Stevens
-   book shows the suggestion which has not been implemented...
-*/
-
- CfOut(cf_verbose,"","Trying to locate my IPv6 address\n");
-
- switch (VSYSTEMHARDCLASS)
-    {
-    case cfnt:
-        /* NT cannot do this */
-        return;
-
-    case irix:
-    case irix4:
-    case irix64:
-
-        if ((pp = cf_popen("/usr/etc/ifconfig -a","r")) == NULL)
-           {
-           CfOut(cf_verbose,"","Could not find interface info\n");
-           return;
-           }
-
-        break;
-
-    case hp:
-
-        if ((pp = cf_popen("/usr/sbin/ifconfig -a","r")) == NULL)
-           {
-           CfOut(cf_verbose,"","Could not find interface info\n");
-           return;
-           }
-
-        break;
-
-    case aix:
-
-        if ((pp = cf_popen("/etc/ifconfig -a","r")) == NULL)
-           {
-           CfOut(cf_verbose,"","Could not find interface info\n");
-           return;
-           }
-
-        break;
-
-    default:
-
-        if ((pp = cf_popen("/sbin/ifconfig -a","r")) == NULL)
-           {
-           CfOut(cf_verbose,"","Could not find interface info\n");
-           return;
-           }
-
-    }
-
-/* Don't know the output format of ifconfig on all these .. hope for the best*/
-
-while (!feof(pp))
-   {
-   fgets(buffer,CF_BUFSIZE-1,pp);
-
-   if (ferror(pp))  /* abortable */
-      {
-      break;
-      }
-
-   if (StrStr(buffer,"inet6"))
-      {
-      struct Item *ip,*list = NULL;
-      char *sp;
-
-      list = SplitStringAsItemList(buffer,' ');
-
-      for (ip = list; ip != NULL; ip=ip->next)
-         {
-         for (sp = ip->name; *sp != '\0'; sp++)
-            {
-            if (*sp == '/')  /* Remove CIDR mask */
-               {
-               *sp = '\0';
-               }
-            }
-
-         if (IsIPV6Address(ip->name) && (strcmp(ip->name,"::1") != 0))
-            {
-            CfOut(cf_verbose,"","Found IPv6 address %s\n",ip->name);
-            AppendItem(&IPADDRESSES,ip->name,"");
-            NewClass(ip->name);
-            }
-         }
-
-      DeleteItemList(list);
-      }
-   }
-
-cf_pclose(pp);
-}
-
-/******************************************************************/
-
 char *GetHome(uid_t uid)
 
 {
 struct passwd *mpw = getpwuid(uid);
 return mpw->pw_dir;
 }
-
-#endif  /* NOT MINGW */
+#endif

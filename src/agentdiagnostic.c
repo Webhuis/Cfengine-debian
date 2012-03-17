@@ -32,6 +32,8 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void TestSearchFilePromiser();
+
 /*****************************************************************************/
 /* new test suite                                                            */
 /*****************************************************************************/
@@ -300,6 +302,9 @@ char TEST_ROOT_DIR[CF_BUFSIZE];
 
 #endif
 
+static void CheckInstalledLibraries(void);
+
+
 /*****************************************************************************/
 
 void AgentDiagnostic(char *file)
@@ -349,7 +354,7 @@ printf("!! Extensive self-diagnostic capabilities not built in\n");
 
 /******************************************************************/
 
-void TestSearchFilePromiser()
+static void TestSearchFilePromiser()
 
 { struct Promise pp;
 
@@ -2525,7 +2530,7 @@ int FileExists(char *file)
 /*********************************************************/
 
 
-void CheckInstalledLibraries(void)
+static void CheckInstalledLibraries(void)
 {
   printf("---- INSTALLED LIBRARIES ----\n");
 
@@ -2533,10 +2538,6 @@ void CheckInstalledLibraries(void)
    
    #ifndef HAVE_LIBACL
    printf("\t->LIBACL not found!!\n");
-   #endif
-   
-   #ifndef HAVE_LIBPCRE
-   printf("\t->LIBPCRE not found!!\n");
    #endif
    
    #ifndef HAVE_LIBPTHREAD

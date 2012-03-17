@@ -35,9 +35,14 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int IntMin (int a,int b);
+static int UseUnixStandard(char *s);
+static char *cf_format_strtimestamp(struct tm *tm, char *buf);
+
+
 /*********************************************************/
 
-int IntMin (int a,int b)
+static int IntMin (int a,int b)
 
 {
 if (a > b)
@@ -160,7 +165,7 @@ return s;
 
 /*********************************************************/
 
-int UseUnixStandard(char *s)
+static int UseUnixStandard(char *s)
 
 {
 #ifdef MINGW
@@ -194,7 +199,7 @@ return strncmp(buf1,buf2,n);
 
 /*********************************************************************/
 
-int cf_strcmp(char *s1,char *s2)
+int cf_strcmp(const char *s1, const char *s2)
 
 {
 /* Windows native eventually? */
@@ -203,7 +208,7 @@ return strcmp(s1,s2);
 
 /*********************************************************************/
 
-int cf_strncmp(char *s1,char *s2,size_t n)
+int cf_strncmp(const char *s1, const char *s2, size_t n)
 
 {
 /* Windows native eventually? */
@@ -212,7 +217,7 @@ return strncmp(s1,s2,n);
 
 /*********************************************************************/
 
-char *cf_strcpy(char *s1,char *s2)
+char *cf_strcpy(char *s1, const char *s2)
 
 {
 /* Windows native eventually? */
@@ -221,7 +226,7 @@ return strcpy(s1,s2);
 
 /*********************************************************************/
 
-char *cf_strncpy(char *s1,char *s2,size_t n)
+char *cf_strncpy(char *s1, const char *s2, size_t n)
 
 {
 /* Windows native eventually? */
@@ -230,7 +235,7 @@ return strncpy(s1,s2,n);
 
 /*********************************************************************/
 
-char *cf_strdup(char *s)
+char *cf_strdup(const char *s)
 
 {
 return strdup(s);
@@ -238,7 +243,7 @@ return strdup(s);
 
 /*********************************************************************/
 
-int cf_strlen(char *s)
+int cf_strlen(const char *s)
     
 {
 return strlen(s);
@@ -246,7 +251,7 @@ return strlen(s);
 
 /*********************************************************************/
 
-char *cf_strchr(char *s, int c)
+char *cf_strchr(const char *s, int c)
     
 {
 return strchr(s,c);
@@ -403,32 +408,6 @@ return NULL;
 
 #endif
 
-/***********************************************************/
-/* strdup() missing on old BSD systems                     */
-/***********************************************************/
-
-#ifndef HAVE_STRDUP
-
-char *strdup(char *str)
-
-{ char *sp;
- 
-if (str == NULL)
-   {
-   return NULL;
-   }
-
-if ((sp = malloc(strlen(str)+1)) == NULL)
-   {
-   perror("malloc");
-   return NULL;
-   }
-
-strcpy(sp,str);
-return sp; 
-}
-
-#endif
 
 #ifndef HAVE_STRSEP
 
@@ -611,48 +590,77 @@ return (getuid() == 0);
 
 /*******************************************************************/
 
-#ifndef HAVE_LIBRT
-
-int clock_gettime(clockid_t clock_id,struct timespec *tp)
-
-{ static time_t now;
-
-now = time(NULL);
-
-tp->tv_sec = (time_t)now;
-tp->tv_nsec = 0;
-return 0;
+char *cf_ctime(const time_t *timep)
+{
+static char buf[26];
+return cf_strtimestamp_local(*timep, buf);
 }
 
-#endif
+/*
+ * This function converts passed time_t value to string timestamp used
+ * throughout the system. By sheer coincidence this timestamp has the same
+ * format as ctime(3) output on most systems (but NT differs in definition of
+ * ctime format, so those are not identical there).
+ *
+ * Buffer passed should be at least 26 bytes long (including the trailing zero).
+ *
+ * Please use this function instead of (non-portable and deprecated) ctime_r or
+ * (non-threadsafe) cf_ctime or ctime.
+ */
 
 /*******************************************************************/
 
-char *cf_ctime(const time_t *timep)
-
-/* NT uses format "Wed Jan 02 02:03:55 1980", but should use
- * "Wed Jan  2 02:03:55 1980" (no 0-padding for days)        */
-
+char *cf_strtimestamp_local(const time_t time, char *buf)
 {
-char *times = ctime(timep);
+struct tm tm;
 
-if (times == NULL)
-  {
-  CfOut(cf_error, "ctime", "!! Could not convert time to string");
-  return NULL;
-  }
+if (localtime_r(&time, &tm) == NULL)
+   {
+   CfOut(cf_verbose, "localtime_r", "Unable to parse passed timestamp");
+   return NULL;
+   }
 
+return cf_format_strtimestamp(&tm, buf);
+}
 
-#ifdef MINGW
+/*******************************************************************/
 
-if (times[8] == '0')
-  {
-  times[8] = ' ';
-  }
+char *cf_strtimestamp_utc(const time_t time, char *buf)
+{
+struct tm tm;
 
-#endif  /* MINGW */
+if (gmtime_r(&time, &tm) == NULL)
+   {
+   CfOut(cf_verbose, "gmtime_r", "Unable to parse passed timestamp");
+   return NULL;
+   }
 
-return times;
+return cf_format_strtimestamp(&tm, buf);
+}
+
+/*******************************************************************/
+
+static char *cf_format_strtimestamp(struct tm *tm, char *buf)
+{
+ /* Security checks */
+if (tm->tm_year < -2899 || tm->tm_year > 8099)
+   {
+   CfOut(cf_error, "", "Unable to format timestamp: passed year is out of range: %d",
+         tm->tm_year + 1900);
+   return NULL;
+   }
+
+/* There is no easy way to replicate ctime output by using strftime */
+
+if (snprintf(buf, 26, "%3.3s %3.3s %2d %02d:%02d:%02d %04d",
+             DAY_TEXT[tm->tm_wday ? (tm->tm_wday - 1) : 6], MONTH_TEXT[tm->tm_mon],
+             tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, tm->tm_year + 1900) >= 26)
+   {
+   CfOut(cf_error, "", "Unable to format timestamp: passed values are out of range");
+   return NULL;
+   }
+
+return buf;
 }
 
 /*******************************************************************/
@@ -710,24 +718,6 @@ return NovaWin_rename(oldpath, newpath);
 #else
 return rename(oldpath,newpath);
 #endif
-}
-
-/*******************************************************************/
-
-void *cf_malloc(size_t size, char *errLocation)
-/* Stops on memory allocation error */
-{
-void *ptr = NULL;
- 
- ptr = malloc(size);
-
- if(ptr == NULL)
-    {
-    CfOut(cf_error, "malloc", "!! Could not allocate memory in \"%s\"", errLocation);
-    FatalError("Memory allocation\n");
-    }
- 
- return ptr;
 }
 
 /*******************************************************************/

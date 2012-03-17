@@ -32,6 +32,11 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void ConvergePromiseValues(struct Promise *pp);
+static void ScanScalar(char *scope,struct Rlist **los,struct Rlist **lol,char *string,int level,struct Promise *pp);
+static int ExpandPrivateScalar(const char *contextid, const char *string, char buffer[CF_EXPANDSIZE]);
+static int Epimenides(char *var,char *rval,char rtype,int level);
+
 /*
 
 Expanding variables is easy -- expanding lists automagically requires
@@ -95,6 +100,7 @@ void ExpandPromise(enum cfagenttype agent,char *scopeid,struct Promise *pp,void 
 { struct Rlist *listvars = NULL, *scalarvars = NULL;
   struct Constraint *cp;
   struct Promise *pcopy;
+
 
 Debug("****************************************************\n");
 Debug("* ExpandPromises (scope = %s )\n",scopeid);
@@ -202,7 +208,7 @@ switch(type)
 
 /*********************************************************************/
 
-void ScanScalar(char *scopeid,struct Rlist **scal,struct Rlist **its,char *string,int level,struct Promise *pp)
+static void ScanScalar(char *scopeid,struct Rlist **scal,struct Rlist **its,char *string,int level,struct Promise *pp)
 
 {
   char *sp,rtype;
@@ -239,7 +245,7 @@ for (sp = string; (*sp != '\0') ; sp++)
             strncpy(absscope,scopeid,CF_MAXVARSIZE-1);  
             }
 
-         ExpandPrivateScalar(absscope,v,var); 
+         ExpandPrivateScalar(absscope,v,var);
          
          RegisterBundleDependence(absscope,pp);
 
@@ -286,7 +292,7 @@ for (sp = string; (*sp != '\0') ; sp++)
 
 /*********************************************************************/
 
-int ExpandScalar(char *string,char buffer[CF_EXPANDSIZE])
+int ExpandScalar(const char *string,char buffer[CF_EXPANDSIZE])
 
 {
 Debug("ExpandScalar(context=%s,id=%s)\n",CONTEXTID,string);
@@ -445,9 +451,10 @@ return false;
 
 /*********************************************************************/
 
-int ExpandPrivateScalar(char *scopeid,char *string,char buffer[CF_EXPANDSIZE]) 
+static int ExpandPrivateScalar(const char *scopeid, const char *string,char buffer[CF_EXPANDSIZE])
 
-{ char *sp,rtype;
+{ char rtype;
+  const char *sp;
   void *rval;
   int varstring = false;
   char currentitem[CF_EXPANDSIZE],temp[CF_BUFSIZE],name[CF_MAXVARSIZE];
@@ -662,7 +669,7 @@ do
    NewScalar("this","promiser_uid",v,cf_int);
    snprintf(v,CF_MAXVARSIZE,"%d",(int)getgid());
    NewScalar("this","promiser_gid",v,cf_int);
-   
+
    /* End special variables */
 
    pexp = ExpandDeRefPromise("this",pp);
@@ -799,9 +806,9 @@ return returnval;
 /* Tools                                                             */
 /*********************************************************************/
 
-int IsExpandable(char *str)
+int IsExpandable(const char *str)
 
-{ char *sp;
+{ const char *sp;
   char left = 'x', right = 'x';
   int dollar = false;
   int bracks = 0, vars = 0;
@@ -964,7 +971,7 @@ void ConvergeVarHashPromise(char *scope,struct Promise *pp,int allow_redefine)
 
 { struct Constraint *cp,*cp_save = NULL;
   struct Attributes a = {{0}};
-  char rtype,type = 'x',*sp = NULL;
+  char rtype,type = 'x';
   void *rval = NULL,*retval;
   int i = 0,ok_redefine = false,drop_undefined = false;
   struct Rval returnval; /* Must expand naked functions here for consistency */
@@ -976,11 +983,6 @@ if (pp->done)
    }
 
 if (IsExcluded(pp->classes))
-   {
-   return;
-   }
-
-if (VarClassExcluded(pp,&sp))
    {
    return;
    }
@@ -999,9 +1001,37 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
 
    if (strcmp(cp->lval,"ifvarclass") == 0)
       {
-      if (IsExcluded(cp->rval))
+      struct Rval res;
+      
+      switch(cp->type)
          {
-         return;
+         case CF_SCALAR:
+             
+             if (IsExcluded(cp->rval))
+                {
+                return;
+                }
+             
+             break;
+
+         case CF_FNCALL:
+             /* eval it: e.g. ifvarclass => not("a_class") */
+
+             res = EvaluateFunctionCall(cp->rval,NULL);
+             bool excluded = IsExcluded(res.item);
+
+             DeleteRvalItem(res.item,res.rtype);
+
+             if(excluded)
+                {
+                return;
+                }
+             
+             break;
+             
+         default:
+             CfOut(cf_error, "", "!! Invalid ifvarclass type '%c': should be string or function", cp->type);
+             continue;
          }
       
       continue;
@@ -1118,18 +1148,19 @@ if (rval != NULL)
          {
          switch (type)
             {
+            char valbuf[CF_BUFSIZE];
+
             case CF_SCALAR:
-                CfOut(cf_error,""," !! Redefinition of a constant scalar \"%s\" (was %s now %s)",pp->promiser,retval,rval);
-                PromiseRef(cf_error,pp);
+                CfOut(cf_verbose,""," !! Redefinition of a constant scalar \"%s\" (was %s now %s)",pp->promiser,retval,rval);
+                PromiseRef(cf_verbose,pp);
                 break;
             case CF_LIST:
-                CfOut(cf_error,""," !! Redefinition of a constant list \"%s\"",pp->promiser,retval,rval);
-                printf("%s>  -- Was ",VPREFIX);
-                ShowRlist(stdout,retval);      
-                printf("%s> now ",VPREFIX);
-                ShowRlist(stdout,rval);      
-                printf("%s>\n",VPREFIX);
-                PromiseRef(cf_error,pp);
+                CfOut(cf_verbose,""," !! Redefinition of a constant list \"%s\".",pp->promiser);
+                PrintRlist(valbuf, CF_BUFSIZE, retval);
+                CfOut(cf_verbose,"","Old value: %s", valbuf);
+                PrintRlist(valbuf, CF_BUFSIZE, rval);
+                CfOut(cf_verbose,""," New value: %s", valbuf);
+                PromiseRef(cf_verbose,pp);
 		break;
             }
          }
@@ -1185,7 +1216,7 @@ else
 
 /*********************************************************************/
 
-void ConvergePromiseValues(struct Promise *pp)
+static void ConvergePromiseValues(struct Promise *pp)
 
 { struct Constraint *cp;
   struct Rlist *rp;
@@ -1279,7 +1310,7 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
 /* Levels                                                            */
 /*********************************************************************/
 
-int Epimenides(char *var,char *rval,char rtype,int level)
+static int Epimenides(char *var,char *rval,char rtype,int level)
 
 { struct Rlist *rp,*list;
   char exp[CF_EXPANDSIZE];

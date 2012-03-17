@@ -32,6 +32,8 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void DeleteReferenceRlist(struct Rlist *list);
+
 /*****************************************************************************/
 
 struct Rlist *NewIterationContext(char *scopeid,struct Rlist *namelist)
@@ -142,7 +144,7 @@ if (state == NULL)
 
 /* Go ahead and increment */
 
-Debug(" -> Incrementing (%s) from \"%s\"\n",cp->lval,iterator->state_ptr->item);
+Debug(" -> Incrementing (%s) from \"%s\"\n", cp->lval, (char *)iterator->state_ptr->item);
 
 if (state->next == NULL)
    {
@@ -262,7 +264,7 @@ return false;
 
 /*******************************************************************/
 
-void DeleteReferenceRlist(struct Rlist *list)
+static void DeleteReferenceRlist(struct Rlist *list)
 
 /* Delete all contents, hash table in scope has own copy */
 {
@@ -272,7 +274,6 @@ if (list == NULL)
    }
 
 DeleteAssoc((struct CfAssoc *)list->item);
-
 
 DeleteReferenceRlist(list->next);
 free((char *)list);

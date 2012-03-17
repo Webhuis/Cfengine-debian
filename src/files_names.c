@@ -32,6 +32,10 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void DeEscapeFilename(char *in,char *out);
+static int JoinFast(char *path,char *leaf,char **nextFree,int bufsize);
+static int StartJoinFast(char *path,char *leaf,char **nextFree,int bufsize);
+
 /*****************************************************************************/
 
 void LocateFilePromiserGroup(char *wildpath,struct Promise *pp,void (*fnptr)(char *path, struct Promise *ptr))
@@ -106,8 +110,8 @@ for (ip = path; ip != NULL; ip=ip->next)
 if (expandregex) /* Expand one regex link and hand down */
    {
    char nextbuffer[CF_BUFSIZE],nextbufferOrig[CF_BUFSIZE],regex[CF_BUFSIZE];
-   struct dirent *dirp;
-   DIR *dirh;
+   const struct dirent *dirp;
+   CFDIR *dirh;
    struct Attributes dummyattr = {{0}};
 
    memset(&dummyattr,0,sizeof(dummyattr));
@@ -115,7 +119,7 @@ if (expandregex) /* Expand one regex link and hand down */
 
    strncpy(regex,ip->name,CF_BUFSIZE-1);
 
-   if ((dirh=opendir(pbuffer)) == NULL)
+   if ((dirh = OpenDirLocal(pbuffer)) == NULL)
       {
       // Could be a dummy directory to be created so this is not an error.
       CfOut(cf_verbose,""," -> Using best-effort expanded (but non-existent) file base path %s\n",wildpath);
@@ -127,7 +131,7 @@ if (expandregex) /* Expand one regex link and hand down */
       {
       count = 0;
    
-      for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+      for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
          {
          if (!ConsiderFile(dirp->d_name,pbuffer,dummyattr,pp))
             {
@@ -190,7 +194,7 @@ if (expandregex) /* Expand one regex link and hand down */
             }
          }
       
-      closedir(dirh);
+      CloseDir(dirh);
       }
    }
 else
@@ -216,10 +220,10 @@ DeleteItemList(path);
 
 int IsNewerFileTree(char *dir,time_t reftime)
 
-{ struct dirent *dirp;
+{ const struct dirent *dirp;
   char path[CF_BUFSIZE] = {0};
   struct Attributes dummyattr = {{0}};
-  DIR *dirh;
+  CFDIR *dirh;
   struct stat sb;
 
 // Assumes that race conditions on the file path are unlikely and unimportant
@@ -242,14 +246,14 @@ if (S_ISDIR(sb.st_mode))
       }
    }
   
-if ((dirh=opendir(dir)) == NULL)
+if ((dirh = OpenDirLocal(dir)) == NULL)
    {
    CfOut(cf_error,"opendir"," !! Unable to open directory '%s' in IsNewerFileTree",dir);
    return false;
    }
 else
    {
-   for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+   for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
       {
       if (!ConsiderFile(dirp->d_name,dir,dummyattr,NULL))
          {
@@ -261,14 +265,14 @@ else
       if (!JoinPath(path,dirp->d_name))
          {
          CfOut(cf_error,"","Internal limit: Buffer ran out of space adding %s to %s in IsNewerFileTree",dir,path);
-	 closedir(dirh);
+         CloseDir(dirh);
          return false;
          }
 
       if (lstat(path,&sb) == -1)
          {
          CfOut(cf_error,"stat"," !! Unable to stat directory %s in IsNewerFileTree",path);
-	 closedir(dirh);
+         CloseDir(dirh);
          // return true to provoke update
          return true;
          }
@@ -278,14 +282,14 @@ else
          if (sb.st_mtime > reftime)
             {
             CfOut(cf_verbose,""," >> Detected change in %s",path);      
-            closedir(dirh);
+            CloseDir(dirh);
             return true;
             }
          else
             {
             if (IsNewerFileTree(path,reftime))
                {
-               closedir(dirh);
+               CloseDir(dirh);
                return true;
                }
             }
@@ -293,7 +297,7 @@ else
       }   
    }
 
-closedir(dirh);
+CloseDir(dirh);
 return false;
 }
 
@@ -341,7 +345,7 @@ return true;
 
 /*********************************************************************/
 
-char *JoinPath(char *path,char *leaf)
+char *JoinPath(char *path, const char *leaf)
 
 { int len = strlen(leaf);
 
@@ -388,7 +392,7 @@ return JoinMargin(path,leaf,NULL,bufsize,CF_BUFFERMARGIN);
 
 /*********************************************************************/
 
-int StartJoinFast(char *path,char *leaf,char **nextFree,int bufsize)
+static int StartJoinFast(char *path,char *leaf,char **nextFree,int bufsize)
 
 {
 *path = '\0';
@@ -399,15 +403,32 @@ return JoinMargin(path,leaf,nextFree,bufsize,CF_BUFFERMARGIN);
 
 /*********************************************************************/
 
-int Join(char *path,char *leaf,int bufsize)
+int Join(char *path, const char *leaf, int bufsize)
 
 {
-  return JoinMargin(path,leaf,NULL,bufsize,CF_BUFFERMARGIN);
+ return JoinMargin(path,leaf,NULL,bufsize,CF_BUFFERMARGIN);
 }
 
 /*********************************************************************/
 
-int JoinFast(char *path,char *leaf,char **nextFree,int bufsize)
+int JoinSilent(char *path, const char *leaf, int bufsize)
+/* Don't warn on buffer limits - just return the value */
+{
+ int len = strlen(leaf);
+
+ if ((strlen(path)+len) > (bufsize - CF_BUFFERMARGIN))
+    {
+    return false;
+    }
+ 
+ strcat(path,leaf);
+ 
+ return true;
+}
+
+/*********************************************************************/
+
+static int JoinFast(char *path,char *leaf,char **nextFree,int bufsize)
 /*
  * Faster stringjoin by keeping track of where we last stopped
  */
@@ -426,7 +447,7 @@ int EndJoin(char *path,char *leaf,int bufsize)
 
 /*********************************************************************/
 
-int JoinMargin(char *path,char *leaf,char **nextFree,int bufsize,int margin)
+int JoinMargin(char *path, const char *leaf, char **nextFree, int bufsize, int margin)
 
 { int len = strlen(leaf);
 
@@ -553,12 +574,12 @@ if (IsFileSep(str[strlen(str)-1]))
 
 /*********************************************************************/
 
-char *LastFileSeparator(char *str)
+const char *LastFileSeparator(const char *str)
 
   /* Return pointer to last file separator in string, or NULL if 
      string does not contains any file separtors */
 
-{ char *sp;
+{ const char *sp;
 
 /* Walk through string backwards */
  
@@ -584,10 +605,12 @@ int ChopLastNode(char *str)
      last character and removing up to the first / encountered 
      e.g. /a/b/c -> /a/b
           /a/b/ -> /a/b                                        */
-{ char *sp;
- int ret; 
+{
+char *sp;
+int ret;
 
-if ((sp = LastFileSeparator(str)) == NULL)
+/* Here cast is necessary and harmless, str is modifiable */
+if ((sp = (char *)LastFileSeparator(str)) == NULL)
    {
    ret = false;
    }
@@ -676,11 +699,11 @@ return 0;
 
 /*********************************************************************/
 
-char *ReadLastNode(char *str)
+const char *ReadLastNode(const char *str)
 
 /* Return the last node of a pathname string  */
 
-{ char *sp;
+{ const char *sp;
   
 if ((sp = LastFileSeparator(str)) == NULL)
    {
@@ -694,7 +717,7 @@ else
 
 /*****************************************************************************/
 
-void DeEscapeFilename(char *in,char *out)
+static void DeEscapeFilename(char *in,char *out)
 
 { char *sp_in,*sp_out = out;
 
@@ -715,9 +738,10 @@ for (sp_in = in; *sp_in != '\0'; sp_in++)
 
 /*****************************************************************************/
 
-int DeEscapeQuotedString(char *from,char *to)
+int DeEscapeQuotedString(const char *from,char *to)
 
-{ char *sp,*cp;
+{ char *cp;
+const char *sp;
   char start = *from;
   int len = strlen(from);
 
@@ -795,20 +819,22 @@ for (i = strlen(str)-1; i >= 0 && isspace((int)str[i]); i--)
    }
 }
 
+/*********************************************************************/
+
 void StripTrailingNewline(char *str)
-{
-    char *c = str + strlen(str);
 
-    if (c - str > CF_EXPANDSIZE)
-    {
-        CfOut(cf_error, "", "StripTrailingNewline was called on an overlong string");
-        return;
-    }
+{ char *c = str + strlen(str);
 
-    for (; c >= str && (*c == '\0' || *c == '\n'); --c)
-    {
-        *c = '\0';
-    }
+if (c - str > CF_EXPANDSIZE)
+   {
+   CfOut(cf_error, "", "StripTrailingNewline was called on an overlong string");
+   return;
+   }
+
+for (; c >= str && (*c == '\0' || *c == '\n'); --c)
+   {
+   *c = '\0';
+   }
 }
 
 /*********************************************************************/
@@ -879,28 +905,31 @@ return true;
 
 /*********************************************************************/
 
-int IsStrIn(char *str, char **strs, int ignoreCase)
+bool IsStrIn(const char *str, const char **strs)
+{
+int i;
 
-{ int i;
-
-for (i = 0; strs[i] != NULL; i++)
+for (i = 0; strs[i]; ++i)
    {
-   if(ignoreCase)
-     {
-     if (strcasecmp(str,strs[i]) == 0)
-       {
-       return true;
-       }
-     }
-   else
-     {
-     if (strcmp(str,strs[i]) == 0)
-       {
-       return true;
-       }
-     }
+   if (strcmp(str, strs[i]) == 0)
+      {
+      return true;
+      }
    }
+return false;
+}
 
+bool IsStrCaseIn(const char *str, const char **strs)
+{
+int i;
+
+for (i = 0; strs[i]; ++i)
+   {
+   if (strcasecmp(str, strs[i]) == 0)
+      {
+      return true;
+      }
+   }
 return false;
 }
 
@@ -1272,6 +1301,31 @@ void ReplaceTrailingChar(char *str, char from, char to)
  if(str[strLen - 1] == from)
     {
     str[strLen - 1] = to;
+    }
+}
+
+/*********************************************************************/
+
+void ReplaceTrailingStr(char *str, char *from, char to)
+
+/* Replaces any unwanted last chars in str. */
+{
+ int strLen;
+ int fromLen;
+
+ strLen = strlen(str);
+ fromLen = strlen(from);
+
+ if(strLen == 0)
+    {
+    return;
+    }
+
+ char *startCmp = str + strLen - fromLen;
+ 
+ if(strcmp(startCmp, from) == 0)
+    {
+    memset(startCmp, to, fromLen);
     }
 }
 

@@ -97,18 +97,6 @@ void EnterpriseContext()
 
 /*****************************************************************************/
 
-void EnterpriseVersion()
-
-{
-#ifdef HAVE_CONSTELLATION
-Constellation_Version();
-#elif defined HAVE_NOVA
-Nova_Version();
-#endif 
-}
-
-/*****************************************************************************/
-
 int CfSessionKeySize(char c)
 {
 #ifdef HAVE_NOVA
@@ -143,11 +131,12 @@ return EVP_bf_cbc();
 
 /*****************************************************************************/
 
-int EnterpriseExpiry(char *day,char *month,char *year,char *company)
+
+int EnterpriseExpiry(void)
 
 {
 #ifdef HAVE_NOVA
- return Nova_EnterpriseExpiry(day,month,year,company);
+return Nova_EnterpriseExpiry();
 #else
 return false;
 #endif
@@ -155,26 +144,35 @@ return false;
 
 /*****************************************************************************/
 
+#ifdef HAVE_NOVA
+
 void CheckLicenses()
 
 {
-#ifdef HAVE_NOVA
 Nova_CheckLicensePromise();
-#else
-return;
-#endif
 }
 
-/*****************************************************************************/
+#else
 
-void CheckAutoBootstrap()
+void CheckLicenses()
 
 {
-#ifdef HAVE_NOVA
- Nova_CheckAutoBootstrap();
-#else
-#endif
+struct stat sb;
+char name[CF_BUFSIZE];
+
+snprintf(name,sizeof(name),"%s/state/am_policy_hub",CFWORKDIR);
+MapName(name);
+
+if (stat(name,&sb) != -1)
+   {
+   NewClass("am_policy_hub");
+   CfOut(cf_verbose,""," -> Additional class defined: am_policy_hub");
+   }
+
+return;
 }
+
+#endif
 
 /*****************************************************************************/
 
@@ -208,18 +206,6 @@ else
 strcpy(buffer,"community");
 #endif
 return buffer;
-}
-
-/*****************************************************************************/
-
-void SetPolicyServer(char *name)
-
-{
-#ifdef HAVE_NOVA
-Nova_SetPolicyServer(name);
-#else
-CfOut(cf_verbose,"","Setting policy server requires version Nova or above");
-#endif 
 }
 
 /*****************************************************************************/
@@ -457,7 +443,6 @@ void HistoryUpdate(struct Averages newvals)
   struct Attributes dummyattr = {{0}};
   struct CfLock thislock;
   time_t now = time(NULL);
-  char timekey[CF_MAXVARSIZE];
 
 /* We do this only once per hour - this should not be changed */
 
@@ -486,20 +471,18 @@ DeletePrivateClassContext();
 DeleteEntireHeap();
 DeleteAllScope();
 
-if (!NOHARDCLASSES)
-   {
-   NewScope("sys");
-   NewScope("const");
-   NewScope("match");
-   NewScope("mon");
-   NewScope("control_monitor");
-   NewScope("control_common");
-   GetNameInfo3();
-   CfGetInterfaceInfo(cf_monitor);
-   Get3Environment();
-   OSClasses();
-   SetReferenceTime(true);
-   }
+NewScope("sys");
+NewScope("const");
+NewScope("match");
+NewScope("mon");
+NewScope("control_monitor");
+NewScope("control_common");
+GetNameInfo3();
+CfGetInterfaceInfo(cf_monitor);
+Get3Environment();
+BuiltinClasses();
+OSClasses();
+SetReferenceTime(true);
 
 LoadPersistentContext();
 LoadSystemConstants();
@@ -507,8 +490,7 @@ LoadSystemConstants();
 YieldCurrentLock(thislock);
 DeletePromise(pp);
 
-snprintf(timekey,CF_MAXVARSIZE-1,"%s_%s_%s_%s",VDAY,VMONTH,VLIFECYCLE,VSHIFT);
-Nova_HistoryUpdate(timekey,newvals);
+Nova_HistoryUpdate(CFSTARTTIME, &newvals);
 
 if (strcmp(CURRENT_SHIFT,VSHIFT) != 0)
    {
@@ -628,53 +610,12 @@ return false;
 
 /*****************************************************************************/
 
-void TranslatePath(char *new,char *old)
+void TranslatePath(char *new, const char *old)
 {
 #ifdef HAVE_NOVA
 Nova_TranslatePath(new,old);
 #else
 strncpy(new,old,CF_BUFSIZE-1);
-#endif 
-}
-
-/*****************************************************************************/
-
-RSA *Nova_SelectKeyRing(char *name);
-RSA *SelectKeyRing(char *name)
-{
-#ifdef HAVE_NOVA
-if (KEYTTL > 0)
-   {
-   return Nova_SelectKeyRing(name);
-   }
-else
-   {
-   return NULL;
-   }
-#else
-return NULL;
-#endif 
-}
-
-/*****************************************************************************/
-
-void IdempAddToKeyRing(char *name,char *ip,RSA *key)
-{
-#ifdef HAVE_NOVA
-Nova_IdempAddToKeyRing(name,ip,key);
-#else
-return;
-#endif 
-}
-
-/*****************************************************************************/
-
-void PurgeKeyRing()
-{
-#ifdef HAVE_NOVA
-Nova_PurgeKeyRing();
-#else
-return;
 #endif 
 }
 
@@ -802,37 +743,6 @@ void SummarizeSetuid(int xml,int html,int csv,int embed,char *stylesheet,char *h
 
 /*****************************************************************************/
 
-void ReportSoftware(struct CfPackageManager *list)
-
-{ FILE *fout;
-  struct CfPackageManager *mp = NULL;
-  struct CfPackageItem *pi;
-  char name[CF_BUFSIZE];
-
-snprintf(name,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,NOVA_SOFTWARE_INSTALLED);
-MapName(name);
-
-if ((fout = fopen(name,"w")) == NULL)
-   {
-   CfOut(cf_error,"fopen","Cannot open the destination file %s",name);
-   return;
-   }
-
-for (mp = list; mp != NULL; mp = mp->next)
-   {
-   for (pi = mp->pack_list; pi != NULL; pi=pi->next)
-      {
-      fprintf(fout,"%s,",CanonifyChar(pi->name,','));
-      fprintf(fout,"%s,",CanonifyChar(pi->version,','));
-      fprintf(fout,"%s,%s\n",pi->arch,ReadLastNode(GetArg0(mp->manager)));
-      }
-   }
-
-fclose(fout);
-}
-
-/*****************************************************************************/
-
 void ReportPatches(struct CfPackageManager *list)
 {
 #ifdef HAVE_NOVA
@@ -881,15 +791,6 @@ void VerifyServices(struct Attributes a,struct Promise *pp)
 /* Montoring                                                                 */
 /*****************************************************************************/
 
-void InitMeasurements()
-{
-#ifdef HAVE_NOVA
- NovaInitMeasurements();
-#endif
-}
-
-/*****************************************************************************/
-
 void VerifyMeasurement(double *this,struct Attributes a,struct Promise *pp)
 
 {
@@ -906,8 +807,7 @@ void LongHaul()
 
 {
 #ifdef HAVE_NOVA
- Nova_LongHaul(VDAY,VMONTH,VLIFECYCLE,VSHIFT);
-#else
+Nova_LongHaul(CFSTARTTIME);
 #endif
 }
 
@@ -965,12 +865,12 @@ Nova_VerifyRegistryPromise(a,pp);
 
 /*****************************************************************************/
 
-int GetRegistryValue(char *key,char *value,char *buffer)
+int GetRegistryValue(char *key,char *name,char *buf, int bufSz)
 
 {
 #ifdef HAVE_NOVA
 # ifdef NT
-return Nova_CopyRegistryValue(key,value,buffer);
+return Nova_GetRegistryValueAsString(key, name, buf, bufSz);
 # endif
 return 0;
 #else
@@ -1142,7 +1042,7 @@ void NoteEfficiency(double e)
  struct Promise p = {0};
  
 NovaNamedEvent("Configuration model efficiency",e,a,&p);
-CfOut(cf_verbose,"","Configuration model efficiency for %s = %.4lf%%",VUQNAME,e);
+CfOut(cf_verbose,""," -> Configuration model efficiency for %s = %.2lf%%",VUQNAME,e);
 #endif 
 }
 
@@ -1249,3 +1149,14 @@ return false;
 
 #endif
 }
+/*****************************************************************************/
+
+void AddGoalsToDB(char *goal_patterns, char *goal_categories)
+
+{
+#ifdef HAVE_NOVA
+  Nova_AddGoalsToDB(goal_patterns,goal_categories); 
+#endif
+}
+
+/*****************************************************************************/

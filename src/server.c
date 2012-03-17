@@ -46,7 +46,7 @@ void DoExec (struct cfd_connection *conn, char *sendbuffer, char *args);
 int GetCommand (char *str);
 int VerifyConnection (struct cfd_connection *conn, char *buf);
 void RefuseAccess (struct cfd_connection *conn, char *sendbuffer, int size, char *errormsg);
-int AccessControl(char *oldFilename,struct cfd_connection *conn,int encrypt,struct Auth *admit, struct Auth *deny);
+int AccessControl(const char *oldFilename,struct cfd_connection *conn,int encrypt,struct Auth *admit, struct Auth *deny);
 int LiteralAccessControl(char *filename,struct cfd_connection *conn,int encrypt,struct Auth *admit, struct Auth *deny);
 struct Item *ContextAccessControl(char *in,struct cfd_connection *conn,int encrypt,struct Auth *vadmit, struct Auth *vdeny);
 void ReplyServerContext(struct cfd_connection *conn,char *sendbuffer,char *recvbuffer,int encrypted,struct Item *classes);
@@ -82,17 +82,20 @@ in_addr_t GetInetAddr (char *host);
 
 extern struct BodySyntax CFS_CONTROLBODY[];
 
+char CFRUNCOMMAND[CF_BUFSIZE];
+time_t CFDSTARTTIME;
+
 /*******************************************************************/
 /* Command line options                                            */
 /*******************************************************************/
 
- char *ID = "The server daemon provides two services: it acts as a\n"
-            "file server for remote file copying and it allows an\n"
-            "authorized cf-runagent to start start a cf-agent process\n"
-            "and set certain additional classes with role-based access\n"
-            "control.\n";
+const char *ID = "The server daemon provides two services: it acts as a\n"
+                 "file server for remote file copying and it allows an\n"
+                 "authorized cf-runagent to start start a cf-agent process\n"
+                 "and set certain additional classes with role-based access\n"
+                 "control.\n";
  
- struct option OPTIONS[15] =
+const struct option OPTIONS[15] =
       {
       { "help",no_argument,0,'h' },
       { "debug",optional_argument,0,'d' },
@@ -109,12 +112,11 @@ extern struct BodySyntax CFS_CONTROLBODY[];
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[15] =
+const char *HINTS[15] =
       {
       "Print the help message",
       "Set debugging level 0,1,2,3",
       "Output verbose information about the behaviour of the agent",
-      "All talk and no action mode - make no changes, only inform of promises not kept",
       "Output the version of the software",
       "Specify an alternative input file than the default",
       "Define a list of comma separated classes to be defined at the start of execution",
@@ -247,7 +249,7 @@ while ((c=getopt_long(argc,argv,"d:vIKf:D:N:VSxLFM",OPTIONS,&optindex)) != EOF)
           putenv(ld_library_path);
           break;
 
-      case 'V': Version("cf-serverd");
+      case 'V': PrintVersionBanner("cf-serverd");
           exit(0);
           
       case 'h': Syntax("cf-serverd - cfengine's server agent",OPTIONS,HINTS,ID);
@@ -367,18 +369,20 @@ if (!NO_FORK)
 WritePID("cf-serverd.pid");
 
 /* Andrew Stribblehill <ads@debian.org> -- close sd on exec */ 
-#ifndef MINGW  // TODO: close in windows on exec
+#ifndef MINGW
 fcntl(sd, F_SETFD, FD_CLOEXEC);
 #endif
  
 while (true)
    {
-   if (ACTIVE_THREADS == 0)
+   if (ThreadLock(cft_server_children))
       {
-      CheckFileChanges(argc,argv,sd);
-      PurgeKeyRing();
+      if (ACTIVE_THREADS == 0)
+         {
+         CheckFileChanges(argc,argv,sd);
+         }
+      ThreadUnlock(cft_server_children);
       }
-   UpdateLastSeen();
    
    FD_ZERO(&rset);
    FD_SET(sd,&rset);
@@ -803,6 +807,7 @@ if (NewPromiseProposals())
       DeleteAllScope();
       
       strcpy(VDOMAIN,"undefined.domain");
+      POLICY_SERVER[0] = '\0';
       
       VADMIT = VADMITTOP = NULL;
       VDENY  = VDENYTOP  = NULL;
@@ -824,9 +829,10 @@ if (NewPromiseProposals())
       
       NewScope("sys");
 
+      SetPolicyServer(POLICY_SERVER);
       NewScalar("sys","policy_hub",POLICY_SERVER,cf_str);
 
-      if (EnterpriseExpiry(LIC_DAY,LIC_MONTH,LIC_YEAR,LIC_COMPANY)) 
+      if (EnterpriseExpiry())
          {
          CfOut(cf_error,"","Cfengine - autonomous configuration engine. This enterprise license is invalid.\n");
          }
@@ -840,7 +846,11 @@ if (NewPromiseProposals())
       GetNameInfo3();
       CfGetInterfaceInfo(cf_server);
       Get3Environment();
+      BuiltinClasses();
       OSClasses();
+
+      NewClass(THIS_AGENT);
+
       SetReferenceTime(true);
       ReadPromises(cf_server,CF_SERVERC);
       KeepPromises();
@@ -881,7 +891,7 @@ if (conn == NULL)
    return NULL;
    }
 
-if (!ThreadLock(cft_count))
+if (!ThreadLock(cft_server_children))
    {
    DeleteConn(conn);
    return NULL;
@@ -889,18 +899,8 @@ if (!ThreadLock(cft_count))
 
 ACTIVE_THREADS++;
 
-if (!ThreadUnlock(cft_count))
-   {
-   }
-
 if (ACTIVE_THREADS >= CFD_MAXPROCESSES)
    {
-   if (!ThreadLock(cft_count))
-      {
-      DeleteConn(conn);
-      return NULL;
-      }
-
    ACTIVE_THREADS--;
    
    if (TRIES++ > MAXTRIES)  /* When to say we're hung / apoptosis threshold */
@@ -909,15 +909,19 @@ if (ACTIVE_THREADS >= CFD_MAXPROCESSES)
       HandleSignals(SIGTERM);
       }
 
-   if (!ThreadUnlock(cft_count))
+   if (!ThreadUnlock(cft_server_children))
       {
       }
 
-   CfOut(cf_error,"","Too many threads (>=%d) -- increase MaxConnections?",CFD_MAXPROCESSES);
-   snprintf(output,CF_BUFSIZE,"BAD: Server is currently too busy -- increase MaxConnections or Splaytime?");
+   CfOut(cf_error,"","Too many threads (>=%d) -- increase server maxconnections?",CFD_MAXPROCESSES);
+   snprintf(output,CF_BUFSIZE,"BAD: Server is currently too busy -- increase maxconnections or splaytime?");
    SendTransaction(conn->sd_reply,output,0,CF_DONE);
    DeleteConn(conn);
    return NULL;
+   }
+else
+   {
+   ThreadUnlock(cft_server_children);
    }
 
 TRIES = 0;   /* As long as there is activity, we're not stuck */
@@ -928,7 +932,7 @@ while (BusyWithConnection(conn))
 
 Debug("Terminating thread...\n");
 
-if (!ThreadLock(cft_count))
+if (!ThreadLock(cft_server_children))
    {
    DeleteConn(conn);
    return NULL;
@@ -936,7 +940,7 @@ if (!ThreadLock(cft_count))
 
 ACTIVE_THREADS--;
 
-if (!ThreadUnlock(cft_count))
+if (!ThreadUnlock(cft_server_children))
    {
    }
 
@@ -1030,7 +1034,7 @@ switch (GetCommand(recvbuffer))
           RefuseAccess(conn,sendbuffer,0,recvbuffer);
           }
 
-       snprintf(conn->output,CF_BUFSIZE,"OK: %s",VERSION);
+       snprintf(conn->output,CF_BUFSIZE,"OK: %s",Version());
        SendTransaction(conn->sd_reply,conn->output,0,CF_DONE);
        return conn->id_verified;
        
@@ -1515,10 +1519,8 @@ while (true && (count < 10))  /* arbitrary check to avoid infinite loop, DoS att
 
    if (ReceiveTransaction(conn->sd_reply,recvbuffer,NULL) == -1)
       {
-      if (errno == EINTR) 
-         {
-         continue;
-         }
+      CfOut(cf_verbose, "ReceiveTransaction", "Unable to read data from network");
+      return false;
       }
 
    Debug("Got class buffer %s\n",recvbuffer);
@@ -1979,63 +1981,83 @@ return false;
 
 /**************************************************************/
 
-int AccessControl(char *oldFilename,struct cfd_connection *conn,int encrypt,struct Auth *vadmit, struct Auth *vdeny)
+/* 'resolved' argument needs to be at least CF_BUFSIZE long */
 
-{ struct Auth *ap;
-  int access = false;
-  char realname[CF_BUFSIZE],path[CF_BUFSIZE],lastnode[CF_BUFSIZE],filename[CF_BUFSIZE];
-  char transrequest[CF_BUFSIZE],transpath[CF_BUFSIZE];
-  struct stat statbuf;
+static bool ResolveFilename(const char *req_path, char *res_path)
+{
+char req_dir[CF_BUFSIZE];
+char req_filename[CF_BUFSIZE];
 
-TranslatePath(filename,oldFilename);
+/*
+ * Eliminate symlinks from path, but do not resolve the file itself if it is a
+ * symlink.
+ */
 
-Debug("AccessControl(%s)\n",filename);
+strlcpy(req_dir, req_path, CF_BUFSIZE);
+ChopLastNode(req_dir);
 
-memset(realname,0,CF_BUFSIZE);
-
-/* Separate path first, else this breaks for lastnode = symlink */
-
-strncpy(path,filename,CF_BUFSIZE-1);
-strncpy(lastnode,ReadLastNode(filename),CF_BUFSIZE-1);
-ChopLastNode(path);
-
-/* Eliminate links from path */
+strlcpy(req_filename, ReadLastNode(req_path), CF_BUFSIZE);
 
 #if defined HAVE_REALPATH && !defined NT
-if (realpath(path,realname) == NULL)
+if (realpath(req_dir,res_path) == NULL)
    {
-   CfOut(cf_verbose,"lstat","Couldn't resolve filename %s from host %s\n",filename,conn->hostname);
    return false;
    }
 #else
-CompressPath(realname,path);
+memset(res_path,0,CF_BUFSIZE);
+CompressPath(res_path,req_dir);
 #endif
 
-/* Rejoin the last node and stat the real thing */
+AddSlash(res_path);
+strlcat(res_path, req_filename, CF_BUFSIZE);
 
-AddSlash(realname);
-strcat(realname,lastnode);
+/* Adjust for forward slashes */
 
-strncpy(transrequest,MapName(realname),CF_BUFSIZE-1);
+MapName(res_path);
+
+/* NT has case-insensitive path names */
 
 #ifdef MINGW
-// NT has case-insensitive path names
 int i;
-
-ThreadLock(cft_system);
-
-for (i = 0; i < strlen(transrequest); i++)
+for (i = 0; i < strlen(res_path); i++)
    {
-   transrequest[i] = ToLower(transrequest[i]);
+   res_path[i] = ToLower(res_path[i]);
    }
-
-ThreadUnlock(cft_system);
-
 #endif  /* MINGW */
+
+return true;
+}
+
+/**************************************************************/
+
+int AccessControl(const char *req_path,struct cfd_connection *conn,int encrypt,struct Auth *vadmit, struct Auth *vdeny)
+
+{ struct Auth *ap;
+  int access = false;
+  char transrequest[CF_BUFSIZE];
+  struct stat statbuf;
+  char translated_req_path[CF_BUFSIZE];
+  char transpath[CF_BUFSIZE];
+
+Debug("AccessControl(%s)\n",req_path);
+
+/*
+ * /var/cfengine -> $workdir translation.
+ */
+TranslatePath(translated_req_path,req_path);
+
+if (ResolveFilename(translated_req_path, transrequest))
+   {
+   CfOut(cf_verbose, "", "Filename %s is resolved to %s", translated_req_path, transrequest);
+   }
+else
+   {
+   CfOut(cf_verbose,"lstat","Couldn't resolve filename %s from host %s\n",translated_req_path,conn->hostname);
+   }
 
 if (lstat(transrequest,&statbuf) == -1)
    {
-   CfOut(cf_verbose,"lstat","Couldn't stat filename %s (i.e. %s) from host %s\n",filename,transrequest,conn->hostname);
+   CfOut(cf_verbose,"lstat","Couldn't stat filename %s requested by host %s\n",transrequest,conn->hostname);
    return false;
    }
 
@@ -2052,7 +2074,7 @@ conn->maproot = false;
 for (ap = vadmit; ap != NULL; ap=ap->next)
    {
    int res = false;
-   Debug("Examining rule in access list (%s,%s)?\n",realname,ap->path);
+   Debug("Examining rule in access list (%s,%s)?\n",transrequest,ap->path);
 
    strncpy(transpath,ap->path,CF_BUFSIZE-1);
    MapName(transpath);
@@ -2109,9 +2131,9 @@ for (ap = vadmit; ap != NULL; ap=ap->next)
       }
    }
 
-for (ap = vdeny; ap != NULL; ap=ap->next)
+if (strncmp(transpath,transrequest,strlen(transpath)) == 0)
    {
-   if (strncmp(transpath,transrequest,strlen(transpath)) == 0)
+   for (ap = vdeny; ap != NULL; ap=ap->next)
       {
       if (IsRegexItemIn(ap->accesslist,conn->hostname))
          {
@@ -2124,17 +2146,17 @@ for (ap = vdeny; ap != NULL; ap=ap->next)
 
 if (access)
    {
-   CfOut(cf_verbose,"","Host %s granted access to %s\n",conn->hostname,realname);
+   CfOut(cf_verbose,"","Host %s granted access to %s\n",conn->hostname,req_path);
    
    if (encrypt && LOGENCRYPT)
       {
       /* Log files that were marked as requiring encryption */
-      CfOut(cf_log,"","Host %s granted access to %s\n",conn->hostname,realname);
+      CfOut(cf_log,"","Host %s granted access to %s\n",conn->hostname,req_path);
       }
    }
 else
    {
-   CfOut(cf_verbose,"","Host %s denied access to %s\n",conn->hostname,realname);
+   CfOut(cf_verbose,"","Host %s denied access to %s\n",conn->hostname,req_path);
    }
 
 if (!conn->rsa_auth)
@@ -3369,8 +3391,8 @@ else
 
 int CfOpenDirectory(struct cfd_connection *conn,char *sendbuffer,char *oldDirname)
 
-{ DIR *dirh;
-  struct dirent *dirp;
+{ CFDIR *dirh;
+  const struct dirent *dirp;
   int offset;
   char dirname[CF_BUFSIZE];
 
@@ -3385,7 +3407,7 @@ if (!IsAbsoluteFileName(dirname))
    return -1;
    }
 
-if ((dirh = opendir(dirname)) == NULL)
+if ((dirh = OpenDirLocal(dirname)) == NULL)
    {
    Debug("cfengine, couldn't open dir %s\n",dirname);
    snprintf(sendbuffer,CF_BUFSIZE,"BAD: cfengine, couldn't open dir %s\n",dirname);
@@ -3399,7 +3421,7 @@ memset(sendbuffer,0,CF_BUFSIZE);
 
 offset = 0;
 
-for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
    {
    if (strlen(dirp->d_name)+1+offset >= CF_BUFSIZE - CF_MAXLINKSIZE)
       {
@@ -3415,7 +3437,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
 strcpy(sendbuffer+offset,CFD_TERMINATOR);
 SendTransaction(conn->sd_reply,sendbuffer,offset+2+strlen(CFD_TERMINATOR),CF_DONE);
 Debug("END CfOpenDirectory(%s)\n",dirname);
-closedir(dirh);
+CloseDir(dirh);
 return 0;
 }
 
@@ -3423,8 +3445,8 @@ return 0;
 
 int CfSecOpenDirectory(struct cfd_connection *conn,char *sendbuffer,char *dirname)
 
-{ DIR *dirh;
-  struct dirent *dirp;
+{ CFDIR *dirh;
+  const struct dirent *dirp;
   int offset,cipherlen;
   char out[CF_BUFSIZE];
 
@@ -3438,7 +3460,7 @@ if (!IsAbsoluteFileName(dirname))
    return -1;
    }
 
-if ((dirh = opendir(dirname)) == NULL)
+if ((dirh = OpenDirLocal(dirname)) == NULL)
    {
    CfOut(cf_verbose,"","Couldn't open dir %s\n",dirname);
    snprintf(sendbuffer,CF_BUFSIZE,"BAD: cfengine, couldn't open dir %s\n",dirname);
@@ -3453,7 +3475,7 @@ memset(sendbuffer,0,CF_BUFSIZE);
 
 offset = 0;
 
-for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
    {
    if (strlen(dirp->d_name)+1+offset >= CF_BUFSIZE - CF_MAXLINKSIZE)
       {
@@ -3474,7 +3496,7 @@ strcpy(sendbuffer+offset,CFD_TERMINATOR);
 cipherlen = EncryptString(conn->encryption_type,sendbuffer,out,conn->session_key,offset+2+strlen(CFD_TERMINATOR));
 SendTransaction(conn->sd_reply,out,cipherlen,CF_DONE);
 Debug("END CfSecOpenDirectory(%s)\n",dirname);
-closedir(dirh);
+CloseDir(dirh);
 return 0;
 }
 

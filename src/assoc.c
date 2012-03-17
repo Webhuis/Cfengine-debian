@@ -33,9 +33,11 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void ShowAssoc (struct CfAssoc *cp);
+
 /*******************************************************************/
 
-struct CfAssoc *NewAssoc(char *lval,void *rval,char rtype,enum cfdatatype dt)
+struct CfAssoc *NewAssoc(const char *lval,void *rval,char rtype,enum cfdatatype dt)
 
 { struct CfAssoc *ap;
 
@@ -84,7 +86,7 @@ if (ap->lval)
    }
 
 if (ap->rval)
-  { 
+   { 
    DeleteRvalItem(ap->rval,ap->rtype);
    }
 
@@ -108,7 +110,7 @@ return NewAssoc(old->lval,old->rval,old->rtype,old->dtype);
 
 /*******************************************************************/
 
-void ShowAssoc (struct CfAssoc *cp)
+static void ShowAssoc (struct CfAssoc *cp)
 
 {
 printf("ShowAssoc: lval = %s\n",cp->lval);

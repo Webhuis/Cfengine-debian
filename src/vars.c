@@ -32,6 +32,11 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void ExtendList(char *scope,char *lval,void *rval,enum cfdatatype dt);
+static void IdempNewScalar(char *scope,char *lval,char *rval,enum cfdatatype dt);
+static void DeleteAllVariables(char *scope);
+static int IsCf3Scalar(char *str);
+
 /*******************************************************************/
 
 void LoadSystemConstants()
@@ -100,7 +105,7 @@ AddVariableHash(scope,lval,rval,CF_SCALAR,dt,NULL,0);
 
 /*******************************************************************/
 
-void IdempNewScalar(char *scope,char *lval,char *rval,enum cfdatatype dt)
+static void IdempNewScalar(char *scope,char *lval,char *rval,enum cfdatatype dt)
 
 {
   struct Rval rvald;
@@ -117,28 +122,19 @@ AddVariableHash(scope,lval,rval,CF_SCALAR,dt,NULL,0);
 
 /*******************************************************************/
 
-void DeleteScalar(char *scope,char *lval)
+void DeleteScalar(char *scope_name, char *lval)
 
-{ struct Scope *ptr;
-  struct CfAssoc *ap;
-  int slot;
- 
-ptr = GetScope(scope);
-slot = GetHash(lval);
+{
+struct Scope *scope = GetScope(scope_name);
 
-if (ptr == NULL)
+if (scope == NULL)
    {
    return;
    }
- 
-if ((ap = (struct CfAssoc *)(ptr->hashtable[slot])))
+
+if (HashDeleteElement(scope->hashtable, lval) == false)
    {
-   DeleteAssoc(ap);
-   ptr->hashtable[slot] = NULL;
-   }
-else
-   {
-   Debug("Attempt to delete non existent variable %s in scope %s\n",lval,scope);
+   Debug("Attempt to delete non-existent variable %s in scope %s\n", lval, scope_name);
    }
 }
 
@@ -160,7 +156,7 @@ AddVariableHash(scope,sp1,rval,CF_LIST,dt,NULL,0);
 
 /*******************************************************************/
 
-void ExtendList(char *scope,char *lval,void *rval,enum cfdatatype dt)
+static void ExtendList(char *scope,char *lval,void *rval,enum cfdatatype dt)
 
 {
   struct Rval rvald;
@@ -203,19 +199,19 @@ else
 
 /*******************************************************************/
 
-enum cfdatatype GetVariable(char *scope,char *lval,void **returnv, char *rtype)
+enum cfdatatype GetVariable(const char *scope, const char *lval, void **returnv, char *rtype)
 
 {
-  int slot,i,found = false;
   struct Scope *ptr = NULL;
   char scopeid[CF_MAXVARSIZE],vlval[CF_MAXVARSIZE],sval[CF_MAXVARSIZE];
   char expbuf[CF_EXPANDSIZE];
-  
+  CfAssoc *assoc;
+
 Debug("\nGetVariable(%s,%s) type=(to be determined)\n",scope,lval);
 
 if (lval == NULL)
    {
-   *returnv = lval;
+   *returnv = (void*)lval;
    *rtype   = CF_SCALAR;
    return cf_notype;
    }
@@ -232,7 +228,7 @@ else
       }
    else
       {
-      *returnv = lval;
+      *returnv = (void*)lval;
       *rtype   = CF_SCALAR;
       Debug("Couldn't expand array-like variable (%s) due to undefined dependencies\n",lval);
       return cf_notype;
@@ -261,120 +257,61 @@ if (ptr == NULL)
    ptr = GetScope(scopeid);
    }
 
-i = slot = GetHash(vlval);
-
-if (ptr == NULL || ptr->hashtable == NULL)
+if (ptr == NULL)
    {
    Debug("Scope for variable \"%s.%s\" does not seem to exist\n",scope,lval);
-   *returnv = lval;
+   *returnv = (void*)lval;
    *rtype   = CF_SCALAR;
    return cf_notype;
    }
 
-Debug("GetVariable(%s,%s): using scope '%s' for variable '%s' (slot =%d)\n",scopeid,vlval,ptr->scope,vlval,slot);
+Debug("GetVariable(%s,%s): using scope '%s' for variable '%s'\n",scopeid,vlval,ptr->scope,vlval);
 
-if (CompareVariable(vlval,ptr->hashtable[slot]) != 0)
+assoc = HashLookupElement(ptr->hashtable, vlval);
+
+if (assoc == NULL)
    {
-   /* Recover from previous hash collision */
-   
-   while (true)
-      {
-      i++;
-
-      if (i >= CF_HASHTABLESIZE)
-         {
-         i = 0;
-         }
-      
-      if (CompareVariable(vlval,ptr->hashtable[i]) == 0)
-         {
-         found = true;
-         break;
-         }
-
-      /* Removed autolookup in Unix environment variables -
-         implement as getenv() fn instead */
-      
-      if (i == slot)
-         {
-         found = false;
-         break;
-         }
-      }
-
-   if (!found)
-      {
-      Debug("No such variable found %s.%s\n\n",scopeid,lval);
-      *returnv = lval;
-      *rtype   = CF_SCALAR;
-      return cf_notype;
-      }
+   Debug("No such variable found %s.%s\n\n",scopeid,lval);
+   *returnv = (void*)lval;
+   *rtype   = CF_SCALAR;
+   return cf_notype;
    }
 
-Debug("return final variable type=%s, value={\n",CF_DATATYPES[(ptr->hashtable[i])->dtype]);
+Debug("return final variable type=%s, value={\n",CF_DATATYPES[assoc->dtype]);
 
 if (DEBUG)
    {
-   ShowRval(stdout,(ptr->hashtable[i])->rval,(ptr->hashtable[i])->rtype);
+   ShowRval(stdout,assoc->rval,assoc->rtype);
    }
 Debug("}\n");
 
-*returnv = ptr->hashtable[i]->rval;
-*rtype   = ptr->hashtable[i]->rtype;
+*returnv = assoc->rval;
+*rtype   = assoc->rtype;
 
-return (ptr->hashtable[i])->dtype;
+return assoc->dtype;
 }
 
 /*******************************************************************/
 
 void DeleteVariable(char *scope,char *id)
 
-{ int slot,i;
-  struct Scope *ptr;
-  
-i = slot = GetHash(id);
-
-ptr = GetScope(scope);
+{
+struct Scope *ptr = GetScope(scope);
 
 if (ptr == NULL)
    {
    return;
    }
 
-if (CompareVariable(id,ptr->hashtable[slot]) != 0)
+if (HashDeleteElement(ptr->hashtable, id) == false)
    {
-   while (true)
-      {
-      i++;
-      
-      if (i == slot)
-         {
-         Debug("No variable matched %s\n",id);
-         break;
-         }
-      
-      if (i >= CF_HASHTABLESIZE)
-         {
-         i = 0;
-         }
-      
-      if (CompareVariable(id,ptr->hashtable[i]) == 0)
-         {
-	 DeleteAssoc(ptr->hashtable[i]);
-         ptr->hashtable[i] = NULL;
-         }
-      }
+   Debug("No variable matched %s\n",id);
    }
-else
-   {
-   DeleteAssoc(ptr->hashtable[i]);
-   ptr->hashtable[i] = NULL;
-   }   
 }
 
 /*******************************************************************/
 
-int CompareVariable(char *lval,struct CfAssoc *ap)
+int CompareVariable(const char *lval,struct CfAssoc *ap)
 
 {
 
@@ -482,21 +419,11 @@ return false;
 
 /*******************************************************************/
 
-void DeleteAllVariables(char *scope)
-
-{ int i;
-  struct Scope *ptr;
-  
+static void DeleteAllVariables(char *scope)
+{
+struct Scope *ptr;
 ptr = GetScope(scope);
- 
-for (i = 0; i < CF_HASHTABLESIZE; i++)
-   {
-   if (ptr->hashtable[i] != NULL)
-      {
-      DeleteAssoc(ptr->hashtable[i]);
-      ptr->hashtable[i] = NULL;
-      }
-   }
+HashClear(ptr->hashtable);
 }
 
 /******************************************************************/
@@ -624,7 +551,7 @@ return vars;
 
 /*********************************************************************/
 
-int IsCf3Scalar(char *str)
+static int IsCf3Scalar(char *str)
 
 { char *sp;
   char left = 'x', right = 'x';
@@ -744,9 +671,9 @@ return false;
 
 /*******************************************************************/
 
-char *ExtractInnerCf3VarString(char *str,char *substr)
+const char *ExtractInnerCf3VarString(const char *str,char *substr)
 
-{ char *sp;
+{ const char *sp;
   int bracks = 1;
 
 Debug("ExtractInnerVarString( %s ) - syntax verify\n",str);
@@ -813,11 +740,11 @@ return sp-1;
 
 /*********************************************************************/
 
-char *ExtractOuterCf3VarString(char *str,char *substr)
+const char *ExtractOuterCf3VarString(const char *str, char *substr)
 
   /* Should only by applied on str[0] == '$' */
     
-{ char *sp;
+{ const char *sp;
   int dollar = false;
   int bracks = 0, onebrack = false;
   int nobracks = true;
@@ -930,4 +857,216 @@ int IsCfList(char *type)
   return false;
 }
 
+/*******************************************************************/
 
+int AddVariableHash(char *scope,char *lval,void *rval,char rtype,enum cfdatatype dtype,char *fname,int lineno)
+
+{ struct Scope *ptr;
+  struct Rlist *rp;
+  struct CfAssoc *assoc;
+
+if (rtype == CF_SCALAR)
+   {
+   Debug("AddVariableHash(%s.%s=%s (%s) rtype=%c)\n",scope,lval,rval,CF_DATATYPES[dtype],rtype);
+   }
+else
+   {
+   Debug("AddVariableHash(%s.%s=(list) (%s) rtype=%c)\n",scope,lval,CF_DATATYPES[dtype],rtype);
+   }
+
+if (lval == NULL || scope == NULL)
+   {
+   CfOut(cf_error,"","scope.value = %s.%s = %s",scope,lval,rval);
+   ReportError("Bad variable or scope in a variable assignment");
+   FatalError("Should not happen - forgotten to register a function call in fncall.c?");
+   }
+
+if (rval == NULL)
+   {
+   Debug("No value to assignment - probably a parameter in an unused bundle/body\n");
+   return false;
+   }
+
+if (strlen(lval) > CF_MAXVARSIZE)
+   {
+   ReportError("variable lval too long");
+   return false;
+   }
+
+/* If we are not expanding a body template, check for recursive singularities */
+
+if (strcmp(scope,"body") != 0)
+   {
+   switch (rtype)
+      {
+      case CF_SCALAR:
+
+          if (StringContainsVar((char *)rval,lval))
+             {
+             CfOut(cf_error,"","Scalar variable %s.%s contains itself (non-convergent): %s",scope,lval,(char *)rval);
+             return false;
+             }
+          break;
+
+      case CF_LIST:
+
+          for (rp = rval; rp != NULL; rp=rp->next)
+             {
+             if (StringContainsVar((char *)rp->item,lval))
+                {
+                CfOut(cf_error,"","List variable %s contains itself (non-convergent)",lval);
+                return false;
+                }
+             }
+          break;
+
+      }
+   }
+
+ptr = GetScope(scope);
+
+if (ptr == NULL)
+   {
+   return false;
+   }
+
+// Look for outstanding lists in variable rvals
+
+if (THIS_AGENT_TYPE == cf_common)
+   {
+   struct Rlist *listvars = NULL, *scalarvars = NULL;
+
+   if (strcmp(CONTEXTID,"this") != 0)
+      {
+      ScanRval(CONTEXTID,&scalarvars,&listvars,rval,rtype,NULL);
+
+      if (listvars != NULL)
+         {
+         CfOut(cf_error,""," !! Redefinition of variable \"%s\" (embedded list in RHS) in context \"%s\"",lval,CONTEXTID);
+         }
+
+      DeleteRlist(scalarvars);
+      DeleteRlist(listvars);
+      }
+   }
+
+assoc = HashLookupElement(ptr->hashtable, lval);
+
+if (assoc)
+   {
+   if (CompareVariableValue(rval, rtype, assoc) == 0)
+      {
+      /* Identical value, keep as is */
+      }
+   else
+      {
+      /* Different value, bark and replace */
+      if (!UnresolvedVariables(assoc, rtype))
+         {
+         CfOut(cf_inform,""," !! Duplicate selection of value for variable \"%s\" in scope %s",lval,ptr->scope);
+         if (fname)
+            {
+            CfOut(cf_inform,""," !! Rule from %s at/before line %d\n",fname,lineno);
+            }
+         else
+            {
+            CfOut(cf_inform,""," !! in bundle parameterization\n",fname,lineno);
+            }
+         }
+      DeleteRvalItem(assoc->rval, assoc->rtype);
+      assoc->rval = CopyRvalItem(rval, rtype);
+      assoc->rtype = rtype;
+      assoc->dtype = dtype;
+      Debug("Stored \"%s\" in context %s\n",lval,scope);
+      }
+   }
+else
+   {
+   if (!HashInsertElement(ptr->hashtable, lval, rval, rtype, dtype))
+      {
+      FatalError("Hash table is full");
+      }
+   }
+
+Debug("Added Variable %s in scope %s with value (omitted)\n",lval,scope);
+return true;
+}
+
+/*******************************************************************/
+
+void DeRefListsInHashtable(char *scope,struct Rlist *namelist,struct Rlist *dereflist)
+
+// Go through scope and for each variable in name-list, replace with a
+// value from the deref "lol" (list of lists) clock
+
+{ int len;
+  struct Scope *ptr;
+  struct Rlist *rp,*state;
+  struct CfAssoc *cplist;
+  HashIterator i;
+  CfAssoc *assoc;
+
+if ((len = RlistLen(namelist)) != RlistLen(dereflist))
+   {
+   CfOut(cf_error,""," !! Name list %d, dereflist %d\n",len, RlistLen(dereflist));
+   FatalError("Software Error DeRefLists... correlated lists not same length");
+   }
+
+if (len == 0)
+   {
+   return;
+   }
+
+ptr = GetScope(scope);
+i = HashIteratorInit(ptr->hashtable);
+
+while ((assoc = HashIteratorNext(&i)))
+   {
+   for (rp = dereflist; rp != NULL; rp = rp->next)
+      {
+      cplist = (struct CfAssoc *)rp->item;
+
+      if (strcmp(cplist->lval,assoc->lval) == 0)
+         {
+         /* Link up temp hash to variable lol */
+
+         state = (struct Rlist *)(cplist->rval);
+
+         if (rp->state_ptr == NULL || rp->state_ptr->type == CF_FNCALL)
+            {
+            /* Unexpanded function, or blank variable must be skipped.*/
+            return;
+            }
+
+         if (rp->state_ptr)
+            {
+            Debug("Rewriting expanded type for %s from %s to %s\n",assoc->lval,CF_DATATYPES[assoc->dtype],rp->state_ptr->item);
+
+            // must first free existing rval in scope, then allocate new (should always be string)
+            DeleteRvalItem(assoc->rval,assoc->rtype);
+
+            // avoids double free - borrowing value from lol (freed in DeleteScope())
+            assoc->rval = strdup(rp->state_ptr->item);
+            }
+
+         switch(assoc->dtype)
+            {
+            case cf_slist:
+               assoc->dtype = cf_str;
+               assoc->rtype = CF_SCALAR;
+               break;
+            case cf_ilist:
+               assoc->dtype = cf_int;
+               assoc->rtype = CF_SCALAR;
+               break;
+            case cf_rlist:
+               assoc->dtype = cf_real;
+               assoc->rtype = CF_SCALAR;
+               break;
+            }
+
+         Debug(" to %s\n",CF_DATATYPES[assoc->dtype]);
+         }
+      }
+   }
+}

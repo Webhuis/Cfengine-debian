@@ -32,6 +32,40 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void VerifyPromisedPatch(struct Attributes a,struct Promise *pp);
+static int ExecuteSchedule(struct CfPackageManager *schedule,enum package_actions action);
+static int ExecutePatch(struct CfPackageManager *schedule,enum package_actions action);
+static int PackageSanityCheck(struct Attributes a,struct Promise *pp);
+static int VerifyInstalledPackages(struct CfPackageManager **alllists,struct Attributes a,struct Promise *pp);
+static void VerifyPromisedPackage(struct Attributes a,struct Promise *pp);
+static void DeletePackageItems(struct CfPackageItem *pi);
+static int PackageMatch(char *n,char *v,char *a,struct Attributes attr,struct Promise *pp);
+static int PatchMatch(char *n,char *v,char *a,struct Attributes attr,struct Promise *pp);
+static int ComparePackages(char *n,char *v,char *a,struct CfPackageItem *pi,enum version_cmp cmp);
+static void ParsePackageVersion(char *version,struct Rlist **num,struct Rlist **sep);
+static void SchedulePackageOp(char *name,char *version,char *arch,int installed,int matched,int novers,struct Attributes a,struct Promise *pp);
+static char *PrefixLocalRepository(struct Rlist *repositories,char *package);
+static int FindLargestVersionAvail(char *matchName, char *matchVers, char *refAnyVer, char *ver, enum version_cmp package_select, struct Rlist *repositories);
+static int VersionCmp(char *vs1, char *vs2);
+static int IsNewerThanInstalled(char *n,char *v,char *a, char *instV, char *instA, struct Attributes attr);
+static int PackageInItemList(struct CfPackageItem *list,char *name,char *version,char *arch);
+static int ExecPackageCommandGeneric(char *command,int verify,int setCmdClasses,struct Attributes a,struct Promise *pp);
+static int PrependPatchItem(struct CfPackageItem **list,char *item,struct CfPackageItem *chklist,struct Attributes a,struct Promise *pp);
+static int PrependMultiLinePackageItem(struct CfPackageItem **list,char *item,int reset,struct Attributes a,struct Promise *pp);
+static int ExecPackageCommand(char *command,int verify,int setCmdClasses,struct Attributes a,struct Promise *pp);
+static void ReportSoftware(struct CfPackageManager *list);
+static const char *GetSoftwareCacheFilename(char *buffer);
+static void InvalidateSoftwareCache(void);
+static void ExecutePackageSchedule(struct CfPackageManager *schedule);
+static void DeletePackageManagers(struct CfPackageManager *newlist);
+static struct CfPackageManager *NewPackageManager(struct CfPackageManager **lists,char *mgr,enum package_actions pa,enum action_policy x);
+static struct CfPackageItem *GetCachedPackageList(struct CfPackageManager *manager,struct Attributes a,struct Promise *pp);
+
+/*****************************************************************************/
+
+struct CfPackageManager *PACKAGE_SCHEDULE = NULL;
+struct CfPackageManager *INSTALLED_PACKAGE_LISTS = NULL;
+
 /*****************************************************************************/
 
 void VerifyPackagesPromise(struct Promise *pp)
@@ -55,28 +89,6 @@ if (!PackageSanityCheck(a,pp))
 
 PromiseBanner(pp);
 
-// First check if we need to force a repository update
-
-if (a.packages.package_list_update_command)
-   {
-   snprintf(lockname,CF_BUFSIZE-1,"%s-%s",PACK_UPIFELAPSED_SALT,a.packages.package_list_update_command);
-   
-   al = a;
-   
-   if (a.packages.package_list_update_ifelapsed != CF_NOINT)
-      {
-      al.transaction.ifelapsed = a.packages.package_list_update_ifelapsed;
-      }
-
-   thislock = AcquireLock(lockname,VUQNAME,CFSTARTTIME,al,pp,false);
-   
-   if (thislock.lock != NULL)
-      {
-      ExecPackageCommand(a.packages.package_list_update_command,false,false,al,pp);   
-      YieldCurrentLock(thislock);
-      }
-   }
-
 // Now verify the package itself
 
 snprintf(lockname,CF_BUFSIZE-1,"package-%s-%s",pp->promiser,a.packages.package_list_command);
@@ -87,6 +99,10 @@ if (thislock.lock == NULL)
    {
    return;
    }
+
+// Start by reseting the root directory in case yum tries to glob regexs(!)
+
+chdir("/");
 
 if (!VerifyInstalledPackages(&INSTALLED_PACKAGE_LISTS,a,pp))
    {
@@ -110,7 +126,7 @@ YieldCurrentLock(thislock);
 
 /*****************************************************************************/
 
-int PackageSanityCheck(struct Attributes a,struct Promise *pp)
+static int PackageSanityCheck(struct Attributes a,struct Promise *pp)
 
 {
 #ifndef MINGW
@@ -204,7 +220,25 @@ return true;
 
 /*****************************************************************************/
 
-void ExecutePackageSchedule(struct CfPackageManager *schedule)
+void ExecuteScheduledPackages(void)
+{
+if (PACKAGE_SCHEDULE)
+   {
+   ExecutePackageSchedule(PACKAGE_SCHEDULE);
+   }
+}
+
+void CleanScheduledPackages(void)
+{
+DeletePackageManagers(PACKAGE_SCHEDULE);
+PACKAGE_SCHEDULE = NULL;
+DeletePackageManagers(INSTALLED_PACKAGE_LISTS);
+INSTALLED_PACKAGE_LISTS = NULL;
+}
+
+/*****************************************************************************/
+
+static void ExecutePackageSchedule(struct CfPackageManager *schedule)
 
 {
 CfOut(cf_verbose,""," >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
@@ -254,7 +288,7 @@ if (!ExecuteSchedule(schedule,cfa_verifypack))
 /* Level                                                                     */
 /*****************************************************************************/
 
-int VerifyInstalledPackages(struct CfPackageManager **all_mgrs,struct Attributes a,struct Promise *pp)
+static int VerifyInstalledPackages(struct CfPackageManager **all_mgrs,struct Attributes a,struct Promise *pp)
 
 { struct CfPackageManager *manager = NewPackageManager(all_mgrs,a.packages.package_list_command,cfa_pa_none,cfa_no_ppolicy);
   const int reset = true, update = false;
@@ -307,6 +341,11 @@ if (a.packages.package_list_command != NULL)
       }
    else
       {
+      if (a.packages.package_list_update_command != NULL)
+         {
+         ExecPackageCommand(a.packages.package_list_update_command,false,false,a,pp);
+         }
+
       CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
       CfOut(cf_verbose,"","   Reading package list from %s\n",GetArg0(a.packages.package_list_command));
       CfOut(cf_verbose,""," ???????????????????????????????????????????????????????????????\n");
@@ -327,7 +366,7 @@ if (a.packages.package_list_command != NULL)
          {
          memset(vbuff,0,CF_BUFSIZE);
          CfReadLine(vbuff,CF_BUFSIZE,prp);
-         CF_NODES++;
+         CF_OCCUR++;
          
          if (a.packages.package_multiline_start)
             {
@@ -413,8 +452,50 @@ return true;
 }
 
 /*****************************************************************************/
+static int VersionCheckSchedulePackage(struct Attributes a, struct Promise *pp, int matches, int installed)
 
-void VerifyPromisedPackage(struct Attributes a,struct Promise *pp)
+{
+/* The meaning of matches and installed depends on the package policy */
+enum package_actions policy = a.packages.package_policy;
+
+switch(policy)
+   {
+   case cfa_deletepack:
+      if (matches && installed)
+         {
+         return true;
+         }
+      break;
+
+   case cfa_reinstall:
+      if (matches && installed)
+         {
+         return true;
+         }
+      else
+         {
+	 cfPS(cf_verbose,CF_NOP,"",pp,a," -> Package (%s) already installed and matches criteria\n",pp->promiser);
+	 }
+      break;
+
+   default:
+      if (!installed || !matches)
+         {
+         return true;
+	 }
+      else
+         {
+	 cfPS(cf_verbose,CF_NOP,"",pp,a," -> Package (%s) already installed and matches criteria\n",pp->promiser);
+	 }
+      break;
+   }
+
+return false;
+}
+
+/*****************************************************************************/
+
+static void VerifyPromisedPackage(struct Attributes a,struct Promise *pp)
 
 { char version[CF_MAXVARSIZE];
   char name[CF_MAXVARSIZE];
@@ -422,7 +503,7 @@ void VerifyPromisedPackage(struct Attributes a,struct Promise *pp)
   char *package = pp->promiser;
   int matches = 0, installed = 0, no_version = false;
   struct Rlist *rp;
-  
+
 if (a.packages.package_version) 
    {
    /* The version is specified separately */
@@ -436,49 +517,56 @@ if (a.packages.package_version)
       installed = PackageMatch(name,"*",arch,a,pp);
       matches = PackageMatch(name,version,arch,a,pp);
 
-      SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
+      if (VersionCheckSchedulePackage(a, pp, matches, installed))
+         {
+         SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
+         }
       }
    else
       {
       for (rp = a.packages.package_architectures; rp != NULL; rp=rp->next)
-        {
-	CfOut(cf_verbose,""," ... trying listed arch %s\n",rp->item);
-	strncpy(name,pp->promiser,CF_MAXVARSIZE-1);
-	strncpy(version,a.packages.package_version,CF_MAXVARSIZE-1);
-	strncpy(arch,rp->item,CF_MAXVARSIZE-1);
+         {
+         CfOut(cf_verbose,""," ... trying listed arch %s\n",rp->item);
+         strncpy(name,pp->promiser,CF_MAXVARSIZE-1);
+         strncpy(version,a.packages.package_version,CF_MAXVARSIZE-1);
+         strncpy(arch,rp->item,CF_MAXVARSIZE-1);
 
-	installed = PackageMatch(name,"*",arch,a,pp);
-	matches = PackageMatch(name,version,arch,a,pp);
+         installed = PackageMatch(name,"*",arch,a,pp);
+         matches = PackageMatch(name,version,arch,a,pp);
 
-	SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
-	}
+         if (VersionCheckSchedulePackage(a, pp, matches, installed))
+            {
+            SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
+            }
+	 }
       }
-
    }
 else if (a.packages.package_version_regex)
    {
    /* The name, version and arch are to be extracted from the promiser */
    CfOut(cf_verbose,""," -> Package version specified implicitly in promiser's name");
       
-   strncpy(version,ExtractFirstReference(a.packages.package_version_regex,package),CF_MAXVARSIZE-1);
-   strncpy(name,ExtractFirstReference(a.packages.package_name_regex,package),CF_MAXVARSIZE-1);
-   strncpy(arch,ExtractFirstReference(a.packages.package_arch_regex,package),CF_MAXVARSIZE-1);
+   strlcpy(version,ExtractFirstReference(a.packages.package_version_regex,package),CF_MAXVARSIZE);
+   strlcpy(name,ExtractFirstReference(a.packages.package_name_regex,package),CF_MAXVARSIZE);
+   strlcpy(arch,ExtractFirstReference(a.packages.package_arch_regex,package),CF_MAXVARSIZE);
 
    if (strlen(arch) == 0)
       {
       strncpy(arch,"*",CF_MAXVARSIZE-1);
       }
 
-   if(strcmp(arch,"CF_NOMATCH") == 0)  // no match on arch regex, use any arch
-     {
-     strcpy(arch,"*");
-     }
-
+   if (strcmp(arch,"CF_NOMATCH") == 0)  // no match on arch regex, use any arch
+      {
+      strcpy(arch,"*");
+      }
+   
    installed = PackageMatch(name,"*",arch,a,pp);
    matches = PackageMatch(name,version,arch,a,pp);
-   
-   SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
 
+   if (VersionCheckSchedulePackage(a, pp, matches, installed))
+      {
+      SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
+      }
    }
 else
    {
@@ -508,17 +596,13 @@ else
 
        SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
        }
-
      }
-
    }
-
 }
 
 /*****************************************************************************/
 
-void VerifyPromisedPatch(struct Attributes a,struct Promise *pp)
-// NOTE: Should be acting the same as VerifyPromisedPackage()
+static void VerifyPromisedPatch(struct Attributes a,struct Promise *pp)
 
 { char version[CF_MAXVARSIZE];
   char name[CF_MAXVARSIZE];
@@ -589,7 +673,7 @@ SchedulePackageOp(name,version,arch,installed,matches,no_version,a,pp);
 
 /*****************************************************************************/
 
-int ExecuteSchedule(struct CfPackageManager *schedule,enum package_actions action)
+static int ExecuteSchedule(struct CfPackageManager *schedule,enum package_actions action)
 
 { struct CfPackageItem *pi;
   struct CfPackageManager *pm;
@@ -829,13 +913,16 @@ if (command_string)
    free(command_string);
    }
 
+/* We have performed some operation on packages, our cache is invalid */
+InvalidateSoftwareCache();
+
 return retval;
 }
 
 
 /*****************************************************************************/
 
-int ExecutePatch(struct CfPackageManager *schedule,enum package_actions action)
+static int ExecutePatch(struct CfPackageManager *schedule,enum package_actions action)
 
 { struct CfPackageItem *pi;
   struct CfPackageManager *pm;
@@ -994,6 +1081,9 @@ if (command_string)
    free(command_string);
    }
 
+/* We have performed some operation on packages, our cache is invalid */
+InvalidateSoftwareCache();
+
 return retval;
 }
 
@@ -1001,7 +1091,7 @@ return retval;
 /* Level                                                                     */
 /*****************************************************************************/
 
-struct CfPackageManager *NewPackageManager(struct CfPackageManager **lists,char *mgr,enum package_actions pa,enum action_policy policy)
+static struct CfPackageManager *NewPackageManager(struct CfPackageManager **lists,char *mgr,enum package_actions pa,enum action_policy policy)
 
 { struct CfPackageManager *np;
 
@@ -1038,7 +1128,7 @@ return np;
 
 /*****************************************************************************/
 
-void DeletePackageManagers(struct CfPackageManager *newlist)
+static void DeletePackageManagers(struct CfPackageManager *newlist)
 
 { struct CfPackageManager *np,*next;
 
@@ -1052,7 +1142,7 @@ for (np = newlist; np != NULL; np = next)
 
 /*****************************************************************************/
 
-struct CfPackageItem *GetCachedPackageList(struct CfPackageManager *manager,struct Attributes a,struct Promise *pp)
+static struct CfPackageItem *GetCachedPackageList(struct CfPackageManager *manager,struct Attributes a,struct Promise *pp)
 
 { struct CfPackageItem *list = NULL;
   char name[CF_MAXVARSIZE],version[CF_MAXVARSIZE],arch[CF_MAXVARSIZE],mgr[CF_MAXVARSIZE],line[CF_BUFSIZE];
@@ -1061,8 +1151,7 @@ struct CfPackageItem *GetCachedPackageList(struct CfPackageManager *manager,stru
   time_t horizon = 24*60,now = time(NULL);
   struct stat sb;
 
-snprintf(name,CF_MAXVARSIZE-1,"%s/state/%s",CFWORKDIR,NOVA_SOFTWARE_INSTALLED);
-MapName(name);
+GetSoftwareCacheFilename(name);
 
 if (stat(name,&sb) == -1)
    {
@@ -1114,7 +1203,7 @@ return list;
 
 /*****************************************************************************/
 
-int PrependMultiLinePackageItem(struct CfPackageItem **list,char *item,int reset,struct Attributes a,struct Promise *pp)
+static int PrependMultiLinePackageItem(struct CfPackageItem **list,char *item,int reset,struct Attributes a,struct Promise *pp)
 
 { static char name[CF_MAXVARSIZE];
   static char arch[CF_MAXVARSIZE];
@@ -1144,7 +1233,7 @@ if (reset)
 
 if (FullTextMatch(a.packages.package_list_name_regex,item))
    {
-   strncpy(vbuff,ExtractFirstReference(a.packages.package_list_name_regex,item),CF_MAXVARSIZE-1);
+   strlcpy(vbuff,ExtractFirstReference(a.packages.package_list_name_regex,item),CF_MAXVARSIZE);
    sscanf(vbuff,"%s",name); /* trim */
    }
 
@@ -1168,7 +1257,7 @@ return false;
 
 /*****************************************************************************/
 
-int PrependPatchItem(struct CfPackageItem **list,char *item,struct CfPackageItem *chklist,struct Attributes a,struct Promise *pp)
+static int PrependPatchItem(struct CfPackageItem **list,char *item,struct CfPackageItem *chklist,struct Attributes a,struct Promise *pp)
 
 { char name[CF_MAXVARSIZE];
   char arch[CF_MAXVARSIZE];
@@ -1211,7 +1300,7 @@ return PrependPackageItem(list,name,version,arch,a,pp);
 
 /*****************************************************************************/
 
-void DeletePackageItems(struct CfPackageItem *pi)
+static void DeletePackageItems(struct CfPackageItem *pi)
 
 {
 if (pi)
@@ -1226,9 +1315,9 @@ if (pi)
 
 /*****************************************************************************/
 
-int PackageMatch(char *n,char *v,char *a,struct Attributes attr,struct Promise *pp)
+static int PackageMatch(char *n,char *v,char *a,struct Attributes attr,struct Promise *pp)
 /*
- * Returns true if any installed packatges match (n,v,a), false otherwise.
+ * Returns true if any installed packages match (n,v,a), false otherwise.
  */
 { struct CfPackageManager *mp = NULL;
   struct CfPackageItem  *pi;
@@ -1257,7 +1346,7 @@ return false;
 
 /*****************************************************************************/
 
-int PatchMatch(char *n,char *v,char *a,struct Attributes attr,struct Promise *pp)
+static int PatchMatch(char *n,char *v,char *a,struct Attributes attr,struct Promise *pp)
 
 { struct CfPackageManager *mp = NULL;
   struct CfPackageItem  *pi;
@@ -1290,7 +1379,7 @@ return false;
 
 /*****************************************************************************/
 
-void SchedulePackageOp(char *name,char *version,char *arch,int installed,int matched,int no_version_specified,struct Attributes a,struct Promise *pp)
+static void SchedulePackageOp(char *name,char *version,char *arch,int installed,int matched,int no_version_specified,struct Attributes a,struct Promise *pp)
 
 { struct CfPackageManager *manager;
  char reference[CF_EXPANDSIZE],reference2[CF_EXPANDSIZE];
@@ -1489,7 +1578,7 @@ switch(policy)
 
        *instVer = '\0';
        *instArch = '\0';
-
+       
        if ((a.packages.package_file_repositories != NULL) &&
 	  (a.packages.package_select == cfa_gt || a.packages.package_select == cfa_ge))
           {          
@@ -1512,22 +1601,29 @@ switch(policy)
              CfOut(cf_verbose, "", "No package in file repositories satisfy version constraint");
              break;
 	     }
-          
-          if (installed)
-	     {
-             CfOut(cf_verbose, "", "Checking if latest available version is newer than installed...");
-	     
-             if (IsNewerThanInstalled(name, largestVerAvail, arch, instVer, instArch, a))
-                {
-                CfOut(cf_verbose, "", "Installed package is older than latest available");
-                }
-             else
-                {
-                CfOut(cf_verbose, "", "Installed package is up to date, not updating");
-                break;
-                }
-	     }
           }
+       else
+          {
+          snprintf(largestVerAvail, sizeof(largestVerAvail), "%s", version);  // user-supplied version
+          }
+       
+       
+       if (installed)
+          {
+          CfOut(cf_verbose, "", "Checking if latest available version is newer than installed...");
+	  
+          if (IsNewerThanInstalled(name, largestVerAvail, arch, instVer, instArch, a))
+             {
+             CfOut(cf_verbose, "", "Installed package (%s,%s,%s) is older than latest available (%s,%s,%s) - updating",
+                   name, instVer, instArch, name, largestVerAvail, arch);
+             }
+          else
+             {
+             CfOut(cf_verbose, "", "Installed package is up to date, not updating");
+             break;
+             }
+          }
+       
        
        if ((matched && package_select_in_range && !no_version_specified) || installed)
           {
@@ -1609,7 +1705,7 @@ switch(policy)
           }
        else
           {
-          cfPS(cf_error,CF_FAIL,"",pp,a,"!! Package \"%s\" cannot be verified -- no match\n",pp->promiser);
+          cfPS(cf_inform,CF_FAIL,"",pp,a,"!! Package \"%s\" cannot be verified -- no match\n",pp->promiser);
           }
        
        break;
@@ -1654,12 +1750,12 @@ int FindLargestVersionAvail(char *matchName, char *matchVers, char *refAnyVer, c
 /* Returns true if a version gt/ge ver is found in local repos, false otherwise */
 {
   struct Rlist *rp;
-  struct dirent *dirp;
+  const struct dirent *dirp;
   char largestVer[CF_MAXVARSIZE];
   char largestVerName[CF_MAXVARSIZE];
   char *matchVer;
   int match;
-  DIR *dirh;
+  CFDIR *dirh;
 
   Debug("FindLargestVersionAvail()\n");
 
@@ -1683,13 +1779,13 @@ int FindLargestVersionAvail(char *matchName, char *matchVers, char *refAnyVer, c
   for (rp = repositories; rp != NULL; rp=rp->next)
     {
 
-      if ((dirh = opendir(rp->item)) == NULL)
+      if ((dirh = OpenDirLocal(rp->item)) == NULL)
 	{
 	  CfOut(cf_error,"opendir","!! Can't open local directory \"%s\"\n", rp->item);
 	  continue;
 	}
       
-      for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+      for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
 	{
 #ifdef LINUX 
 	  if(dirp->d_type != DT_REG && dirp->d_type != DT_LNK)
@@ -1714,7 +1810,7 @@ int FindLargestVersionAvail(char *matchName, char *matchVers, char *refAnyVer, c
 	  
 	}
       
-    closedir(dirh);
+    CloseDir(dirh);
     }
   
   Debug("largest ver is \"%s\", name is \"%s\"\n", largestVer, largestVerName);
@@ -1768,7 +1864,7 @@ return true;
 
 /*****************************************************************************/
 
-int IsNewerThanInstalled(char *n,char *v,char *a, char *instV, char *instA, struct Attributes attr)
+static int IsNewerThanInstalled(char *n,char *v,char *a, char *instV, char *instA, struct Attributes attr)
 
 /* Returns true if a package (n, a) is installed and v is larger than
  * the installed version. instV and instA are the version and arch installed. */
@@ -1812,16 +1908,17 @@ return false;
 
 /*****************************************************************************/
 
-int ExecPackageCommand(char *command,int verify,int setCmdClasses,struct Attributes a,struct Promise *pp)
+static int ExecPackageCommand(char *command,int verify,int setCmdClasses,struct Attributes a,struct Promise *pp)
+
 {
-  if(strncmp(command,"/cf_internal_rpath",sizeof("/cf_internal_rpath") - 1) == 0)
-    {
-      return ExecPackageCommandRpath(command,verify,setCmdClasses,a,pp);
-    }
-  else
-    {
-      return ExecPackageCommandGeneric(command,verify,setCmdClasses,a,pp);
-    }
+if(strncmp(command,"/cf_internal_rpath",sizeof("/cf_internal_rpath") - 1) == 0)
+   {
+   return ExecPackageCommandRpath(command,verify,setCmdClasses,a,pp);
+   }
+else
+   {
+   return ExecPackageCommandGeneric(command,verify,setCmdClasses,a,pp);
+   }
 }
 
 /*****************************************************************************/
@@ -1880,7 +1977,7 @@ int ExecPackageCommandGeneric(char *command,int verify,int setCmdClasses,struct 
     ReplaceStr(line,lineSafe,sizeof(lineSafe),"%","%%");
     CfOut(cf_inform,"","Q:%20.20s ...:%s",cmd,lineSafe);
 
-    if (line[0] != '\0' && verify)
+    if (verify && line[0] != '\0')
        {
        if (a.packages.package_noverify_regex)
           {
@@ -1896,19 +1993,23 @@ int ExecPackageCommandGeneric(char *command,int verify,int setCmdClasses,struct 
 
  packmanRetval = cf_pclose(pfp);
 
- if(verify)  // return code check for verify policy
+ if(verify && a.packages.package_noverify_returncode != CF_NOINT)
     {
-    if(a.packages.package_noverify_returncode != CF_NOINT)
+    if(a.packages.package_noverify_returncode == packmanRetval)
        {
-       if(a.packages.package_noverify_returncode == packmanRetval)
-	  {
-          cfPS(cf_inform,CF_FAIL,"",pp,a,"!! Package verification error (returned %d)",packmanRetval);
-          retval = false;
-	  }
-       else
-	  {
-          CfOut(cf_verbose, "", " Package sucessfully verified from return code");
-	  }
+       cfPS(cf_inform,CF_FAIL,"",pp,a,"!! Package verification error (returned %d)",packmanRetval);
+       retval = false;
+       }
+    else
+       {
+       cfPS(cf_inform,CF_NOP,"",pp,a,"-> Package verification succeeded (returned %d)",packmanRetval);
+       }
+    }
+ else if(verify && a.packages.package_noverify_regex)
+    {
+    if(retval)  // set status if we succeeded above
+       {
+       cfPS(cf_inform,CF_NOP,"",pp,a,"-> Package verification succeeded (no match with package_noverify_regex)");
        }
     }
  else if(setCmdClasses)  // generic return code check
@@ -1923,12 +2024,16 @@ int ExecPackageCommandGeneric(char *command,int verify,int setCmdClasses,struct 
 /* Level                                                                     */
 /*****************************************************************************/
 
-int ComparePackages(char *n,char *v,char *a,struct CfPackageItem *pi,enum version_cmp cmp)
+static int ComparePackages(char *n,char *v,char *a,struct CfPackageItem *pi,enum version_cmp cmp)
 
-{ struct Rlist *numbers_1 = NULL,*separators_1 = NULL;
-  struct Rlist *numbers_2 = NULL,*separators_2 = NULL;
-  struct Rlist *rp_1,*rp_2;
+{ struct Rlist *numbers_pr = NULL,*separators_pr = NULL;
+  struct Rlist *numbers_in = NULL,*separators_in = NULL;
+  struct Rlist *rp_pr,*rp_in;
   int result = true;
+  int version_matched = false;
+  int version_equal = false;
+  int cmp_result;
+  int break_loop = false;
 
 Debug("Compare (%s,%s,%s) and (%s,%s,%s)\n",n,v,a,pi->name,pi->version,pi->arch);
   
@@ -1955,28 +2060,28 @@ if (strcmp(v,"*") == 0)
    return true;
    }
 
-ParsePackageVersion(CanonifyChar(v,','),numbers_1,&separators_1);
-ParsePackageVersion(CanonifyChar(pi->version,','),numbers_2,&separators_2);
+ParsePackageVersion(CanonifyChar(v,','),&numbers_pr,&separators_pr);
+ParsePackageVersion(CanonifyChar(pi->version,','),&numbers_in,&separators_in);
 
 /* If the format of the version string doesn't match, we're already doomed */
 
 CfOut(cf_verbose,""," -> Check for compatible versioning model in (%s,%s)\n",v,pi->version);
 
-for (rp_1 = separators_1,rp_2 = separators_2; rp_1 != NULL && rp_2 != NULL; rp_1= rp_1->next,rp_2=rp_2->next)
+for (rp_pr = separators_pr,rp_in = separators_in; rp_pr != NULL && rp_in != NULL; rp_pr= rp_pr->next,rp_in=rp_in->next)
    {
-   if (strcmp(rp_1->item,rp_2->item) != 0)
+   if (strcmp(rp_pr->item,rp_in->item) != 0)
       {
       result = false;
       break;
       }
    
-   if (rp_1->next == NULL && rp_2->next == NULL)
+   if (rp_pr->next == NULL && rp_in->next == NULL)
       {
       result = true;
       break;
       }
 
-   if ((rp_1->next != NULL && rp_2->next == NULL) || (rp_1->next == NULL && rp_2->next != NULL))
+   if ((rp_pr->next != NULL && rp_in->next == NULL) || (rp_pr->next == NULL && rp_in->next != NULL))
       {
       result = false;
       break;
@@ -1992,61 +2097,81 @@ else
    CfOut(cf_verbose,""," !! Versioning models for (%s,%s) were incompatible\n",v,pi->version);
    }
 
-if (result != false)
+version_equal = (strcmp(pi->version,v) == 0);
+
+if (result)
    {
-   for (rp_1 = numbers_1,rp_2 = numbers_2;
-        rp_1 != NULL && rp_2 != NULL;
-        rp_1= rp_1->next,rp_2=rp_2->next)
+   for (rp_pr = numbers_pr,rp_in = numbers_in; rp_pr != NULL && rp_in != NULL; rp_pr= rp_pr->next,rp_in=rp_in->next)
       {
+      cmp_result = strcmp(rp_pr->item,rp_in->item);
+
       switch (cmp)
          {
          case cfa_eq:
          case cfa_cmp_none:
-             if (strcmp(rp_1->item,rp_2->item) != 0)
+             if (version_equal)
                 {
-                result = false;
+                version_matched = true;
                 }             
              break;
          case cfa_neq:
-             if (strcmp(rp_1->item,rp_2->item) == 0)
+             if (!version_equal)
                 {
-                result = false;
+                version_matched = true;
                 }             
              break;
          case cfa_gt:
-             if (strcmp(rp_1->item,rp_2->item) <= 0)
+             if (cmp_result < 0)
                 {
-                result = false;
+                version_matched = true;
+                }             
+             else if (cmp_result > 0)
+                {
+                break_loop = true;
                 }
              break;
          case cfa_lt:
-             if (strcmp(rp_1->item,rp_2->item) >= 0)
+             if (cmp_result > 0)
                 {
-                result = false;
+                version_matched = true;
                 }             
+             else if (cmp_result < 0)
+                {
+                break_loop = true;
+                }
              break;
          case cfa_ge:
-             if (strcmp(rp_1->item,rp_2->item) < 0)
+             if ((cmp_result < 0) || version_equal)
                 {
-                result = false;
+                version_matched = true;
                 }             
+             else if (cmp_result > 0)
+                {
+                break_loop = true;
+                }
              break;
          case cfa_le:
-             if (strcmp(rp_1->item,rp_2->item) > 0)
+             if ((cmp_result > 0) || version_equal)
                 {
-                result = false;
+                version_matched = true;
                 }             
+             else if (cmp_result < 0)
+                {
+                break_loop = true;
+                }
              break;
          default:
              break;
          }
 
-      if (result == false)
+      if ((version_matched == true) || break_loop)
          {
          break;
          }
       }
    }
+
+result = version_matched;
 
 if (result)
    {
@@ -2057,16 +2182,16 @@ else
    CfOut(cf_verbose,""," -> Versions did not match\n");
    }
 
-DeleteRlist(numbers_1);
-DeleteRlist(numbers_2);
-DeleteRlist(separators_1);
-DeleteRlist(separators_2);
+DeleteRlist(numbers_pr);
+DeleteRlist(numbers_in);
+DeleteRlist(separators_pr);
+DeleteRlist(separators_in);
 return result;
 }
 
 /*****************************************************************************/
 
-int PackageInItemList(struct CfPackageItem *list,char *name,char *version,char *arch)
+static int PackageInItemList(struct CfPackageItem *list,char *name,char *version,char *arch)
 
 { struct CfPackageItem *pi;
  
@@ -2091,7 +2216,7 @@ return false;
 /* Level                                                                     */
 /*****************************************************************************/
 
-void ParsePackageVersion(char *version,struct Rlist *num,struct Rlist **sep)
+static void ParsePackageVersion(char *version,struct Rlist **num,struct Rlist **sep)
 
 { char *sp,numeral[30],separator[2];
 
@@ -2110,9 +2235,9 @@ for (sp = version; *sp != '\0'; sp++)
    sscanf(sp,"%29[0-9a-zA-Z]",numeral);
    sp += strlen(numeral);
 
-   /* Prepend to end up with right->left comparison */
+   /* Append to end up with left->right (major->minor) comparison */
 
-   PrependRScalar(&num,numeral,CF_SCALAR);
+   AppendRScalar(num,numeral,CF_SCALAR);
 
    if (*sp == '\0')
       {
@@ -2124,9 +2249,60 @@ for (sp = version; *sp != '\0'; sp++)
    }
 }
 
+/*****************************************************************************/
 
+static void InvalidateSoftwareCache(void)
+{
+char name[CF_BUFSIZE];
+GetSoftwareCacheFilename(name);
 
+struct utimbuf epoch = { 0, 0 };
 
+if (utime(name, &epoch) != 0)
+   {
+   if (errno != ENOENT)
+      {
+      CfOut(cf_error, "utimes", "Cannot mark software cache as invalid");
+      }
+   }
+}
 
+/*****************************************************************************/
 
+static void ReportSoftware(struct CfPackageManager *list)
 
+{ FILE *fout;
+  struct CfPackageManager *mp = NULL;
+  struct CfPackageItem *pi;
+  char name[CF_BUFSIZE];
+
+GetSoftwareCacheFilename(name);
+
+if ((fout = fopen(name,"w")) == NULL)
+   {
+   CfOut(cf_error,"fopen","Cannot open the destination file %s",name);
+   return;
+   }
+
+for (mp = list; mp != NULL; mp = mp->next)
+   {
+   for (pi = mp->pack_list; pi != NULL; pi=pi->next)
+      {
+      fprintf(fout,"%s,",CanonifyChar(pi->name,','));
+      fprintf(fout,"%s,",CanonifyChar(pi->version,','));
+      fprintf(fout,"%s,%s\n",pi->arch,ReadLastNode(GetArg0(mp->manager)));
+      }
+   }
+
+fclose(fout);
+}
+
+/*****************************************************************************/
+
+/* Buffer should be at least CF_BUFSIZE large */
+static const char *GetSoftwareCacheFilename(char *buffer)
+{
+snprintf(buffer,CF_BUFSIZE,"%s/state/%s",CFWORKDIR,SOFTWARE_PACKAGES_CACHE);
+MapName(buffer);
+return buffer;
+}

@@ -32,9 +32,11 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void DebugVariables(char *label);
+
 /*******************************************************************/
 
-void DebugVariables(char *label)
+static void DebugVariables(char *label)
 /* 
  * Not thread safe 
  */
@@ -45,11 +47,7 @@ void DebugVariables(char *label)
 for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
    {
    printf("\nConstant variables in SCOPE %s:\n",ptr->scope);
-   
-   if (ptr->hashtable)
-      {
-      PrintHashes(stdout,ptr->hashtable,0);
-      }
+   PrintHashes(stdout,ptr->hashtable,0);
    }
 
 printf("--------------------------------------------------\n");
@@ -125,7 +123,7 @@ if ((ptr = (struct Scope *)malloc(sizeof(struct Scope))) == NULL)
    FatalError("Memory Allocation failed for Scope");
    }
 
-InitHashes((struct CfAssoc**)ptr->hashtable);
+InitHashes(ptr->hashtable);
 
 ptr->next = VSCOPE;
 ptr->scope = strdup(name);
@@ -141,7 +139,8 @@ void AugmentScope(char *scope,struct Rlist *lvals,struct Rlist *rvals)
   struct Rlist *rpl,*rpr;
   struct Rval retval;
   char *lval,naked[CF_BUFSIZE];
-  int i;
+  HashIterator i;
+  struct CfAssoc *assoc;
 
 if (RlistLen(lvals) != RlistLen(rvals))
    {
@@ -193,16 +192,15 @@ for (rpl = lvals, rpr=rvals; rpl != NULL; rpl = rpl->next,rpr = rpr->next)
 
 ptr = GetScope(scope);
 
-for (i = 0; i < CF_HASHTABLESIZE; i++)
+i = HashIteratorInit(ptr->hashtable);
+
+while ((assoc = HashIteratorNext(&i)))
    {
-   if (ptr->hashtable[i] != NULL)
-      {
-      retval = ExpandPrivateRval(scope,(char *)(ptr->hashtable[i]->rval),ptr->hashtable[i]->rtype);
-      // Retain the assoc, just replace rval
-      DeleteRvalItem(ptr->hashtable[i]->rval,ptr->hashtable[i]->rtype);
-      ptr->hashtable[i]->rval = retval.item;
-      ptr->hashtable[i]->rtype = retval.rtype;
-      }
+   retval = ExpandPrivateRval(scope,(char *)(assoc->rval),assoc->rtype);
+   // Retain the assoc, just replace rval
+   DeleteRvalItem(assoc->rval,assoc->rtype);
+   assoc->rval = retval.item;
+   assoc->rtype = retval.rtype;
    }
 
 return;
@@ -288,10 +286,7 @@ else
    prev->next = ptr->next;
    }
 
-if (ptr->hashtable)
-   {
-   DeleteHashes(ptr->hashtable);
-   }
+DeleteHashes(ptr->hashtable);
 
 free(ptr->scope);
 free((char *)ptr);
@@ -356,11 +351,7 @@ for (ptr = VSCOPE; ptr != NULL; ptr=ptr->next)
       }
 
    printf("\nConstant variables in SCOPE %s:\n",ptr->scope);
-   
-   if (ptr->hashtable)
-      {
-      PrintHashes(stdout,ptr->hashtable,0);
-      }
+   PrintHashes(stdout,ptr->hashtable,0);
    }
 }
 

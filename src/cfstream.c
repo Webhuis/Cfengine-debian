@@ -36,6 +36,15 @@
 
 /*****************************************************************************/
 
+static void MakeReport(struct Item *mess,int prefix);
+static void FileReport(struct Item *mess,int prefix,char *filename);
+static void MakeLog(struct Item *mess,enum cfreport level);
+#ifndef MINGW
+static void Unix_MakeLog(struct Item *mess,enum cfreport level);
+#endif  /* NOT MINGW */
+
+/*****************************************************************************/
+
 void CfFOut(char *filename,enum cfreport level,char *errstr,char *fmt, ...)
 
 { va_list ap;
@@ -52,7 +61,6 @@ va_start(ap,fmt);
 vsnprintf(buffer,CF_BUFSIZE-1,fmt,ap);
 va_end(ap);
 ExpandThis(level,buffer,expand);
-SanitizeBuffer(expand);
 Chop(expand);
 AppendItem(&mess,expand,NULL);
 
@@ -108,7 +116,7 @@ DeleteItemList(mess);
 
 /*****************************************************************************/
 
-void CfOut(enum cfreport level,char *errstr,char *fmt, ...)
+void CfOut(enum cfreport level, const char *errstr, const char *fmt, ...)
 
 { va_list ap;
  char buffer[CF_BUFSIZE],output[CF_BUFSIZE],expand[CF_EXPANDSIZE];
@@ -124,7 +132,6 @@ va_start(ap,fmt);
 vsnprintf(buffer,CF_BUFSIZE-1,fmt,ap);
 va_end(ap);
 ExpandThis(level,buffer,expand);
-SanitizeBuffer(expand);
 Chop(expand);
 AppendItem(&mess,expand,NULL);
 
@@ -198,7 +205,6 @@ va_start(ap,fmt);
 vsnprintf(buffer,CF_BUFSIZE-1,fmt,ap);
 va_end(ap);
 ExpandThis(status,buffer,expand);
-SanitizeBuffer(expand);
 Chop(expand);
 AppendItem(&mess,expand,NULL);
 
@@ -400,7 +406,7 @@ ThreadUnlock(cft_output);
 /* Level                                                                         */
 /*********************************************************************************/
 
-void MakeReport(struct Item *mess,int prefix)
+static void MakeReport(struct Item *mess,int prefix)
 
 { struct Item *ip;
 
@@ -423,7 +429,7 @@ for (ip = mess; ip != NULL; ip = ip->next)
 
 /*********************************************************************************/
 
-void FileReport(struct Item *mess,int prefix,char *filename)
+static void FileReport(struct Item *mess,int prefix,char *filename)
 
 { struct Item *ip;
   FILE *fp;
@@ -458,14 +464,6 @@ if (fp != stdout)
 
 /*********************************************************************************/
 
-void SanitizeBuffer(char *buffer)
-
-{
-/* No longer necessary */
-}
-
-/*********************************************************************************/
-
 char *GetErrorStr(void)
 {
 #ifdef MINGW
@@ -477,7 +475,7 @@ return Unix_GetErrorStr();
 
 /*********************************************************************************/
 
-void MakeLog(struct Item *mess,enum cfreport level)
+static void MakeLog(struct Item *mess,enum cfreport level)
 {
 #ifdef MINGW
 NovaWin_MakeLog(mess, level);
@@ -490,7 +488,7 @@ Unix_MakeLog(mess, level);
 
 #ifndef MINGW
 
-void Unix_MakeLog(struct Item *mess,enum cfreport level)
+static void Unix_MakeLog(struct Item *mess,enum cfreport level)
 
 { struct Item *ip;
 

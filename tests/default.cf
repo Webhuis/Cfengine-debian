@@ -1,11 +1,19 @@
 bundle common G
 {
+classes:
+  "bin_sort" expression => fileexists("/bin/sort");
+  "usr_bin_sort" expression => fileexists("/usr/bin/sort");
+
 vars:
     "cwd" string => execresult("/bin/pwd", "noshell");
 
     "logfile_leafname" string => "TEST.log";
-
     "logfile" string => "$(cwd)/$(logfile_leafname)";
+
+  bin_sort::
+    "sort" string => "/bin/sort";
+  usr_bin_sort::
+    "sort" string => "/usr/bin/sort";
 }
 
 bundle agent default(filename)
@@ -29,7 +37,7 @@ reports:
 bundle agent default_sort(infile, outfile)
 {
 commands:
-    "/usr/bin/sort $(infile) > $(outfile)"
+    "$(G.sort) $(infile) > $(outfile)"
 	contain => default_shell_command;
 }
 
@@ -67,24 +75,12 @@ classes:
 reports:
     no_difference.!expected_difference::
 	"$(test) Pass";
-    MAIN.no_difference.!expected_difference::
-	"$(test) Pass"
-                report_to_file => "$(G.logfile)";
     !no_difference.expected_difference::
 	"$(test) Pass";
-    MAIN.!no_difference.expected_difference::
-	"$(test) Pass"
-		report_to_file => "$(G.logfile)";
     !no_difference.!expected_difference::
 	"$(test) FAIL";
-    MAIN.!no_difference.!expected_difference::
-	"$(test) FAIL"
-		report_to_file => "$(G.logfile)";
     no_difference.expected_difference::
 	"$(test) FAIL";
-    MAIN.no_difference.expected_difference::
-	"$(test) FAIL"
-		report_to_file => "$(G.logfile)";
 
     DEBUG.!no_difference.!expected_difference::
         "$(file1) and $(file2) differ:";

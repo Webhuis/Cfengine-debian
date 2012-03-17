@@ -32,6 +32,8 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void ShowAttributes(struct Attributes a);
+
 /*******************************************************************/
 
 struct Attributes GetFilesAttributes(struct Promise *pp)
@@ -505,6 +507,46 @@ else if (rp = GetListConstraint("affects",pp))
       case cfk_possible:
           attr.fwd_name = KM_AFFECTS_POSS_F;
           attr.bwd_name = KM_AFFECTS_POSS_B;   
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("causes",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.fwd_name = KM_CAUSE_CERT_F;
+          attr.bwd_name = KM_CAUSE_CERT_B;   
+          break;
+      case cfk_uncertain:
+          attr.fwd_name = KM_CAUSE_UNCERT_F;
+          attr.bwd_name = KM_CAUSE_UNCERT_B;   
+          break;
+      case cfk_possible:
+          attr.fwd_name = KM_CAUSE_POSS_F;
+          attr.bwd_name = KM_CAUSE_POSS_B;   
+          break;
+      }
+
+   attr.associates = rp;
+   }
+else if (rp = GetListConstraint("caused_by",pp))
+   {
+   switch (certainty)
+      {
+      case cfk_certain:
+          attr.bwd_name = KM_CAUSE_CERT_F;
+          attr.fwd_name = KM_CAUSE_CERT_B;   
+          break;
+      case cfk_uncertain:
+          attr.bwd_name = KM_CAUSE_UNCERT_F;
+          attr.fwd_name = KM_CAUSE_UNCERT_B;   
+          break;
+      case cfk_possible:
+          attr.bwd_name = KM_CAUSE_POSS_F;
+          attr.fwd_name = KM_CAUSE_POSS_B;   
           break;
       }
 
@@ -1402,7 +1444,7 @@ return p;
 
 /*******************************************************************/
 
-void ShowAttributes(struct Attributes a)
+static void ShowAttributes(struct Attributes a)
 
 {
 printf(".....................................................\n");
@@ -1722,7 +1764,7 @@ if (r.intermittency == CF_NODOUBLE)
 
 r.haveprintfile = GetBooleanConstraint("printfile",pp);
 r.filename = (char *)GetConstraint("file_to_print",pp,CF_SCALAR);
-r.numlines = GetIntConstraint("num_lines",pp);
+r.numlines = GetIntConstraint("number_of_lines",pp);
 
 if (r.numlines == CF_NOINT)
    {

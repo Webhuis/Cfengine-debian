@@ -33,6 +33,13 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int OrderedListsMatch(struct Item *list1,struct Item *list2);
+static int IsClassedItemIn(struct Item *list,char *item);
+static int IsFuzzyItemIn(struct Item *list, char *item);
+static void IdempAppendItem(struct Item **liststart,char *itemstring,char *classes);
+static int ItemListsEqual(struct Item *list1, struct Item *list2,int report,struct Attributes a,struct Promise *pp);
+static struct Item *NextItem(struct Item *ip);
+
 /*********************************************************************/
 
 int ItemListSize(struct Item *list)
@@ -111,6 +118,27 @@ for (ptr = list; ptr != NULL; ptr=ptr->next)
       {
       return ptr;
       }
+   }
+ 
+return NULL;
+}
+
+/*********************************************************************/
+
+struct Item *ReturnItemAtIndex(struct Item *list,int index)
+
+{ struct Item *ptr;
+ int i = 0;
+
+for (ptr = list; ptr != NULL; ptr=ptr->next)
+   {
+
+   if (i == index)
+      {
+      return ptr;
+      }
+
+   i++;
    }
  
 return NULL;
@@ -251,7 +279,7 @@ else
 
 /*********************************************************************/
 
-void IdempAppendItem(struct Item **liststart,char *itemstring,char *classes)
+static void IdempAppendItem(struct Item **liststart,char *itemstring,char *classes)
 
 {
 if (!IsItemIn(*liststart,itemstring))
@@ -262,7 +290,7 @@ if (!IsItemIn(*liststart,itemstring))
 
 /*********************************************************************/
 
-struct Item *PrependItem(struct Item **liststart,char *itemstring,char *classes)
+struct Item *PrependItem(struct Item **liststart,const char *itemstring,const char *classes)
 
 { struct Item *ip;
   char *sp,*spe = NULL;
@@ -345,7 +373,7 @@ else
 
 /*********************************************************************/
 
-void AppendItem(struct Item **liststart,char *itemstring,char *classes)
+void AppendItem(struct Item **liststart, const char *itemstring,char *classes)
 
 { struct Item *ip, *lp;
 
@@ -626,10 +654,17 @@ return false;
 
 /*********************************************************************/ 
 
-int MatchRegion(char *chunk,struct Item *location,struct Item *begin,struct Item *end)
+int MatchRegion(char *chunk,struct Item *start,struct Item *begin,struct Item *end)
 
-{ struct Item *ip = location;
+/*
+  Match a region in between the selection delimiters. It is
+  called after SelectRegion. The end delimiter will be visible
+  here so we have to check for it.
+*/
+    
+{ struct Item *ip = begin;
   char *sp,buf[CF_BUFSIZE];
+  int lines = 0;
 
 for (sp = chunk; sp <= chunk+strlen(chunk); sp++)
    {
@@ -637,32 +672,43 @@ for (sp = chunk; sp <= chunk+strlen(chunk); sp++)
    sscanf(sp,"%[^\n]",buf);
    sp += strlen(buf);
 
+   if (ip == NULL)
+      {
+      return false;
+      }
+   
    if (!FullTextMatch(buf,ip->name))
       {
       return false;
       }
+
+   lines++;
+
+   // We have to manually exclude the marked terminator
    
    if (ip == end)
       {
       return false;
       }
 
+   // Now see if there is more
+   
    if (ip->next)
       {
       ip = ip->next;
       }
-   else
+   else // if the region runs out before the end
       {
       if (++sp <= chunk+strlen(chunk))
          {
          return false;
-         }
-      
+         }      
+
       break;
       }
    }
 
-return true;
+return lines;
 }
 
 /*********************************************************************/
@@ -934,7 +980,7 @@ return(false);
 
 /*********************************************************************/
 
-int IsFuzzyItemIn(struct Item *list,char *item)
+static int IsFuzzyItemIn(struct Item *list,char *item)
 
  /* This is for matching ranges of IP addresses, like CIDR e.g.
 
@@ -969,25 +1015,24 @@ return(false);
 
 void DeleteItemList(struct Item *item)  /* delete starting from item */
  
-{
-  struct Item *ip, *next;
+{ struct Item *ip, *next;
 
-  for(ip = item; ip != NULL; ip = next)
-    {
-      next = ip->next;  // save before free
-
-      if (ip->name != NULL)
-	{
-	  free (ip->name);
-	}
-      
-      if (ip->classes != NULL)
-	{
-	  free (ip->classes);
-	}
-      
-      free((char *)ip);
-    }
+for(ip = item; ip != NULL; ip = next)
+   {
+   next = ip->next;  // save before free
+   
+   if (ip->name != NULL)
+      {
+      free (ip->name);
+      }
+   
+   if (ip->classes != NULL)
+      {
+      free (ip->classes);
+      }
+   
+   free((char *)ip);
+   }
 }
 
 /*********************************************************************/
@@ -1051,10 +1096,13 @@ for (ptr = liststart; ptr != NULL; ptr=ptr->next)
 
 /*********************************************************************/
 
-int ItemListsEqual(struct Item *list1,struct Item *list2)
+static int ItemListsEqual(struct Item *list1,struct Item *list2,int warnings,struct Attributes a,struct Promise *pp)
 
+// Some complex logic here to enable warnings of diffs to be given
+    
 { struct Item *ip1, *ip2;
-
+  int retval = true;
+ 
 ip1 = list1;
 ip2 = list2;
 
@@ -1062,29 +1110,72 @@ while (true)
    {
    if ((ip1 == NULL) && (ip2 == NULL))
       {
-      return true;
+      return retval;
       }
 
    if ((ip1 == NULL) || (ip2 == NULL))
       {
+      if (warnings)
+         {
+         if (ip1 == list1 || ip2 == list2)
+            {
+            cfPS(cf_error,CF_WARN,"",pp,a," ! File content wants to change from from/to full/empty but only a warning promised");
+            }
+         else
+            {
+            if (ip1 != NULL)
+               {
+               cfPS(cf_error,CF_WARN,"",pp,a," ! edit_line change warning promised: (remove) %s",ip1->name);
+               }
+
+            if (ip2 != NULL)
+               {               
+               cfPS(cf_error,CF_WARN,"",pp,a," ! edit_line change warning promised: (add) %s",ip2->name);
+               }
+            }
+         }
+
+      if (warnings)
+         {
+         if (ip1 || ip2)
+            {
+            retval = false;
+            ip1 = NextItem(ip1);
+            ip2 = NextItem(ip2);
+            continue;
+            }
+         }
+
       return false;
       }
-   
+
    if (strcmp(ip1->name,ip2->name) != 0)
       {
-      return false;
+      if (!warnings)
+         {
+         // No need to wait
+         return false;
+         }
+      else
+         {
+         // If we want to see warnings, we need to scan the whole file
+
+         cfPS(cf_error,CF_WARN,"",pp,a," ! edit_line warning promised: - %s",ip1->name);
+         cfPS(cf_error,CF_WARN,"",pp,a," ! edit_line warning promised: + %s",ip2->name);
+         retval = false;
+         }
       }
 
-   ip1 = ip1->next;
-   ip2 = ip2->next;
+   ip1 = NextItem(ip1);
+   ip2 = NextItem(ip2);
    }
 
-return true;
+return retval;
 }
 
 /*********************************************************************/
 
-int OrderedListsMatch(struct Item *list1,struct Item *list2)
+static int OrderedListsMatch(struct Item *list1,struct Item *list2)
 
 { struct Item *ip1,*ip2;
 
@@ -1108,7 +1199,7 @@ return true;
 
 /*********************************************************************/
 
-int IsClassedItemIn(struct Item *list,char *item)
+static int IsClassedItemIn(struct Item *list,char *item)
 
 { struct Item *ptr; 
 
@@ -1338,7 +1429,7 @@ if (!LoadFileAsItemList(&cmplist,file,a,pp))
    return false;
    }
 
-if (!ItemListsEqual(cmplist,liststart))
+if (!ItemListsEqual(cmplist,liststart,(a.transaction.action == cfa_warn),a,pp))
    {
    DeleteItemList(cmplist);
    return false;
@@ -1346,4 +1437,37 @@ if (!ItemListsEqual(cmplist,liststart))
 
 DeleteItemList(cmplist);
 return (true);
+}
+
+/*********************************************************************/
+
+int ByteSizeList(const struct Item *list)
+{
+int count = 0;
+const struct Item *ip;
+
+for (ip = list; ip; ip = ip->next)
+   {
+   count += strlen(ip->name);
+   }
+
+return count;
+}
+
+
+/*********************************************************************/
+/* helpers                                                           */
+/*********************************************************************/
+
+struct Item *NextItem(struct Item *ip)
+
+{
+if (ip)
+   {
+   return ip->next;
+   }
+else
+   {
+   return NULL;
+   }
 }

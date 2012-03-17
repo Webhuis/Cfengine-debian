@@ -44,14 +44,13 @@ struct CfRegEx
 {
    int failed;
    const char *regexp;
-#ifdef HAVE_LIBPCRE
     pcre *rx;
     const char *err;
     int err_offset;
-#else
-    regex_t rx;
-#endif
 };
+
+static int FullTextCaseMatch (char *regexp,const char *teststring);
+static int BlockTextCaseMatch(char *regexp,char *teststring,int *start,int *end);
 
 /*********************************************************************/
 /* Wrappers                                                          */
@@ -61,7 +60,6 @@ static struct CfRegEx CompileRegExp(const char *regexp)
 
 { struct CfRegEx this;
  
-#ifdef HAVE_LIBPCRE
  pcre *rx;
  const char *errorstr; 
  int erroffset;
@@ -81,31 +79,6 @@ else
    this.rx = rx;
    }
 
-#else
-
- regex_t rx;
- int code;
-
-memset(&this,0,sizeof(struct CfRegEx));
-
-code = regcomp(&rx,regexp,REG_EXTENDED);
-
-if (code != 0)
-   {
-   char buf[CF_BUFSIZE];
-   regerror(code,&rx,buf,CF_BUFSIZE-1);
-   Chop(buf);
-   CfOut(cf_error,"regerror","Regular expression error %d for %s: %s\n", code,regexp,buf);
-   this.failed = true;
-   }
-else
-   {
-   this.failed = false;
-   this.rx = rx;
-   }
-
-#endif
-
 this.regexp = regexp;
 return this;
 }
@@ -116,7 +89,6 @@ static struct CfRegEx CaseCompileRegExp(const char *regexp)
 
 { struct CfRegEx this;
  
-#ifdef HAVE_LIBPCRE
  pcre *rx;
  const char *errorstr; 
  int erroffset;
@@ -135,30 +107,6 @@ else
    this.rx = rx;
    }
 
-#else
-
- regex_t rx;
- int code;
-
-memset(&this,0,sizeof(struct CfRegEx)); 
-
-code = regcomp(&rx,regexp,REG_EXTENDED|REG_ICASE);
-
-if (code != 0)
-   {
-   char buf[CF_BUFSIZE];
-   regerror(code,&rx,buf,CF_BUFSIZE-1);
-   CfOut(cf_error,"regerror","Regular expression error %d for %s: %s\n", code, regexp,buf);
-   this.failed = true;
-   }
-else
-   {
-   this.failed = false;
-   this.rx = rx;
-   }
-
-#endif
-
 this.regexp = regexp;
 return this;
 }
@@ -168,7 +116,6 @@ return this;
 static int RegExMatchSubString(struct CfRegEx rex,char *teststring,int *start,int *end)
 
 {
-#ifdef HAVE_LIBPCRE
  pcre *rx;
  int ovector[OVECCOUNT],i,rc;
  
@@ -208,71 +155,16 @@ else
    pcre_free(rx);
    return false;
    }
-
-#else
-
- regex_t rx = rex.rx;
- regmatch_t pmatch[2];
- int code,i;
-
-if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
-   {
-   DeleteScope("match");
-   NewScope("match");
-
-   for (i = 0; i < 2; i++) /* make backref vars $(1),$(2) etc */
-      {
-      int backref_len;
-      char substring[CF_MAXVARSIZE];
-      char lval[4];
-      regoff_t s,e;
-      s = (int)pmatch[i].rm_so;
-      e = (int)pmatch[i].rm_eo;
-      backref_len = e - s;
-
-      if (backref_len < CF_MAXVARSIZE)
-         {
-         memset(substring,0,CF_MAXVARSIZE);
-         strncpy(substring,(char *)(teststring+s),backref_len);
-         snprintf(lval,3,"%d",i);
-         ForceScalar(lval,substring);
-         }
-      }
-
-   *start = (int)pmatch[0].rm_so;
-   *end = (int)pmatch[0].rm_eo;
-   regfree(&rx);
-   return true;
-   }
-else
-   {
-   char buf[CF_BUFSIZE];
-   
-   if (DEBUG)
-      {
-      buf[0] = '\0';
-      regerror(code,&rx,buf,CF_BUFSIZE-1);
-      Debug("Regular expression error %d for %s: %s\n", code,rex.regexp,buf);
-      }
-   
-   *start = 0;
-   *end = 0;
-   regfree(&rx);
-   return false;
-   }
-
-#endif
 }
 
 /*********************************************************************/
 
-static int RegExMatchFullString(struct CfRegEx rex,char *teststring)
+static int RegExMatchFullString(struct CfRegEx rex, const char *teststring)
 
 {
-#ifdef HAVE_LIBPCRE
  pcre *rx;
  int ovector[OVECCOUNT],i,rc,match_len;
- char *match_start;
+ const char *match_start;
  
 rx = rex.rx;
 
@@ -288,7 +180,7 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
       {
       char substring[CF_MAXVARSIZE];
       char lval[4];
-      char *backref_start = teststring + ovector[i*2];
+      const char *backref_start = teststring + ovector[i*2];
       int backref_len = ovector[i*2+1] - ovector[i*2];
 
       memset(substring,0,CF_MAXVARSIZE);
@@ -320,80 +212,17 @@ else
    pcre_free(rx);
    return false;
    }
-
-#else
-
- regex_t rx = rex.rx;
- regmatch_t pmatch[2];
- int i,code;
- regoff_t start = 0,end = 0;
-
-if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
-   {
-   DeleteScope("match");
-   NewScope("match");
-
-   for (i = 1; i < 2; i++) /* make backref vars $(1),$(2) etc */
-      {
-      int backref_len;
-      char substring[CF_MAXVARSIZE];
-      char lval[4];
-      start = pmatch[i].rm_so;
-      end = pmatch[i].rm_eo;
-      backref_len = end - start;
-      
-      if (backref_len < CF_MAXVARSIZE)
-         {
-         memset(substring,0,CF_MAXVARSIZE);
-         strncpy(substring,teststring+start,backref_len);
-         snprintf(lval,3,"%d",i);
-         ForceScalar(lval,substring);         
-         }
-      
-      break;
-      }
-
-   regfree(&rx);
-      
-   if ((pmatch[0].rm_so == 0) && (pmatch[0].rm_eo == strlen(teststring)))
-      {
-      Debug("Regex %s matches (%s) exactly.\n",rex.regexp,teststring);
-      return true;
-      }
-   else
-      {
-      Debug("Regex %s did not match (%s) exactly, but it matched a part of it.\n",rex.regexp,teststring);
-      return false;
-      }
-   }
-else
-   {
-   char buf[CF_BUFSIZE];
-
-   if (DEBUG)
-      {
-      regerror(code,&rx,buf,CF_BUFSIZE-1);
-      Debug("Regular expression error %d for %s: %s\n", code,rex.regexp,buf);
-      }
-   
-   regfree(&rx);
-   return false;
-   }
-
-#endif
-return false;
 }
 
 /*********************************************************************/
 
-static char *FirstBackReference(struct CfRegEx rex,char *regex,char *teststring)
+static char *FirstBackReference(struct CfRegEx rex,char *regex, const char *teststring)
 
 { static char backreference[CF_BUFSIZE];
 
-#ifdef HAVE_LIBPCRE
  pcre *rx;
  int ovector[OVECCOUNT],i,rc,match_len;
- char *match_start;
+ const char *match_start;
 
 rx = rex.rx;
 memset(backreference,0,CF_BUFSIZE);
@@ -405,7 +234,7 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
 
    for (i = 1; i < rc; i++) /* make backref vars $(1),$(2) etc */
       {
-      char *backref_start = teststring + ovector[i*2];
+      const char *backref_start = teststring + ovector[i*2];
       int backref_len = ovector[i*2+1] - ovector[i*2];
       
       if (backref_len < CF_MAXVARSIZE)
@@ -419,39 +248,6 @@ if ((rc = pcre_exec(rx,NULL,teststring,strlen(teststring),0,0,ovector,OVECCOUNT)
 
 pcre_free(rx);
    
-#else
-
- regex_t rx = rex.rx;
- regmatch_t pmatch[3];
- int i,code;
- regoff_t start = 0,end = 0;
-
-memset(backreference,0,CF_MAXVARSIZE);
- 
-if ((code = regexec(&rx,teststring,2,pmatch,0)) == 0)
-   {
-   for (i = 1; i < 2; i++) /* make backref vars $(1),$(2) etc */
-      {
-      int backref_len;
-      char substring[CF_MAXVARSIZE];
-      char lval[4];
-      start = pmatch[i].rm_so;
-      end = pmatch[i].rm_eo;
-      backref_len = end - start;
-      
-      if (backref_len < CF_MAXVARSIZE)
-         {
-         strncpy(backreference,(char *)(teststring+start),backref_len);
-         }
-      
-      break;
-      }
-   }
-
-regfree(&rx);
-
-#endif
-
 if (strlen(backreference) == 0)
    {
    Debug("The regular expression \"%s\" yielded no matching back-reference\n",regex);
@@ -476,7 +272,7 @@ bool ValidateRegEx(const char *regex)
 /* WILDCARD TOOLKIT : Level 0                                            */
 /*************************************************************************/
 
-int FullTextMatch(char *regexp,char *teststring)
+int FullTextMatch(char *regexp,const char *teststring)
 
 { struct CfRegEx rex;
 
@@ -505,7 +301,7 @@ else
 
 /*************************************************************************/
 
-char *ExtractFirstReference(char *regexp,char *teststring)
+char *ExtractFirstReference(char *regexp, const char *teststring)
     
 { struct CfRegEx rex;
   static char *nothing = "";
@@ -527,7 +323,7 @@ return FirstBackReference(rex,regexp,teststring);
 
 /*************************************************************************/
 
-int FullTextCaseMatch (char *regexp,char *teststring)
+static int FullTextCaseMatch (char *regexp, const char *teststring)
 
 { struct CfRegEx rex;
  
@@ -573,7 +369,7 @@ else
 
 /*************************************************************************/
 
-int BlockTextCaseMatch(char *regexp,char *teststring,int *start,int *end)
+static int BlockTextCaseMatch(char *regexp,char *teststring,int *start,int *end)
 
 { struct CfRegEx rex;
  
@@ -901,7 +697,7 @@ return ok;
 
 /*********************************************************************/
 
-int MatchRlistItem(struct Rlist *listofregex,char *teststring)
+int MatchRlistItem(struct Rlist *listofregex, const char *teststring)
 
    /* Checks whether item matches a list of wildcards */
 
@@ -920,7 +716,7 @@ for (rp = listofregex; rp != NULL; rp=rp->next)
    
    if (FullTextMatch(rp->item,teststring))
       {
-      Debug("MatchRlistItem(%s > %s)\n",rp->item,teststring);
+      Debug("MatchRlistItem(%s > %s)\n", (char *)rp->item, teststring);
       return true;
       }
    }
@@ -1173,6 +969,14 @@ if (!(isv6 || isv4))
 
 if (!(isrange||isCIDR)) 
    {
+   if (strlen(s2) > strlen(s1))
+      {
+      if (*(s2+strlen(s1)) != '.')
+         {
+         return -1; // Because xxx.1 should not match xxx.12 in the same octet
+         }
+      }
+   
    return strncmp(s1,s2,strlen(s1)); /* do partial string match */
    }
  
@@ -1377,7 +1181,7 @@ int FuzzyHostMatch(char *arg0, char* arg1, char *refhost)
   long cmp = -1, start = -1, end = -1;
   char buf1[CF_BUFSIZE], buf2[CF_BUFSIZE];
 
-strncpy(refbase,refhost,CF_MAXVARSIZE-1);
+strlcpy(refbase,refhost,CF_MAXVARSIZE);
 sp = refbase + strlen(refbase) - 1;
 
 while ( isdigit((int)*sp) )

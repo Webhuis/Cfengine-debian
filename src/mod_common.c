@@ -112,6 +112,8 @@ struct BodySyntax CF_CLASSBODY[] =
 struct BodySyntax CFG_CONTROLBODY[] =
    {
    {"bundlesequence",cf_slist,".*","List of promise bundles to verify in order"},
+   {"goal_categories",cf_slist,"","A list of context names that represent parent categories for goals (goal patterns)"},
+   {"goal_patterns",cf_slist,"","A list of regular expressions that match promisees/topics considered to be organizational goals"},
    {"ignore_missing_bundles",cf_opts,CF_BOOL,"If any bundles in the bundlesequence do not exist, ignore and continue"},
    {"ignore_missing_inputs",cf_opts,CF_BOOL,"If any input files do not exist, ignore and continue"},
    {"inputs",cf_slist,".*","List of additional filenames to parse for promises"},
@@ -121,6 +123,7 @@ struct BodySyntax CFG_CONTROLBODY[] =
    {"domain",cf_str,".*","Specify the domain name for this host"},
    {"require_comments",cf_opts,CF_BOOL,"Warn about promises that do not have comment documentation"},
    {"host_licenses_paid",cf_int,CF_VALRANGE,"The number of licenses that you promise to have paid for by setting this value (legally binding for commercial license)"},
+   {"site_classes",cf_clist,CF_CLASSRANGE,"A list of classes that will represent geographical site locations for hosts. These should be defined elsewhere in the configuration in a classes promise."},
    {"syslog_host",cf_str,CF_IPRANGE,"The name or address of a host to which syslog messages should be sent directly by UDP"},
    {"syslog_port",cf_int,CF_VALRANGE,"The port number of a UDP syslog service"},
    {"fips_mode",cf_opts,CF_BOOL,"Activate full FIPS mode restrictions"},
@@ -160,7 +163,7 @@ struct BodySyntax CFA_CONTROLBODY[] =
    {"nonalphanumfiles",cf_opts,CF_BOOL,"true/false warn about filenames with no alphanumeric content"},
    {"repchar",cf_str,".","The character used to canonize pathnames in the file repository"},
    {"refresh_processes",cf_slist,CF_IDRANGE,"Reload the process table before verifying the bundles named in this list (lazy evaluation)"},
-   {"default_repository",cf_str,CF_PATHRANGE,"Path to the default file repository"},
+   {"default_repository",cf_str,CF_ABSPATHRANGE,"Path to the default file repository"},
    {"secureinput",cf_opts,CF_BOOL,"true/false check whether input files are writable by unauthorized users"},
    {"sensiblecount",cf_int,CF_VALRANGE,"Minimum number of files a mounted filesystem is expected to have"},
    {"sensiblesize",cf_int,CF_VALRANGE,"Minimum number of bytes a mounted filesystem is expected to have"},
@@ -181,7 +184,7 @@ struct BodySyntax CFS_CONTROLBODY[] =
    {"allowusers",cf_slist,"","List of usernames who may execute requests from this server"},
    {"auditing",cf_opts,CF_BOOL,"true/false activate auditing of server connections"},
    {"bindtointerface",cf_str,"","IP of the interface to which the server should bind on multi-homed hosts"},
-   {"cfruncommand",cf_str,CF_PATHRANGE,"Path to the cf-agent command or cf-execd wrapper for remote execution"},
+   {"cfruncommand",cf_str,CF_ABSPATHRANGE,"Path to the cf-agent command or cf-execd wrapper for remote execution"},
    {"denybadclocks",cf_opts,CF_BOOL,"true/false accept connections from hosts with clocks that are out of sync"},
    {"denyconnects",cf_slist,"","List of IPs or hostnames that may NOT connect to the server port"},
    {"dynamicaddresses",cf_slist,"","List of IPs or hostnames for which the IP/name binding is expected to change"},
@@ -204,7 +207,7 @@ struct BodySyntax CFM_CONTROLBODY[] =
    {"monitorfacility",cf_opts,CF_FACILITY,"Menu option for syslog facility"},
    {"histograms",cf_opts,CF_BOOL,"Ignored, kept for backward compatibility"},
    {"tcpdump",cf_opts,CF_BOOL,"true/false use tcpdump if found"},
-   {"tcpdumpcommand",cf_str,CF_PATHRANGE,"Path to the tcpdump command on this system"},
+   {"tcpdumpcommand",cf_str,CF_ABSPATHRANGE,"Path to the tcpdump command on this system"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -218,6 +221,7 @@ struct BodySyntax CFR_CONTROLBODY[] =
    {"background_children",cf_opts,CF_BOOL,"true/false parallelize connections to servers"},
    {"max_children",cf_int,CF_VALRANGE,"Maximum number of simultaneous connections to attempt"},
    {"output_to_file",cf_opts,CF_BOOL,"true/false whether to send collected output to file(s)"},
+   {"output_directory",cf_str,CF_ABSPATHRANGE,"Directory where the output is stored"},
    {"timeout",cf_int,"1,9999","Connection timeout, sec"},
    {NULL,cf_notype,NULL,NULL}
    };
@@ -231,7 +235,7 @@ struct BodySyntax CFEX_CONTROLBODY[] = /* enum cfexcontrol */
    {"mailmaxlines",cf_int,"0,1000","Maximum number of lines of output to send by email"},
    {"schedule",cf_slist,"","The class schedule used by cf-execd for activating cf-agent"},
    {"executorfacility",cf_opts,CF_FACILITY,"Menu option for syslog facility level"},
-   {"exec_command",cf_str,CF_PATHRANGE,"The full path and command to the executable run by default (overriding builtin)"},
+   {"exec_command",cf_str,CF_ABSPATHRANGE,"The full path and command to the executable run by default (overriding builtin)"},
    {NULL,cf_notype,NULL,NULL}
    };
 
@@ -240,14 +244,12 @@ struct BodySyntax CFK_CONTROLBODY[] =
    {"build_directory",cf_str,".*","The directory in which to generate output files"},
    {"document_root",cf_str,".*","The directory in which the web root resides"},
    {"generate_manual",cf_opts,CF_BOOL,"true/false generate texinfo manual page skeleton for this version"},
-   {"graph_directory",cf_str,CF_PATHRANGE,"Path to directory where rendered .png files will be created"},
+   {"graph_directory",cf_str,CF_ABSPATHRANGE,"Path to directory where rendered .png files will be created"},
    {"graph_output",cf_opts,CF_BOOL,"true/false generate png visualization of topic map if possible (requires lib)"},
-   {"goal_categories",cf_slist,"","A list of context names that represent parent categories for goals (goal patterns)"},
-   {"goal_patterns",cf_slist,"","A list of regular expressions that match promisees/topics considered to be organizational goals"},
    {"html_banner",cf_str,"","HTML code for a banner to be added to rendered in html after the header"},
    {"html_footer",cf_str,"","HTML code for a page footer to be added to rendered in html before the end body tag"},
    {"id_prefix",cf_str,".*","The LTM identifier prefix used to label topic maps (used for disambiguation in merging)"},
-   {"manual_source_directory",cf_str,CF_PATHRANGE,"Path to directory where raw text about manual topics is found (defaults to build_directory)"},
+   {"manual_source_directory",cf_str,CF_ABSPATHRANGE,"Path to directory where raw text about manual topics is found (defaults to build_directory)"},
    {"query_engine",cf_str,"","Name of a dynamic web-page used to accept and drive queries in a browser"},
    {"query_output",cf_opts,"html,text","Menu option for generated output format"},
    {"sql_type",cf_opts,"mysql,postgres","Menu option for supported database type"},
@@ -263,7 +265,7 @@ struct BodySyntax CFK_CONTROLBODY[] =
 
 struct BodySyntax CFRE_CONTROLBODY[] = /* enum cfrecontrol */
    {
-   {"aggregation_point",cf_str,CF_PATHRANGE,"The root directory of the data cache for CMDB aggregation"},       
+   {"aggregation_point",cf_str,CF_ABSPATHRANGE,"The root directory of the data cache for CMDB aggregation"},       
    {"auto_scaling",cf_opts,CF_BOOL,"true/false whether to auto-scale graph output to optimize use of space"},
    {"build_directory",cf_str,".*","The directory in which to generate output files"},
    {"csv2xml",cf_slist,"","A list of csv formatted files in the build directory to convert to simple xml"},
@@ -282,7 +284,8 @@ struct BodySyntax CFRE_CONTROLBODY[] = /* enum cfrecontrol */
 struct BodySyntax CFH_CONTROLBODY[] = /* enum cfh_control */
    {
    {"export_zenoss",cf_opts,CF_BOOL,"Make data available for Zenoss integration in docroot/reports/summary.z"},
-   {"federation",cf_slist,"","The list of cfengine servers supporting constellation integration with this hub"},
+   {"federation",cf_slist,"","The list of CFEngine servers supporting constellation integration with this hub"},
+   {"exclude_hosts",cf_slist,"","A list of IP addresses of hosts to exclude from report collection"},
    {"hub_schedule",cf_slist,"","The class schedule used by cf-hub for report collation"},
    {"port",cf_int,"1024,99999","Default port for contacting hub nodes"},
    {NULL,cf_notype,NULL,NULL}

@@ -49,12 +49,7 @@
 /* Fundamental (meta) types                                              */
 /*************************************************************************/
 
-#define CF3COPYRIGHT "Copyright (C) Cfengine AS 2008,2010-"
-
-#define LIC_DAY "15"
-#define LIC_MONTH "December"
-#define LIC_YEAR "2001"
-#define LIC_COMPANY "PARTNER TEST LICENSE - NOT FOR PRODUCTION"
+#define CF3COPYRIGHT "Copyright (C) CFEngine AS 2008,2010-"
 
 #define CF_SCALAR 's'
 #define CF_LIST   'l'
@@ -69,6 +64,7 @@
 #define CF_ANYGROUP (gid_t)-1
 #define CF_UNDEFINED_ITEM (void *)0x1234
 #define CF_VARARGS 99
+#define CF_UNKNOWN_IP "location unknown"
 
 #define CF_INBODY   1
 #define CF_INBUNDLE 2
@@ -224,6 +220,8 @@ enum cfagenttype
 enum cfgcontrol
    {
    cfg_bundlesequence,
+   cfg_goalcategories,
+   cfg_goalpatterns,
    cfg_ignore_missing_bundles,
    cfg_ignore_missing_inputs,
    cfg_inputs,
@@ -233,6 +231,7 @@ enum cfgcontrol
    cfg_domain,
    cfg_require_comments,
    cfg_licenses,
+   cfg_site_classes,
    cfg_syslog_host,
    cfg_syslog_port,
    cfg_fips_mode,
@@ -326,6 +325,7 @@ enum cfrcontrol
    cfr_background,
    cfr_maxchild,
    cfr_output_to_file,
+   cfr_output_directory,
    cfr_timeout,
    cfr_notype
    };
@@ -364,8 +364,6 @@ enum cfkcontrol
    cfk_genman,
    cfk_graph_dir,
    cfk_graph_output,
-   cfk_goalcategories,
-   cfk_goalpatterns,
    cfk_htmlbanner,
    cfk_htmlfooter,
    cfk_tm_prefix,
@@ -410,6 +408,7 @@ enum cfhcontrol
    {
    cfh_export_zenoss,
    cfh_federation,
+   cfh_exclude_hosts,
    cfh_schedule,
    cfh_port,
    cfh_notype
@@ -484,21 +483,44 @@ enum cfeditorder
 #define CF_FNCALLRANGE "[a-zA-Z0-9_(){}.$@]+"
 #define CF_NAKEDLRANGE "@[(][a-zA-Z0-9]+[)]"
 #define CF_ANYSTRING   ".*"
-#define CF_PATHRANGE   "\042?(([a-zA-Z]:\\\\.*)|(/.*))"  // can start with e.g. c:\... or "c:\...  |  unix
+
+#ifndef MINGW
+#define CF_ABSPATHRANGE   "\042?(/.*)"
+#else
+// can start with e.g. c:\... or "c:\...  |  unix (for Cygwin-style paths)
+#define CF_ABSPATHRANGE   "\042?(([a-zA-Z]:\\\\.*)|(/.*))"
+#endif
+
+/* Any non-empty string can be an absolute path under Unix */
+#define CF_PATHRANGE ".+"
+
 #define CF_LOGRANGE    "stdout|udp_syslog|(\042?[a-zA-Z]:\\\\.*)|(/.*)"
 
 #define CF_FACILITY "LOG_USER,LOG_DAEMON,LOG_LOCAL0,LOG_LOCAL1,LOG_LOCAL2,LOG_LOCAL3,LOG_LOCAL4,LOG_LOCAL5,LOG_LOCAL6,LOG_LOCAL7"
 
 // Put this here now for caching efficiency
 
-#define NOVA_SOFTWARE_INSTALLED "software_packages.csv"
+#define SOFTWARE_PACKAGES_CACHE "software_packages.csv"
 
 /***************************************************************************/
 /* Knowledge relationships                                                 */
 /***************************************************************************/
 
+enum storytype
+   {
+   cfi_cause,
+   cfi_connect,
+   cfi_part,
+   cfi_access,
+   cfi_none
+   };
+
+#define KM_AFFECTS_CERT_F "affects"
+#define KM_AFFECTS_CERT_B "is affected by"
+#define KM_CAUSE_CERT_F "causes"
+#define KM_CAUSE_CERT_B "is caused by"
 #define KM_PARTOF_CERT_F "is/are a part of"
-#define KM_PARTOF_CERT_B "has/have as a part"
+#define KM_PARTOF_CERT_B "has/have a part"
 #define KM_DETERMINES_CERT_F "determine(s)"
 #define KM_DETERMINES_CERT_B "is/are determined by"
 #define KM_CONTRIBUTES_CERT_F "contibutes to"
@@ -509,11 +531,9 @@ enum cfeditorder
 #define KM_PROVIDES_CERT_B "is/are provided by"
 #define KM_BELONGS_CERT_F "belongs to"
 #define KM_BELONGS_CERT_B "owns"
-#define KM_AFFECTS_CERT_F "affects"
-#define KM_AFFECTS_CERT_B "is affected by"
 #define KM_CONNECTS_CERT_F "connects to"
 #define KM_CONNECTS_CERT_B "connects to"
-#define KM_NEEDS_CERT_F "needs"
+#define KM_NEEDS_CERT_F "need(s)"
 #define KM_NEEDS_CERT_B "is needed by"
 #define KM_EQUIV_CERT_F "is equivalent to"
 #define KM_EQUIV_CERT_B "is equivalent to"
@@ -523,8 +543,13 @@ enum cfeditorder
 #define KM_ACCESS_CERT_B "is allowed to access"
 #define KM_MONITOR_CERT_F "monitor(s)"
 #define KM_MONITOR_CERT_B "is/are monitored by"
+#define KM_LOCATED_CERT_F "is located in"
+#define KM_LOCATED_CERT_B "situates"
+#define KM_REPAIR_CERT_F "repairs"
+#define KM_REPAIR_CERT_B "is repaired by"
 
-
+#define KM_CAUSE_POSS_F "can cause"
+#define KM_CAUSE_POSS_B "can be caused by"
 #define KM_PARTOF_POSS_F "can be a part of"
 #define KM_PARTOF_POSS_B "can have a part"
 #define KM_DETERMINES_POSS_F "can determine"
@@ -549,7 +574,13 @@ enum cfeditorder
 #define KM_MONITOR_POSS_B "can be monitored by"
 #define KM_ACCESS_POSS_F "can access to"
 #define KM_ACCESS_POSS_B "can be allowed to access"
+#define KM_LOCATED_POSS_F "can be located in"
+#define KM_LOCATED_POSS_B "can situate"
+#define KM_REPAIR_POSS_F "can repair"
+#define KM_REPAIR_POSS_B "can be repaired by"
 
+#define KM_CAUSE_UNCERT_F "might cause"
+#define KM_CAUSE_UNCERT_B "might be caused by"
 #define KM_PARTOF_UNCERT_F "might be a part of"
 #define KM_PARTOF_UNCERT_B "might have a part"
 #define KM_DETERMINES_UNCERT_F "might determine"
@@ -576,9 +607,13 @@ enum cfeditorder
 #define KM_MONITOR_UNCERT_B "might be monitored by"
 #define KM_ACCESS_UNCERT_F "might grant access to"
 #define KM_ACCESS_UNCERT_B "might be allowed to access"
+#define KM_LOCATED_UNCERT_F "might be located in"
+#define KM_LOCATED_UNCERT_B "might situate"
+#define KM_REPAIR_UNCERT_F "might repair"
+#define KM_REPAIR_UNCERT_B "might be repaired by"
 
 #define KM_GENERALIZES_F "is a generalization of"
-#define KM_GENERALIZES_B "is a case of"
+#define KM_GENERALIZES_B "is a special case of"
 #define KM_SYNONYM "is a synonym for"
 
 enum knowledgecertainty
@@ -615,14 +650,17 @@ struct SubTypeSyntax
 
 /*************************************************************************/
 
-struct FnCallType
+struct FnCall;
+
+typedef struct FnCallType
    {
    char *name;
    enum cfdatatype dtype;
    int numargs;
    struct FnCallArg *args;
+   struct Rval (*impl)(struct FnCall *, struct Rlist *);
    char *description;
-   };
+   } FnCallType;
 
 struct FnCallArg
    {
@@ -633,97 +671,7 @@ struct FnCallArg
 
 /*************************************************************************/
 
-enum fncalltype
-   {
-   cfn_accessedbefore,
-   cfn_accum,
-   cfn_ago,
-   cfn_canonify,
-   cfn_changedbefore,
-   cfn_classify,
-   cfn_classmatch,
-   cfn_countclassesmatching,
-   cfn_countlinesmatching,
-   cfn_diskfree,
-   cfn_escape,
-   cfn_execresult,
-   cfn_fileexists,
-   cfn_filesexist,
-   cfn_filesize,
-   cfn_getenv,
-   cfn_getfields,
-   cfn_getgid,
-   cfn_getindices,
-   cfn_getuid,
-   cfn_getusers,
-   cfn_getvalues,
-   cfn_grep,
-   cfn_groupexists,
-   cfn_hash,
-   cfn_hashmatch,
-   cfn_host2ip,
-   cfn_ip2host,
-   cfn_hostinnetgroup,
-   cfn_hostrange,
-   cfn_hostsseen,
-   cfn_hubknowledge,
-   cfn_iprange,
-   cfn_irange,
-   cfn_isdir,
-   cfn_isexecutable,
-   cfn_isgreaterthan,
-   cfn_islessthan,
-   cfn_islink,
-   cfn_isnewerthan,
-   cfn_isplain,
-   cfn_isvariable,
-   cfn_join,
-   cfn_lastnode,
-   cfn_laterthan,
-   cfn_ldaparray,
-   cfn_ldaplist,
-   cfn_ldapvalue,
-   cfn_now,
-   cfn_date,
-   cfn_parseintarray,
-   cfn_parserealarray,
-   cfn_parsestringarray,
-   cfn_parsestringarrayidx,
-   cfn_peers,
-   cfn_peerleader,
-   cfn_peerleaders,
-   cfn_product,
-   cfn_randomint,
-   cfn_readfile,
-   cfn_readintarray,
-   cfn_readintlist,
-   cfn_readrealarray,
-   cfn_readreallist,
-   cfn_readstringarray,
-   cfn_readstringarrayidx,
-   cfn_readstringlist,   
-   cfn_readtcp,
-   cfn_regarray,
-   cfn_regcmp,
-   cfn_regextract,
-   cfn_registryvalue,
-   cfn_regline,
-   cfn_reglist,
-   cfn_regldap,
-   cfn_remotescalar,
-   cfn_remoteclassesmatching,
-   cfn_returnszero,
-   cfn_rrange,
-   cfn_selectservers,
-   cfn_splayclass,
-   cfn_splitstring,
-   cfn_strcmp,
-   cfn_sum,
-   cfn_translatepath,
-   cfn_usemodule,
-   cfn_userexists,
-   cfn_unknown,
-   };
+#define UNKNOWN_FUNCTION -1
 
 /*************************************************************************/
 
@@ -876,26 +824,24 @@ struct Scope                         /* $(bundlevar) $(scope.name) */
 
 /*******************************************************************/
 
-struct Variable  /* Used to represent contents of var in DBM file -
-		    scope.name is key */
-   {
-   struct Event e;
-   enum cfdatatype dtype;
-   char rtype;
-   char rval[CF_MAXVARSIZE];    // as string, \0-terminated
-   };
-
-#define VARSTRUCTUSAGE(v) (sizeof(v) - sizeof(v.rval) + strlen(v.rval) + 1)
-
-/*******************************************************************/
-
-struct CfAssoc        /* variable reference linkage , with metatype*/
+typedef struct CfAssoc        /* variable reference linkage , with metatype*/
    {
    char *lval;
    void *rval;
    char rtype;
    enum cfdatatype dtype;
-   };
+   } CfAssoc;
+
+/*******************************************************************/
+
+/*
+ * Disposable iterator over hash table. Does not require deinitialization.
+ */
+typedef struct HashIterator
+   {
+   CfAssoc **hash;
+   int bucket;
+   } HashIterator;
 
 /*******************************************************************/
 /* Return value signalling                                         */
@@ -1089,7 +1035,8 @@ enum cf_thread_mutex
   cft_no_tpolicy,
   cft_report,
   cft_vscope,           // protects VSCOPE
-  cft_server_keyseen  // protects   SERVER_KEYSEEN
+  cft_server_keyseen,  // protects   SERVER_KEYSEEN
+  cft_server_children,
   };
 
 enum cf_status
@@ -1187,19 +1134,6 @@ enum cfd_menu
    cfd_menu_relay,
    cfd_menu_error
    };
-
-/*************************************************************************/
-
-enum cfl_view
-   {
-   cfl_view_sumcomp_wk,
-   cfl_view_sumrepaired_wk,
-   cfl_view_sumnotkept_wk,
-   cfl_view_repairedreason,
-   cfl_view_notkeptreason,
-   cfl_view_error
-   };
-
 
 /*************************************************************************/
 /* Runtime constraint structures                                         */
@@ -2028,16 +1962,16 @@ cfrep_t;
   || strncmp(c,"GMT_Hr",6) == 0  || strncmp(c,"Yr",2) == 0                     \
   || strncmp(c,"Day",3) == 0 || strcmp(c,"license_expired") == 0               \
   || strcmp(c,"any") == 0 || strcmp(c,"from_cfexecd") == 0                     \
-  || IsStrIn(c,MONTH_TEXT,false) || IsStrIn(c,DAY_TEXT,false)                  \
-  || IsStrIn(c,SHIFT_TEXT,false))
+  || IsStrIn(c,MONTH_TEXT) || IsStrIn(c,DAY_TEXT)                  \
+  || IsStrIn(c,SHIFT_TEXT))
 
 // Date time classes 
 #define ISCLASS_DATETIME(c)						\
   (strncmp(c,"Min",3) == 0 || strncmp(c,"Hr",2) == 0 || strcmp(c,"Q1") == 0 \
     || strcmp(c,"Q2") == 0 || strcmp(c,"Q3") == 0 || strcmp(c,"Q4") == 0 \
     || strncmp(c,"GMT_Hr",6) == 0  || strncmp(c,"Yr",2) == 0                     \
-   || strncmp(c,"Day",3) == 0 || IsStrIn(c,MONTH_TEXT,false)		\
-  || IsStrIn(c,DAY_TEXT,false) || IsStrIn(c,SHIFT_TEXT,false)                 \
+   || strncmp(c,"Day",3) == 0 || IsStrIn(c,MONTH_TEXT)		\
+  || IsStrIn(c,DAY_TEXT) || IsStrIn(c,SHIFT_TEXT)                 \
   || strncmp(c,"Lcycle",6) == 0)
 
 #include "prototypes3.h"

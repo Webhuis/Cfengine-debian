@@ -153,29 +153,17 @@ struct Rlist *NewExpArgs(struct FnCall *fp, struct Promise *pp)
   struct Rval rval;
   struct Rlist *rp,*newargs = NULL;
   struct FnCall *subfp;
+  FnCallType *fn = FindFunction(fp->name);
 
 /* Check if numargs correct and expand recursion */
   
 len = RlistLen(fp->args); 
 
-for (i = 0; CF_FNCALL_TYPES[i].name != NULL; i++)
-   {
-   if (strcmp(fp->name,CF_FNCALL_TYPES[i].name) == 0)
-      {
-      ref = CF_FNCALL_TYPES[i].numargs;
-      }
-   }
+ref = fn ? fn->numargs : 0;
 
 if ((ref != CF_VARARGS) && (ref != len))
    {
    CfOut(cf_error,"","Arguments to function %s(.) do not tally. Expect %d not %d",fp->name,ref,len);
-   PromiseRef(cf_error,pp);
-   exit(1);
-   }
-
-if ((ref == CF_VARARGS) && (len < 1))
-   {
-   CfOut(cf_error,"","Arguments to method call %s(.) must contain at least the name of the method",fp->name);
    PromiseRef(cf_error,pp);
    exit(1);
    }
@@ -218,9 +206,10 @@ void ArgTemplate(struct FnCall *fp,struct FnCallArg *argtemplate,struct Rlist *r
 { int argnum,i;
   struct Rlist *rp = fp->args;
   char id[CF_BUFSIZE],output[CF_BUFSIZE];
+  FnCallType *fn = FindFunction(fp->name);
 
 snprintf(id,CF_MAXVARSIZE,"built-in FnCall %s-arg",fp->name);
-  
+
 for (argnum = 0; rp != NULL && argtemplate[argnum].pattern != NULL; argnum++)
     {
     if (rp->type != CF_FNCALL)
@@ -232,7 +221,7 @@ for (argnum = 0; rp != NULL && argtemplate[argnum].pattern != NULL; argnum++)
     rp = rp->next;
     }
 
-if (argnum != RlistLen(realargs))
+if (argnum != RlistLen(realargs) && fn->numargs != CF_VARARGS)
    {
    snprintf(output,CF_BUFSIZE,"Argument template mismatch handling function %s(",fp->name);
    ReportError(output);

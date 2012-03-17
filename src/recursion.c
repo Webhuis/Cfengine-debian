@@ -32,15 +32,19 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int PushDirState(char *name,struct stat *sb);
+static void PopDirState(int goback,char * name,struct stat *sb,struct Recursion r);
+static void CheckLinkSecurity(struct stat *sb,char *name);
+
 /*********************************************************************/
 /* Depth searches                                                    */
 /*********************************************************************/
 
 int DepthSearch(char *name,struct stat *sb,int rlevel,struct Attributes attr,struct Promise *pp)
     
-{ DIR *dirh;
+{ CFDIR *dirh;
   int goback; 
-  struct dirent *dirp;
+  const struct dirent *dirp;
   char path[CF_BUFSIZE];
   struct stat lsb;
 
@@ -76,13 +80,13 @@ if (!PushDirState(name,sb))
    return false;
    }
  
-if ((dirh = opendir(".")) == NULL)
+if ((dirh = OpenDirLocal(".")) == NULL)
    {
    CfOut(cf_inform,"opendir","Could not open existing directory %s\n",name);
    return false;
    }
 
-for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
+for (dirp = ReadDir(dirh); dirp != NULL; dirp = ReadDir(dirh))
    {
    if (!ConsiderFile(dirp->d_name,name,attr,pp))
       {
@@ -94,7 +98,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
 
    if (!JoinPath(path,dirp->d_name))
       {
-      closedir(dirh);
+      CloseDir(dirh);
       return true;
       }
    
@@ -166,7 +170,7 @@ for (dirp = readdir(dirh); dirp != NULL; dirp = readdir(dirh))
       }
    }
 
-closedir(dirh);
+CloseDir(dirh);
 return true; 
 }
 
@@ -174,7 +178,7 @@ return true;
 /* Level                                                           */
 /*******************************************************************/
 
-int PushDirState(char *name,struct stat *sb)
+static int PushDirState(char *name,struct stat *sb)
 
 {
 if (chdir(name) == -1)
@@ -193,7 +197,7 @@ return true;
 
 /**********************************************************************/
 
-void PopDirState(int goback,char *name,struct stat *sb,struct Recursion r)
+static void PopDirState(int goback,char *name,struct stat *sb,struct Recursion r)
 
 {
 if (goback && r.travlinks)
@@ -218,7 +222,7 @@ else if (goback)
 
 /**********************************************************************/
 
-int SkipDirLinks(char *path,char *lastnode,struct Recursion r)
+int SkipDirLinks(char *path,const char *lastnode,struct Recursion r)
 
 {
 Debug("SkipDirLinks(%s,%s)\n",path,lastnode);
@@ -247,7 +251,7 @@ return false;
 
 /**********************************************************************/
 
-void CheckLinkSecurity(struct stat *sb,char *name)
+static void CheckLinkSecurity(struct stat *sb,char *name)
 
 { struct stat security;
 

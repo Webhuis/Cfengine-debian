@@ -32,6 +32,10 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void DeleteDeRefPromise(char *scopeid,struct Promise *pp);
+static void DebugPromise(struct Promise *pp);
+static void DereferenceComment(struct Promise *pp);
+
 /*****************************************************************************/
 
 char *BodyName(struct Promise *pp)
@@ -158,7 +162,7 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
    char *bodyname = NULL;
 
    /* A body template reference could look like a scalar or fn to the parser w/w () */
-
+   
    switch (cp->type)
       {
       case CF_SCALAR:
@@ -346,13 +350,15 @@ for (cp = pp->conlist; cp != NULL; cp=cp->next)
       {
       if (final.rtype != CF_SCALAR)
          {
-         yyerror("Comments can only be scalar objects");
+         char err[CF_BUFSIZE];
+	 snprintf(err,CF_BUFSIZE,"Comments can only be scalar objects (not %c in \"%s\")",final.rtype,pp->promiser);
+	 yyerror(err);
          }
       else
          {
          pcopy->ref = final.item; /* No alloc reference to comment item */
          
-         if (pcopy->ref && strstr(pcopy->ref,"$(this.promiser)"))
+         if (pcopy->ref && (strstr(pcopy->ref,"$(this.promiser)") || strstr(pcopy->ref,"${this.promiser}")))
             {
             DereferenceComment(pcopy);
             }
@@ -462,7 +468,7 @@ return pcopy;
 
 /*******************************************************************/
 
-void DebugPromise(struct Promise *pp)
+static void DebugPromise(struct Promise *pp)
 
 { struct Constraint *cp;
   struct Body *bp;
@@ -693,7 +699,7 @@ ThreadUnlock(cft_policy);
 
 /*****************************************************************************/
 
-void DeleteDeRefPromise(char *scopeid,struct Promise *pp)
+static void DeleteDeRefPromise(char *scopeid,struct Promise *pp)
 
 { struct Constraint *cp;
 
@@ -855,14 +861,14 @@ EVP_DigestFinal(&context,digest,&md_len);
 
 /*******************************************************************/
 
-void DereferenceComment(struct Promise *pp)
+static void DereferenceComment(struct Promise *pp)
 
 { char pre_buffer[CF_BUFSIZE],post_buffer[CF_BUFSIZE],buffer[CF_BUFSIZE],*sp;
   int offset = 0;
 
-strncpy(pre_buffer,pp->ref,CF_BUFSIZE);
+strlcpy(pre_buffer,pp->ref,CF_BUFSIZE);
 
-if ((sp = strstr(pre_buffer,"$(this.promiser)")))
+if ((sp = strstr(pre_buffer,"$(this.promiser)")) || (sp = strstr(pre_buffer, "${this.promiser}")))
    {
    *sp = '\0';
    offset = sp - pre_buffer + strlen("$(this.promiser)");

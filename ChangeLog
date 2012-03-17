@@ -1,4 +1,95 @@
-3.1.5b1
+3.2.4   (Bugfix and Stability release)
+
+	Fixed failure in network transfer in case of misbehaving peer
+
+	A few tiny memory leaks on error paths fixed
+
+3.2.3   (Bugfix and Stability release)
+
+	A few tiny memory leaks fixed
+
+	Improved performance of cf-serverd under heavy load with
+	TokyoCabinet database
+
+	Full list of issues fixed is available on
+	https://cfengine.com/bugtracker/changelog_page.php
+
+3.2.2   (Bugfix and Stability release)
+
+	Enabled compilation in "large files" mode under AIX
+
+	Alleviated problem with broken file transfers over unstable
+	Internet links.
+
+	Full list of issues fixed is available on
+	https://cfengine.com/bugtracker/changelog_page.php
+
+3.2.1   (Bugfix and Stability release)
+
+	Fixed compilation under HP-UX and Solaris
+
+	Enabled compilation using HP ANSI C compiler
+
+	Full list of issues fixed is available on
+	https://cfengine.com/bugtracker/changelog_page.php
+
+3.2.0   (Feature release)
+
+	New bootstrap method with single-command bootstrapping:
+	- cf-agent --bootstrap --policy-server 123.456.789.123
+	- Associated policy template files are added, partially maintained
+	  by CFEngine
+
+	Bug fixes for file-editing, package versioning, and embedded
+	database corruption (We recommend using TokyoCabinet instead of
+	BerkeleyDB if building from source).
+
+	Improved upgrade path for Nova.
+
+	Patches for improved run-agent concurrency
+
+	Reorganization of documentation and community resources
+
+	100% on regression test suite on 3 operating systems
+	(Ubuntu, Debian, SuSE on x86-64 hardware)
+
+	Support for multiple release environments
+
+	package_policy update and addupdate now check if user-supplied
+	version is larger than currently installed - updates only if so
+
+	Help text of cf-report -r corrected - a list of key hashes is
+	required, not ip addresses.
+
+	New Emacs mode for CFEngine policy files (thanks to Ted Zlatanov!)
+
+	Warnings are on edit_line changes can now give greater degree of information
+	without spamming promise logs
+
+	Class expressions parser accepts '||' as an alias for '|' again.
+
+	Invalidation of package list cache on installation/removal of
+	packages.
+
+	New option cf-key -r to remove host key by IP or hostname.
+
+	Added detection of network interfaces which belong to BSD jails.
+
+	Improve robustness of multi-threaded code, in particular fix
+	problems with spurious acces denials in server and losing of
+	authentication rules after policy reload.
+
+	cf-promises accepts option -b matching cf-agent, which causes it
+	to do not complain about missing bundlesequence.
+
+	New functions and(), not(), or() and concat() to ease use of
+	ifvarclass() clause.
+
+	Full list of issues fixed is available on
+	https://cfengine.com/bugtracker/changelog_page.php
+
+3.1.5   (Bugfix and Stability release)
+
 	New class parser, '||' is no longer allowed in expressions (use '|').
 
 	Class setting in the promise types insert_lines, delete_lines,

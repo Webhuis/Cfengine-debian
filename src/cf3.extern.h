@@ -41,8 +41,9 @@ extern int REQUIRE_COMMENTS;
 extern int FIPS_MODE;
 extern char POLICY_SERVER[CF_BUFSIZE];
 extern int ALWAYS_VALIDATE;
-extern int VIEWS;
 extern int LICENSES;
+extern int AM_NOVA;
+extern int AM_CONSTELLATION;
 extern char EXPIRY[32];
 extern char LICENSE_COMPANY[CF_SMALLBUF];
 extern int IGNORE_MISSING_INPUTS;
@@ -52,11 +53,11 @@ extern char DOCROOT[CF_MAXVARSIZE];
 extern char BANNER[2*CF_BUFSIZE];
 extern char FOOTER[CF_BUFSIZE];
 extern char STYLESHEET[CF_BUFSIZE];
-extern int CF_NODES;
+extern int CF_TOPICS;
+extern int CF_OCCUR;
 extern int CF_EDGES;
 extern int KEYTTL;
 extern struct Rlist *SERVER_KEYSEEN;
-extern unsigned int CFTEST_CLASS;
 extern enum cfhashes CF_DEFAULT_DIGEST;
 extern int CF_DEFAULT_DIGEST_LEN;
 extern struct Item *EDIT_ANCHORS;
@@ -73,10 +74,10 @@ extern struct Rlist *SINGLE_COPY_LIST;
 extern struct Rlist *AUTO_DEFINE_LIST;
 extern struct Rlist *SINGLE_COPY_CACHE;
 extern struct Rlist *ACCESSLIST;
-extern struct Topic *TOPIC_MAP;
 extern struct PromiseIdent *PROMISE_ID_LIST;
 extern struct Item *DONELIST;
 extern struct Rlist *CBUNDLESEQUENCE;
+extern char *CBUNDLESEQUENCE_STR;
 extern struct Item *ROTATED;
 extern double FORGETRATE;
 extern struct Rlist *GOALS;
@@ -96,6 +97,7 @@ extern FILE *FREPORT_HTML;
 extern FILE *FREPORT_TXT;
 extern FILE *FKNOW;
 extern struct FnCallStatus FNCALL_STATUS;
+extern int CSV;
 
 extern struct SubTypeSyntax CF_NOSTYPE;
 extern char *CF_DATATYPES[];
@@ -110,7 +112,6 @@ extern char THIS_AGENT[CF_MAXVARSIZE];
 extern enum cfagenttype THIS_AGENT_TYPE;
 extern int INSTALL_SKIP;
 extern int SHOWREPORTS;
-extern int FACILITY;
 extern char SYSLOGHOST[CF_MAXVARSIZE];
 extern unsigned short SYSLOGPORT;
 extern time_t PROMISETIME;
@@ -118,28 +119,27 @@ extern time_t CF_LOCKHORIZON;
 extern int ABORTBUNDLE;
 extern struct Item *ABORTBUNDLEHEAP;
 extern int LASTSEENEXPIREAFTER;
-extern int LASTSEEN;
 extern char *DEFAULT_COPYTYPE;
 extern struct Rlist *SERVERLIST;
 extern struct Item *PROCESSTABLE;
 extern struct Item *PROCESSREFRESH;
 extern struct Item *FSTABLIST;
 extern struct Rlist *MOUNTEDFSLIST;
-extern struct CfPackageManager *INSTALLED_PACKAGE_LISTS;
-extern struct CfPackageManager *PACKAGE_SCHEDULE;
 
 extern int CF_MOUNTALL;
 extern int CF_SAVEFSTAB;
 
-extern char *DAY_TEXT[];
-extern char *MONTH_TEXT[];
-extern char *SHIFT_TEXT[];
+extern const char *DAY_TEXT[];
+extern const char *MONTH_TEXT[];
+extern const char *SHIFT_TEXT[];
 
-extern char FILE_SEPARATOR;
-extern char FILE_SEPARATOR_STR[2];
-
-extern char AGGREGATION[CF_BUFSIZE];
-extern char *UNITS[CF_OBSERVABLES];
+#if defined(NT) && !defined(__CYGWIN__)
+#  define FILE_SEPARATOR '\\'
+#  define FILE_SEPARATOR_STR "\\"
+# else
+#  define FILE_SEPARATOR '/'
+#  define FILE_SEPARATOR_STR "/"
+#endif
 
 extern char *BASIC_REPORTS[cfrep_unknown][2];
 extern char *CDP_REPORTS[cdp_unknown][2];
@@ -159,8 +159,6 @@ extern double METER_KEPT[meter_endmark];
 extern double METER_REPAIRED[meter_endmark];
 extern double Q_MEAN;
 extern double Q_SIGMA;
-extern double Q_MAX;
-extern double Q_MIN;
 
 /***********************************************************/
 /* SYNTAX MODULES                                          */

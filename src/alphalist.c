@@ -36,6 +36,8 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static void ShowAlphaList(struct AlphaList al);
+
 /*****************************************************************************/
 /* This library creates a simple indexed array of lists for optimization of
    high entropy class searches.
@@ -143,7 +145,7 @@ return false;
 
 /*****************************************************************************/
 
-void PrependAlphaList(struct AlphaList *al,char *string)
+void PrependAlphaList(struct AlphaList *al, const char *string)
 
 { int i = (int)*string;
 
@@ -152,7 +154,17 @@ al->list[i] = PrependItem(&(al->list[i]),string,NULL);
 
 /*****************************************************************************/
 
-void ShowAlphaList(struct AlphaList al)
+void IdempPrependAlphaList(struct AlphaList *al, const char *string)
+{
+if (!InAlphaList(*al, string))
+   {
+   PrependAlphaList(al, string);
+   }
+}
+
+/*****************************************************************************/
+
+static void ShowAlphaList(struct AlphaList al)
 
 { int i;
   struct Item *ip;

@@ -32,6 +32,13 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static char *GetTopicContext(char *topic_name);
+static int ClassifiedTopicMatch(char *ttopic1,char *ttopic2);
+static void DeClassifyCanonicalTopic(char *typed_topic,char *topic,char *type);
+static char *ClassifiedTopic(char *topic,char *type);
+static char *URLHint(char *s);
+static char *NormalizeTopic(char *s);
+
 int GLOBAL_ID = 1; // Used as a primary key for convenience, 0 reserved
 extern struct Occurrences *OCCURRENCES;
 
@@ -97,10 +104,25 @@ else
       }
 
    tp->id = GLOBAL_ID++;
-   tp->associations = NULL;
+   tp->associations = NULL;   
    tp->next = *list;
    *list = tp;
-   CF_NODES++;
+   CF_TOPICS++;
+
+   // This section must come last, as there is possible recursion and memory ref needs to be complete first
+   
+   if (strcmp(tp->topic_context,"any") != 0)
+      {
+      // Every topic in a special context is generalized by itself in context "any"
+      
+      char gen[CF_BUFSIZE];
+      struct Rlist *rlist = 0;
+      snprintf(gen,CF_BUFSIZE-1,"any::%s",tp->topic_name);
+      PrependRScalar(&rlist,gen,CF_SCALAR);
+      AddTopicAssociation(tp,&(tp->associations),KM_GENERALIZES_B,KM_GENERALIZES_F,rlist,true,tp->topic_context,tp->topic_name);
+      DeleteRlist(rlist);
+      }
+
    }
 
 return tp;
@@ -108,13 +130,17 @@ return tp;
 
 /*****************************************************************************/
 
-void AddTopicAssociation(struct Topic *this_tp,struct TopicAssociation **list,char *fwd_name,char *bwd_name,struct Rlist *passociates,int ok_to_add_inverse)
+void AddTopicAssociation(struct Topic *this_tp,struct TopicAssociation **list,char *fwd_name,char *bwd_name,struct Rlist *passociates,int ok_to_add_inverse,char *from_context,char *from_topic)
 
 { struct TopicAssociation *ta = NULL,*texist;
   char fwd_context[CF_MAXVARSIZE];
   struct Rlist *rp,*rpc;
   struct Topic *new_tp;
+  char contexttopic[CF_BUFSIZE],ntopic[CF_BUFSIZE],ncontext[CF_BUFSIZE];
 
+strncpy(ntopic,NormalizeTopic(from_topic),CF_BUFSIZE-1);
+strncpy(ncontext,NormalizeTopic(from_context),CF_BUFSIZE-1);  
+snprintf(contexttopic,CF_MAXVARSIZE,"%s::%s",ncontext,ntopic);
 strncpy(fwd_context,CanonifyName(fwd_name),CF_MAXVARSIZE-1);
 
 if (passociates == NULL || passociates->item == NULL)
@@ -163,6 +189,15 @@ else
 
 /* Association now exists, so add new members */
 
+if (ok_to_add_inverse)
+   {
+   CfOut(cf_verbose,""," -> BEGIN add fwd associates for %s::%s",ncontext,ntopic);
+   }
+else
+   {
+   CfOut(cf_verbose,"","  ---> BEGIN reverse associations %s::%s",ncontext,ntopic);
+   }
+
 // First make sure topics pointed to exist so that they can point to us also
 
 for (rp = passociates; rp != NULL; rp=rp->next)
@@ -170,33 +205,56 @@ for (rp = passociates; rp != NULL; rp=rp->next)
    char normalform[CF_BUFSIZE] = {0};
 
    strncpy(normalform,NormalizeTopic(rp->item),CF_BUFSIZE-1);
-   new_tp = IdempInsertTopic(rp->item);
+   new_tp = IdempInsertTopic(normalform);
+
+   if (strcmp(contexttopic,normalform) == 0)
+      {
+      CfOut(cf_verbose,""," ! Excluding self-reference to %s",rp->item);
+      continue;
+      }
 
    if (ok_to_add_inverse)
       {
-      CfOut(cf_verbose,""," --> Adding '%s' with id %d as an associate of '%s'",normalform,new_tp->id,this_tp->topic_name);
+      CfOut(cf_verbose,""," --> Adding '%s' with id %d as an associate of '%s::%s'",normalform,new_tp->id,this_tp->topic_context,this_tp->topic_name);
       }
    else
       {
-      CfOut(cf_verbose,""," ---> Reverse '%s' with id %d as an associate of '%s' (inverse)",normalform,new_tp->id,this_tp->topic_name);
+      CfOut(cf_verbose,""," ---> Reverse '%s' with id %d as an associate of '%s::%s' (inverse)",normalform,new_tp->id,this_tp->topic_context,this_tp->topic_name);
       }
 
    if (!IsItemIn(ta->associates,normalform))
       {
       PrependFullItem(&(ta->associates),normalform,NULL,new_tp->id,0);
+
+      if (ok_to_add_inverse)
+         {
+         // inverse is from normalform to ncontext::ntopic
+         char rev[CF_BUFSIZE],ndt[CF_BUFSIZE],ndc[CF_BUFSIZE];
+         struct Rlist *rlist = 0;
+         snprintf(rev,CF_BUFSIZE-1,"%s::%s",ncontext,ntopic);
+         PrependRScalar(&rlist,rev,CF_SCALAR);
+
+         // Stupid to have to declassify + reclassify, but ..
+         DeClassifyTopic(normalform,ndt,ndc);
+         AddTopicAssociation(new_tp,&(new_tp->associations),bwd_name,fwd_name,rlist,false,ndc,ndt);
+         DeleteRlist(rlist);
+         }
       }
-   
-   if (ok_to_add_inverse)
+   else
       {
-      char rev[CF_BUFSIZE];
-      struct Rlist *rlist = 0;
-      snprintf(rev,CF_BUFSIZE-1,"%s::%s",this_tp->topic_context,this_tp->topic_name);
-      PrependRScalar(&rlist,rev,CF_SCALAR);
-      AddTopicAssociation(new_tp,&(new_tp->associations),bwd_name,fwd_name,rlist,false);
-      DeleteRlist(rlist);
+      CfOut(cf_verbose,""," -> Already in %s::%s's associate list",ncontext,ntopic);
       }
        
    CF_EDGES++;
+   }
+
+if (ok_to_add_inverse)
+   {
+   CfOut(cf_verbose,""," -> END add fwd associates for %s::%s",ncontext,ntopic);
+   }
+else
+   {
+   CfOut(cf_verbose,"","  ---> END reverse associations %s::%s",ncontext,ntopic);
    }
 }
 
@@ -216,13 +274,12 @@ if ((op = OccurrenceExists(*list,reference,rtype,context)) == NULL)
       }
 
    op->represents = NULL;
-   op->occurrence_context = strdup(context);
+   op->occurrence_context = strdup(ToLowerStr(context));
    op->locator = strdup(reference);
    op->rep_type = rtype;   
    op->next = *list;
    *list = op;
-   CF_EDGES++;
-   CF_NODES++;
+   CF_OCCUR++;
    CfOut(cf_verbose,""," -> Noted occurrence for %s::%s",context,reference);
    }
 
@@ -261,7 +318,7 @@ ip->next = *list;
 
 /*********************************************************************/
 
-char *ClassifiedTopic(char *topic,char *context)
+static char *ClassifiedTopic(char *topic,char *context)
 
 { static char name[CF_MAXVARSIZE];
 
@@ -318,7 +375,7 @@ if (strlen(context) == 0)
 
 /*********************************************************************/
 
-void DeClassifyCanonicalTopic(char *classified_topic,char *topic,char *context)
+static void DeClassifyCanonicalTopic(char *classified_topic,char *topic,char *context)
 
 {
 context[0] = '\0';
@@ -350,7 +407,7 @@ if (strlen(context) == 0)
 
 /*********************************************************************/
 
-int ClassifiedTopicMatch(char *ttopic1,char *ttopic2)
+static int ClassifiedTopicMatch(char *ttopic1,char *ttopic2)
 
 { char context1[CF_MAXVARSIZE],topic1[CF_MAXVARSIZE];
   char context2[CF_MAXVARSIZE],topic2[CF_MAXVARSIZE];
@@ -409,7 +466,7 @@ return 0;
 
 /*****************************************************************************/
 
-char *URLHint(char *url)
+static char *URLHint(char *url)
 
 { char *sp;
 
@@ -519,21 +576,11 @@ for (ta = list; ta != NULL; ta=ta->next)
 
       ybwd = true;
       }
-   else if (!bwd && ta->bwd_name == NULL)
-      {
-      ybwd = true;
-      }
    else
       {
       ybwd = false;
       }
    
-   if (ta->bwd_name && (strcmp(fwd,ta->bwd_name) == 0) && bwd && (strcmp(bwd,ta->fwd_name) == 0))
-      {
-      CfOut(cf_inform,""," ! Association \"%s\" exists already but in opposite orientation\n",fwd);
-      return ta;
-      }
-
    if (yfwd && ybwd)
       {
       return ta;
@@ -625,7 +672,7 @@ return NULL;
 
 /*****************************************************************************/
 
-char *GetTopicContext(char *topic_name)
+static char *GetTopicContext(char *topic_name)
 
 { struct Topic *tp;
   static char context1[CF_MAXVARSIZE],topic1[CF_MAXVARSIZE];
@@ -652,7 +699,7 @@ return NULL;
 
 /*****************************************************************************/
 
-char *NormalizeTopic(char *s)
+static char *NormalizeTopic(char *s)
 
 { char *sp;
   int special = false;

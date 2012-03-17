@@ -81,7 +81,7 @@ int NewTypeContext(enum typesequence type);
 void DeleteTypeContext(enum typesequence type);
 void ClassBanner(enum typesequence type);
 void ParallelFindAndVerifyFilesPromises(struct Promise *pp);
-void SetEnvironment(char *s);
+static bool VerifyBootstrap(void);
 
 extern struct BodySyntax CFA_CONTROLBODY[];
 extern struct Rlist *SERVERLIST;
@@ -90,11 +90,11 @@ extern struct Rlist *SERVERLIST;
 /* Command line options                                            */
 /*******************************************************************/
 
- char *ID = "The main Cfengine agent is the instigator of change\n"
-            "in the system. In that sense it is the most important\n"
-            "part of the Cfengine suite.\n";
+const char *ID = "The main Cfengine agent is the instigator of change\n"
+                 "in the system. In that sense it is the most important\n"
+                 "part of the Cfengine suite.\n";
 
- struct option OPTIONS[15] =
+const struct option OPTIONS[15] =
       {
       { "bootstrap",no_argument,0,'B' },
       { "bundlesequence",required_argument,0,'b' },
@@ -113,7 +113,7 @@ extern struct Rlist *SERVERLIST;
       { NULL,0,0,'\0' }
       };
 
- char *HINTS[15] =
+const char *HINTS[15] =
       {
       "Bootstrap/repair a cfengine configuration from failsafe file in the WORKDIR else in current directory",
       "Set or override bundlesequence from command line",
@@ -137,19 +137,26 @@ extern struct Rlist *SERVERLIST;
 int main(int argc,char *argv[])
 
 {
+int ret = 0;
+
 CheckOpts(argc,argv);
 GenericInitialize(argc,argv,"agent");
-PromiseManagement("agent");
 ThisAgentInit();
 KeepPromises();
 NoteClassUsage(VHEAP);
 #ifdef HAVE_NOVA
 Nova_NoteVarUsageDB();
 #endif
-UpdateLastSeen();
 PurgeLocks();
+
+if(BOOTSTRAP && !VerifyBootstrap())
+   {
+   ret = 1;
+   }
+
 GenericDeInitialize();
-return 0;
+
+return ret;
 }
 
 /*******************************************************************/
@@ -193,6 +200,7 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:x:MBb:",OPTIONS,&optindex)) != 
           if (optarg)
              {
              CBUNDLESEQUENCE = SplitStringAsRList(optarg,',');
+             CBUNDLESEQUENCE_STR = optarg;
              }
           break;
           
@@ -217,6 +225,7 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:x:MBb:",OPTIONS,&optindex)) != 
       case 'B':
           BOOTSTRAP = true;
           MINUSF = true;
+          IGNORELOCK = true;
           NewClass("bootstrap_mode");
           break;
 
@@ -277,7 +286,7 @@ while ((c=getopt_long(argc,argv,"rd:vnKIf:D:N:Vs:x:MBb:",OPTIONS,&optindex)) != 
           break;
           
       case 'V':
-          Version("cf-agent");
+          PrintVersionBanner("cf-agent");
           exit(0);
           
       case 'h':
@@ -358,11 +367,14 @@ KeepControlPromises();
 KeepPromiseBundles();
 EndAudit();
 
-CfOut(cf_verbose,"","Estimated system complexity as touched objects = %d, for %d promises",CF_NODES,CF_EDGES);
+// TOPICS counts the number of currently defined promises
+// OCCUR counts the number of objects touched while verifying config
 
-efficiency = 100.0*CF_EDGES/(double)(CF_NODES+CF_EDGES);
+efficiency = 100.0*CF_OCCUR/(double)(CF_OCCUR+CF_TOPICS);
 
 NoteEfficiency(efficiency);
+
+CfOut(cf_verbose,""," -> Checked %d objects with %d promises, efficiency %.2lf",CF_OCCUR,CF_TOPICS,efficiency);
 }
 
 /*******************************************************************/
@@ -412,7 +424,6 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFA_CONTROLBODY[cfa_agentfacility].lval) == 0)
       {
       SetFacility(retval);
-      CfOut(cf_verbose,"","SET Syslog FACILITY = %s\n",retval);
       continue;
       }
    
@@ -433,7 +444,7 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
 
          for (rp  = (struct Rlist *) retval; rp != NULL; rp = rp->next)
             {
-            printf(" %s",rp->item);
+            printf(" %s",(char *)rp->item);
             PrependItem(&PROCESSREFRESH,rp->item,NULL);
             }
 
@@ -693,7 +704,10 @@ for (cp = ControlBodyConstraints(cf_agent); cp != NULL; cp=cp->next)
       
       for (rp  = (struct Rlist *) retval; rp != NULL; rp = rp->next)
          {
-         SetEnvironment(rp->item);
+         if (putenv(rp->item) != 0)
+            {
+            CfOut(cf_error, "putenv", "Failed to set environment variable %s", rp->item);
+            }
          }
       
       continue;
@@ -884,6 +898,7 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
 
          if (Abort())
             {
+            NoteClassUsage(VADDCLASSES);
             DeleteTypeContext(type);
             return false;
             }
@@ -892,6 +907,8 @@ for (pass = 1; pass < CF_DONEPASSES; pass++)
       DeleteTypeContext(type);      
       }
    }
+
+NoteClassUsage(VADDCLASSES);
 
 return true;
 }
@@ -990,7 +1007,7 @@ if (VarClassExcluded(pp,&sp))
 
 // Record promises examined for efficiency calc
 
-CF_EDGES++;
+CF_TOPICS++;
 
 if (strcmp("vars",pp->agentsubtype) == 0)
    {
@@ -1096,17 +1113,6 @@ if (strcmp("reports",pp->agentsubtype) == 0)
 }
 
 /*********************************************************************/
-
-void SetEnvironment(char *s)
-
-{
-if (putenv(s) != 0)
-   {
-   CfOut(cf_inform,"putenv","Failed to set environment %s",s);
-   }
-}
-
-/*********************************************************************/
 /* Type context                                                      */
 /*********************************************************************/
 
@@ -1146,10 +1152,6 @@ switch(type)
           MOUNTEDFSLIST = NULL;
           }
 #endif  /* NOT MINGW */
-       break;
-
-   case kp_packages:
-       INSTALLED_PACKAGE_LISTS = NULL;
        break;
    }
 
@@ -1234,17 +1236,12 @@ switch(type)
 
    case kp_packages:
 
-       if (!DONTDO && PACKAGE_SCHEDULE)
-          {
-          ExecutePackageSchedule(PACKAGE_SCHEDULE);
-          }
-
-       DeletePackageManagers(INSTALLED_PACKAGE_LISTS);
-       DeletePackageManagers(PACKAGE_SCHEDULE);
-       INSTALLED_PACKAGE_LISTS = NULL;
-       PACKAGE_SCHEDULE = NULL;
-       break;
-
+      if (!DONTDO)
+         {
+         ExecuteScheduledPackages();
+         }
+      CleanScheduledPackages();
+      break;
    }
 }
 
@@ -1270,8 +1267,6 @@ for (i = 0; i < CF_ALPHABETSIZE; i++)
       CfOut(cf_verbose,"","     +       %s\n",ip->name);
       }
    }
-
-NoteClassUsage(VADDCLASSES);
 
 CfOut(cf_verbose,"","\n");
 
@@ -1346,3 +1341,41 @@ if (child == 0 || !background)
 #endif  /* NOT MINGW */
 }
 
+/**************************************************************/
+
+static bool VerifyBootstrap(void)
+{
+ struct stat sb;
+ char filePath[CF_MAXVARSIZE];
+
+ if(EMPTY(POLICY_SERVER))
+    {
+    CfOut(cf_error, "", "!! Bootstrapping failed, no policy server is specified");
+    return false;
+    }
+ 
+ // we should at least have gotten promises.cf from the policy hub
+ snprintf(filePath, sizeof(filePath), "%s/inputs/promises.cf", CFWORKDIR);
+ MapName(filePath);
+ 
+ if(cfstat(filePath, &sb) == -1)
+    {
+    CfOut(cf_error, "", "!! Bootstrapping failed, no input file at %s after bootstrap", filePath);
+    return false;
+    }
+
+ // embedded failsafe.cf (bootstrap.c) contains a promise to start cf-execd (executed while running this cf-agent)
+ DeleteItemList(PROCESSTABLE);
+ PROCESSTABLE = NULL;
+ LoadProcessTable(&PROCESSTABLE);
+
+ if(!IsProcessNameRunning(".*cf-execd.*"))
+    {
+    CfOut(cf_error, "", "!! Bootstrapping failed, cf-execd is not running");
+    return false;
+    }
+
+ CfOut(cf_cmdout, "", "-> Bootstrap to %s completed successfully", POLICY_SERVER);
+ 
+ return true;
+}

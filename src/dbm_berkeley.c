@@ -38,73 +38,20 @@
 
 #ifdef BDB
 
-/* Global variables */
+static DBT *BDB_NewDBKey(char *name);
+static DBT *BDB_NewDBComplexKey(char *key,int size);
+static void BDB_DeleteDBKey(DBT *key);
+static DBT *BDB_NewDBValue(const void *ptr,int size);
+static void BDB_DeleteDBValue(DBT *value);
 
-static bool bdb_use_verification = true;
-
-static bool BDB_VerifyDB(const char *filename)
-
-{
-int ret;
-DB *dbp;
-
-if (bdb_use_verification == false)
-   {
-   return true;
-   }
-
-if ((ret = db_create(&dbp, NULL, 0)) != 0)
-   {
-   CfOut(cf_error, "",
-         "BDB_VerifyDB: Couldn't get database environment for %s: %s\n",
-         filename, db_strerror(ret));
-   return false;
-   }
-
-if ((ret = (dbp->verify)(dbp, filename, NULL, NULL, 0)) != 0)
-   {
-   if (ret == ENOTSUPP || ret == EOPNOTSUPP || ret == EINVAL)
-      {
-      CfOut(cf_error, "", "BDB_VerifyDB: verification support is disabled in BerkeleyDB: skipping database verification.\n");
-      bdb_use_verification = false;
-      return true;
-      }
-   else if (ret != ENOENT)
-      {
-      CfOut(cf_error, "", "BDB_VerifyDB: database %s is corrupted: %s\n",
-            filename, db_strerror(ret));
-      return false;
-      }
-   }
-
-return true;
-}
-
+/*****************************************************************************/
 
 int BDB_OpenDB(char *filename,DB **dbp)
 
 {
-DB_ENV *dbenv = NULL;
 int ret;
 
-if (!BDB_VerifyDB(filename))
-   {
-   char asidefile[CF_BUFSIZE];
-   snprintf(asidefile, CF_BUFSIZE, "%s.corrupted", filename);
-
-   /* Try to recover from corrupted database by moving it aside */
-   if ((ret = cf_rename(filename, asidefile)) != 0)
-      {
-      if (errno != ENOENT)
-         {
-         CfOut(cf_error, "rename", "BDB_OpenDB: error trying to move"
-               " corrupted database %s aside to %s", filename, asidefile);
-         return false;
-         }
-      }
-   }
-
-if ((ret = db_create(dbp,dbenv,0)) != 0)
+if ((ret = db_create(dbp,NULL,0)) != 0)
    {
    CfOut(cf_error, "",
          "BDB_OpenDB: Couldn't get database environment for %s: %s\n",
@@ -273,7 +220,7 @@ return retval;
 
 /*****************************************************************************/
 
-int BDB_WriteComplexKeyDB(DB *dbp,char *name,int keysize,void *ptr,int size)
+int BDB_WriteComplexKeyDB(DB *dbp,char *name,int keysize,const void *ptr,int size)
 
 {
 DBT *key,*value;
@@ -411,7 +358,7 @@ else
 /* Level 2                                                                   */
 /*****************************************************************************/
 
-DBT *BDB_NewDBKey(char *name)
+static DBT *BDB_NewDBKey(char *name)
 
 {
 char *dbkey;
@@ -440,7 +387,7 @@ return key;
 
 /*****************************************************************************/
 
-void BDB_DeleteDBKey(DBT *key)
+static void BDB_DeleteDBKey(DBT *key)
 
 {
 free((char *)key->data);
@@ -449,7 +396,7 @@ free((char *)key);
 
 /*****************************************************************************/
 
-DBT *BDB_NewDBValue(void *ptr,int size)
+static DBT *BDB_NewDBValue(const void *ptr,int size)
 
 {
 void *val;
@@ -476,7 +423,7 @@ return value;
 
 /*****************************************************************************/
 
-void BDB_DeleteDBValue(DBT *value)
+static void BDB_DeleteDBValue(DBT *value)
 
 {
 free((char *)value->data);

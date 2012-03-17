@@ -32,6 +32,8 @@
 #include "cf3.defs.h"
 #include "cf3.extern.h"
 
+static int IsSpace(char *remainder);
+
 /*****************************************************************************/
 
 void IPString2KeyDigest(char *ipv4,char *result)
@@ -45,17 +47,20 @@ void IPString2KeyDigest(char *ipv4,char *result)
   int ksize,vsize;
   unsigned char digest[EVP_MAX_MD_SIZE+1];
 
+result[0] = '\0';
+
 if (strcmp(ipv4,"127.0.0.1") == 0 || strcmp(ipv4,"::1") == 0 || strcmp(ipv4,VIPADDRESS) == 0)
    {
-   HashPubKey(PUBKEY,digest,CF_DEFAULT_DIGEST);
-   snprintf(result,CF_MAXVARSIZE,"%s",HashPrint(CF_DEFAULT_DIGEST,digest));
+   if (PUBKEY)
+      {
+      HashPubKey(PUBKEY,digest,CF_DEFAULT_DIGEST);
+      snprintf(result,CF_MAXVARSIZE,"%s",HashPrint(CF_DEFAULT_DIGEST,digest));
+      }
    return;
    }
-  
+
 snprintf(name,CF_BUFSIZE-1,"%s/%s",CFWORKDIR,CF_LASTDB_FILE);
 MapName(name);
-
-result[0] = '\0';
 
 if (!OpenDB(name,&dbp))
    {
@@ -94,6 +99,11 @@ while(NextDB(dbp,dbcp,&key,&ksize,&value,&vsize))
 
 DeleteDBCursor(dbp,dbcp);
 CloseDB(dbp);
+
+if(EMPTY(result))
+   {
+   CfOut(cf_verbose, "", "!! Unable to find a key for ip %s", ipv4);
+   }
 }
 
 /***************************************************************/
@@ -129,7 +139,7 @@ memset(out,0,outSz);
       case '\"':
           *spt++ = '\\';
           *spt = *spf;
-	  i+=2;
+	  i+=3;
           break;
 
       default:
@@ -155,14 +165,38 @@ memset(out,0,outSz);
    {
    switch (*spf)
       {
-      case '\'':
       case '\"':
-      case '\\':  
+      case '\\':
+      case '/':
           *spt++ = '\\';
           *spt = *spf;
-	  i+=2;
+          i+=2;
           break;
-
+      case '\n':
+          *spt++ = '\\';
+          *spt = 'n';
+          i+=2;
+          break;
+      case '\t':
+          *spt++ = '\\';
+          *spt = 't';
+          i+=2;
+          break;          
+      case '\r':
+          *spt++ = '\\';
+          *spt = 'r';
+          i+=2;
+          break;
+      case '\b':
+          *spt++ = '\\';
+          *spt = 'b';
+          i+=2;
+          break;
+      case '\f':
+          *spt++ = '\\';
+          *spt = 'f';
+          i+=2;
+          break;
       default:
           *spt = *spf;
 	  i++;
@@ -174,6 +208,7 @@ return out;
 }
 
 /***************************************************************************/
+
 char *EscapeRegex(char *s, char *out, int outSz)
 
 { char *spt,*spf;
@@ -677,8 +712,11 @@ if (a == CF_NOINT || !IsSpace(remainder))
    {
    if (THIS_AGENT_TYPE == cf_common)
       {
-      snprintf(output,CF_BUFSIZE,"Error reading assumed integer value \"%s\" => \"%s\" (found remainder \"%s\")\n",s,"non-value",remainder);
-      ReportError(output);
+      CfOut(cf_inform,""," !! Error reading assumed integer value \"%s\" => \"%s\" (found remainder \"%s\")\n",s,"non-value",remainder);
+      if (strchr(s,'$'))
+         {
+         CfOut(cf_inform,""," !! The variable might not yet be expandable - not necessarily an error");
+         }
       }
    }
 else
@@ -899,7 +937,7 @@ return -1;
 
 /****************************************************************************/
 
-void CtimeHourInterval(time_t t, char *out, int outSz)
+void UtcShiftInterval(time_t t, char *out, int outSz)
 /* 00 - 06, 
    06 - 12, 
    12 - 18, 
@@ -908,7 +946,7 @@ void CtimeHourInterval(time_t t, char *out, int outSz)
   char buf[CF_MAXVARSIZE];
   int hr = 0, fromHr = 0, toHr = 0;
 
-  snprintf(buf,sizeof(buf),"%s",cf_ctime(&t));
+  cf_strtimestamp_utc(t,buf);
   
   sscanf(buf+11,"%d", &hr);
   buf[11] = '\0';
@@ -1146,29 +1184,6 @@ return cfsrv_nostatus;
 
 /*********************************************************************/
 
-enum cfl_view Str2View(char *s)
-
-{ static char *views[] = { "SumCompWk",  // NOTE: must match cfl_view enum
-			   "SumRepairedWk",
-			   "SumNotKeptWk",
-			   "RepairedReason",                           
-			   "NotKeptReason",
-			   NULL };
-  int i;
-
-for (i = 0; views[i] != NULL; i++)
-   {
-   if (strcmp(s,views[i]) == 0)
-      {
-      return i;
-      }
-   }
-
-return cfl_view_error;
-}
-
-/*********************************************************************/
-
 char *Dtype2Str(enum cfdatatype dtype)
 {
   switch(dtype)
@@ -1244,52 +1259,9 @@ snprintf(outStr,outStrSz,"%s %s %s",day,month,year);
 
 /*********************************************************************/
 
-void DateStrToTime(char *inStr, time_t *t)
-/**
- * Takes a time str as "30 Sep 2010" and returns a time_t struct in
- * that day.
- */
-{
-  char monthStr[CF_SMALLBUF] = {0};
-  int day = 0, month = 0, year = 0;
-  struct tm tmTime = {0};
-  time_t tTime = 0;
-  
-  sscanf(inStr,"%d %3s %d",&day,monthStr,&year);
+const char *GetArg0(const char *execstr)
 
-  month = MonthLen2Int(monthStr,3);
-
-  if(month == -1)
-    {
-    CfOut(cf_error, "", "!! Could not convert month to int in DateStrToTime()");
-    *t = 0;
-    return;
-    }
-
-  tmTime.tm_mday = day;
-  tmTime.tm_mon = month - 1;
-  tmTime.tm_year = year - 1900;
-  tmTime.tm_isdst = -1;
-
-  tTime = mktime(&tmTime);
-
-  if(tTime == -1)
-    {
-    CfOut(cf_error, "mktime", "!! Could not convert \"%s\" from string to time_t", inStr);
-    *t = 0;
-    }
-  else
-    {
-    *t = tTime;
-    }
-}
-
-/*************************************************************/
-
-
-char *GetArg0(char *execstr)
-
-{ char *sp;
+{ const char *sp;
   static char arg[CF_BUFSIZE];
   int i = 0;
 
@@ -1390,7 +1362,7 @@ char *Item2String(struct Item *ip)
 
 /*******************************************************************/
 
-int IsSpace(char *remainder)
+static int IsSpace(char *remainder)
 
 { char *sp;
 

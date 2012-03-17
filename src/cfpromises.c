@@ -42,14 +42,15 @@ int main (int argc,char *argv[]);
 /* Command line options                                            */
 /*******************************************************************/
 
- char *ID = "The promise agent is a validator and analysis tool for\n"
-            "configuration files belonging to any of the components\n"
-            "of Cfengine. Configurations that make changes must be\n"
-            "approved by this validator before being executed.";
+const char *ID = "The promise agent is a validator and analysis tool for\n"
+                 "configuration files belonging to any of the components\n"
+                 "of Cfengine. Configurations that make changes must be\n"
+                 "approved by this validator before being executed.";
  
- struct option OPTIONS[14] =
+const struct option OPTIONS[14] =
       {
       { "help",no_argument,0,'h' },
+      { "bundlesequence",required_argument,0,'b' },
       { "debug",optional_argument,0,'d' },
       { "verbose",no_argument,0,'v' },
       { "dry-run",no_argument,0,'n'},
@@ -65,9 +66,10 @@ int main (int argc,char *argv[]);
       };
 
 
- char *HINTS[14] =
+const char *HINTS[14] =
       {
       "Print the help message",
+      "Use the specified bundlesequence for verification",
       "Set debugging level 0,1,2,3",
       "Output verbose information about the behaviour of the agent",
       "All talk and no action mode - make no changes, only inform of promises not kept",
@@ -89,7 +91,7 @@ int main (int argc,char *argv[]);
 int main(int argc,char *argv[])
 
 {
-CheckOpts(argc,argv); 
+CheckOpts(argc,argv);
 GenericInitialize(argc,argv,"common");
 ThisAgentInit();
 AnalyzePromiseConflicts();
@@ -118,7 +120,7 @@ void CheckOpts(int argc,char **argv)
   int optindex = 0;
   int c;
   
-while ((c=getopt_long(argc,argv,"ad:vnIf:D:N:VSrxM",OPTIONS,&optindex)) != EOF)
+while ((c=getopt_long(argc,argv,"ad:vnIf:D:N:VSrxMb:",OPTIONS,&optindex)) != EOF)
   {
   switch ((char) c)
       {
@@ -152,6 +154,14 @@ while ((c=getopt_long(argc,argv,"ad:vnIf:D:N:VSrxM",OPTIONS,&optindex)) != EOF)
                  break;
              }
           break;
+
+      case 'b':
+         if (optarg)
+            {
+            CBUNDLESEQUENCE = SplitStringAsRList(optarg, ',');
+            CBUNDLESEQUENCE_STR = optarg;
+            }
+         break;
           
       case 'K': IGNORELOCK = true;
           break;
@@ -174,7 +184,7 @@ while ((c=getopt_long(argc,argv,"ad:vnIf:D:N:VSrxM",OPTIONS,&optindex)) != EOF)
           NewClass("opt_dry_run");
           break;
           
-      case 'V': Version("cf-promises");
+      case 'V': PrintVersionBanner("cf-promises");
           exit(0);
           
       case 'h': Syntax("cf-promises - cfengine's promise analyzer",OPTIONS,HINTS,ID);
@@ -184,6 +194,8 @@ while ((c=getopt_long(argc,argv,"ad:vnIf:D:N:VSrxM",OPTIONS,&optindex)) != EOF)
           exit(0);
 
        case 'r':
+	  PrependRScalar(&GOALS,"goal.*",CF_SCALAR);
+  	  PrependRScalar(&GOALCATEGORIES,"goals",CF_SCALAR);
           SHOWREPORTS = true;
           break;
 
@@ -214,6 +226,7 @@ Debug("Set debugging\n");
 void ThisAgentInit()
 
 {
+AddGoalsToDB(Rlist2String(GOALS,","),Rlist2String(GOALCATEGORIES,","));
 SHOWREPORTS = false;
 }
 

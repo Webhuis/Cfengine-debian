@@ -33,6 +33,11 @@
 #include "cf3.extern.h"
 #include "cf3.server.h"
 
+static void KeepContextBundles(void);
+static void KeepServerPromise(struct Promise *pp);
+static void InstallServerAuthPath(char *path,struct Auth **list,struct Auth **listtop);
+static void KeepServerRolePromise(struct Promise *pp);
+
 extern struct BodySyntax CFS_CONTROLBODY[];
 extern struct BodySyntax CF_REMROLE_BODIES[];
 
@@ -53,7 +58,6 @@ extern int TRIES;
 extern int MAXTRIES;
 extern int LOGCONNS;
 extern int LOGENCRYPT;
-extern int FACILITY;
 extern struct Item *CONNECTIONLIST;
 extern struct Auth *ROLES;
 extern struct Auth *ROLESTOP;
@@ -209,7 +213,6 @@ for (cp = ControlBodyConstraints(cf_server); cp != NULL; cp=cp->next)
    if (strcmp(cp->lval,CFS_CONTROLBODY[cfs_serverfacility].lval) == 0)
       {
       SetFacility(retval);
-      CfOut(cf_verbose,"","SET Syslog FACILITY = %s\n",retval);
       continue;
       }
    
@@ -404,7 +407,7 @@ if (GetVariable("control_common",CFG_CONTROLBODY[cfg_fips_mode].lval,&retval,&re
 
 /*********************************************************************/
 
-void KeepContextBundles()
+static void KeepContextBundles()
     
 { struct Bundle *bp;
   struct SubType *sp;
@@ -492,7 +495,7 @@ for (bp = BUNDLES; bp != NULL; bp = bp->next) /* get schedule */
 /* Level                                                             */
 /*********************************************************************/
 
-void KeepServerPromise(struct Promise *pp)
+static void KeepServerPromise(struct Promise *pp)
 
 { char *sp = NULL;
  
@@ -804,7 +807,7 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
 
 /*********************************************************************/
 
-void KeepServerRolePromise(struct Promise *pp)
+static void KeepServerRolePromise(struct Promise *pp)
 
 { struct Constraint *cp;
   struct Rlist *rp;
@@ -860,7 +863,7 @@ for (cp = pp->conlist; cp != NULL; cp = cp->next)
 /* Level                                                               */
 /***********************************************************************/
 
-void InstallServerAuthPath(char *path,struct Auth **list,struct Auth **listtop)
+static void InstallServerAuthPath(char *path,struct Auth **list,struct Auth **listtop)
 
 { struct Auth *ptr;
 
