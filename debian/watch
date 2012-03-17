@@ -1,0 +1,9 @@
+# Compulsory line, this is a version 3 file
+version=3
+
+# usually the cfengine maintainer releases versions like x.x.xb7 or x.x.xa4
+# *before* the official version, which does not contain any letter, so we need
+# to adapt our version otherwise uscan will believe, for example, that 3.0.2 is
+# older than 3.0.2b3
+opts="uversionmangle=s{([a-z]\d)}{~$1}i,filenamemangle=s{/tarballs/download.php\?file=}{}" \
+http://www.cfengine.org/pages/source_code /tarballs/.+?cfengine-(.*)\.tar\.gz

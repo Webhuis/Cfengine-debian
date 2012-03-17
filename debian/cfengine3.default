@@ -1,0 +1,20 @@
+# Defaults for cfengine initscript
+# sourced by /etc/init.d/cfengine3
+# installed at /etc/default/cfengine3 by the maintainer scripts
+
+#
+# This is a POSIX shell fragment
+#
+
+# Set variable to 1 to start the daemon; 0 otherwise.
+
+# to start these three daemons you need the /etc/cfengine3/promises.cf
+# have a look at the examples in /usr/share/doc/cfengine3/examples
+RUN_CFMONITORD=0
+RUN_CFSERVERD=0
+RUN_CFEXECD=0
+
+# Additional options that are passed to the daemons
+CFMONITORD_ARGS=""
+CFSERVERD_ARGS=""
+CFEXECD_ARGS=""
