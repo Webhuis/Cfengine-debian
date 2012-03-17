@@ -1,4 +1,4 @@
-cfengine3 (3.2.4) unstable; urgency=low
+cfengine3 (3.2.4-1) unstable; urgency=low
 
   * New upstream release
   * debian/watch:
