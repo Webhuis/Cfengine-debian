@@ -10,6 +10,9 @@ cfengine3 (3.2.4) unstable; urgency=low
     + installing the distributed share/doc directory, exmaples included.
   * debian/README.Debian:
     + updated to reflect that inputs/ are now in examples_config/
+  * debian/links:
+    + dropped the /var/lib/cfengine3/inputs link because it does not exist
+      anymore upstream.
 
  -- Antonio Radici <antonio@debian.org>  Sat, 17 Mar 2012 18:12:34 +0000
 
