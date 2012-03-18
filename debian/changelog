@@ -8,6 +8,7 @@ cfengine3 (3.2.4-1) unstable; urgency=low
   * debian/patches:
     + refreshed all patches, removed fix-error-typos
     + added 626647-kfreebsd-support.patch to add kfreebsd support
+      (Closes: 626647)
   * debian/cfengine3.install:
     + installing the distributed share/doc directory, exmaples included.
   * debian/README.Debian:
