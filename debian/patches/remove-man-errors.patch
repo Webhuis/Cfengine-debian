@@ -3,8 +3,8 @@ file; I'm removing all the man errors from here
 
 Index: cfengine3/src/generic_agent.c
 ===================================================================
---- cfengine3.orig/src/generic_agent.c	2012-03-17 19:15:23.000000000 +0000
-+++ cfengine3/src/generic_agent.c	2012-03-18 10:44:34.000000000 +0000
+--- cfengine3.orig/src/generic_agent.c	2012-03-18 11:45:42.000000000 +0000
++++ cfengine3/src/generic_agent.c	2012-03-18 11:45:43.000000000 +0000
 @@ -1758,7 +1758,7 @@
     {
     if (options[i].has_arg)
@@ -55,8 +55,8 @@ Index: cfengine3/src/generic_agent.c
  /*******************************************************************/
 Index: cfengine3/src/evalfunction.c
 ===================================================================
---- cfengine3.orig/src/evalfunction.c	2012-03-18 10:44:40.000000000 +0000
-+++ cfengine3/src/evalfunction.c	2012-03-18 10:44:45.000000000 +0000
+--- cfengine3.orig/src/evalfunction.c	2012-03-18 11:45:42.000000000 +0000
++++ cfengine3/src/evalfunction.c	2012-03-18 11:45:43.000000000 +0000
 @@ -225,7 +225,7 @@
      return rval;
      }
@@ -66,3 +66,16 @@ Index: cfengine3/src/evalfunction.c
  
  /* Acquire a cursor for the database. */
  
+Index: cfengine3/src/runagent.c
+===================================================================
+--- cfengine3.orig/src/runagent.c	2012-03-18 11:45:47.000000000 +0000
++++ cfengine3/src/runagent.c	2012-03-18 11:45:53.000000000 +0000
+@@ -547,7 +547,7 @@
+        */
+       if (BACKGROUND || INTERACTIVE)
+          {
+-         CfOut(cf_error, "", "Warning: 'background_children' setting from 'body runagent control' is overriden by command-line option.");
++         CfOut(cf_error, "", "Warning: 'background_children' setting from 'body runagent control' is overridden by command-line option.");
+          }
+       else
+          {
