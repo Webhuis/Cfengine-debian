@@ -1,3 +1,4 @@
 remove-man-errors.patch
 fhs-compliance.patch
 fix-examples-paths.patch
+626647-kfreebsd-support.patch

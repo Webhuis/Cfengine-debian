@@ -1,0 +1,13 @@
+Index: cfengine3/configure.ac
+===================================================================
+--- cfengine3.orig/configure.ac	2012-03-18 10:54:53.000000000 +0000
++++ cfengine3/configure.ac	2012-03-18 10:54:58.000000000 +0000
+@@ -734,7 +734,7 @@
+ 	AC_DEFINE(IRIX)
+         CFLAGS="$CFLAGS -w"
+         ;;
+-   linux*)
++   linux*|*bsd*gnu)
+ 	AC_DEFINE(LINUX, [], [Linux build])
+ 	AC_CHECK_LIB(nss_nis, yp_get_default_domain)
+         AC_CHECK_LIB(acl,main)

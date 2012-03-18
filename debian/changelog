@@ -5,7 +5,9 @@ cfengine3 (3.2.4-1) unstable; urgency=low
     + refreshed to use the new upstream URLs
   * debian/control:
     + Standards-Version updated to 3.9.3, no change required
-  * debian/patches: refreshed
+  * debian/patches:
+    + refreshed all patches, removed fix-error-typos
+    + added 626647-kfreebsd-support.patch to add kfreebsd support
   * debian/cfengine3.install:
     + installing the distributed share/doc directory, exmaples included.
   * debian/README.Debian:
