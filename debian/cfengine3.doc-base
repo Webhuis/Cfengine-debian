@@ -6,4 +6,5 @@ Abstract: The documentation for cfengine3, a tool for configuring and
 Section: System/Administration
 
 Format: HTML
+Index: /usr/share/doc/cfengine3/html/agents.html
 Files: /usr/share/doc/cfengine3/html/*

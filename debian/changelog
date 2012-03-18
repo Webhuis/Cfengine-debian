@@ -17,6 +17,8 @@ cfengine3 (3.2.4-1) unstable; urgency=low
     + dropped the /var/lib/cfengine3/inputs link because it does not exist
       anymore upstream
   * debian/cfengine3.doc-base: dropping cf3.html which was removed by upstream
+    and replacing it with agents.html (this is debatable but from the next
+    version we will get a better HTML doc).
 
  -- Antonio Radici <antonio@debian.org>  Sat, 17 Mar 2012 18:12:34 +0000
 
