@@ -15,7 +15,8 @@ cfengine3 (3.2.4-1) unstable; urgency=low
     + updated to reflect that inputs/ are now in examples_config/
   * debian/links:
     + dropped the /var/lib/cfengine3/inputs link because it does not exist
-      anymore upstream.
+      anymore upstream
+  * debian/cfengine3.doc-base: dropping cf3.html which was removed by upstream
 
  -- Antonio Radici <antonio@debian.org>  Sat, 17 Mar 2012 18:12:34 +0000
 
