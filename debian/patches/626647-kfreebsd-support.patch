@@ -1,3 +1,6 @@
+Simple patch to add kfreebsd support, created by Cristoph Egger
+(cristoph@debian.org).
+
 Index: cfengine3/configure.ac
 ===================================================================
 --- cfengine3.orig/configure.ac	2012-03-18 10:54:53.000000000 +0000
