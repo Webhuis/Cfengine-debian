@@ -1,3 +1,11 @@
+cfengine3 (3.2.4-2) unstable; urgency=low
+
+  * debian/{README.Debian,links}:
+    + restoring /var/lib/cfengine3/inputs as a link to /etc/cfengine3
+      (Closes: 664636).
+
+ -- Antonio Radici <antonio@debian.org>  Mon, 19 Mar 2012 19:56:35 +0000
+
 cfengine3 (3.2.4-1) unstable; urgency=low
 
   * New upstream release

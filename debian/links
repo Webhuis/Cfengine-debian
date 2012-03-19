@@ -1,1 +1,2 @@
+etc/cfengine3 var/lib/cfengine3/inputs
 usr/sbin var/lib/cfengine3/bin
