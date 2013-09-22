@@ -482,11 +482,11 @@ body_constraints::
    comment => "Containment options for the execution process",
    association => a("is a possible body constraint for","promise_types::commands","can have body constraints");
    "useshell"
-   comment => "true/false embed the command in a shell environment (true)",
+   comment => "noshell/useshell/powershell embed the command in the given shell environment (noshell)",
    association => a("is a possible sub-body constraint for","contain","may have sub-body constraints");
 body_constraints::
    "useshell" association => a("is a body constraint of type","(menu option)","has possible body constraints"),
-          comment => "true/false embed the command in a shell environment (true)";
+          comment => "noshell/useshell/powershell embed the command in the given shell environment (noshell)";
    "umask"
    comment => "The umask value for the child process",
    association => a("is a possible sub-body constraint for","contain","may have sub-body constraints");
@@ -1182,12 +1182,12 @@ body_constraints::
 body_constraints::
    "acl_type" association => a("is a body constraint of type","(menu option)","has possible body constraints"),
           comment => "Access control list type for the affected file system";
-   "acl_directory_inherit"
-   comment => "Access control list type for the affected file system",
+   "acl_default"
+   comment => "How to apply default (inheritable) access control list",
    association => a("is a possible sub-body constraint for","acl","may have sub-body constraints");
 body_constraints::
-   "acl_directory_inherit" association => a("is a body constraint of type","(menu option)","has possible body constraints"),
-          comment => "Access control list type for the affected file system";
+   "acl_default" association => a("is a body constraint of type","(menu option)","has possible body constraints"),
+          comment => "How to apply default (inheritable) access control list";
    "aces"
    comment => "Native settings for access control entry",
    association => a("is a possible sub-body constraint for","acl","may have sub-body constraints");
@@ -1195,13 +1195,13 @@ body_constraints::
    "aces" association => a("is a body constraint of type","slist","has possible body constraints"),
           comment => "Native settings for access control entry";
    "aces" association => a("is a list of type","slist","is used in");
-   "inherit_aces"
+   "default_aces"
    comment => "Native settings for access control entry",
    association => a("is a possible sub-body constraint for","acl","may have sub-body constraints");
 body_constraints::
-   "inherit_aces" association => a("is a body constraint of type","slist","has possible body constraints"),
+   "default_aces" association => a("is a body constraint of type","slist","has possible body constraints"),
           comment => "Native settings for access control entry";
-   "inherit_aces" association => a("is a list of type","slist","is used in");
+   "default_aces" association => a("is a list of type","slist","is used in");
 promise_types::
    "insert_lines";
 body_constraints::
@@ -2277,30 +2277,30 @@ contexts::
   "!have_ppkeys";
 promisers::
 
-  "/usr/local/sbin/cf-key"
+  "/var/cfengine/bin/cf-key"
       association => a("occurs in bundle","bundles::update","bundle contains promiser");
-  "/usr/local/sbin/cf-key"
+  "/var/cfengine/bin/cf-key"
       association => a("makes promise of type","promise_types::commands","promises have been made by");
-  "/usr/local/sbin/cf-key"
+  "/var/cfengine/bin/cf-key"
       association => a("makes promises","promise_unit_update_cf_31","is a promise made by");
 promise_types::
   "commands" association => a("is employed in bundle","update","employs promises of type");
 promises::
 
 "promise_unit_update_cf_31"
-   comment => "(Uncommented promise of type <i>commands</i> made by: /usr/local/sbin/cf-key..)";
+   comment => "(Uncommented promise of type <i>commands</i> made by: /var/cfengine/bin/cf-key..)";
 "promise_unit_update_cf_31" association => a("is activated by class context","!have_ppkeys","activates promises");
 "promise_unit_update_cf_31" association => a("is a promise of type","commands","has current exemplars");
 
  occurrences:
 promise_unit_update_cf_31::
 "promises.cf.html#promise_unit_update_cf_31"
-   comment => "A promise of type commands made by: /usr/local/sbin/cf-key",
+   comment => "A promise of type commands made by: /var/cfengine/bin/cf-key",
    represents => { "!have_ppkeys", "commands" };
 
 _have_ppkeys::
 "promises.cf.html#promise_unit_update_cf_31"
-   represents => { "promise", "/usr/local/sbin/cf-key", "commands" };
+   represents => { "promise", "/var/cfengine/bin/cf-key", "commands" };
 
 update::
 "promises.cf.html#bundle_update"

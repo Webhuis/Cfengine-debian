@@ -21,7 +21,19 @@
 # included file COSL.txt.
 
 
-bundle agent test
+
+#
+# This is an example of malformed promise file. If you pass it through
+# cf-promises, syntax checker should complain.
+#
+
+body common control
+
+{
+bundlesequence => { "example" };
+}
+
+bundle agent example
 
 {
 report:

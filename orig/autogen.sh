@@ -1,38 +1,51 @@
-#!/bin/sh
+#
+try_exec() {
+  type "$1" > /dev/null 2>&1 && exec "$@"
+}
 
-srcdir=$(dirname $0)
+unset foo
+(: ${foo%%bar}) 2> /dev/null
+T1="$?"
+
+if test "$T1" != 0; then
+  try_exec /usr/xpg4/bin/sh "$0" "$@"
+  echo "No compatible shell script interpreter found."
+  echo "Please find a POSIX shell for your system."
+  exit 42
+fi
+
+#
+# Do not set -e before switching to POSIX shell, as it will break the test
+# above.
+#
+set -e
+
+srcdir=`dirname $0`
 test -z "$srcdir" && srcdir=.
 
-ORIGDIR=$(pwd)
+ORIGDIR=`pwd`
 cd $srcdir
 
 if [ -z "$NO_SUBPROJECTS" ]; then
   #
-  # Include nova/constellation
+  # Include nova
   #
-
-  if [ -d ${srcdir}/../nova ]; then
-    if [ -h ${srcdir}/nova ]; then
-      rm -f ${srcdir}/nova
+  for s in nova; do
+    if [ -d ${srcdir}/../${s} ]; then
+      if [ -h ${srcdir}/${s} ]; then
+        rm -f ${srcdir}/${s}
+      fi
+      ln -sf ${srcdir}/../${s} ${srcdir}/${s}
     fi
-    ln -sf ${srcdir}/../nova ${srcdir}/nova
-  fi
-
-  if [ -d ${srcdir}/../constellation ]; then
-    if [ -h ${srcdir}/constellation ]; then
-      rm -f ${srcdir}/constellation
-    fi
-    ln -sf ${srcdir}/../constellation ${srcdir}/constellation
-  fi
+  done
 else
   #
   # Clean up just in case
   #
   rm -f ${srcdir}/nova
-  rm -f ${srcdir}/constellation
 fi
 
-autoreconf --force -v --install -I m4 || exit 1
+autoreconf -Wno-portability --force --install -I m4 || exit 1
 cd $ORIGDIR || exit $?
 
 if [ -z "$NO_CONFIGURE" ]; then
