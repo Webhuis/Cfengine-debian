@@ -1,3 +1,17 @@
+cfengine3 (3.2.4-2+NMU1 git) unstable; urgency=high
+
+  * Branch 3.2.4-2+NMU1
+  * Put NMU updates in debian directory, left debian/source/local-options
+  * Separated debian from orig
+  * Upload to central repository
+
+cfengine3 (3.2.4-2+nmu1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Include full text of the Frontier Artistic License (closes: #701864). 
+
+ -- Michael Gilbert <mgilbert@debian.org>  Sun, 03 Mar 2013 08:53:27 +0000
+
 cfengine3 (3.2.4-2) unstable; urgency=low
 
   * debian/{README.Debian,links}:
