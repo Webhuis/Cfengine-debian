@@ -1,0 +1,49 @@
+#######################################################
+#
+# Check canonification in ifvarclass
+#
+#######################################################
+
+body common control
+{
+  inputs => { "../../default.cf.sub" };
+  bundlesequence  => { default("$(this.promise_filename)") };
+  version => "1.0";
+}
+
+#######################################################
+
+bundle agent init
+{
+vars:
+    "dummy" string => "dummy";
+}
+
+#######################################################
+
+bundle agent test
+{
+commands:
+  "$(G.true)"
+    classes => if_repaired("/test");
+}
+
+body classes if_repaired(z)
+{
+promise_repaired => { "$(z)" };
+}
+
+#######################################################
+
+bundle agent check
+{
+classes:
+    "ok" expression => "_test";
+
+reports:
+    ok::
+        "$(this.promise_filename) Pass";
+    !ok::
+        "$(this.promise_filename) FAIL";
+}
+

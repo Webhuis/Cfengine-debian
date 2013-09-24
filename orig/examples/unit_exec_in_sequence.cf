@@ -29,12 +29,12 @@
 body common control
 
 {
-bundlesequence  => { "testbundle"  };
+bundlesequence  => { "example"  };
 }
 
 ########################################################
 
-bundle agent testbundle
+bundle agent example
 
 {
 vars:
@@ -68,7 +68,7 @@ body contain standard
 
 {
 exec_owner => "mark";
-useshell => "true";
+useshell => "useshell";
 }
 
 ######################################################################

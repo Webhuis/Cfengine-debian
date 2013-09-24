@@ -39,7 +39,7 @@ fi
 # which indicates that we try without any flags at all, and "pthread-config"
 # which is a program returning the flags for the Pth emulation library.
 
-acx_pthread_flags="pthreads none -Kthread -kthread lthread -pthread -pthreads -mthreads pthread --thread-safe -mt pthread-config pthreadGC2"
+acx_pthread_flags="pthreads none -Kthread -kthread lthread -pthread -pthreads -mt -mthreads pthread --thread-safe pthread-config pthreadGC2"
 
 # The ordering *is* (sometimes) important.  Some notes on the
 # individual items follow:
@@ -194,3 +194,14 @@ else
 fi
 AC_LANG_RESTORE
 ])dnl ACX_PTHREAD
+
+m4_ifdef([AC_PROG_MKDIR_P], [
+  dnl For automake-1.9.6 && autoconf < 2.62: Ensure MKDIR_P is AC_SUBSTed.
+  m4_define([AC_PROG_MKDIR_P],
+    m4_defn([AC_PROG_MKDIR_P])[
+    AC_SUBST([MKDIR_P])])], [
+  dnl For autoconf < 2.60: Backport of AC_PROG_MKDIR_P.
+  AC_DEFUN([AC_PROG_MKDIR_P],
+    [AC_REQUIRE([AM_PROG_MKDIR_P])dnl defined by automake
+     MKDIR_P='$(mkdir_p)'
+     AC_SUBST([MKDIR_P])])])

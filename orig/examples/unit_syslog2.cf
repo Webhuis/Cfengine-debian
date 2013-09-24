@@ -4,14 +4,13 @@
 
 body common control
 {
-bundlesequence => { "test" };
+bundlesequence => { "example" };
 syslog_host => "loghost.example.org";
-host_licenses_paid => "1";
 }
 
 #
 
-bundle agent test
+bundle agent example
 {
 vars:
 
