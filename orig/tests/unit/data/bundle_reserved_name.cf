@@ -1,6 +1,0 @@
-bundle agent sys
-{
-reports:
-  cfengine3::
-    "hello world";
-}

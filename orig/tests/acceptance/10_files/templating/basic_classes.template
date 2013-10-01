@@ -1,9 +1,0 @@
-[%CFEngine BEGIN %]
-one
-[%CFEngine END %]
-
-[%CFEngine two:: %]
-two
-
-[%CFEngine default:three:: %]
-three

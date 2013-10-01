@@ -1,8 +1,0 @@
-bundle agent foo
-{
-
-vars:
-
-  invalid string => "foo";
-
-}

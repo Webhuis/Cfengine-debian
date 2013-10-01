@@ -1,9 +1,0 @@
-bundle agent my_commands
-{
-
-vars:
-
-    any::
-        "env" string => getenv("PATH", "bas );
-
-}
