@@ -1,7 +1,7 @@
 ###############################################################################
 #
-# common def
-#  - common/global variables and classes here  
+# bundle common def
+#  - common/global variables and classes here
 #
 ###############################################################################
 
@@ -9,37 +9,66 @@ bundle common def
 
 {
 
- vars:
+  vars:
 
-  # Begin change # Your domain name, for use in access control
+    any::
 
-     "domain"  string => "example.com",
-              comment => "Define a global domain for all hosts",
-               handle => "common_def_vars_domain";
+      # Begin change # Your domain name, for use in access control
 
-  # List here the IP masks that we grant access to on the server
+      "domain"  string => "example.com",
+      comment => "Define a global domain for all hosts",
+      handle => "common_def_vars_domain";
 
-    "acl" slist => {
-                # Assume /16 LAN clients to start with
-                   "$(sys.policy_hub)/16", 
+      # List here the IP masks that we grant access to on the server
 
-                 #  "2001:700:700:3.*", 
-                 #  "217.77.34.18", 
-                 #  "217.77.34.19",
-                   },
-       comment => "Define an acl for the machines to be granted accesses",
-        handle => "common_def_vars_acl";
+      "acl"     slist => {
 
-  # End change #
+                           # Assume /16 LAN clients to start with
+                           "$(sys.policy_hub)/16",
 
-   "dir_masterfiles" string => translatepath("$(sys.workdir)/masterfiles"),
-                    comment => "Define masterfiles path",
-                     handle => "common_def_vars_dir_masterfiles";
-   "dir_bin"         string => translatepath("$(sys.workdir)/bin"),
-                    comment => "Define binary path",
-                     handle => "common_def_vars_dir_bin";
-   "dir_modules"     string => translatepath("$(sys.workdir)/modules"),
-                    comment => "Define modules path",
-                     handle => "common_def_vars_dir_modules";
+                           #  "2001:700:700:3.*",
+                           #  "217.77.34.18",
+                           #  "217.77.34.19",
+      },
+      comment => "Define an acl for the machines to be granted accesses",
+      handle => "common_def_vars_acl";
 
+      # End change #
+
+      "dir_masterfiles" string => translatepath("$(sys.masterdir)"),
+      comment => "Define masterfiles path",
+      handle => "common_def_vars_dir_masterfiles";
+
+      "dir_reports"     string => translatepath("$(sys.workdir)/reports"),
+      comment => "Define reports path",
+      handle => "common_def_vars_dir_reports";
+
+      "dir_software"    string => translatepath("$(sys.workdir)/master_software_updates"),
+      comment => "Define software path",
+      handle => "common_def_vars_dir_software";
+
+      "dir_bin"         string => translatepath("$(sys.bindir)"),
+      comment => "Define binary path",
+      handle => "common_def_vars_dir_bin";
+
+      "dir_modules"     string => translatepath("$(sys.workdir)/modules"),
+      comment => "Define modules path",
+      handle => "common_def_vars_dir_modules";
+
+      # CFEngine own log files
+      "cfe_log_files"    slist => {
+                                    "$(sys.workdir)/cf3.$(sys.host).runlog",
+                                    "$(sys.workdir)/promise_summary.log"
+                                  };
+
+      "cfe_log_dirs"     slist => {
+                                    "$(sys.workdir)/outputs"
+                                  };
+
+  classes:
+
+    ### Enable special features policies. Set to "any" to enable.
+
+    # Internal CFEngine log files rotation
+    "cfengine_internal_rotate_logs" expression  =>  "!any";
 }
