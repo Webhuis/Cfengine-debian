@@ -7,10 +7,8 @@
 override_dh_auto_configure:
 	dh_autoreconf
 	./configure --enable-shared=no \
-				--without-nova \
-				--without-constellation \
 				--prefix=/usr \
-				--with-sql=no \
+				--with-sql=yes \
 				--with-workdir=/var/lib/cfengine3 \
 				--mandir=\$${prefix}/share/man \
 				--infodir=\$${prefix}/share/info \
