@@ -6,9 +6,15 @@
 
 override_dh_auto_configure:
 	dh_autoreconf
-	./configure --enable-shared=no \
+	./configure --enable-shared=yes \
 				--prefix=/usr \
 				--with-sql=yes \
+				--with-mysql \
+				--with-postgresql \
+				--with-libvirt \
+				--with-tokyocabinet \
+				--with-libxml2 \
+				--with-acl \
 				--with-workdir=/var/lib/cfengine3 \
 				--mandir=\$${prefix}/share/man \
 				--infodir=\$${prefix}/share/info \
