@@ -1,0 +1,11 @@
+--- a/libpromises/locks.c
++++ b/libpromises/locks.c
+@@ -665,7 +665,7 @@ CfLock AcquireLock(EvalContext *ctx, char *operand, char *host, time_t now, Tran
+         sum = (CF_MACROALPHABET * sum + cc_operand[i]) % CF_HASHTABLESIZE;
+     }
+ 
+-    snprintf(cflog, CF_BUFSIZE, "%s/cf3.%.40s.runlog", CFWORKDIR, host);
++    snprintf(cflog, CF_BUFSIZE, "/var/log/cfengine3/cf3.%.40s.runlog", host);
+     snprintf(cflock, CF_BUFSIZE, "lock.%.100s.%s.%.100s_%d_%s", PromiseGetBundle(pp)->name, cc_operator, cc_operand, sum, str_digest);
+     snprintf(cflast, CF_BUFSIZE, "last.%.100s.%s.%.100s_%d_%s", PromiseGetBundle(pp)->name, cc_operator, cc_operand, sum, str_digest);
+ 
