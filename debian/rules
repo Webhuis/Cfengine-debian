@@ -1,0 +1,50 @@
+#!/usr/bin/make -f
+# vim:noet:ts=4:sw=4:
+
+%:
+	dh $@ --with quilt
+
+override_dh_auto_configure:
+	dh_autoreconf
+	./configure --enable-shared=yes \
+				--prefix=/usr \
+				--with-sql=yes \
+				--with-mysql \
+				--with-postgresql \
+				--with-libvirt \
+				--with-tokyocabinet \
+				--with-libxml2 \
+				--with-workdir=/var/lib/cfengine3 \
+				--with-logdir=/var/log/cfengine3 \
+				--with-piddir=/run/cfengine3 \
+				--mandir=\$${prefix}/share/man \
+				--infodir=\$${prefix}/share/info \
+				--htmldir=\$${prefix}/share/doc/cfengine3/html \
+				CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs"
+
+override_dh_clean:
+	dh_autoreconf_clean
+	dh_clean
+
+override_dh_compress:
+	dh_compress -X.cf
+
+override_dh_installinfo:
+
+override_dh_strip:
+	dh_strip --dbg-package=cfengine3-dbg
+
+override_dh_installchangelogs:
+	#rm debian/cfengine3/usr/share/doc/cfengine3/ChangeLog
+	dh_installchangelogs
+
+override_dh_install:
+	dh_testdir
+	dh_testroot
+	dh_prep
+	dh_installdirs
+
+	# Add here commands to install the package into debian/cfengine3.
+	$(MAKE) DESTDIR=$(CURDIR)/debian/cfengine3 install
+
+	/bin/rmdir $(CURDIR)/debian/cfengine3/var/lib/cfengine3/inputs

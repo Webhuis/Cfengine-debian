@@ -1,0 +1,50 @@
+The purpose of this patch is to fix all the pats according to what was modified
+by the fhs-compliance patch; see #552144 for more details
+
+I'm also removing the auto-update of the binaries because the debian package is
+supposed to update the binaries, rather than cf-execd itself
+
+Index: cfengine3/examples/example_config/update.cf
+===================================================================
+--- cfengine3.orig/examples/example_config/update.cf	2012-03-17 18:30:58.000000000 +0000
++++ cfengine3/examples/example_config/update.cf	2012-03-17 18:31:58.000000000 +0000
+@@ -26,24 +26,16 @@
+ {
+ vars:
+ 
+- "master_location" string => "/var/cfengine/masterfiles";
++ "master_location" string => "/var/lib/cfengine3/masterfiles";
+ 
+ files:
+ 
+-  "/var/cfengine/inputs" 
++  "/var/lib/cfengine3/inputs"
+ 
+     perms => u_p("600"),
+     copy_from => mycopy("$(master_location)","localhost"),
+     depth_search => urecurse("inf"),
+     action => uimmediate;
+-
+-  "/var/cfengine/bin" 
+-
+-    perms => u_p("700"),
+-    copy_from => mycopy("/usr/local/sbin","localhost"),
+-    file_select => cf3_files,
+-    depth_search => urecurse("inf"),
+-    action => uimmediate;
+ }
+ 
+ ############################################
+Index: cfengine3/examples/example_config/site.cf
+===================================================================
+--- cfengine3.orig/examples/example_config/site.cf	2012-03-17 18:32:19.000000000 +0000
++++ cfengine3/examples/example_config/site.cf	2012-03-17 18:32:31.000000000 +0000
+@@ -306,7 +306,7 @@
+ 
+     exec_fix::
+ 
+-      "0,5,10,15,20,25,30,35,40,45,50,55 * * * * /var/cfengine/bin/cf-execd -F";
++      "0,5,10,15,20,25,30,35,40,45,50,55 * * * * /usr/sbin/cf-execd -F";
+ 
+   replace_patterns:
+ 

@@ -1,0 +1,176 @@
+Index: orig/configure.ac
+===================================================================
+--- orig.orig/configure.ac	2013-10-13 00:58:31.000000000 +0200
++++ orig/configure.ac	2013-10-13 01:03:18.977521289 +0200
+@@ -126,6 +126,7 @@
+   projdocdir='${exec_prefix}/share/doc/cfengine'
+   WORKDIR='${localstatedir}/lib/cfengine'
+   LOGDIR='${localstatedir}/lib/cfengine'
++  PIDDIR=='${localstatedir}/lib/cfengine'
+ ], [
+   if test x"$prefix" = xNONE || test x"$prefix" = x/var/cfengine; then
+     prefix=/var/cfengine
+@@ -133,15 +134,18 @@
+       mingw*)
+         WORKDIR=$(cmd /c "echo %PROGRAMFILES%\\Cfengine" | sed 's/\\/\\\\/g')
+         LOGDIR=$(cmd /c "echo %PROGRAMFILES%\\Cfengine" | sed 's/\\/\\\\/g')
++        PIDDIR=$(cmd /c "echo %PROGRAMFILES%\\Cfengine" | sed 's/\\/\\\\/g')
+       ;;
+       *)
+         WORKDIR=/var/cfengine
+         LOGDIR=/var/cfengine
++        PIDDIR=/var/cfengine
+       ;;
+     esac
+   else
+     WORKDIR="${localstatedir}/cfengine"
+     LOGDIR="${localstatedir}/cfengine"
++    PIDDIR="${localstatedir}/cfengine"
+   fi
+ 
+   sbindir='${exec_prefix}/bin' # /var/cfengine/bin despite being sbin_?
+@@ -903,6 +907,7 @@
+         if test x$withval != x ; then
+             WORKDIR=$withval
+             LOGDIR=$withval
++            PIDDIR==$withval
+         fi
+     ],
+ )
+@@ -932,6 +937,21 @@
+ AC_DEFINE_UNQUOTED(LOGDIR, "${LOGDIR}", [Logdir location])
+ AC_SUBST(logdir, "${LOGDIR}")
+ 
++AC_ARG_WITH(piddir,
++    [  --with-piddir=LOGDIR  default internal for pid directory ],
++    [
++        if test x$withval != x ; then
++            PIDDIR=$withval
++        fi
++    ],
++)
++
++dnl Expand ${prefix} and whatnot in PIDDIR
++
++adl_RECURSIVE_EVAL("${PIDDIR}", PIDDIR)
++
++AC_DEFINE_UNQUOTED(PIDDIR, "${PIDDIR}", [piddir location])
++AC_SUBST(piddir, "${PIDDIR}")
+ 
+ AC_ARG_WITH(shell, [AS_HELP_STRING([--with-shell=PATH],
+                    [Specify path to POSIX-compatible shell (if not /bin/sh)])],
+@@ -1117,6 +1137,7 @@
+ 
+ AC_MSG_RESULT([-> Workdir: $WORKDIR])
+ AC_MSG_RESULT([-> Logdir: $LOGDIR])
++AC_MSG_RESULT([-> Piddir: $PIDDIR])
+ 
+ AC_MSG_RESULT( )
+ 
+Index: orig/libpromises/generic_agent.c
+===================================================================
+--- orig.orig/libpromises/generic_agent.c	2013-10-13 00:56:28.000000000 +0200
++++ orig/libpromises/generic_agent.c	2013-10-13 01:03:18.977521289 +0200
+@@ -1530,7 +1530,7 @@
+ 
+     pthread_once(&pid_cleanup_once, RegisterPidCleanup);
+ 
+-    snprintf(PIDFILE, CF_BUFSIZE - 1, "%s%c%s", CFWORKDIR, FILE_SEPARATOR, filename);
++    snprintf(PIDFILE, CF_BUFSIZE - 1, "%s%c%s", GetPidDir(), FILE_SEPARATOR, filename);
+ 
+     if ((fp = fopen(PIDFILE, "w")) == NULL)
+     {
+Index: orig/libpromises/sysinfo.c
+===================================================================
+--- orig.orig/libpromises/sysinfo.c	2013-10-13 00:58:31.000000000 +0200
++++ orig/libpromises/sysinfo.c	2013-10-13 01:04:16.872068228 +0200
+@@ -431,6 +431,7 @@
+     ScopeNewSpecial(ctx, "sys", "maildir", VMAILDIR[VSYSTEMHARDCLASS], DATA_TYPE_STRING);
+     ScopeNewSpecial(ctx, "sys", "exports", VEXPORTS[VSYSTEMHARDCLASS], DATA_TYPE_STRING);
+     ScopeNewSpecial(ctx, "sys", "logdir", GetLogDir(), DATA_TYPE_STRING);
++    ScopeNewSpecial(ctx, "sys", "piddir", GetPidDir(), DATA_TYPE_STRING);
+ /* FIXME: type conversion */
+     ScopeNewSpecial(ctx, "sys", "cf_version", (char *) Version(), DATA_TYPE_STRING);
+ 
+@@ -2302,6 +2303,11 @@
+     return LOGDIR;
+ }
+ 
++static const char *GetDefaultPidDir(void)
++{
++    return PIDDIR;
++}
++
+ #elif defined(__ANDROID__)
+ 
+ static const char *GetDefaultWorkDir(void)
+@@ -2315,6 +2321,11 @@
+     return LOGDIR;
+ }
+ 
++static const char *GetDefaultPidDir(void)
++{
++    return PIDDIR;
++}
++
+ #elif !defined(__MINGW32__)
+ 
+ #define MAX_WORKDIR_LENGTH (CF_BUFSIZE / 2)
+@@ -2365,6 +2376,29 @@
+     }
+ }
+ 
++static const char *GetDefaultPidDir(void)
++{
++    if (getuid() > 0)
++    {
++        static char piddir[MAX_WORKDIR_LENGTH];
++
++        if (!*piddir)
++        {
++            struct passwd *mpw = getpwuid(getuid());
++
++            if (snprintf(piddir, MAX_WORKDIR_LENGTH, "%s/.cfagent/", mpw->pw_dir) >= MAX_WORKDIR_LENGTH)
++            {
++                return NULL;
++            }
++        }
++        return piddir;
++    }
++    else
++    {
++        return PIDDIR;
++    }
++}
++
+ #endif
+ 
+ /******************************************************************/
+@@ -2386,6 +2420,15 @@
+ }
+ 
+ /******************************************************************/
++
++const char *GetPidDir(void)
++{
++    const char *piddir = getenv("CFENGINE_TEST_OVERRIDE_PIDDIR");
++
++    return piddir == NULL ? GetDefaultPidDir() : piddir;
++}
++
++/******************************************************************/
+ 
+ static void GetCPUInfo(EvalContext *ctx)
+ {
+Index: orig/libpromises/sysinfo.h
+===================================================================
+--- orig.orig/libpromises/sysinfo.h	2013-10-13 00:58:31.000000000 +0200
++++ orig/libpromises/sysinfo.h	2013-10-13 01:03:18.981521455 +0200
+@@ -37,6 +37,7 @@
+ void DetectDomainName(EvalContext *ctx, const char *orig_nodename);
+ const char *GetWorkDir(void);
+ const char *GetLogDir(void);
++const char *GetPidDir(void);
+ 
+ void CreateHardClassesFromCanonification(EvalContext *ctx, const char *canonified);
+ 

@@ -1,0 +1,30 @@
+There are some tweaks which were applied to the standard cfengine3 installation
+and you should be aware of them:
+
+*) cfengine3 is FHS, that means that, unlike the original, we log in /var/log,
+the binaries are located in /usr/sbin; for upstream compatibility we have the
+following symlinks:
+
+/etc/cfengine3 -> /var/lib/cfengine3/inputs
+/usr/sbin      -> /var/lib/cfengine3/bin§
+
+*) to enable the daemons you need to modify /etc/default/cfengine3 and set the
+proper variables; the daemons won't be started unless there is an
+/etc/cfengine3/promises.cf file present; if you want to test that everything is
+working you can do:
+
+cp /usr/share/doc/cfengine3/examples/example_config/* /etc/cfengine3/
+
+At this point you MUST adapt /etc/cfengine3/site.cf to your needs, you may want
+to remove the blank auth for the user 'mark' (the author of cfengine), and
+anything that update your config files
+
+When everything is ready you can start the daemons:
+/etc/init.d/cfengine3 start
+
+*) By default we are not starting any daemon, in most of your installations you
+will only need the cfagent with a proper configuration file
+
+*) For more info you should have a look at the reference manual and the relevant
+docs:
+http://www.cfengine.org/manuals/cf3-reference.html

@@ -1,0 +1,266 @@
+diff --git a/cf-agent/cf-agent.c b/cf-agent/cf-agent.c
+index be3cf9a..b3f9039 100644
+--- a/cf-agent/cf-agent.c
++++ b/cf-agent/cf-agent.c
+@@ -448,8 +448,10 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
+         case 'x':
+             {
+                 const char *workdir = GetWorkDir();
++		const char *logdir = GetLogDir();
+                 Writer *out = FileWriter(stdout);
+                 WriterWriteF(out, "self-diagnostics for agent using workdir '%s'\n", workdir);
++		WriterWriteF(out, "self-diagnostics for agent using logdir '%s'\n", logdir);
+ 
+                 AgentDiagnosticsRun(workdir, AgentDiagnosticsAllChecks(), out);
+ #ifdef HAVE_NOVA
+@@ -614,7 +616,7 @@ static void ThisAgentInit(void)
+   status which we need for setting returns
+ */
+ 
+-    snprintf(filename, CF_BUFSIZE, "%s/cfagent.%s.log", CFWORKDIR, VSYSNAME.nodename);
++    snprintf(filename, CF_BUFSIZE, "%s/cfagent.%s.log", GetLogDir(), VSYSNAME.nodename);
+     MapName(filename);
+ 
+     if ((fp = fopen(filename, "a")) != NULL)
+diff --git a/cf-agent/verify_files.c b/cf-agent/verify_files.c
+index d117529..c34d04d 100644
+--- a/cf-agent/verify_files.c
++++ b/cf-agent/verify_files.c
+@@ -51,6 +51,7 @@
+ #include "promiser_regex_resolver.h"
+ #include "ornaments.h"
+ #include "audit.h"
++#include "sysinfo.h"
+ 
+ static void LoadSetuid(Attributes a);
+ static void SaveSetuid(EvalContext *ctx, Attributes a, Promise *pp);
+@@ -605,7 +606,7 @@ static void LoadSetuid(Attributes a)
+     edits.backup = BACKUP_OPTION_NO_BACKUP;
+     edits.maxfilesize = 1000000;
+ 
+-    snprintf(filename, CF_BUFSIZE, "%s/cfagent.%s.log", CFWORKDIR, VSYSNAME.nodename);
++    snprintf(filename, CF_BUFSIZE, "%s/cfagent.%s.log", GetLogDir(), VSYSNAME.nodename);
+     MapName(filename);
+ 
+     if (!LoadFileAsItemList(&VSETUIDLIST, filename, edits))
+@@ -624,7 +625,7 @@ static void SaveSetuid(EvalContext *ctx, Attributes a, Promise *pp)
+     b.edits.maxfilesize = 1000000;
+ 
+     char filename[CF_BUFSIZE];
+-    snprintf(filename, CF_BUFSIZE, "%s/cfagent.%s.log", CFWORKDIR, VSYSNAME.nodename);
++    snprintf(filename, CF_BUFSIZE, "%s/cfagent.%s.log", GetLogDir(), VSYSNAME.nodename);
+     MapName(filename);
+ 
+     PurgeItemList(&VSETUIDLIST, "SETUID/SETGID");
+@@ -637,4 +638,3 @@ static void SaveSetuid(EvalContext *ctx, Attributes a, Promise *pp)
+     DeleteItemList(VSETUIDLIST);
+     VSETUIDLIST = NULL;
+ }
+-
+diff --git a/configure.ac b/configure.ac
+index 04c463a..12e21bc 100755
+--- a/configure.ac
++++ b/configure.ac
+@@ -125,17 +125,23 @@ AS_IF([test x"$enable_fhs" = xyes], [
+   projdatadir='${exec_prefix}/share/cfengine'
+   projdocdir='${exec_prefix}/share/doc/cfengine'
+   WORKDIR='${localstatedir}/lib/cfengine'
++  LOGDIR='${localstatedir}/lib/cfengine'
+ ], [
+   if test x"$prefix" = xNONE || test x"$prefix" = x/var/cfengine; then
+     prefix=/var/cfengine
+     case "$target_os" in
+       mingw*)
+-        WORKDIR=$(cmd /c "echo %PROGRAMFILES%\\Cfengine" | sed 's/\\/\\\\/g');;
++        WORKDIR=$(cmd /c "echo %PROGRAMFILES%\\Cfengine" | sed 's/\\/\\\\/g')
++        LOGDIR=$(cmd /c "echo %PROGRAMFILES%\\Cfengine" | sed 's/\\/\\\\/g')
++      ;;
+       *)
+-        WORKDIR=/var/cfengine;;
++        WORKDIR=/var/cfengine
++        LOGDIR=/var/cfengine
++      ;;
+     esac
+   else
+     WORKDIR="${localstatedir}/cfengine"
++    LOGDIR="${localstatedir}/cfengine"
+   fi
+ 
+   sbindir='${exec_prefix}/bin' # /var/cfengine/bin despite being sbin_?
+@@ -896,6 +902,7 @@ AC_ARG_WITH(workdir,
+     [
+         if test x$withval != x ; then
+             WORKDIR=$withval
++            LOGDIR=$withval
+         fi
+     ],
+ )
+@@ -908,6 +915,24 @@ AC_DEFINE_UNQUOTED(WORKDIR, "${WORKDIR}", [Workdir location])
+ AC_SUBST(workdir, "${WORKDIR}")
+ 
+ 
++
++AC_ARG_WITH(logdir,
++    [  --with-logdir=LOGDIR  default internal for log directory ],
++    [
++        if test x$withval != x ; then
++            LOGDIR=$withval
++        fi
++    ],
++)
++
++dnl Expand ${prefix} and whatnot in LOGDIR
++
++adl_RECURSIVE_EVAL("${LOGDIR}", LOGDIR)
++
++AC_DEFINE_UNQUOTED(LOGDIR, "${LOGDIR}", [Logdir location])
++AC_SUBST(logdir, "${LOGDIR}")
++
++
+ AC_ARG_WITH(shell, [AS_HELP_STRING([--with-shell=PATH],
+                    [Specify path to POSIX-compatible shell (if not /bin/sh)])],
+                    [],
+@@ -1091,6 +1116,7 @@ fi
+ m4_indir(incstart[]incend, [nova/config.m4])
+ 
+ AC_MSG_RESULT([-> Workdir: $WORKDIR])
++AC_MSG_RESULT([-> Logdir: $LOGDIR])
+ 
+ AC_MSG_RESULT( )
+ 
+diff --git a/libpromises/enterprise_stubs.c b/libpromises/enterprise_stubs.c
+index d13e630..4655b04 100644
+--- a/libpromises/enterprise_stubs.c
++++ b/libpromises/enterprise_stubs.c
+@@ -23,6 +23,7 @@
+ */
+ 
+ #include "cf3.defs.h"
++#include "sysinfo.h"
+ 
+ #include "prototypes3.h"
+ #include "syntax.h"
+@@ -100,7 +101,7 @@ void LogTotalCompliance(const char *version, int background_tasks)
+     Log(LOG_LEVEL_VERBOSE, "Logging total compliance, total '%s'", string);
+ 
+     char filename[CF_BUFSIZE];
+-    snprintf(filename, CF_BUFSIZE, "%s/%s", CFWORKDIR, CF_PROMISE_LOG);
++    snprintf(filename, CF_BUFSIZE, "%s/%s", GetLogDir(), CF_PROMISE_LOG);
+     MapName(filename);
+ 
+     FILE *fout = fopen(filename, "a");
+diff --git a/libpromises/locks.c b/libpromises/locks.c
+index 6a2fb65..bc03d1a 100644
+--- a/libpromises/locks.c
++++ b/libpromises/locks.c
+@@ -36,6 +36,7 @@
+ #include "process_lib.h"
+ #include "fncall.h"
+ #include "env_context.h"
++#include "sysinfo.h"
+ 
+ #define CFLOGSIZE 1048576       /* Size of lock-log before rotation */
+ 
+@@ -665,7 +666,7 @@ CfLock AcquireLock(EvalContext *ctx, char *operand, char *host, time_t now, Tran
+         sum = (CF_MACROALPHABET * sum + cc_operand[i]) % CF_HASHTABLESIZE;
+     }
+ 
+-    snprintf(cflog, CF_BUFSIZE, "%s/cf3.%.40s.runlog", CFWORKDIR, host);
++    snprintf(cflog, CF_BUFSIZE, "%s/cf3.%.40s.runlog", GetLogDir(), host);
+     snprintf(cflock, CF_BUFSIZE, "lock.%.100s.%s.%.100s_%d_%s", PromiseGetBundle(pp)->name, cc_operator, cc_operand, sum, str_digest);
+     snprintf(cflast, CF_BUFSIZE, "last.%.100s.%s.%.100s_%d_%s", PromiseGetBundle(pp)->name, cc_operator, cc_operand, sum, str_digest);
+ 
+diff --git a/libpromises/sysinfo.c b/libpromises/sysinfo.c
+index 0c49868..0f1b67f 100644
+--- a/libpromises/sysinfo.c
++++ b/libpromises/sysinfo.c
+@@ -430,6 +430,7 @@ void GetNameInfo3(EvalContext *ctx, AgentType agent_type)
+     ScopeNewSpecial(ctx, "sys", "resolv", VRESOLVCONF[VSYSTEMHARDCLASS], DATA_TYPE_STRING);
+     ScopeNewSpecial(ctx, "sys", "maildir", VMAILDIR[VSYSTEMHARDCLASS], DATA_TYPE_STRING);
+     ScopeNewSpecial(ctx, "sys", "exports", VEXPORTS[VSYSTEMHARDCLASS], DATA_TYPE_STRING);
++    ScopeNewSpecial(ctx, "sys", "logdir", GetLogDir(), DATA_TYPE_STRING);
+ /* FIXME: type conversion */
+     ScopeNewSpecial(ctx, "sys", "cf_version", (char *) Version(), DATA_TYPE_STRING);
+ 
+@@ -2296,6 +2297,11 @@ static const char *GetDefaultWorkDir(void)
+     return WORKDIR;
+ }
+ 
++static const char *GetDefaultLogDir(void)
++{
++    return LOGDIR;
++}
++
+ #elif defined(__ANDROID__)
+ 
+ static const char *GetDefaultWorkDir(void)
+@@ -2304,6 +2310,11 @@ static const char *GetDefaultWorkDir(void)
+     return WORKDIR;
+ }
+ 
++static const char *GetDefaultLogDir(void)
++{
++    return LOGDIR;
++}
++
+ #elif !defined(__MINGW32__)
+ 
+ #define MAX_WORKDIR_LENGTH (CF_BUFSIZE / 2)
+@@ -2331,6 +2342,29 @@ static const char *GetDefaultWorkDir(void)
+     }
+ }
+ 
++static const char *GetDefaultLogDir(void)
++{
++    if (getuid() > 0)
++    {
++        static char logdir[MAX_WORKDIR_LENGTH];
++
++        if (!*logdir)
++        {
++            struct passwd *mpw = getpwuid(getuid());
++
++            if (snprintf(logdir, MAX_WORKDIR_LENGTH, "%s/.cfagent/", mpw->pw_dir) >= MAX_WORKDIR_LENGTH)
++            {
++                return NULL;
++            }
++        }
++        return logdir;
++    }
++    else
++    {
++        return LOGDIR;
++    }
++}
++
+ #endif
+ 
+ /******************************************************************/
+@@ -2344,6 +2378,15 @@ const char *GetWorkDir(void)
+ 
+ /******************************************************************/
+ 
++const char *GetLogDir(void)
++{
++    const char *logdir = getenv("CFENGINE_TEST_OVERRIDE_LOGDIR");
++
++    return logdir == NULL ? GetDefaultLogDir() : logdir;
++}
++
++/******************************************************************/
++
+ static void GetCPUInfo(EvalContext *ctx)
+ {
+ #if defined(MINGW) || defined(NT)
+diff --git a/libpromises/sysinfo.h b/libpromises/sysinfo.h
+index ee94ea3..da61d0c 100644
+--- a/libpromises/sysinfo.h
++++ b/libpromises/sysinfo.h
+@@ -36,6 +36,7 @@ void OSClasses(EvalContext *ctx);
+ bool IsInterfaceAddress(const char *adr);
+ void DetectDomainName(EvalContext *ctx, const char *orig_nodename);
+ const char *GetWorkDir(void);
++const char *GetLogDir(void);
+ 
+ void CreateHardClassesFromCanonification(EvalContext *ctx, const char *canonified);
+ 
