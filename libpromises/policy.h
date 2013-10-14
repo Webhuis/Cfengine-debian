@@ -25,12 +25,11 @@
 #ifndef CFENGINE_POLICY_H
 #define CFENGINE_POLICY_H
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-#include <writer.h>
-#include <sequence.h>
-#include <json.h>
-#include <set.h>
+#include "writer.h"
+#include "sequence.h"
+#include "json.h"
 
 typedef enum
 {
@@ -141,9 +140,6 @@ const char *NamespaceDefault(void);
 Policy *PolicyNew(void);
 int PolicyCompare(const void *a, const void *b);
 void PolicyDestroy(Policy *policy);
-unsigned PolicyHash(const Policy *policy);
-
-StringSet *PolicySourceFiles(const Policy *policy);
 
 /**
  * @brief Merge two partial policy objects. The memory for the child objects of the original policies are transfered to the new parent.

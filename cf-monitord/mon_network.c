@@ -22,14 +22,14 @@
   included file COSL.txt.
 */
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-#include <mon.h>
-#include <item_lib.h>
-#include <files_names.h>
-#include <files_interfaces.h>
-#include <files_lib.h>
-#include <pipes.h>
+#include "mon.h"
+#include "item_lib.h"
+#include "files_names.h"
+#include "files_interfaces.h"
+#include "files_lib.h"
+#include "pipes.h"
 
 /* Globals */
 
@@ -72,26 +72,25 @@ static const Sock ECGSOCKS[ATTR] =     /* extended to map old to new using enum 
     {"631", "ipp", ob_ipp_in, ob_ipp_out},
 };
 
-static const char *VNETSTAT[] =
+static const char *VNETSTAT[PLATFORM_CONTEXT_MAX] =
 {
-    [PLATFORM_CONTEXT_UNKNOWN] = "-",
-    [PLATFORM_CONTEXT_OPENVZ] = "/bin/netstat -rn",         /* virt_host_vz_vzps */
-    [PLATFORM_CONTEXT_HP] = "/usr/bin/netstat -rn",     /* hpux */
-    [PLATFORM_CONTEXT_AIX] = "/usr/bin/netstat -rn",     /* aix */
-    [PLATFORM_CONTEXT_LINUX] = "/bin/netstat -rn",         /* linux */
-    [PLATFORM_CONTEXT_SOLARIS] = "/usr/bin/netstat -rn",     /* solaris */
-    [PLATFORM_CONTEXT_FREEBSD] = "/usr/bin/netstat -rn",     /* freebsd */
-    [PLATFORM_CONTEXT_NETBSD] = "/usr/bin/netstat -rn",     /* netbsd */
-    [PLATFORM_CONTEXT_CRAYOS] = "/usr/ucb/netstat -rn",     /* cray */
-    [PLATFORM_CONTEXT_WINDOWS_NT] = "/cygdrive/c/WINNT/System32/netstat",       /* NT */
-    [PLATFORM_CONTEXT_SYSTEMV] = "/usr/bin/netstat -rn",     /* Unixware */
-    [PLATFORM_CONTEXT_OPENBSD] = "/usr/bin/netstat -rn",     /* openbsd */
-    [PLATFORM_CONTEXT_CFSCO] = "/usr/bin/netstat -rn",     /* sco */
-    [PLATFORM_CONTEXT_DARWIN] = "/usr/sbin/netstat -rn",    /* darwin */
-    [PLATFORM_CONTEXT_QNX] = "/usr/bin/netstat -rn",     /* qnx */
-    [PLATFORM_CONTEXT_DRAGONFLY] = "/usr/bin/netstat -rn",     /* dragonfly */
-    [PLATFORM_CONTEXT_MINGW] = "mingw-invalid",            /* mingw */
-    [PLATFORM_CONTEXT_VMWARE] = "/usr/bin/netstat",         /* vmware */
+    "-",
+    "/usr/bin/netstat -rn",     /* hpux */
+    "/usr/bin/netstat -rn",     /* aix */
+    "/bin/netstat -rn",         /* linux */
+    "/usr/bin/netstat -rn",     /* solaris */
+    "/usr/bin/netstat -rn",     /* freebsd */
+    "/usr/bin/netstat -rn",     /* netbsd */
+    "/usr/ucb/netstat -rn",     /* cray */
+    "/cygdrive/c/WINNT/System32/netstat",       /* NT */
+    "/usr/bin/netstat -rn",     /* Unixware */
+    "/usr/bin/netstat -rn",     /* openbsd */
+    "/usr/bin/netstat -rn",     /* sco */
+    "/usr/sbin/netstat -rn",    /* darwin */
+    "/usr/bin/netstat -rn",     /* qnx */
+    "/usr/bin/netstat -rn",     /* dragonfly */
+    "mingw-invalid",            /* mingw */
+    "/usr/bin/netstat",         /* vmware */
 };
 
 /* Implementation */

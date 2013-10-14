@@ -22,9 +22,9 @@
   included file COSL.txt.
 */
 
-#include <cf-serverd-functions.h>
+#include "cf-serverd-functions.h"
 
-#include <server_transform.h>
+#include "server_transform.h"
 
 int main(int argc, char *argv[])
 {
@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
     GenericAgentDiscoverContext(ctx, config);
 
     Policy *policy = NULL;
-    if (GenericAgentCheckPolicy(config, false))
+    if (GenericAgentCheckPolicy(ctx, config, false))
     {
         policy = GenericAgentLoadPolicy(ctx, config);
     }
@@ -46,10 +46,12 @@ int main(int argc, char *argv[])
     else
     {
         Log(LOG_LEVEL_ERR, "CFEngine was not able to get confirmation of promises from cf-promises, so going to failsafe");
-        EvalContextClassPutHard(ctx, "failsafe_fallback");
+        EvalContextHeapAddHard(ctx, "failsafe_fallback");
         GenericAgentConfigSetInputFile(config, GetWorkDir(), "failsafe.cf");
         policy = GenericAgentLoadPolicy(ctx, config);
     }
+
+    CheckForPolicyHub(ctx);
 
     ThisAgentInit();
     KeepPromises(ctx, policy, config);

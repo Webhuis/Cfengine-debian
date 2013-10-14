@@ -22,28 +22,27 @@
   included file COSL.txt.
 */
 
-#include <verify_exec.h>
+#include "verify_exec.h"
 
-#include <actuator.h>
-#include <promises.h>
-#include <files_names.h>
-#include <files_interfaces.h>
-#include <vars.h>
-#include <conversion.h>
-#include <instrumentation.h>
-#include <attributes.h>
-#include <pipes.h>
-#include <locks.h>
-#include <evalfunction.h>
-#include <exec_tools.h>
-#include <misc_lib.h>
-#include <writer.h>
-#include <policy.h>
-#include <string_lib.h>
-#include <scope.h>
-#include <ornaments.h>
-#include <env_context.h>
-#include <retcode.h>
+#include "promises.h"
+#include "files_names.h"
+#include "files_interfaces.h"
+#include "vars.h"
+#include "conversion.h"
+#include "instrumentation.h"
+#include "attributes.h"
+#include "pipes.h"
+#include "locks.h"
+#include "evalfunction.h"
+#include "exec_tools.h"
+#include "misc_lib.h"
+#include "writer.h"
+#include "policy.h"
+#include "string_lib.h"
+#include "scope.h"
+#include "ornaments.h"
+#include "env_context.h"
+#include "retcode.h"
 
 typedef enum
 {
@@ -55,28 +54,30 @@ typedef enum
 static bool SyntaxCheckExec(Attributes a, Promise *pp);
 static bool PromiseKeptExec(Attributes a, Promise *pp);
 static char *GetLockNameExec(Attributes a, Promise *pp);
-static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp, PromiseResult *result);
+static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp);
 
 static void PreviewProtocolLine(char *line, char *comm);
 
-PromiseResult VerifyExecPromise(EvalContext *ctx, Promise *pp)
+void VerifyExecPromise(EvalContext *ctx, Promise *pp)
 {
     Attributes a = { {0} };
 
     a = GetExecAttributes(ctx, pp);
 
-    EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser", pp->promiser, DATA_TYPE_STRING);
+    ScopeNewSpecial(ctx, "this", "promiser", pp->promiser, DATA_TYPE_STRING);
 
     if (!SyntaxCheckExec(a, pp))
     {
-        EvalContextVariableRemoveSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser");
-        return PROMISE_RESULT_FAIL;
+        // cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "");
+        ScopeDeleteSpecial("this", "promiser");
+        return;
     }
 
     if (PromiseKeptExec(a, pp))
     {
-        EvalContextVariableRemoveSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser");
-        return PROMISE_RESULT_NOOP;
+        // cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_NOOP, pp, a, "");
+        ScopeDeleteSpecial("this", "promiser");
+        return;
     }
 
     char *lock_name = GetLockNameExec(a, pp);
@@ -85,25 +86,25 @@ PromiseResult VerifyExecPromise(EvalContext *ctx, Promise *pp)
 
     if (thislock.lock == NULL)
     {
-        EvalContextVariableRemoveSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser");
-        return PROMISE_RESULT_NOOP;
+        // cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "");
+        ScopeDeleteSpecial("this", "promiser");
+        return;
     }
 
     PromiseBanner(pp);
 
-    PromiseResult result = PROMISE_RESULT_NOOP;
-    switch (RepairExec(ctx, a, pp, &result))
+    switch (RepairExec(ctx, a, pp))
     {
     case ACTION_RESULT_OK:
-        result = PromiseResultUpdate(result, PROMISE_RESULT_CHANGE);
+        // cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_CHANGE, pp, a, "");
         break;
 
     case ACTION_RESULT_TIMEOUT:
-        result = PromiseResultUpdate(result, PROMISE_RESULT_TIMEOUT);
+        // cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_TIMEOUT, pp, a, "");
         break;
 
     case ACTION_RESULT_FAILED:
-        result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
+        // cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "");
         break;
 
     default:
@@ -111,9 +112,7 @@ PromiseResult VerifyExecPromise(EvalContext *ctx, Promise *pp)
     }
 
     YieldCurrentLock(thislock);
-    EvalContextVariableRemoveSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser");
-
-    return result;
+    ScopeDeleteSpecial("this", "promiser");
 }
 
 /*****************************************************************************/
@@ -182,7 +181,7 @@ static char *GetLockNameExec(Attributes a, Promise *pp)
 
 /*****************************************************************************/
 
-static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp, PromiseResult *result)
+static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
 {
     char line[CF_BUFSIZE], eventname[CF_BUFSIZE];
     char cmdline[CF_BUFSIZE];
@@ -195,9 +194,6 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp, Prom
     char cmdOutBuf[CF_BUFSIZE];
     int cmdOutBufPos = 0;
     int lineOutLen;
-    char module_context[CF_BUFSIZE];
-
-    module_context[0] = '\0';
 
     if (IsAbsoluteFileName(CommandArg0(pp->promiser)) || a.contain.shelltype == SHELL_TYPE_NONE)
     {
@@ -349,7 +345,7 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp, Prom
 
             if (a.module)
             {
-                ModuleProtocol(ctx, cmdline, line, !a.contain.nooutput, PromiseGetNamespace(pp), module_context);
+                ModuleProtocol(ctx, cmdline, line, !a.contain.nooutput, PromiseGetNamespace(pp));
             }
             else if ((!a.contain.nooutput) && (!EmptyString(line)))
             {
@@ -386,11 +382,10 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp, Prom
             if (ret == -1)
             {
                 cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Finished script '%s' - failed (abnormal termination)", pp->promiser);
-                *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
             }
             else
             {
-                VerifyCommandRetcode(ctx, ret, true, a, pp, result);
+                VerifyCommandRetcode(ctx, ret, true, a, pp);
             }
         }
     }

@@ -22,14 +22,14 @@
   included file COSL.txt.
 */
 
-#include <files_hashes.h>
+#include "files_hashes.h"
 
-#include <dbm_api.h>
-#include <files_interfaces.h>
-#include <client_code.h>
-#include <files_lib.h>
-#include <rlist.h>
-#include <policy.h>
+#include "dbm_api.h"
+#include "files_interfaces.h"
+#include "client_code.h"
+#include "files_lib.h"
+#include "rlist.h"
+#include "policy.h"
 
 static const char *CF_DIGEST_TYPES[10][2] =
 {
@@ -59,7 +59,7 @@ static const int CF_DIGEST_SIZES[10] =
     0
 };
 
-void HashFile(const char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type)
+void HashFile(char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type)
 {
     FILE *file;
     EVP_MD_CTX context;
@@ -204,10 +204,10 @@ char *HashPrintSafe(HashMethod type, unsigned char digest[EVP_MAX_MD_SIZE + 1], 
     switch (type)
     {
     case HASH_METHOD_MD5:
-        strcpy(buffer, "MD5=");
+        sprintf(buffer, "MD5=  ");
         break;
     default:
-        strcpy(buffer, "SHA=");
+        sprintf(buffer, "SHA=  ");
         break;
     }
 

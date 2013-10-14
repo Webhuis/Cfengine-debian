@@ -22,18 +22,18 @@
   included file COSL.txt.
 */
 
-#include <args.h>
+#include "args.h"
 
-#include <promises.h>
-#include <syntax.h>
-#include <expand.h>
-#include <vars.h>
-#include <logging.h>
-#include <fncall.h>
-#include <evalfunction.h>
-#include <misc_lib.h>
-#include <scope.h>
-#include <audit.h>
+#include "promises.h"
+#include "syntax.h"
+#include "expand.h"
+#include "vars.h"
+#include "logging.h"
+#include "fncall.h"
+#include "evalfunction.h"
+#include "misc_lib.h"
+#include "scope.h"
+#include "audit.h"
 
 /******************************************************************/
 /* Argument propagation                                           */
@@ -80,14 +80,14 @@ Rlist *NewExpArgs(EvalContext *ctx, const FnCall *fp, const Promise *pp)
 
     for (const Rlist *rp = fp->args; rp != NULL; rp = rp->next)
     {
-        switch (rp->val.type)
+        switch (rp->type)
         {
         case RVAL_TYPE_FNCALL:
-            subfp = RlistFnCallValue(rp);
+            subfp = (FnCall *) rp->item;
             rval = FnCallEvaluate(ctx, subfp, pp).rval;
             break;
         default:
-            rval = ExpandPrivateRval(ctx, NULL, NULL, (Rval) { rp->val.item, rp->val.type});
+            rval = ExpandPrivateRval(ctx, ScopeGetCurrent()->scope, (Rval) {rp->item, rp->type});
             break;
         }
 
@@ -120,10 +120,10 @@ void ArgTemplate(EvalContext *ctx, FnCall *fp, const FnCallArg *argtemplate, Rli
 
     for (argnum = 0; rp != NULL && argtemplate[argnum].pattern != NULL; argnum++)
     {
-        if (rp->val.type != RVAL_TYPE_FNCALL)
+        if (rp->type != RVAL_TYPE_FNCALL)
         {
             /* Nested functions will not match to lval so don't bother checking */
-            SyntaxTypeMatch err = CheckConstraintTypeMatch(id, rp->val, argtemplate[argnum].dtype, argtemplate[argnum].pattern, 1);
+            SyntaxTypeMatch err = CheckConstraintTypeMatch(id, (Rval) {rp->item, rp->type}, argtemplate[argnum].dtype, argtemplate[argnum].pattern, 1);
             if (err != SYNTAX_TYPE_MATCH_OK && err != SYNTAX_TYPE_MATCH_ERROR_UNEXPANDED)
             {
                 FatalError(ctx, "in %s: %s", id, SyntaxTypeMatchToString(err));
@@ -144,7 +144,7 @@ void ArgTemplate(EvalContext *ctx, FnCall *fp, const FnCallArg *argtemplate, Rli
             printf("  arg[%d] range %s\t", i, argtemplate[i].pattern);
             if (rp != NULL)
             {
-                RvalShow(stdout, rp->val);
+                RvalShow(stdout, (Rval) {rp->item, rp->type});
                 rp = rp->next;
             }
             else

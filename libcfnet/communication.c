@@ -22,27 +22,21 @@
   included file COSL.txt.
 */
 
-#include <communication.h>
+#include "communication.h"
 
-#include <alloc.h>                                      /* xmalloc,... */
-#include <logging.h>                                    /* Log */
-#include <misc_lib.h>                                   /* ProgrammingError */
-#include <buffer.h>                                     /* Buffer */
-#include <ip_address.h>                                 /* IPAddress */
+#include "alloc.h"                                      /* xmalloc,... */
+#include "logging.h"                                    /* Log */
+#include "misc_lib.h"                                   /* ProgrammingError */
 
 AgentConnection *NewAgentConn(const char *server_name)
 {
     AgentConnection *conn = xcalloc(1, sizeof(AgentConnection));
 
-    conn->conn_info.type = CF_PROTOCOL_UNDEFINED;
-    conn->conn_info.sd = SOCKET_INVALID;
-    conn->conn_info.ssl = NULL;
-    conn->conn_info.remote_key = NULL;
+    conn->sd = SOCKET_INVALID;
     conn->family = AF_INET;
     conn->trust = false;
     conn->encryption_type = 'c';
     conn->this_server = xstrdup(server_name);
-    conn->authenticated = false;
     return conn;
 };
 
@@ -57,49 +51,64 @@ void DeleteAgentConn(AgentConnection *conn)
         free(sps);
     }
 
-    if (conn->conn_info.remote_key != NULL)
-    {
-        RSA_free(conn->conn_info.remote_key);
-    }
-    if (conn->conn_info.ssl != NULL)
-    {
-        SSL_free(conn->conn_info.ssl);
-    }
-
     free(conn->session_key);
     free(conn->this_server);
-
-    *conn = (AgentConnection) {0};
     free(conn);
 }
 
 int IsIPV6Address(char *name)
 {
-    if (!name)
+    char *sp;
+    int count, max = 0;
+
+    if (name == NULL)
     {
         return false;
     }
-    Buffer *buffer = BufferNewFrom(name, strlen(name));
-    if (!buffer)
+
+    count = 0;
+
+    for (sp = name; *sp != '\0'; sp++)
+    {
+        if (isalnum((int) *sp))
+        {
+            count++;
+        }
+        else if ((*sp != ':') && (*sp != '.'))
+        {
+            return false;
+        }
+
+        if (*sp == 'r')
+        {
+            return false;
+        }
+
+        if (count > max)
+        {
+            max = count;
+        }
+        else
+        {
+            count = 0;
+        }
+    }
+
+    if (max <= 2)
     {
         return false;
     }
-    IPAddress *ip_address = NULL;
-    bool is_ip = false;
-    is_ip = IPAddressIsIPAddress(buffer, &ip_address);
-    if (!is_ip)
+
+    if (strstr(name, ":") == NULL)
     {
-        BufferDestroy(&buffer);
         return false;
     }
-    if (IPAddressType(ip_address) != IP_ADDRESS_TYPE_IPV6)
+
+    if (strcasestr(name, "scope"))
     {
-        BufferDestroy(&buffer);
-        IPAddressDestroy(&ip_address);
         return false;
     }
-    BufferDestroy(&buffer);
-    IPAddressDestroy(&ip_address);
+
     return true;
 }
 
@@ -107,31 +116,32 @@ int IsIPV6Address(char *name)
 
 int IsIPV4Address(char *name)
 {
-    if (!name)
+    char *sp;
+    int count = 0;
+
+    if (name == NULL)
     {
         return false;
     }
-    Buffer *buffer = BufferNewFrom(name, strlen(name));
-    if (!buffer)
+
+    for (sp = name; *sp != '\0'; sp++)
+    {
+        if ((!isdigit((int) *sp)) && (*sp != '.'))
+        {
+            return false;
+        }
+
+        if (*sp == '.')
+        {
+            count++;
+        }
+    }
+
+    if (count != 3)
     {
         return false;
     }
-    IPAddress *ip_address = NULL;
-    bool is_ip = false;
-    is_ip = IPAddressIsIPAddress(buffer, &ip_address);
-    if (!is_ip)
-    {
-        BufferDestroy(&buffer);
-        return false;
-    }
-    if (IPAddressType(ip_address) != IP_ADDRESS_TYPE_IPV4)
-    {
-        BufferDestroy(&buffer);
-        IPAddressDestroy(&ip_address);
-        return false;
-    }
-    BufferDestroy(&buffer);
-    IPAddressDestroy(&ip_address);
+
     return true;
 }
 
@@ -153,7 +163,7 @@ int Hostname2IPString(char *dst, const char *hostname, size_t dst_size)
 
     if (dst_size < CF_MAX_IP_LEN)
     {
-        ProgrammingError("Hostname2IPString got %zu, needs at least"
+        ProgrammingError("Hostname2IPString got %lu, needs at least"
                          " %d length buffer for IPv6 portability!",
                          dst_size, CF_MAX_IP_LEN);
     }

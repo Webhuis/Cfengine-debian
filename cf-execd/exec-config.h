@@ -25,8 +25,8 @@
 #ifndef CFENGINE_EXEC_CONFIG_H
 #define CFENGINE_EXEC_CONFIG_H
 
-#include <cf3.defs.h>
-#include <set.h>
+#include "cf3.defs.h"
+#include "set.h"
 
 typedef struct
 {
@@ -37,7 +37,6 @@ typedef struct
     char *mail_server;
     char *mail_from_address;
     char *mail_to_address;
-    char *mail_subject;
     int mail_max_lines;
 
     StringSet *schedule;

@@ -22,31 +22,32 @@
   included file COSL.txt.
 */
 
-#include <syntax.h>
+#include "syntax.h"
 
-#include <json.h>
-#include <files_names.h>
-#include <mod_files.h>
-#include <item_lib.h>
-#include <conversion.h>
-#include <expand.h>
-#include <matching.h>
-#include <scope.h>
-#include <fncall.h>
-#include <string_lib.h>
-#include <misc_lib.h>
-#include <rlist.h>
-#include <vars.h>
-#include <env_context.h>
+#include "json.h"
+#include "files_names.h"
+#include "mod_files.h"
+#include "item_lib.h"
+#include "conversion.h"
+#include "expand.h"
+#include "matching.h"
+#include "scope.h"
+#include "fncall.h"
+#include "string_lib.h"
+#include "misc_lib.h"
+#include "rlist.h"
+#include "vars.h"
+#include "env_context.h"
 
+#include <assert.h>
 
 static SyntaxTypeMatch CheckParseString(const char *lv, const char *s, const char *range);
 static SyntaxTypeMatch CheckParseInt(const char *lv, const char *s, const char *range);
 static SyntaxTypeMatch CheckParseReal(const char *lv, const char *s, const char *range);
 static SyntaxTypeMatch CheckParseRealRange(const char *lval, const char *s, const char *range);
 static SyntaxTypeMatch CheckParseIntRange(const char *lval, const char *s, const char *range);
-static SyntaxTypeMatch CheckParseOpts(const char *s, const char *range);
-static SyntaxTypeMatch CheckFnCallType(const char *s, DataType dtype);
+static SyntaxTypeMatch CheckParseOpts(const char *lv, const char *s, const char *range);
+static SyntaxTypeMatch CheckFnCallType(const char *lval, const char *s, DataType dtype, const char *range);
 
 /*********************************************************/
 
@@ -323,7 +324,7 @@ SyntaxTypeMatch CheckConstraintTypeMatch(const char *lval, Rval rval, DataType d
 
         for (rp = (Rlist *) rval.item; rp != NULL; rp = rp->next)
         {
-            SyntaxTypeMatch err = CheckConstraintTypeMatch(lval, rp->val, dt, range, 1);
+            SyntaxTypeMatch err = CheckConstraintTypeMatch(lval, (Rval) {rp->item, rp->type}, dt, range, 1);
             switch (err)
             {
             case SYNTAX_TYPE_MATCH_OK:
@@ -345,7 +346,7 @@ SyntaxTypeMatch CheckConstraintTypeMatch(const char *lval, Rval rval, DataType d
 
         if (!IsItemIn(checklist, lval))
         {
-            SyntaxTypeMatch err = CheckFnCallType(RvalFnCallValue(rval)->name, dt);
+            SyntaxTypeMatch err = CheckFnCallType(lval, ((FnCall *) rval.item)->name, dt, range);
             DeleteItemList(checklist);
             return err;
         }
@@ -353,8 +354,7 @@ SyntaxTypeMatch CheckConstraintTypeMatch(const char *lval, Rval rval, DataType d
         DeleteItemList(checklist);
         return SYNTAX_TYPE_MATCH_OK;
 
-    case RVAL_TYPE_CONTAINER:
-    case RVAL_TYPE_NOPROMISEE:
+    default:
         break;
     }
 
@@ -376,12 +376,11 @@ SyntaxTypeMatch CheckConstraintTypeMatch(const char *lval, Rval rval, DataType d
 
     case DATA_TYPE_BODY:
     case DATA_TYPE_BUNDLE:
-    case DATA_TYPE_CONTAINER:
         break;
 
     case DATA_TYPE_OPTION:
     case DATA_TYPE_OPTION_LIST:
-        return CheckParseOpts(RvalScalarValue(rval), range);
+        return CheckParseOpts(lval, (const char *) rval.item, range);
 
     case DATA_TYPE_CONTEXT:
     case DATA_TYPE_CONTEXT_LIST:
@@ -403,7 +402,7 @@ SyntaxTypeMatch CheckConstraintTypeMatch(const char *lval, Rval rval, DataType d
 
 /****************************************************************************/
 
-DataType StringDataType(EvalContext *ctx, const char *string)
+DataType StringDataType(EvalContext *ctx, const char *scopeid, const char *string)
 {
     DataType dtype;
     Rval rval;
@@ -428,26 +427,19 @@ vars:
     {
         if (ExtractInnerCf3VarString(string, var))
         {
-            if (!IsExpandable(var))
+            if (EvalContextVariableGet(ctx, (VarRef) { NULL, scopeid, var }, &rval, &dtype))
             {
-                VarRef *ref = VarRefParse(var);
-
-                if (EvalContextVariableGet(ctx, ref, &rval, &dtype))
+                if (rval.type == RVAL_TYPE_LIST)
                 {
-                    if (rval.type == RVAL_TYPE_LIST)
+                    if (!islist)
                     {
-                        if (!islist)
-                        {
-                            islist = true;
-                        }
-                        else
-                        {
-                            islist = false;
-                        }
+                        islist = true;
+                    }
+                    else
+                    {
+                        islist = false;
                     }
                 }
-
-                VarRefDestroy(ref);
             }
 
             if (strlen(var) == strlen(string))
@@ -499,7 +491,7 @@ static SyntaxTypeMatch CheckParseString(const char *lval, const char *s, const c
         }
     }
 
-    if (StringMatchFull(range, s))
+    if (FullTextMatch(range, s))
     {
         return SYNTAX_TYPE_MATCH_OK;
     }
@@ -525,7 +517,7 @@ SyntaxTypeMatch CheckParseContext(const char *context, const char *range)
         return SYNTAX_TYPE_MATCH_OK;
     }
 
-    if (StringMatchFull(range, context))
+    if (FullTextMatch(range, context))
     {
         return SYNTAX_TYPE_MATCH_OK;
     }
@@ -770,7 +762,7 @@ static SyntaxTypeMatch CheckParseRealRange(const char *lval, const char *s, cons
 
 /****************************************************************************/
 
-static SyntaxTypeMatch CheckParseOpts(const char *s, const char *range)
+static SyntaxTypeMatch CheckParseOpts(const char *lval, const char *s, const char *range)
 {
     Item *split;
 
@@ -798,7 +790,7 @@ static SyntaxTypeMatch CheckParseOpts(const char *s, const char *range)
 
 int CheckParseVariableName(const char *name)
 {
-    const char *reserved[] = { "promiser", "handle", "promise_filename", "promise_dirname", "promise_linenumber", "this", NULL };
+    const char *reserved[] = { "promiser", "handle", "promise_filename", "promise_linenumber", "this", NULL };
     char scopeid[CF_MAXVARSIZE], vlval[CF_MAXVARSIZE];
     int count = 0, level = 0;
 
@@ -858,7 +850,15 @@ int CheckParseVariableName(const char *name)
 
 /****************************************************************************/
 
-static SyntaxTypeMatch CheckFnCallType(const char *s, DataType dtype)
+bool IsDataType(const char *s)
+{
+    return strcmp(s, "string") == 0 || strcmp(s, "slist") == 0 ||
+        strcmp(s, "int") == 0 || strcmp(s, "ilist") == 0 || strcmp(s, "real") == 0 || strcmp(s, "rlist") == 0;
+}
+
+/****************************************************************************/
+
+static SyntaxTypeMatch CheckFnCallType(const char *lval, const char *s, DataType dtype, const char *range)
 {
     DataType dt;
     const FnCallType *fn;

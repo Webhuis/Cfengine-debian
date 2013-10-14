@@ -22,14 +22,14 @@
   included file COSL.txt.
 */
 
-#include <attributes.h>
+#include "attributes.h"
 
-#include <promises.h>
-#include <policy.h>
-#include <conversion.h>
-#include <logging.h>
-#include <chflags.h>
-#include <audit.h>
+#include "promises.h"
+#include "policy.h"
+#include "conversion.h"
+#include "logging.h"
+#include "chflags.h"
+#include "audit.h"
 
 static int CHECKSUMUPDATES;
 
@@ -59,13 +59,10 @@ Attributes GetFilesAttributes(const EvalContext *ctx, const Promise *pp)
     attr.havecopy = PromiseGetConstraintAsBoolean(ctx, "copy_from", pp);
     attr.havelink = PromiseGetConstraintAsBoolean(ctx, "link_from", pp);
 
-    attr.edit_template = ConstraintGetRvalValue(ctx, "edit_template", pp, RVAL_TYPE_SCALAR);
-    attr.template_method = ConstraintGetRvalValue(ctx, "template_method", pp, RVAL_TYPE_SCALAR);
-    attr.template_data = ConstraintGetRvalValue(ctx, "template_data", pp, RVAL_TYPE_CONTAINER);
-
+    attr.template = (char *)ConstraintGetRvalValue(ctx, "edit_template", pp, RVAL_TYPE_SCALAR);
     attr.haveeditline = PromiseBundleConstraintExists(ctx, "edit_line", pp);
     attr.haveeditxml = PromiseBundleConstraintExists(ctx, "edit_xml", pp);
-    attr.haveedit = (attr.haveeditline) || (attr.haveeditxml) || (attr.edit_template);
+    attr.haveedit = (attr.haveeditline) || (attr.haveeditxml) || (attr.template);
 
 /* Files, specialist */
 
@@ -86,11 +83,11 @@ Attributes GetFilesAttributes(const EvalContext *ctx, const Promise *pp)
     attr.link = GetLinkConstraints(ctx, pp);
     attr.edits = GetEditDefaults(ctx, pp);
 
-    if (attr.edit_template)
-    {
-        attr.edits.empty_before_use = true;
-        attr.edits.inherit = true;
-    }
+    if (attr.template)
+       {
+       attr.edits.empty_before_use = true;
+       attr.edits.inherit = true;
+       }
 
 /* Files, multiple use */
 
@@ -484,7 +481,7 @@ FileSelect GetSelectConstraints(const EvalContext *ctx, const Promise *pp)
     {
         plus = 0;
         minus = 0;
-        value = RlistScalarValue(rp);
+        value = (char *) rp->item;
 
         if (!ParseModeString(value, &plus, &minus))
         {
@@ -760,11 +757,6 @@ FileRename GetRenameConstraints(const EvalContext *ctx, const Promise *pp)
 
 /*******************************************************************/
 
-ENTERPRISE_FUNC_0ARG_DEFINE_STUB(HashMethod, GetBestFileChangeHashMethod)
-{
-    return HASH_METHOD_BEST;
-}
-
 FileChange GetChangeMgtConstraints(const EvalContext *ctx, const Promise *pp)
 {
     FileChange c;
@@ -774,7 +766,11 @@ FileChange GetChangeMgtConstraints(const EvalContext *ctx, const Promise *pp)
 
     if (value && (strcmp(value, "best") == 0))
     {
-        c.hash = GetBestFileChangeHashMethod();
+#ifdef HAVE_NOVA
+        c.hash = HASH_METHOD_SHA512;
+#else
+        c.hash = HASH_METHOD_BEST;
+#endif
     }
     else if (value && (strcmp(value, "md5") == 0))
     {
@@ -846,7 +842,6 @@ FileCopy GetCopyConstraints(const EvalContext *ctx, const Promise *pp)
     FileCopy f;
     char *value;
     long min, max;
-    int pval;
 
     f.source = (char *) ConstraintGetRvalValue(ctx, "source", pp, RVAL_TYPE_SCALAR);
 
@@ -863,15 +858,7 @@ FileCopy GetCopyConstraints(const EvalContext *ctx, const Promise *pp)
 
     f.link_type = FileLinkTypeFromString(value);
     f.servers = PromiseGetConstraintAsList(ctx, "servers", pp);
-    pval = PromiseGetConstraintAsInt(ctx, "portnumber", pp);
-    if (pval != CF_NOINT)
-    {
-        f.portnumber = (unsigned short) pval;
-    }
-    else
-    {
-        f.portnumber = 0;
-    }
+    f.portnumber = (short) PromiseGetConstraintAsInt(ctx, "portnumber", pp);
     f.timeout = (short) PromiseGetConstraintAsInt(ctx, "timeout", pp);
     f.link_instead = PromiseGetConstraintAsList(ctx, "linkcopy_patterns", pp);
     f.copy_links = PromiseGetConstraintAsList(ctx, "copylink_patterns", pp);

@@ -27,12 +27,13 @@
 #ifndef CFENGINE_NET_H
 #define CFENGINE_NET_H
 
+#include "cfnet.h"
 
-#include <cfnet.h>
 
-
-int SendTransaction(const ConnectionInfo *conn_info, const char *buffer, int len, char status);
-int ReceiveTransaction(const ConnectionInfo *conn_info, char *buffer, int *more);
+int SendTransaction(int sd, char *buffer, int len, char status);
+int ReceiveTransaction(int sd, char *buffer, int *more);
+int RecvSocketStream(int sd, char *buffer, int toget);
+int SendSocketStream(int sd, char *buffer, int toget, int flags);
 
 int SetReceiveTimeout(int sd, const struct timeval *timeout);
 

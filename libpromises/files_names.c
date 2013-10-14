@@ -22,18 +22,20 @@
   included file COSL.txt.
 */
 
-#include <files_names.h>
+#include "files_names.h"
 
-#include <policy.h>
-#include <promises.h>
-#include <cf3.defs.h>
-#include <dir.h>
-#include <item_lib.h>
-#include <files_interfaces.h>
-#include <string_lib.h>
-#include <sysinfo.h>
+#include "policy.h"
+#include "promises.h"
+#include "cf3.defs.h"
+#include "dir.h"
+#include "item_lib.h"
+#include "assert.h"
+#include "files_interfaces.h"
+#include "string_lib.h"
 
-#include <cf-windows-functions.h>
+#ifdef HAVE_NOVA
+# include "cf.nova.h"
+#endif
 
 /*********************************************************************/
 
@@ -120,7 +122,7 @@ int IsNewerFileTree(char *dir, time_t reftime)
 
 /*********************************************************************/
 
-int IsDir(const char *path)
+int IsDir(char *path)
 /*
 Checks if the object pointed to by path exists and is a directory.
 Returns true if so, false otherwise.
@@ -598,7 +600,7 @@ FilePathType FilePathGetType(const char *file_path)
     {
         return FILE_PATH_TYPE_ABSOLUTE;
     }
-    else if (*file_path == '.')
+    else if (IsFileOutsideDefaultRepository(file_path))
     {
         return FILE_PATH_TYPE_RELATIVE;
     }
@@ -610,7 +612,7 @@ FilePathType FilePathGetType(const char *file_path)
 
 bool IsFileOutsideDefaultRepository(const char *f)
 {
-    return !StringStartsWith(f, GetWorkDir());
+    return (*f == '.') || (IsAbsoluteFileName(f));
 }
 
 /*******************************************************************/

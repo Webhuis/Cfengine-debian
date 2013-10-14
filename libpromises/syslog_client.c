@@ -22,9 +22,9 @@
   included file COSL.txt.
 */
 
-#include <syslog_client.h>
+#include "syslog_client.h"
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
 static char SYSLOG_HOST[MAXHOSTNAMELEN] = "localhost";
 static uint16_t SYSLOG_PORT = 514;
@@ -96,11 +96,10 @@ void RemoteSysLog(int log_priority, const char *log_string)
         else
         {
             char timebuffer[26];
-            pid_t pid = getpid();
 
-            snprintf(message, rfc3164_len, "<%u>%.15s %s %s[%d]: %s",
+            snprintf(message, rfc3164_len, "<%u>%.15s %s %s",
                      pri, cf_strtimestamp_local(now, timebuffer) + 4,
-                     VFQNAME, VPREFIX, pid, log_string);
+                     VFQNAME, log_string);
             err = sendto(sd, message, strlen(message),
                          0, ap->ai_addr, ap->ai_addrlen);
             if (err == -1)

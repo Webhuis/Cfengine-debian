@@ -25,16 +25,7 @@
 #ifndef CFENGINE_STRING_LIB_H
 #define CFENGINE_STRING_LIB_H
 
-#include <platform.h>
-#include <compiler.h>
-
-typedef struct
-{
-    const char *data;
-    size_t len;
-} StringRef;
-
-unsigned int StringHash(const char *str, unsigned int seed, unsigned int max);
+#include "compiler.h"
 
 char ToLower(char ch);
 char ToUpper(char ch);
@@ -44,10 +35,9 @@ void ToLowerStrInplace(char *str);
 long StringToLong(const char *str);
 char *StringFromLong(long number);
 double StringToDouble(const char *str);
-char *StringFromDouble(double number);
 char *NULLStringToEmpty(char *str);
 
-bool StringIsNumeric(const char *name);
+bool IsNumber(const char *name);
 bool EmptyString(const char *s);
 
 char *StringEncodeBase64(const char *str, size_t len);
@@ -70,9 +60,6 @@ int ReplaceStr(char *in, char *out, int outSz, char *from, char *to);
 
 bool IsStrIn(const char *str, const char **strs);
 bool IsStrCaseIn(const char *str, const char **strs);
-
-size_t StringCountTokens(const char *str, size_t len, const char *seps);
-StringRef StringGetToken(const char *str, size_t len, size_t index, const char *seps);
 
 char **String2StringArray(char *str, char separator);
 void FreeStringArray(char **strs);

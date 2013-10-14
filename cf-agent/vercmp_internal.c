@@ -22,22 +22,22 @@
   included file COSL.txt.
 */
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-#include <files_names.h>
-#include <vercmp_internal.h>
-#include <rlist.h>
+#include "files_names.h"
+#include "vercmp_internal.h"
+#include "rlist.h"
 
 static void ParsePackageVersion(char *version, Rlist **num, Rlist **sep);
 
-VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, PackageVersionComparator cmp)
+bool ComparePackageVersionsInternal(const char *v1, const char *v2, PackageVersionComparator cmp)
 {
     Rlist *rp_pr, *rp_in;
 
     int result = true;
     int break_loop = false;
     int cmp_result;
-    VersionCmpResult version_matched = VERCMP_NO_MATCH;
+    int version_matched = false;
 
     Rlist *numbers_pr = NULL, *separators_pr = NULL;
     Rlist *numbers_in = NULL, *separators_in = NULL;
@@ -52,7 +52,7 @@ VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, 
     for (rp_pr = separators_pr, rp_in = separators_in; (rp_pr != NULL) && (rp_in != NULL);
          rp_pr = rp_pr->next, rp_in = rp_in->next)
     {
-        if (strcmp(RlistScalarValue(rp_pr), RlistScalarValue(rp_in)) != 0)
+        if (strcmp(rp_pr->item, rp_in->item) != 0)
         {
             result = false;
             break;
@@ -72,7 +72,6 @@ VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, 
     else
     {
         Log(LOG_LEVEL_VERBOSE, "Versioning models for (%s,%s) were incompatible", v1, v2);
-        version_matched = VERCMP_ERROR;
     }
 
     int version_equal = (strcmp(v2, v1) == 0);
@@ -82,7 +81,7 @@ VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, 
         for (rp_pr = numbers_pr, rp_in = numbers_in; (rp_pr != NULL) && (rp_in != NULL);
              rp_pr = rp_pr->next, rp_in = rp_in->next)
         {
-            cmp_result = strcmp(RlistScalarValue(rp_pr), RlistScalarValue(rp_in));
+            cmp_result = strcmp(rp_pr->item, rp_in->item);
 
             switch (cmp)
             {
@@ -90,51 +89,51 @@ VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, 
             case PACKAGE_VERSION_COMPARATOR_NONE:
                 if (version_equal)
                 {
-                    version_matched = VERCMP_MATCH;
+                    version_matched = true;
                 }
                 break;
             case PACKAGE_VERSION_COMPARATOR_NEQ:
                 if (!version_equal)
                 {
-                    version_matched = VERCMP_MATCH;
+                    version_matched = true;
                 }
                 break;
             case PACKAGE_VERSION_COMPARATOR_GT:
-                if (cmp_result > 0)
+                if (cmp_result < 0)
                 {
-                    version_matched = VERCMP_MATCH;
+                    version_matched = true;
                 }
-                else if (cmp_result < 0)
+                else if (cmp_result > 0)
                 {
                     break_loop = true;
                 }
                 break;
             case PACKAGE_VERSION_COMPARATOR_LT:
-                if (cmp_result < 0)
+                if (cmp_result > 0)
                 {
-                    version_matched = VERCMP_MATCH;
-                }
-                else if (cmp_result > 0)
-                {
-                    break_loop = true;
-                }
-                break;
-            case PACKAGE_VERSION_COMPARATOR_GE:
-                if ((cmp_result > 0) || version_equal)
-                {
-                    version_matched = VERCMP_MATCH;
+                    version_matched = true;
                 }
                 else if (cmp_result < 0)
                 {
                     break_loop = true;
                 }
                 break;
-            case PACKAGE_VERSION_COMPARATOR_LE:
+            case PACKAGE_VERSION_COMPARATOR_GE:
                 if ((cmp_result < 0) || version_equal)
                 {
-                    version_matched = VERCMP_MATCH;
+                    version_matched = true;
                 }
                 else if (cmp_result > 0)
+                {
+                    break_loop = true;
+                }
+                break;
+            case PACKAGE_VERSION_COMPARATOR_LE:
+                if ((cmp_result > 0) || version_equal)
+                {
+                    version_matched = true;
+                }
+                else if (cmp_result < 0)
                 {
                     break_loop = true;
                 }
@@ -143,7 +142,7 @@ VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, 
                 break;
             }
 
-            if ((version_matched == VERCMP_MATCH) || break_loop)
+            if ((version_matched == true) || break_loop)
             {
                 rp_pr = NULL;
                 rp_in = NULL;
@@ -153,16 +152,16 @@ VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, 
 
         if (rp_pr != NULL)
         {
-            if ((cmp == PACKAGE_VERSION_COMPARATOR_GT) || (cmp == PACKAGE_VERSION_COMPARATOR_GE))
+            if ((cmp == PACKAGE_VERSION_COMPARATOR_LT) || (cmp == PACKAGE_VERSION_COMPARATOR_LE))
             {
-                version_matched = VERCMP_MATCH;
+                version_matched = true;
             }
         }
         if (rp_in != NULL)
         {
-            if ((cmp == PACKAGE_VERSION_COMPARATOR_LT) || (cmp == PACKAGE_VERSION_COMPARATOR_LE))
+            if ((cmp == PACKAGE_VERSION_COMPARATOR_GT) || (cmp == PACKAGE_VERSION_COMPARATOR_GE))
             {
-                version_matched = VERCMP_MATCH;
+                version_matched = true;
             }
         }
     }
@@ -171,6 +170,15 @@ VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, 
     RlistDestroy(numbers_in);
     RlistDestroy(separators_pr);
     RlistDestroy(separators_in);
+
+    if (version_matched)
+    {
+        Log(LOG_LEVEL_VERBOSE, "Verified version constraint promise kept");
+    }
+    else
+    {
+        Log(LOG_LEVEL_VERBOSE, "Versions did not match");
+    }
 
     return version_matched;
 }

@@ -22,18 +22,17 @@
   included file COSL.txt.
 */
 
-#include <generic_agent.h>
-#include <mon.h>
+#include "generic_agent.h"
+#include "mon.h"
 
-#include <env_context.h>
-#include <env_monitor.h>
-#include <conversion.h>
-#include <vars.h>
-#include <signals.h>
-#include <scope.h>
-#include <sysinfo.h>
-#include <man.h>
-#include <bootstrap.h>
+#include "env_context.h"
+#include "env_monitor.h"
+#include "conversion.h"
+#include "vars.h"
+#include "signals.h"
+#include "scope.h"
+#include "sysinfo.h"
+#include "man.h"
 
 typedef enum
 {
@@ -67,7 +66,7 @@ static const char *CF_MONITORD_MANPAGE_LONG_DESCRIPTION =
         "normal system state based on current and past observations. Current estimates are made available as "
         "special variables (e.g. $(mon.av_cpu)) to cf-agent, which may use them to inform policy decisions.";
 
-static const struct option OPTIONS[] =
+static const struct option OPTIONS[14] =
 {
     {"help", no_argument, 0, 'h'},
     {"debug", no_argument, 0, 'd'},
@@ -82,11 +81,10 @@ static const struct option OPTIONS[] =
     {"histograms", no_argument, 0, 'H'},
     {"tcpdump", no_argument, 0, 'T'},
     {"legacy-output", no_argument, 0, 'l'},
-    {"color", optional_argument, 0, 'C'},
     {NULL, 0, 0, '\0'}
 };
 
-static const char *HINTS[] =
+static const char *HINTS[14] =
 {
     "Print the help message",
     "Enable debugging output",
@@ -101,7 +99,6 @@ static const char *HINTS[] =
     "Ignored for backward compatibility",
     "Interface with tcpdump if available to collect data about network",
     "Use legacy output format",
-    "Enable colorized output. Possible values: 'always', 'auto', 'never'. If option is used, the default value is 'auto'",
     NULL
 };
 
@@ -116,6 +113,8 @@ int main(int argc, char *argv[])
 
     GenericAgentDiscoverContext(ctx, config);
     Policy *policy = GenericAgentLoadPolicy(ctx, config);
+
+    CheckForPolicyHub(ctx);
 
     ThisAgentInit(ctx);
     KeepPromises(ctx, policy);
@@ -136,7 +135,7 @@ static GenericAgentConfig *CheckOpts(int argc, char **argv)
     int c;
     GenericAgentConfig *config = GenericAgentConfigNewDefault(AGENT_TYPE_MONITOR);
 
-    while ((c = getopt_long(argc, argv, "dvnIf:VSxHTKMFhlC::", OPTIONS, &optindex)) != EOF)
+    while ((c = getopt_long(argc, argv, "dvnIf:VSxHTKMFhl", OPTIONS, &optindex)) != EOF)
     {
         switch ((char) c)
         {
@@ -179,19 +178,11 @@ static GenericAgentConfig *CheckOpts(int argc, char **argv)
             break;
 
         case 'V':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteVersion(w);
-                FileWriterDetach(w);
-            }
+            PrintVersion();
             exit(0);
 
         case 'h':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-monitord", OPTIONS, HINTS, true);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-monitord", OPTIONS, HINTS, true);
             exit(0);
 
         case 'M':
@@ -210,19 +201,8 @@ static GenericAgentConfig *CheckOpts(int argc, char **argv)
             Log(LOG_LEVEL_ERR, "Self-diagnostic functionality is retired.");
             exit(0);
 
-        case 'C':
-            if (!GenericAgentConfigParseColor(config, optarg))
-            {
-                exit(EXIT_FAILURE);
-            }
-            break;
-
         default:
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-monitord", OPTIONS, HINTS, true);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-monitord", OPTIONS, HINTS, true);
             exit(1);
         }
     }
@@ -254,16 +234,11 @@ static void KeepPromises(EvalContext *ctx, Policy *policy)
                 continue;
             }
 
-            VarRef *ref = VarRefParseFromScope(cp->lval, "control_monitor");
-
-            if (!EvalContextVariableGet(ctx, ref, &retval, NULL))
+            if (!EvalContextVariableGet(ctx, (VarRef) { NULL, "control_monitor", cp->lval }, &retval, NULL))
             {
                 Log(LOG_LEVEL_ERR, "Unknown lval '%s' in monitor control body", cp->lval);
-                VarRefDestroy(ref);
                 continue;
             }
-
-            VarRefDestroy(ref);
 
             if (strcmp(cp->lval, CFM_CONTROLBODY[MONITOR_CONTROL_HISTOGRAMS].lval) == 0)
             {

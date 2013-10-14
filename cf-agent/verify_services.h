@@ -25,8 +25,9 @@
 #ifndef CFENGINE_VERIFY_SERVICES_H
 #define CFENGINE_VERIFY_SERVICES_H
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-PromiseResult VerifyServicesPromise(EvalContext *ctx, Promise *pp);
+void VerifyServices(EvalContext *ctx, Attributes a, Promise *pp);
+void VerifyServicesPromise(EvalContext *ctx, Promise *pp);
 
 #endif

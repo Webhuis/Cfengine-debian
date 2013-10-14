@@ -28,21 +28,19 @@
  * type.
  */
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-#include <actuator.h>
-#include <policy.h>
-#include <matching.h>
-#include <files_names.h>
-#include <files_interfaces.h>
-#include <promises.h>
-#include <dir.h>
-#include <files_properties.h>
-#include <scope.h>
-#include <item_lib.h>
+#include "policy.h"
+#include "matching.h"
+#include "files_names.h"
+#include "files_interfaces.h"
+#include "promises.h"
+#include "dir.h"
+#include "files_properties.h"
+#include "scope.h"
+#include "item_lib.h"
 
-PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise *pp,
-                                      PromiseResult (*fnptr) (EvalContext *ctx, char *path, Promise *ptr))
+void LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise *pp, void (*fnptr) (EvalContext *ctx, char *path, Promise *ptr))
 {
     Item *path, *ip, *remainder = NULL;
     char pbuffer[CF_BUFSIZE];
@@ -57,7 +55,8 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
     if ((!IsPathRegex(wildpath)) || (pathtype && (strcmp(pathtype, "literal") == 0)))
     {
         Log(LOG_LEVEL_VERBOSE, "Using literal pathtype for '%s'", wildpath);
-        return (*fnptr) (ctx, wildpath, pp);
+        (*fnptr) (ctx, wildpath, pp);
+        return;
     }
     else
     {
@@ -67,7 +66,6 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
     pbuffer[0] = '\0';
     path = SplitString(wildpath, '/');  // require forward slash in regex on all platforms
 
-    PromiseResult result = PROMISE_RESULT_NOOP;
     for (ip = path; ip != NULL; ip = ip->next)
     {
         if ((ip->name == NULL) || (strlen(ip->name) == 0))
@@ -96,7 +94,7 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
         if (!JoinPath(pbuffer, ip->name))
         {
             Log(LOG_LEVEL_ERR, "Buffer has limited size in LocateFilePromiserGroup");
-            return result;
+            return;
         }
 
         if (stat(pbuffer, &statbuf) != -1)
@@ -125,9 +123,9 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
         {
             // Could be a dummy directory to be created so this is not an error.
             Log(LOG_LEVEL_VERBOSE, "Using best-effort expanded (but non-existent) file base path '%s'", wildpath);
-            result = PromiseResultUpdate(result, (*fnptr) (ctx, wildpath, pp));
+            (*fnptr) (ctx, wildpath, pp);
             DeleteItemList(path);
-            return result;
+            return;
         }
         else
         {
@@ -146,7 +144,7 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
                     continue;
                 }
 
-                if (FullTextMatch(ctx, regex, dirp->d_name))
+                if (FullTextMatch(regex, dirp->d_name))
                 {
                     Log(LOG_LEVEL_DEBUG, "Link '%s' matched regex '%s'", dirp->d_name, regex);
                 }
@@ -171,7 +169,7 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
 
                 if ((!lastnode) && (strcmp(nextbuffer, wildpath) != 0))
                 {
-                    result = PromiseResultUpdate(result, LocateFilePromiserGroup(ctx, nextbuffer, pp, fnptr));
+                    LocateFilePromiserGroup(ctx, nextbuffer, pp, fnptr);
                 }
                 else
                 {
@@ -184,15 +182,15 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
                     snprintf(nextbufferOrig, sizeof(nextbufferOrig), "%s", nextbuffer);
                     MapNameForward(nextbuffer);
 
-                    if (!FullTextMatch(ctx, pp->promiser, nextbuffer))
+                    if (!FullTextMatch(pp->promiser, nextbuffer))
                     {
                         Log(LOG_LEVEL_DEBUG, "Error recomputing references for '%s' in '%s'", pp->promiser, nextbuffer);
                     }
 
                     /* If there were back references there could still be match.x vars to expand */
 
-                    pcopy = ExpandDeRefPromise(ctx, pp);
-                    result = PromiseResultUpdate(result, (*fnptr) (ctx, nextbufferOrig, pcopy));
+                    pcopy = ExpandDeRefPromise(ctx, ScopeGetCurrent()->scope, pp);
+                    (*fnptr) (ctx, nextbufferOrig, pcopy);
                     PromiseDestroy(pcopy);
                 }
             }
@@ -203,7 +201,7 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
     else
     {
         Log(LOG_LEVEL_VERBOSE, "Using file base path '%s'", pbuffer);
-        result = PromiseResultUpdate(result, (*fnptr) (ctx, pbuffer, pp));
+        (*fnptr) (ctx, pbuffer, pp);
     }
 
     if (count == 0)
@@ -212,11 +210,9 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise 
 
         if (create)
         {
-            result = PromiseResultUpdate(result, (*fnptr)(ctx, pp->promiser, pp));
+            (*fnptr)(ctx, pp->promiser, pp);
         }
     }
 
     DeleteItemList(path);
-
-    return result;
 }

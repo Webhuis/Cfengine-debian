@@ -22,30 +22,36 @@
   included file COSL.txt.
 */
 
-#include <env_monitor.h>
+#include "env_monitor.h"
 
-#include <env_context.h>
-#include <mon.h>
-#include <granules.h>
-#include <dbm_api.h>
-#include <policy.h>
-#include <promises.h>
-#include <item_lib.h>
-#include <conversion.h>
-#include <ornaments.h>
-#include <expand.h>
-#include <scope.h>
-#include <sysinfo.h>
-#include <signals.h>
-#include <locks.h>
-#include <exec_tools.h>
-#include <generic_agent.h> // WritePID
-#include <files_lib.h>
-#include <unix.h>
-#include <verify_measurements.h>
-#include <verify_classes.h>
-#include <cf-monitord-enterprise-stubs.h>
+#include "env_context.h"
+#include "mon.h"
+#include "granules.h"
+#include "dbm_api.h"
+#include "policy.h"
+#include "promises.h"
+#include "item_lib.h"
+#include "conversion.h"
+#include "ornaments.h"
+#include "expand.h"
+#include "scope.h"
+#include "sysinfo.h"
+#include "signals.h"
+#include "locks.h"
+#include "exec_tools.h"
+#include "generic_agent.h" // WritePID
+#include "files_lib.h"
+#include "unix.h"
+#include "verify_measurements.h"
+#include "verify_classes.h"
+#include "cf-monitord-enterprise-stubs.h"
 
+#ifdef HAVE_NOVA
+# include "history.h"
+#endif
+
+#include <math.h>
+#include <assert.h>
 
 /*****************************************************************************/
 /* Globals                                                                   */
@@ -95,7 +101,7 @@ static void GetDatabaseAge(void);
 static void LoadHistogram(void);
 static void GetQ(EvalContext *ctx, const Policy *policy);
 static Averages EvalAvQ(EvalContext *ctx, char *timekey);
-static void ArmClasses(EvalContext *ctx, Averages newvals);
+static void ArmClasses(Averages newvals, char *timekey);
 static void GatherPromisedMeasures(EvalContext *ctx, const Policy *policy);
 
 static void LeapDetection(void);
@@ -103,12 +109,12 @@ static Averages *GetCurrentAverages(char *timekey);
 static void UpdateAverages(EvalContext *ctx, char *timekey, Averages newvals);
 static void UpdateDistributions(EvalContext *ctx, char *timekey, Averages *av);
 static double WAverage(double newvals, double oldvals, double age);
-static double SetClasses(EvalContext *ctx, char *name, double variable, double av_expect, double av_var, double localav_expect,
-                         double localav_var, Item **classlist);
+static double SetClasses(char *name, double variable, double av_expect, double av_var, double localav_expect,
+                         double localav_var, Item **classlist, char *timekey);
 static void SetVariable(char *name, double now, double average, double stddev, Item **list);
 static double RejectAnomaly(double new, double av, double var, double av2, double var2);
 static void ZeroArrivals(void);
-static PromiseResult KeepMonitorPromise(EvalContext *ctx, Promise *pp, void *param);
+static void KeepMonitorPromise(EvalContext *ctx, Promise *pp, void *param);
 
 /****************************************************************/
 
@@ -317,7 +323,7 @@ void MonitorStartServer(EvalContext *ctx, const Policy *policy)
         snprintf(timekey, sizeof(timekey), "%s", GenTimeKey(time(NULL)));
         averages = EvalAvQ(ctx, timekey);
         LeapDetection();
-        ArmClasses(ctx, averages);
+        ArmClasses(averages, timekey);
 
         ZeroArrivals();
 
@@ -578,7 +584,7 @@ static void AddOpenPortsClasses(const char *name, const Item *value, Item **clas
     }
 }
 
-static void ArmClasses(EvalContext *ctx, Averages av)
+static void ArmClasses(Averages av, char *timekey)
 {
     double sigma;
     Item *ip,*classlist = NULL;
@@ -593,7 +599,7 @@ static void ArmClasses(EvalContext *ctx, Averages av)
         char desc[CF_BUFSIZE];
 
         GetObservable(i, name, desc);
-        sigma = SetClasses(ctx, name, CF_THIS[i], av.Q[i].expect, av.Q[i].var, LOCALAV.Q[i].expect, LOCALAV.Q[i].var, &classlist);
+        sigma = SetClasses(name, CF_THIS[i], av.Q[i].expect, av.Q[i].var, LOCALAV.Q[i].expect, LOCALAV.Q[i].var, &classlist, timekey);
         SetVariable(name, CF_THIS[i], av.Q[i].expect, sigma, &classlist);
 
         /* LDT */
@@ -896,8 +902,8 @@ static double WAverage(double anew, double aold, double age)
 
 /*****************************************************************************/
 
-static double SetClasses(EvalContext *ctx, char *name, double variable, double av_expect, double av_var, double localav_expect,
-                         double localav_var, Item **classlist)
+static double SetClasses(char *name, double variable, double av_expect, double av_var, double localav_expect,
+                         double localav_var, Item **classlist, char *timekey)
 {
     char buffer[CF_BUFSIZE], buffer2[CF_BUFSIZE];
     double dev, delta, sigma, ldelta, lsigma, sig;
@@ -915,7 +921,7 @@ static double SetClasses(EvalContext *ctx, char *name, double variable, double a
         Log(LOG_LEVEL_DEBUG, "No sigma variation .. can't measure class");
 
         snprintf(buffer, CF_MAXVARSIZE, "entropy_%s.*", name);
-        MonEntropyPurgeUnused(ctx, buffer);
+        MonEntropyPurgeUnused(buffer);
 
         return sig;
     }
@@ -1114,7 +1120,7 @@ static void GatherPromisedMeasures(EvalContext *ctx, const Policy *policy)
     for (size_t i = 0; i < SeqLength(policy->bundles); i++)
     {
         const Bundle *bp = SeqAt(policy->bundles, i);
-        EvalContextStackPushBundleFrame(ctx, bp, NULL, false);
+        EvalContextStackPushBundleFrame(ctx, bp, false);
 
         if ((strcmp(bp->type, CF_AGENTTYPES[AGENT_TYPE_MONITOR]) == 0) || (strcmp(bp->type, CF_AGENTTYPES[AGENT_TYPE_COMMON]) == 0))
         {
@@ -1133,9 +1139,9 @@ static void GatherPromisedMeasures(EvalContext *ctx, const Policy *policy)
         EvalContextStackPopFrame(ctx);
     }
 
-    EvalContextClear(ctx);
+    ScopeDeleteAll();
     GetNameInfo3(ctx, AGENT_TYPE_MONITOR);
-    GetInterfacesInfo(ctx);
+    GetInterfacesInfo(ctx, AGENT_TYPE_MONITOR);
     Get3Environment(ctx, AGENT_TYPE_MONITOR);
     OSClasses(ctx);
     BuiltinClasses(ctx);
@@ -1145,7 +1151,7 @@ static void GatherPromisedMeasures(EvalContext *ctx, const Policy *policy)
 /* Level                                                             */
 /*********************************************************************/
 
-static PromiseResult KeepMonitorPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED void *param)
+static void KeepMonitorPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED void *param)
 {
     assert(param == NULL);
 
@@ -1165,7 +1171,7 @@ static PromiseResult KeepMonitorPromise(EvalContext *ctx, Promise *pp, ARG_UNUSE
         {
             Log(LOG_LEVEL_VERBOSE, "Skipping next promise '%s', as context '%s' is not relevant", pp->promiser, pp->classes);
         }
-        return PROMISE_RESULT_NOOP;
+        return;
     }
 
     if (VarClassExcluded(ctx, pp, &sp))
@@ -1183,21 +1189,20 @@ static PromiseResult KeepMonitorPromise(EvalContext *ctx, Promise *pp, ARG_UNUSE
             Log(LOG_LEVEL_VERBOSE, "Skipping next promise '%s', as var-context '%s' is not relevant", pp->promiser,
                   sp);
         }
-        return PROMISE_RESULT_NOOP;
+        return;
     }
 
     if (strcmp("classes", pp->parent_promise_type->name) == 0)
     {
-        return VerifyClassPromise(ctx, pp, NULL);
-    }
-    else if (strcmp("measurements", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = VerifyMeasurementPromise(ctx, CF_THIS, pp);
-        /* FIXME: Verify why this explicit promise status change is done */
-        EvalContextMarkPromiseNotDone(ctx, pp);
-        return result;
+        VerifyClassPromise(ctx, pp, NULL);
+        return;
     }
 
-    assert(false && "Unknown promise type");
-    return PROMISE_RESULT_NOOP;
+    if (strcmp("measurements", pp->parent_promise_type->name) == 0)
+    {
+        VerifyMeasurementPromise(ctx, CF_THIS, pp);
+        /* FIXME: Verify why this explicit promise status change is done */
+        EvalContextMarkPromiseNotDone(ctx, pp);
+        return;
+    }
 }

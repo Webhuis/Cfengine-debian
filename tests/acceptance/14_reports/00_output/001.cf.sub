@@ -1,18 +1,16 @@
 body common control
 {
-  inputs => { "../../default.cf.sub" };
-  bundlesequence  => { "test" };
-  version => "1.0";
+  bundlesequence => { 'test' };
 }
 
 bundle agent test
 {
 vars:
-  "cwd" string => execresult("$(G.pwd)", "noshell");
+  "cwd" string => execresult("/bin/pwd", "noshell");
 
 reports:
   cfengine_3::
-    "doesnotmatter"
+    "doesnotmatterr"
       printfile => p;
 }
 

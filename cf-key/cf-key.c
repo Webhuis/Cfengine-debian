@@ -22,22 +22,22 @@
   included file COSL.txt.
 */
 
-#include <generic_agent.h>
+#include "generic_agent.h"
 
-#include <dbm_api.h>
-#include <lastseen.h>
-#include <dir.h>
-#include <scope.h>
-#include <files_copy.h>
-#include <files_interfaces.h>
-#include <files_hashes.h>
-#include <keyring.h>
-#include <env_context.h>
-#include <crypto.h>
-#include <sysinfo.h>
-#include <man.h>
+#include "dbm_api.h"
+#include "lastseen.h"
+#include "dir.h"
+#include "scope.h"
+#include "files_copy.h"
+#include "files_interfaces.h"
+#include "files_hashes.h"
+#include "keyring.h"
+#include "env_context.h"
+#include "crypto.h"
+#include "sysinfo.h"
+#include "man.h"
 
-#include <cf-key-functions.h>
+#include "cf-key-functions.h"
 
 int SHOWHOSTS = false;
 bool REMOVEKEYS = false;
@@ -58,7 +58,7 @@ static const char *CF_KEY_SHORT_DESCRIPTION = "make private/public key-pairs for
 
 static const char *CF_KEY_MANPAGE_LONG_DESCRIPTION = "The CFEngine key generator makes key pairs for remote authentication.\n";
 
-static const struct option OPTIONS[] =
+static const struct option OPTIONS[17] =
 {
     {"help", no_argument, 0, 'h'},
     {"debug", no_argument, 0, 'd'},
@@ -70,11 +70,10 @@ static const struct option OPTIONS[] =
     {"install-license", required_argument, 0, 'l'},
     {"print-digest", required_argument, 0, 'p'},
     {"trust-key", required_argument, 0, 't'},
-    {"color", optional_argument, 0, 'C'},
     {NULL, 0, 0, '\0'}
 };
 
-static const char *HINTS[] =
+static const char *HINTS[17] =
 {
     "Print the help message",
     "Enable debugging output",
@@ -86,7 +85,6 @@ static const char *HINTS[] =
     "Install license without boostrapping (CFEngine Enterprise only)",
     "Print digest of the specified public key",
     "Make cf-serverd/cf-agent trust the specified public key",
-    "Enable colorized output. Possible values: 'always', 'auto', 'never'. If option is used, the default value is 'auto'",
     NULL
 };
 
@@ -114,7 +112,7 @@ int main(int argc, char *argv[])
 
     if (REMOVEKEYS)
     {
-        return RemoveKeys(remove_keys_host, true);
+        return RemoveKeys(remove_keys_host);
     }
 
     if(LICENSE_INSTALL)
@@ -162,7 +160,7 @@ static GenericAgentConfig *CheckOpts(int argc, char **argv)
     int c;
     GenericAgentConfig *config = GenericAgentConfigNewDefault(AGENT_TYPE_KEYGEN);
 
-    while ((c = getopt_long(argc, argv, "dvf:VMp:sr:t:hl:C::", OPTIONS, &optindex)) != EOF)
+    while ((c = getopt_long(argc, argv, "dvf:VMp:sr:t:hl:", OPTIONS, &optindex)) != EOF)
     {
         switch ((char) c)
         {
@@ -175,11 +173,7 @@ static GenericAgentConfig *CheckOpts(int argc, char **argv)
             break;
 
         case 'V':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteVersion(w);
-                FileWriterDetach(w);
-            }
+            PrintVersion();
             exit(0);
 
         case 'v':
@@ -209,11 +203,7 @@ static GenericAgentConfig *CheckOpts(int argc, char **argv)
             break;
 
         case 'h':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-key", OPTIONS, HINTS, false);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-key", OPTIONS, HINTS, false);
             exit(0);
 
         case 'M':
@@ -228,19 +218,8 @@ static GenericAgentConfig *CheckOpts(int argc, char **argv)
                 exit(EXIT_SUCCESS);
             }
 
-        case 'C':
-            if (!GenericAgentConfigParseColor(config, optarg))
-            {
-                exit(EXIT_FAILURE);
-            }
-            break;
-
         default:
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-key", OPTIONS, HINTS, false);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-key", OPTIONS, HINTS, false);
             exit(1);
 
         }

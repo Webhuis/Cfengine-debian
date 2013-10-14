@@ -1,12 +1,11 @@
-#include <test.h>
+#include "test.h"
 
-#include <cf3.defs.h>
-#include <cf3.extern.h>
+#include "cf3.defs.h"
+#include "cf3.extern.h"
 
-#include <syslog_client.h>
+#include "syslog_client.h"
 
 char VFQNAME[CF_MAXVARSIZE];
-char VPREFIX[CF_MAXVARSIZE];
 
 static struct sockaddr *got_address;
 

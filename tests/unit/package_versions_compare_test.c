@@ -1,14 +1,22 @@
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-#include <env_context.h>
-#include <verify_packages.h>
+#include "env_context.h"
 
-#include <test.h>
+#include "test.h"
+
+
+typedef enum
+{
+    VERCMP_ERROR = -1,
+    VERCMP_NO_MATCH = 0,
+    VERCMP_MATCH = 1
+} VersionCmpResult;
+
+VersionCmpResult ComparePackages(EvalContext *ctx, const char *n, const char *v, const char *a, PackageItem * pi, Attributes attr, Promise *pp);
 
 void test_different_name(void)
 {
     EvalContext *ctx = EvalContextNew();
-    PromiseResult result;
 
     PackageItem pi = {
         .name = "pkgone",
@@ -21,7 +29,7 @@ void test_different_name(void)
         }
     };
 
-    assert_int_equal(ComparePackages(ctx, "pkgtwo", "1", "arch", &pi, attr, NULL, "test", &result), VERCMP_NO_MATCH);
+    assert_int_equal(ComparePackages(ctx, "pkgtwo", "1", "arch", &pi, attr, NULL), false);
 
     EvalContextDestroy(ctx);
 }
@@ -29,7 +37,6 @@ void test_different_name(void)
 void test_wildcard_arch(void)
 {
     EvalContext *ctx = EvalContextNew();
-    PromiseResult result;
 
     PackageItem pi = {
         .name = "foobar",
@@ -42,7 +49,7 @@ void test_wildcard_arch(void)
         }
     };
 
-    assert_int_equal(ComparePackages(ctx, "foobar", "1", "*", &pi, attr, NULL, "test", &result), VERCMP_MATCH);
+    assert_int_equal(ComparePackages(ctx, "foobar", "1", "*", &pi, attr, NULL), true);
 
     EvalContextDestroy(ctx);
 }
@@ -50,7 +57,6 @@ void test_wildcard_arch(void)
 void test_non_matching_arch(void)
 {
     EvalContext *ctx = EvalContextNew();
-    PromiseResult result;
 
     PackageItem pi = {
         .name = "foobar",
@@ -63,15 +69,14 @@ void test_non_matching_arch(void)
         }
     };
 
-    assert_int_equal(ComparePackages(ctx, "foobar", "1", "s390", &pi, attr, NULL, "test", &result), VERCMP_NO_MATCH);
+    assert_int_equal(ComparePackages(ctx, "foobar", "1", "s390", &pi, attr, NULL), false);
 
     EvalContextDestroy(ctx);
 }
 
-VersionCmpResult DoCompare(const char *lhs, const char *rhs, PackageVersionComparator cmp)
+bool DoCompare(const char *lhs, const char *rhs, PackageVersionComparator cmp)
 {
     EvalContext *ctx = EvalContextNew();
-    PromiseResult result;
 
     PackageItem pi = {
         .name = "foobar",
@@ -84,194 +89,152 @@ VersionCmpResult DoCompare(const char *lhs, const char *rhs, PackageVersionCompa
         }
     };
 
-    VersionCmpResult cmp_result = ComparePackages(ctx, "foobar", rhs, "somearch", &pi, a, NULL, "test", &result);
+    return ComparePackages(ctx, "foobar", rhs, "somearch", &pi, a, NULL);
 
     EvalContextDestroy(ctx);
-
-    return cmp_result;
 }
 
 void test_wildcard_version(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "*", PACKAGE_VERSION_COMPARATOR_EQ), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "*", PACKAGE_VERSION_COMPARATOR_EQ), true);
 }
 
 void test_eq(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_EQ), VERCMP_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_NONE), VERCMP_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_EQ), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_EQ), true);
+    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_NONE), true);
+    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_EQ), false);
 }
 
 void test_ne(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_NEQ), VERCMP_NO_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_NEQ), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_NEQ), false);
+    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_NEQ), true);
 }
 
 void test_gt_lt(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_NO_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_NO_MATCH);
-    assert_int_equal(DoCompare("1.0-2", "1.0-1", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_NO_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_MATCH);
-    assert_int_equal(DoCompare("1.0-2", "1.0-1", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_GT), false);
+    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_GT), false);
+    assert_int_equal(DoCompare("1.0-2", "1.0-1", PACKAGE_VERSION_COMPARATOR_GT), true);
+    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_LT), false);
+    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_LT), true);
+    assert_int_equal(DoCompare("1.0-2", "1.0-1", PACKAGE_VERSION_COMPARATOR_LT), false);
 }
 
 void test_gte_lte(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_NO_MATCH);
-    assert_int_equal(DoCompare("1.0-2", "1.0-1", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_MATCH);
-    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_MATCH);
-    assert_int_equal(DoCompare("1.0-2", "1.0-1", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_GE), true);
+    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_GE), false);
+    assert_int_equal(DoCompare("1.0-2", "1.0-1", PACKAGE_VERSION_COMPARATOR_GE), true);
+    assert_int_equal(DoCompare("1.0-1", "1.0-1", PACKAGE_VERSION_COMPARATOR_LE), true);
+    assert_int_equal(DoCompare("1.0-1", "1.0-2", PACKAGE_VERSION_COMPARATOR_LE), true);
+    assert_int_equal(DoCompare("1.0-2", "1.0-1", PACKAGE_VERSION_COMPARATOR_LE), false);
 }
 
 void wrong_separators(void)
 {
-    assert_int_equal(DoCompare("1.0", "1,0", PACKAGE_VERSION_COMPARATOR_EQ), VERCMP_ERROR);
+    assert_int_equal(DoCompare("1.0", "1,0", PACKAGE_VERSION_COMPARATOR_EQ), false);
 }
 
 void uneven_lengths_1(void)
 {
-    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_EQ), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_EQ), false);
 }
 
 void uneven_lengths_2(void)
 {
-    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_GT), true);
 }
 
 void uneven_lengths_3(void)
 {
-    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_LT), false);
 }
 
 void uneven_lengths_4(void)
 {
-    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_GE), true);
 }
 
 void uneven_lengths_5(void)
 {
-    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0.1", "1.0", PACKAGE_VERSION_COMPARATOR_LE), false);
 }
 
 void uneven_lengths_6(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_EQ), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_EQ), false);
 }
 
 void uneven_lengths_7(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_GT), false);
 }
 
 void uneven_lengths_8(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_LT), true);
 }
 
 void uneven_lengths_9(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_GE), false);
 }
 
 void uneven_lengths_10(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0.1", PACKAGE_VERSION_COMPARATOR_LE), true);
 }
 
 void uneven_lengths_11(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_EQ), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_EQ), false);
 }
 
 void uneven_lengths_12(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_GT), true);
 }
 
 void uneven_lengths_13(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_LT), false);
 }
 
 void uneven_lengths_14(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_GE), true);
 }
 
 void uneven_lengths_15(void)
 {
-    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0-1", "1.0", PACKAGE_VERSION_COMPARATOR_LE), false);
 }
 
 void uneven_lengths_16(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_EQ), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_EQ), false);
 }
 
 void uneven_lengths_17(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_GT), false);
 }
 
 void uneven_lengths_18(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_LT), true);
 }
 
 void uneven_lengths_19(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_NO_MATCH);
+    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_GE), false);
 }
 
 void uneven_lengths_20(void)
 {
-    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_MATCH);
-}
-
-void invalid_01(void)
-{
-    assert_int_equal(DoCompare("text-1.0", "1.0", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_ERROR);
-}
-
-void invalid_02(void)
-{
-    assert_int_equal(DoCompare("text-1.0", "1.0", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_ERROR);
-}
-
-void invalid_03(void)
-{
-    assert_int_equal(DoCompare("1.0", "text-1.0", PACKAGE_VERSION_COMPARATOR_LE), VERCMP_ERROR);
-}
-
-void invalid_04(void)
-{
-    assert_int_equal(DoCompare("1.0", "text-1.0", PACKAGE_VERSION_COMPARATOR_GE), VERCMP_ERROR);
-}
-
-void invalid_05(void)
-{
-    assert_int_equal(DoCompare("text-1.0", "1.0", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_ERROR);
-}
-
-void invalid_06(void)
-{
-    assert_int_equal(DoCompare("text-1.0", "1.0", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_ERROR);
-}
-
-void invalid_07(void)
-{
-    assert_int_equal(DoCompare("1.0", "text-1.0", PACKAGE_VERSION_COMPARATOR_LT), VERCMP_ERROR);
-}
-
-void invalid_08(void)
-{
-    assert_int_equal(DoCompare("1.0", "text-1.0", PACKAGE_VERSION_COMPARATOR_GT), VERCMP_ERROR);
+    assert_int_equal(DoCompare("1.0", "1.0-1", PACKAGE_VERSION_COMPARATOR_LE), true);
 }
 
 
@@ -311,14 +274,6 @@ int main()
             unit_test(uneven_lengths_18),
             unit_test(uneven_lengths_19),
             unit_test(uneven_lengths_20),
-            unit_test(invalid_01),
-            unit_test(invalid_02),
-            unit_test(invalid_03),
-            unit_test(invalid_04),
-            unit_test(invalid_05),
-            unit_test(invalid_06),
-            unit_test(invalid_07),
-            unit_test(invalid_08),
         };
 
     return run_tests(tests);

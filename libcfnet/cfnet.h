@@ -22,13 +22,10 @@
   included file COSL.txt.
 */
 
-
 #ifndef CFENGINE_CFNET_H
 #define CFENGINE_CFNET_H
 
-
-#include <platform.h>
-#include <openssl/ssl.h>
+#include "platform.h"
 
 
 /* ************************************************ */
@@ -40,8 +37,6 @@
 #define CF_BUFSIZE 4096
 #define CF_SMALLBUF 128
 #define CF_MAX_IP_LEN 64        /* numerical ip length */
-#define CF_DONE 't'
-#define CF_MORE 'm'
 /* ************************************************ */
 
 
@@ -52,11 +47,7 @@
 #define CF_INBAND_OFFSET 8
 
 
-/* The only protocol we support inside TLS, for now... */
-#define CFNET_PROTOCOL_VERSION 1
 
-
-/* TODO Shouldn't this be in libutils? */
 typedef enum
 {
     FILE_TYPE_REGULAR,
@@ -67,6 +58,8 @@ typedef enum
     FILE_TYPE_CHAR_, /* Conflict with winbase.h */
     FILE_TYPE_SOCK
 } FileType;
+
+/* TODO Shouldn't this be in libutils? */
 typedef struct Stat_ Stat;
 struct Stat_
 {
@@ -90,53 +83,24 @@ struct Stat_
     Stat *next;
 };
 
-
-/*
- * TLS support
- */
-#define DEFAULT_TLS_TIMEOUT_SECONDS     5
-#define DEFAULT_TLS_TIMEOUT_USECONDS    0
-#define SET_DEFAULT_TLS_TIMEOUT(x) \
-    x.tv_sec = DEFAULT_TLS_TIMEOUT_SECONDS; \
-    x.tv_usec = DEFAULT_TLS_TIMEOUT_USECONDS
-#define DEFAULT_TLS_TRIES 5
-
-
-typedef enum
-{
-    /* When connection is initialised ProtocolVersion is 0, i.e. undefined. */
-    CF_PROTOCOL_UNDEFINED = 0,
-    CF_PROTOCOL_CLASSIC,
-    CF_PROTOCOL_TLS
-} ProtocolVersion;
-
 typedef struct
 {
-    ProtocolVersion type;
-    int sd;                           /* Socket descriptor */
-    SSL *ssl;                         /* OpenSSL struct for TLS connections */
-    RSA *remote_key;
-    char remote_keyhash[EVP_MAX_MD_SIZE];       /* key hash */
-    char remote_keyhash_str[EVP_MAX_MD_SIZE*4]; /* key hash as a SHA=... string */
-} ConnectionInfo;
-
-typedef struct
-{
-    int family;                 /* AF_INET or AF_INET6 */
-    ConnectionInfo conn_info;
+    int sd;
     int trust;                  /* true if key being accepted on trust */
     int authenticated;
+    int protoversion;
+    int family;                 /* AF_INET or AF_INET6 */
     char username[CF_SMALLBUF];
     /* Unused for now... */
     /* char localip[CF_MAX_IP_LEN]; */
     char remoteip[CF_MAX_IP_LEN];
+    unsigned char digest[EVP_MAX_MD_SIZE + 1];
     unsigned char *session_key;
     char encryption_type;
     short error;
     char *this_server;
-    Stat *cache;             /* Cache for network connection (SYNCH result) */
+    Stat *cache; /* Cache for network connection (READDIR result) */
 } AgentConnection;
-
 
 
 /* misc.c */

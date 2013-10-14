@@ -22,16 +22,15 @@
   included file COSL.txt.
 */
 
-#include <generic_agent.h>
+#include "generic_agent.h"
 
-#include <env_context.h>
-#include <conversion.h>
-#include <syntax.h>
-#include <rlist.h>
-#include <parser.h>
-#include <sysinfo.h>
-#include <man.h>
-#include <bootstrap.h>
+#include "env_context.h"
+#include "conversion.h"
+#include "syntax.h"
+#include "rlist.h"
+#include "parser.h"
+#include "sysinfo.h"
+#include "man.h"
 
 #include <time.h>
 
@@ -68,7 +67,6 @@ static const struct option OPTIONS[] =
     {"full-check", no_argument, 0, 'c'},
     {"warn", optional_argument, 0, 'W'},
     {"legacy-output", no_argument, 0, 'l'},
-    {"color", optional_argument, 0, 'C'},
     {NULL, 0, 0, '\0'}
 };
 
@@ -91,7 +89,6 @@ static const char *HINTS[] =
     "Ensure full policy integrity checks",
     "Pass comma-separated <warnings>|all to enable non-default warnings, or error=<warnings>|all",
     "Use legacy output format",
-    "Enable colorized output. Possible values: 'always', 'auto', 'never'. If option is used, the default value is 'auto'",
     NULL
 };
 
@@ -118,6 +115,8 @@ int main(int argc, char *argv[])
         ShowPromises(policy->bundles, policy->bodies);
     }
 
+    CheckForPolicyHub(ctx);
+
     switch (config->agent_specific.common.policy_output_format)
     {
     case GENERIC_AGENT_CONFIG_COMMON_POLICY_OUTPUT_FORMAT_CF:
@@ -137,9 +136,9 @@ int main(int argc, char *argv[])
                                                     config->agent_specific.common.parser_warnings_error);
             JsonElement *json_policy = PolicyToJson(output_policy);
             Writer *writer = FileWriter(stdout);
-            JsonWrite(writer, json_policy, 2);
+            JsonElementPrint(writer, json_policy, 2);
             WriterClose(writer);
-            JsonDestroy(json_policy);
+            JsonElementDestroy(json_policy);
             PolicyDestroy(output_policy);
         }
         break;
@@ -163,7 +162,7 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
     int c;
     GenericAgentConfig *config = GenericAgentConfigNewDefault(AGENT_TYPE_COMMON);
 
-    while ((c = getopt_long(argc, argv, "dvnIf:D:N:VSrxMb:i:p:s:cg:hW:lC::", OPTIONS, &optindex)) != EOF)
+    while ((c = getopt_long(argc, argv, "dvnIf:D:N:VSrxMb:i:p:s:cg:hW:l", OPTIONS, &optindex)) != EOF)
     {
         switch ((char) c)
         {
@@ -229,9 +228,9 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             {
                 JsonElement *json_syntax = SyntaxToJson();
                 Writer *out = FileWriter(stdout);
-                JsonWrite(out, json_syntax, 0);
+                JsonElementPrint(out, json_syntax, 0);
                 FileWriterDetach(out);
-                JsonDestroy(json_syntax);
+                JsonElementDestroy(json_syntax);
                 exit(EXIT_SUCCESS);
             }
             else
@@ -265,23 +264,15 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             DONTDO = true;
             IGNORELOCK = true;
             LOOKUP = true;
-            EvalContextClassPutHard(ctx, "opt_dry_run");
+            EvalContextHeapAddHard(ctx, "opt_dry_run");
             break;
 
         case 'V':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteVersion(w);
-                FileWriterDetach(w);
-            }
+            PrintVersion();
             exit(0);
 
         case 'h':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-promises", OPTIONS, HINTS, true);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-promises", OPTIONS, HINTS, true);
             exit(0);
 
         case 'M':
@@ -312,19 +303,8 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             Log(LOG_LEVEL_ERR, "Self-diagnostic functionality is retired.");
             exit(0);
 
-        case 'C':
-            if (!GenericAgentConfigParseColor(config, optarg))
-            {
-                exit(EXIT_FAILURE);
-            }
-            break;
-
         default:
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-promises", OPTIONS, HINTS, true);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-promises", OPTIONS, HINTS, true);
             exit(1);
 
         }

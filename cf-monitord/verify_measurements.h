@@ -25,8 +25,8 @@
 #ifndef CFENGINE_VERIFY_MEASUREMENTS_H
 #define CFENGINE_VERIFY_MEASUREMENTS_H
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-PromiseResult VerifyMeasurementPromise(EvalContext *ctx, double *measurement, Promise *pp);
+void VerifyMeasurementPromise(EvalContext *ctx, double *this, Promise *pp);
 
 #endif

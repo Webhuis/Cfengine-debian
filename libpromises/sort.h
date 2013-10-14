@@ -36,9 +36,5 @@ Item *SortItemListTimes(Item *list); /* Reverse sort */
 
 Rlist *SortRlist(Rlist *list, int (*CompareItems) ());
 Rlist *AlphaSortRListNames(Rlist *list);
-Rlist *IntSortRListNames(Rlist *list);
-Rlist *RealSortRListNames(Rlist *list);
-Rlist *IPSortRListNames(Rlist *list);
-Rlist *MACSortRListNames(Rlist *list);
 
 #endif

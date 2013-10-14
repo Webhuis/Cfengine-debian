@@ -22,21 +22,29 @@
   included file COSL.txt.
 */
 
-#include <generic_agent.h>
+#include "generic_agent.h"
 
-#include <dbm_api.h>
-#include <lastseen.h>
-#include <dir.h>
-#include <scope.h>
-#include <files_copy.h>
-#include <files_interfaces.h>
-#include <files_hashes.h>
-#include <keyring.h>
-#include <communication.h>
-#include <env_context.h>
-#include <crypto.h>
+#include "dbm_api.h"
+#include "lastseen.h"
+#include "dir.h"
+#include "scope.h"
+#include "files_copy.h"
+#include "files_interfaces.h"
+#include "files_hashes.h"
+#include "keyring.h"
+#include "communication.h"
+#include "env_context.h"
+#include "crypto.h"
 
-#include <cf-key-functions.h>
+#include "cf-key-functions.h"
+
+#ifdef HAVE_NOVA
+#include "license.h"
+#endif
+
+#ifdef HAVE_NOVA
+static bool LicensePublicKeyPath(char path_public_key[MAX_FILENAME], char *path_license);
+#endif
 
 RSA* LoadPublicKey(const char* filename)
 {
@@ -137,7 +145,7 @@ bool ShowHost(const char *hostkey, const char *address, bool incoming,
     int ret = IPString2Hostname(hostname, address, sizeof(hostname));
 
     (*count)++;
-    printf("%-10.10s %-40.40s %-25.25s %-26.26s %-s\n",
+    printf("%-10.10s %-17.17s %-25.25s %-26.26s %-s\n",
            incoming ? "Incoming" : "Outgoing",
            address, (ret != -1) ? hostname : "-",
            cf_strtimestamp_local(quality->lastseen, timebuf), hostkey);
@@ -149,7 +157,7 @@ void ShowLastSeenHosts()
 {
     int count = 0;
 
-    printf("%-10.10s %-40.40s %-25.25s %-26.26s %-s\n", "Direction", "IP", "Name", "Last connection", "Key");
+    printf("%-10.10s %-17.17s %-25.25s %-26.26s %-s\n", "Direction", "IP", "Name", "Last connection", "Key");
 
     if (!ScanLastSeenQuality(ShowHost, &count))
     {
@@ -160,50 +168,43 @@ void ShowLastSeenHosts()
     printf("Total Entries: %d\n", count);
 }
 
-/**
- * @brief removes all traces of entry 'input' from lastseen and filesystem
- *
- * @param[in] key digest (SHA/MD5 format) or free host name string
- * @param[in] must_be_coherent. false : delete if lastseen is incoherent, 
- *                              true :  don't if lastseen is incoherent
- * @retval 0 if entry was deleted, >0 otherwise
- */
-int RemoveKeys(const char *input, bool must_be_coherent)
+
+int RemoveKeys(const char *host)
 {
-    int res = 0;
-    char equivalent[CF_BUFSIZE];
-    equivalent[0] = '\0';
+    char digest[CF_BUFSIZE];
+    char ipaddr[CF_MAX_IP_LEN];
 
-    res = RemoveKeysFromLastSeen(input, must_be_coherent, equivalent);
-    if (res!=0)
+    if (Hostname2IPString(ipaddr, host, sizeof(ipaddr)) == -1)
     {
-        return res;
-    }
-
-    Log(LOG_LEVEL_INFO, "Removed corresponding entries from lastseen database.");
-
-    int removed_input      = RemovePublicKey(input);
-    int removed_equivalent = RemovePublicKey(equivalent);
-
-    if ((removed_input == -1) || (removed_equivalent == -1))
-    {
-        Log(LOG_LEVEL_ERR, "Unable to remove keys for the entry %s", input);
+        Log(LOG_LEVEL_ERR, 
+            "ERROR, could not resolve '%s', not removing", host);
         return 255;
     }
-    else if (removed_input + removed_equivalent == 0)
+
+    Address2Hostkey(ipaddr, digest);
+    RemoveHostFromLastSeen(digest);
+
+    int removed_by_ip = RemovePublicKey(ipaddr);
+    int removed_by_digest = RemovePublicKey(digest);
+
+    if ((removed_by_ip == -1) || (removed_by_digest == -1))
     {
-        Log(LOG_LEVEL_ERR, "No key file(s) for entry %s were found on the filesytem", input);
+        Log(LOG_LEVEL_ERR, "Unable to remove keys for the host '%s'", host);
+        return 255;
+    }
+    else if (removed_by_ip + removed_by_digest == 0)
+    {
+        Log(LOG_LEVEL_ERR, "No keys for host '%s' were found", host);
         return 1;
     }
     else
     {
-        Log(LOG_LEVEL_INFO, "Removed %d corresponding key file(s) from filesystem.",
-              removed_input + removed_equivalent);
+        Log(LOG_LEVEL_INFO, "Removed %d key(s) for host '%s'",
+              removed_by_ip + removed_by_digest, host);
         return 0;
     }
-
-    return -1;
 }
+
 
 void KeepKeyPromises(const char *public_key_file, const char *private_key_file)
 {
@@ -311,9 +312,75 @@ void KeepKeyPromises(const char *public_key_file, const char *private_key_file)
 }
 
 
-ENTERPRISE_FUNC_1ARG_DEFINE_STUB(bool, LicenseInstall, ARG_UNUSED char *, path_source)
+#ifndef HAVE_NOVA
+bool LicenseInstall(ARG_UNUSED char *path_source)
 {
     Log(LOG_LEVEL_ERR, "License installation only applies to CFEngine Enterprise");
 
     return false;
 }
+
+#else  /* HAVE_NOVA */
+bool LicenseInstall(char *path_source)
+{
+    struct stat sb;
+
+    if(stat(path_source, &sb) == -1)
+    {
+        Log(LOG_LEVEL_ERR, "Can not stat input license file '%s'. (stat: %s)", path_source, GetErrorStr());
+        return false;
+    }
+
+    char path_destination[MAX_FILENAME];
+    snprintf(path_destination, sizeof(path_destination), "%s/inputs/license.dat", CFWORKDIR);
+    MapName(path_destination);
+
+    if(stat(path_destination, &sb) == 0)
+    {
+        Log(LOG_LEVEL_ERR, "A license file is already installed in '%s' -- please move it out of the way and try again", path_destination);
+        return false;
+    }
+
+    char path_public_key[MAX_FILENAME];
+
+    if(!LicensePublicKeyPath(path_public_key, path_source))
+    {
+        Log(LOG_LEVEL_ERR, "Could not find path to public key -- license parse error?");
+    }
+
+    if(stat(path_public_key, &sb) != 0)
+    {
+        Log(LOG_LEVEL_ERR, "The licensed public key is not installed -- please copy it to '%s' and try again", path_public_key);
+        return false;
+    }
+
+
+    bool success = CopyRegularFileDisk(path_source, path_destination);
+
+    if(success)
+    {
+        Log(LOG_LEVEL_INFO, "Installed license at '%s'", path_destination);
+    }
+    else
+    {
+        Log(LOG_LEVEL_ERR, "Failed copying license from '%s' to '%s'", path_source, path_destination);
+    }
+
+    return success;
+}
+
+static bool LicensePublicKeyPath(char path_public_key[MAX_FILENAME], char *path_license)
+{
+    EnterpriseLicense license;
+
+    if(!LicenseFileParse(&license, path_license))
+    {
+        return false;
+    }
+
+    snprintf(path_public_key, MAX_FILENAME, "%s/ppkeys/root-SHA=%s.pub", CFWORKDIR, license.public_key_digest);
+    MapName(path_public_key);
+
+    return true;
+}
+#endif  /* HAVE_NOVA */

@@ -1,5 +1,5 @@
 ############################################################################
-#  Copyright (C) CFEngine AS
+#  Copyright (C) Cfengine AS
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of the GNU Lesser General Public License LGPL as published by the
@@ -11,16 +11,16 @@
 #  GNU General Public License for more details.
 #
 #  To the extent this program is licensed as part of the Enterprise
-#  versions of CFEngine, the applicable Commerical Open Source License
+#  versions of Cfengine, the applicable Commerical Open Source License
 #  (COSL) may apply to this file if you as a licensee so wish it. See
 #  included file COSL.txt.
 ###########################################################################
 #
-# CFEngine Community Open Promise-Body Library
+# Cfengine Community Open Promise-Body Library
 #
-# This initiative started by CFEngine promotes a
+# This initiative started by Cfengine promotes a
 # standardized set of names and promise specifications
-# for template functionality within CFEngine 3.
+# for template functionality within Cfengine 3.
 #
 # The aim is to promote an industry standard for
 # naming of configuration patterns, leading to a
@@ -30,7 +30,7 @@
 # minimal to assist readability and comprehensibility.
 
 # Contributions to this file are voluntarily given to
-# the cfengine community, and are moderated by CFEngine.
+# the cfengine community, and are moderated by Cfengine.
 # No liability or warranty for misuse is implied.
 #
 # If you add to this file, please try to make the
@@ -39,11 +39,11 @@
 # the online docs
 #
 
-# For CFEngine Core: 3.5.1 to 3.5.x
+# For Cfengine Core: 3.5.1 to 3.5.x
 # Monitor bodies
 
 ###################################################
-# If you find CFEngine useful, please consider    #
+# If you find Cfengine useful, please consider    #
 # purchasing a commercial version of the software.#
 ###################################################
 
@@ -53,30 +53,30 @@
 
 body match_value scan_log(line)
 {
-      select_line_matching => "$(line)";
-      track_growing_file => "true";
+select_line_matching => "$(line)";
+track_growing_file => "true";
 }
 
 ##
 
 body match_value scan_changing_file(line)
 {
-      select_line_matching => "$(line)";
-      track_growing_file => "false";
+select_line_matching => "$(line)";
+track_growing_file => "false";
 }
 
 ##
 
 body match_value single_value(regex)
 {
-      select_line_matching => "$(regex)";
-      extraction_regex => "($(regex))";
+select_line_matching => "$(regex)";
+extraction_regex => "($(regex))";
 }
 
 ##
 
 body match_value line_match_value(line_match, extract_regex)
 {
-      select_line_matching => "$(line_match)";
-      extraction_regex => "$(extract_regex)";
+select_line_matching => "$(line_match)";
+extraction_regex => "$(extract_regex)";
 }

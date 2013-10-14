@@ -22,10 +22,12 @@
   included file COSL.txt.
 */
 
+#include "sequence.h"
 
-#include <sequence.h>
-#include <alloc.h>
+#include "alloc.h"
 
+#include <stdlib.h>
+#include <assert.h>
 
 static const size_t EXPAND_FACTOR = 2;
 
@@ -84,12 +86,6 @@ static void ExpandIfNeccessary(Seq *seq)
         seq->capacity *= EXPAND_FACTOR;
         seq->data = xrealloc(seq->data, sizeof(void *) * seq->capacity);
     }
-}
-
-void SeqSet(Seq *seq, size_t index, void *item)
-{
-    assert(index < SeqLength(seq));
-    seq->data[index] = item;
 }
 
 void SeqAppend(Seq *seq, void *item)
@@ -224,14 +220,6 @@ void SeqSoftRemoveRange(Seq *seq, size_t start, size_t end)
     seq->length -= end - start + 1;
 }
 
-void SeqClear(Seq *seq)
-{
-    if (SeqLength(seq) > 0)
-    {
-        SeqRemoveRange(seq, 0, SeqLength(seq) - 1);
-    }
-}
-
 void SeqSoftRemove(Seq *seq, size_t index)
 {
     SeqSoftRemoveRange(seq, index, index);
@@ -267,23 +255,4 @@ void SeqShuffle(Seq *seq, unsigned int seed)
 
     /* Restore previous random number state */
     srand(rand_state);
-}
-
-Seq *SeqGetRange(Seq *seq, size_t start, size_t end)
-{
-    assert (seq);
-
-    if ((start > end) || (seq->length < start) || (seq->length < end))
-    {
-        return NULL;
-    }
-
-    Seq *sub = SeqNew(end - start + 1, seq->ItemDestroy);
-
-    for (size_t i = start; i <= end; i++)
-    {
-        SeqAppend(sub, SeqAt(seq, i));
-    }
-
-    return sub;
 }

@@ -22,17 +22,16 @@
   included file COSL.txt.
 */
 
-#include <verify_files_hashes.h>
+#include "verify_files_hashes.h"
 
-#include <actuator.h>
-#include <rlist.h>
-#include <policy.h>
-#include <client_code.h>
-#include <files_interfaces.h>
-#include <files_lib.h>
-#include <files_hashes.h>
-#include <misc_lib.h>
-#include <env_context.h>
+#include "rlist.h"
+#include "policy.h"
+#include "client_code.h"
+#include "files_interfaces.h"
+#include "files_lib.h"
+#include "files_hashes.h"
+#include "misc_lib.h"
+#include "env_context.h"
 
 /*
  * Key format:
@@ -41,7 +40,7 @@
  * 1 byte     \0
  * N bytes    filename
  */
-static char *NewIndexKey(char type, const char *name, int *size)
+static char *NewIndexKey(char type, char *name, int *size)
 {
     char *chk_key;
 
@@ -81,7 +80,7 @@ static void DeleteHashValue(ChecksumValue *chk_val)
     free((char *) chk_val);
 }
 
-static int ReadHash(CF_DB *dbp, HashMethod type, const char *name, unsigned char digest[EVP_MAX_MD_SIZE + 1])
+static int ReadHash(CF_DB *dbp, HashMethod type, char *name, unsigned char digest[EVP_MAX_MD_SIZE + 1])
 {
     char *key;
     int size;
@@ -103,7 +102,7 @@ static int ReadHash(CF_DB *dbp, HashMethod type, const char *name, unsigned char
     }
 }
 
-static int WriteHash(CF_DB *dbp, HashMethod type, const char *name, unsigned char digest[EVP_MAX_MD_SIZE + 1])
+static int WriteHash(CF_DB *dbp, HashMethod type, char *name, unsigned char digest[EVP_MAX_MD_SIZE + 1])
 {
     char *key;
     ChecksumValue *value;
@@ -117,7 +116,7 @@ static int WriteHash(CF_DB *dbp, HashMethod type, const char *name, unsigned cha
     return ret;
 }
 
-static void DeleteHash(CF_DB *dbp, HashMethod type, const char *name)
+static void DeleteHash(CF_DB *dbp, HashMethod type, char *name)
 {
     int size;
     char *key;
@@ -132,8 +131,8 @@ static void DeleteHash(CF_DB *dbp, HashMethod type, const char *name)
    to the database. Returns true if hashes do not match and also potentially
    updates database to the new value */
 
-int FileHashChanged(EvalContext *ctx, const char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type,
-                    Attributes attr, Promise *pp, PromiseResult *result)
+int FileHashChanged(EvalContext *ctx, char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type,
+                    Attributes attr, Promise *pp)
 {
     int i, size = 21;
     unsigned char dbdigest[EVP_MAX_MD_SIZE + 1];
@@ -145,7 +144,6 @@ int FileHashChanged(EvalContext *ctx, const char *filename, unsigned char digest
     if (!OpenDB(&dbp, dbid_checksums))
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr, "Unable to open the hash database!");
-        *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
         return false;
     }
 
@@ -166,7 +164,6 @@ int FileHashChanged(EvalContext *ctx, const char *filename, unsigned char digest
                 {
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_CHANGE, pp, attr, "Updating hash for '%s' to '%s'", filename,
                          HashPrintSafe(type, digest, buffer));
-                    *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
 
                     DeleteHash(dbp, type, filename);
                     WriteHash(dbp, type, filename, digest);
@@ -174,7 +171,6 @@ int FileHashChanged(EvalContext *ctx, const char *filename, unsigned char digest
                 else
                 {
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr, "Hash for file '%s' changed", filename);
-                    *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
                 }
 
                 CloseDB(dbp);
@@ -183,7 +179,6 @@ int FileHashChanged(EvalContext *ctx, const char *filename, unsigned char digest
         }
 
         cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, attr, "File hash for %s is correct", filename);
-        *result = PromiseResultUpdate(*result, PROMISE_RESULT_NOOP);
         CloseDB(dbp);
         return false;
     }
@@ -192,7 +187,6 @@ int FileHashChanged(EvalContext *ctx, const char *filename, unsigned char digest
         /* Key was not found, so install it */
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_CHANGE, pp, attr, "File '%s' was not in '%s' database - new file found", filename,
              FileHashName(type));
-        *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
         Log(LOG_LEVEL_DEBUG, "Storing checksum for '%s' in database '%s'", filename, HashPrintSafe(type, digest, buffer));
         WriteHash(dbp, type, filename, digest);
 
@@ -203,7 +197,7 @@ int FileHashChanged(EvalContext *ctx, const char *filename, unsigned char digest
     }
 }
 
-int CompareFileHashes(const char *file1, const char *file2, struct stat *sstat, struct stat *dstat, FileCopy fc, AgentConnection *conn)
+int CompareFileHashes(char *file1, char *file2, struct stat *sstat, struct stat *dstat, FileCopy fc, AgentConnection *conn)
 {
     unsigned char digest1[EVP_MAX_MD_SIZE + 1] = { 0 }, digest2[EVP_MAX_MD_SIZE + 1] = { 0 };
     int i;
@@ -214,7 +208,7 @@ int CompareFileHashes(const char *file1, const char *file2, struct stat *sstat, 
         return true;
     }
 
-    if ((fc.servers == NULL) || (strcmp(RlistScalarValue(fc.servers), "localhost") == 0))
+    if ((fc.servers == NULL) || (strcmp(fc.servers->item, "localhost") == 0))
     {
         HashFile(file1, digest1, CF_DEFAULT_DIGEST);
         HashFile(file2, digest2, CF_DEFAULT_DIGEST);
@@ -236,7 +230,7 @@ int CompareFileHashes(const char *file1, const char *file2, struct stat *sstat, 
     }
 }
 
-int CompareBinaryFiles(const char *file1, const char *file2, struct stat *sstat, struct stat *dstat, FileCopy fc, AgentConnection *conn)
+int CompareBinaryFiles(char *file1, char *file2, struct stat *sstat, struct stat *dstat, FileCopy fc, AgentConnection *conn)
 {
     int fd1, fd2, bytes1, bytes2;
     char buff1[BUFSIZ], buff2[BUFSIZ];
@@ -247,7 +241,7 @@ int CompareBinaryFiles(const char *file1, const char *file2, struct stat *sstat,
         return true;
     }
 
-    if ((fc.servers == NULL) || (strcmp(RlistScalarValue(fc.servers), "localhost") == 0))
+    if ((fc.servers == NULL) || (strcmp(fc.servers->item, "localhost") == 0))
     {
         fd1 = open(file1, O_RDONLY | O_BINARY, 0400);
         fd2 = open(file2, O_RDONLY | O_BINARY, 0400);
@@ -363,7 +357,7 @@ static char FileStateToChar(FileState status)
     }
 }
 
-void LogHashChange(const char *file, FileState status, char *msg, Promise *pp)
+void LogHashChange(char *file, FileState status, char *msg, Promise *pp)
 {
     FILE *fp;
     char fname[CF_BUFSIZE];

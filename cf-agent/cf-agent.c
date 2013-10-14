@@ -22,57 +22,56 @@
   included file COSL.txt.
 */
 
-#include <generic_agent.h>
+#include "generic_agent.h"
 
-#include <actuator.h>
-#include <audit.h>
-#include <env_context.h>
-#include <verify_classes.h>
-#include <verify_databases.h>
-#include <verify_environments.h>
-#include <verify_exec.h>
-#include <verify_methods.h>
-#include <verify_processes.h>
-#include <verify_packages.h>
-#include <verify_services.h>
-#include <verify_storage.h>
-#include <verify_files.h>
-#include <verify_files_utils.h>
-#include <verify_vars.h>
-#include <addr_lib.h>
-#include <files_names.h>
-#include <files_interfaces.h>
-#include <files_repository.h>
-#include <files_edit.h>
-#include <files_properties.h>
-#include <item_lib.h>
-#include <vars.h>
-#include <conversion.h>
-#include <expand.h>
-#include <locks.h>
-#include <scope.h>
-#include <matching.h>
-#include <instrumentation.h>
-#include <promises.h>
-#include <unix.h>
-#include <attributes.h>
-#include <communication.h>
-#include <signals.h>
-#include <nfs.h>
-#include <processes_select.h>
-#include <list.h>
-#include <fncall.h>
-#include <rlist.h>
-#include <agent-diagnostics.h>
-#include <sysinfo.h>
-#include <cf-agent-enterprise-stubs.h>
-#include <syslog_client.h>
-#include <man.h>
-#include <bootstrap.h>
-#include <misc_lib.h>
-#include <buffer.h>
+#include "audit.h"
+#include "env_context.h"
+#include "verify_classes.h"
+#include "verify_databases.h"
+#include "verify_environments.h"
+#include "verify_exec.h"
+#include "verify_methods.h"
+#include "verify_processes.h"
+#include "verify_packages.h"
+#include "verify_services.h"
+#include "verify_storage.h"
+#include "verify_files.h"
+#include "verify_files_utils.h"
+#include "verify_vars.h"
+#include "addr_lib.h"
+#include "files_names.h"
+#include "files_interfaces.h"
+#include "files_repository.h"
+#include "files_edit.h"
+#include "files_properties.h"
+#include "item_lib.h"
+#include "vars.h"
+#include "conversion.h"
+#include "expand.h"
+#include "locks.h"
+#include "scope.h"
+#include "matching.h"
+#include "instrumentation.h"
+#include "promises.h"
+#include "unix.h"
+#include "attributes.h"
+#include "communication.h"
+#include "signals.h"
+#include "nfs.h"
+#include "processes_select.h"
+#include "list.h"
+#include "fncall.h"
+#include "rlist.h"
+#include "agent-diagnostics.h"
+#include "sysinfo.h"
+#include "cf-agent-enterprise-stubs.h"
+#include "syslog_client.h"
+#include "man.h"
+#include "bootstrap.h"
+#include "misc_lib.h"
+#include "buffer.h"
 
-#include <mod_common.h>
+#include "mod_common.h"
 
 typedef enum
 {
@@ -96,12 +95,18 @@ typedef enum
 
 #ifdef HAVE_AVAHI_CLIENT_CLIENT_H
 #ifdef HAVE_AVAHI_COMMON_ADDRESS_H
-#include <findhub.h>
+#include "findhub.h"
 #endif
 #endif
 
-#include <ornaments.h>
+#ifdef HAVE_NOVA
+#include "agent_reports.h"
+#include "nova-agent-diagnostics.h"
+#endif
 
+#include "ornaments.h"
+
+#include <assert.h>
 
 extern int PR_KEPT;
 extern int PR_REPAIRED;
@@ -147,14 +152,14 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv);
 static char **TranslateOldBootstrapOptionsSeparate(int *argc_new, char **argv);
 static char **TranslateOldBootstrapOptionsConcatenated(int argc, char **argv);
 static void FreeStringArray(int size, char **array);
-static void CheckAgentAccess(Rlist *list, const Policy *policy);
+static void CheckAgentAccess(Rlist *list, const Rlist *input_files);
 static void KeepControlPromises(EvalContext *ctx, Policy *policy);
-static PromiseResult KeepAgentPromise(EvalContext *ctx, Promise *pp, void *param);
-static int NewTypeContext(EvalContext *ctx, TypeSequence type);
+static void KeepAgentPromise(EvalContext *ctx, Promise *pp, void *param);
+static int NewTypeContext(TypeSequence type);
 static void DeleteTypeContext(EvalContext *ctx, Bundle *bp, TypeSequence type);
 static void ClassBanner(EvalContext *ctx, TypeSequence type);
-static PromiseResult ParallelFindAndVerifyFilesPromises(EvalContext *ctx, Promise *pp);
-static bool VerifyBootstrap(EvalContext *ctx);
+static void ParallelFindAndVerifyFilesPromises(EvalContext *ctx, Promise *pp);
+static bool VerifyBootstrap(void);
 static void KeepPromiseBundles(EvalContext *ctx, Policy *policy, GenericAgentConfig *config);
 static void KeepPromises(EvalContext *ctx, Policy *policy, GenericAgentConfig *config);
 static int NoteBundleCompliance(const Bundle *bundle, int save_pr_kept, int save_pr_repaired, int save_pr_notkept);
@@ -174,7 +179,7 @@ static const char *CF_AGENT_MANPAGE_LONG_DESCRIPTION =
         "For each bundle, cf-agent groups promise statements according to their type. Promise types are then evaluated in a preset "
         "order to ensure fast system convergence to policy.\n";
 
-static const struct option OPTIONS[] =
+static const struct option OPTIONS[15] =
 {
     {"bootstrap", required_argument, 0, 'B'},
     {"bundlesequence", required_argument, 0, 'b'},
@@ -190,12 +195,10 @@ static const struct option OPTIONS[] =
     {"verbose", no_argument, 0, 'v'},
     {"version", no_argument, 0, 'V'},
     {"legacy-output", no_argument, 0, 'l'},
-    {"color", optional_argument, 0, 'C'},
-    {"no-extensions", no_argument, 0, 'E'},
     {NULL, 0, 0, '\0'}
 };
 
-static const char *HINTS[] =
+static const char *HINTS[15] =
 {
     "Bootstrap CFEngine to the given policy server IP, hostname or :avahi (automatic detection)",
     "Set or override bundlesequence from command line",
@@ -211,8 +214,6 @@ static const char *HINTS[] =
     "Output verbose information about the behaviour of the agent",
     "Output the version of the software",
     "Use legacy output format",
-    "Enable colorized output. Possible values: 'always', 'auto', 'never'. If option is used, the default value is 'auto'",
-    "Disable extension loading (used while upgrading)",
     NULL
 };
 
@@ -230,7 +231,7 @@ int main(int argc, char *argv[])
     GenericAgentDiscoverContext(ctx, config);
 
     Policy *policy = NULL;
-    if (GenericAgentCheckPolicy(config, ALWAYS_VALIDATE))
+    if (GenericAgentCheckPolicy(ctx, config, ALWAYS_VALIDATE))
     {
         policy = GenericAgentLoadPolicy(ctx, config);
     }
@@ -241,10 +242,12 @@ int main(int argc, char *argv[])
     else
     {
         Log(LOG_LEVEL_ERR, "CFEngine was not able to get confirmation of promises from cf-promises, so going to failsafe");
-        EvalContextClassPut(ctx, NULL, "failsafe_fallback", false, CONTEXT_SCOPE_NAMESPACE);
+        EvalContextHeapAddHard(ctx, "failsafe_fallback");
         GenericAgentConfigSetInputFile(config, GetWorkDir(), "failsafe.cf");
         policy = GenericAgentLoadPolicy(ctx, config);
     }
+
+    CheckForPolicyHub(ctx);
 
     ThisAgentInit();
     BeginAudit();
@@ -258,15 +261,19 @@ int main(int argc, char *argv[])
     // only note class usage when default policy is run
     if (!MINUSF)
     {
-        ClassTableIterator *iter = EvalContextClassTableIteratorNewGlobal(ctx, NULL, true, true);
-        NoteClassUsage(iter, true);
-        ClassTableIteratorDestroy(iter);
+        StringSetIterator soft_iter = EvalContextHeapIteratorSoft(ctx);
+        NoteClassUsage(soft_iter, true);
+
+        StringSetIterator hard_iter = EvalContextHeapIteratorHard(ctx);
+        NoteClassUsage(hard_iter, true);
     }
-    Nova_NoteVarUsageDB(ctx);
+#ifdef HAVE_NOVA
+    Nova_NoteVarUsageDB();
     Nova_TrackExecution(config->input_file);
+#endif
     PurgeLocks();
 
-    if (config->agent_specific.agent.bootstrap_policy_server && !VerifyBootstrap(ctx))
+    if (config->agent_specific.agent.bootstrap_policy_server && !VerifyBootstrap())
     {
         RemovePolicyServerFile(GetWorkDir());
         WriteAmPolicyHubFile(GetWorkDir(), false);
@@ -305,7 +312,7 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
     char **argv_new = TranslateOldBootstrapOptionsConcatenated(argc_new, argv_tmp);
     FreeStringArray(argc_new, argv_tmp);
 
-    while ((c = getopt_long(argc_new, argv_new, "dvnKIf:D:N:VxMB:b:hlC::E", OPTIONS, NULL)) != EOF)
+    while ((c = getopt_long(argc_new, argv_new, "dvnKIf:D:N:VxMB:b:hl", OPTIONS, NULL)) != EOF)
     {
         switch ((char) c)
         {
@@ -415,23 +422,15 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
         case 'n':
             DONTDO = true;
             IGNORELOCK = true;
-            EvalContextClassPut(ctx, NULL, "opt_dry_run", false, CONTEXT_SCOPE_NAMESPACE);
+            EvalContextHeapAddHard(ctx, "opt_dry_run");
             break;
 
         case 'V':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteVersion(w);
-                FileWriterDetach(w);
-            }
+            PrintVersion();
             exit(0);
 
         case 'h':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-agent", OPTIONS, HINTS, true);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-agent", OPTIONS, HINTS, true);
             exit(0);
 
         case 'M':
@@ -449,35 +448,19 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
         case 'x':
             {
                 const char *workdir = GetWorkDir();
-                const char *logdir = GetLogDir();
-                strcpy(CFWORKDIR, workdir);
                 Writer *out = FileWriter(stdout);
                 WriterWriteF(out, "self-diagnostics for agent using workdir '%s'\n", workdir);
-                WriterWriteF(out, "self-diagnostics for agent using logdir '%s'\n", logdir);
 
                 AgentDiagnosticsRun(workdir, AgentDiagnosticsAllChecks(), out);
-                AgentDiagnosticsRunAllChecksNova(workdir, out, &AgentDiagnosticsRun, &AgentDiagnosticsResultNew);
+#ifdef HAVE_NOVA
+                AgentDiagnosticsRun(workdir, AgentDiagnosticsAllChecksNova(), out);
+#endif
                 FileWriterDetach(out);
             }
             exit(0);
 
-        case 'C':
-            if (!GenericAgentConfigParseColor(config, optarg))
-            {
-                exit(EXIT_FAILURE);
-            }
-            break;
-
-        case 'E':
-            extension_libraries_disable();
-            break;
-
         default:
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-agent", OPTIONS, HINTS, true);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-agent", OPTIONS, HINTS, true);
             exit(1);
         }
     }
@@ -631,7 +614,7 @@ static void ThisAgentInit(void)
   status which we need for setting returns
 */
 
-    snprintf(filename, CF_BUFSIZE, "%s/cfagent.%s.log", GetLogDir(), VSYSNAME.nodename);
+    snprintf(filename, CF_BUFSIZE, "%s/cfagent.%s.log", CFWORKDIR, VSYSNAME.nodename);
     MapName(filename);
 
     if ((fp = fopen(filename, "a")) != NULL)
@@ -675,15 +658,11 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
                 continue;
             }
 
-            VarRef *ref = VarRefParseFromScope(cp->lval, "control_agent");
-            if (!EvalContextVariableGet(ctx, ref, &retval, NULL))
+            if (!EvalContextVariableGet(ctx, (VarRef) { NULL, "control_agent", cp->lval }, &retval, NULL))
             {
                 Log(LOG_LEVEL_ERR, "Unknown lval '%s' in agent control body", cp->lval);
-                VarRefDestroy(ref);
                 continue;
             }
-
-            VarRefDestroy(ref);
 
             if (strcmp(cp->lval, CFA_CONTROLBODY[AGENT_CONTROL_MAXCONNECTIONS].lval) == 0)
             {
@@ -708,7 +687,7 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
             if (strcmp(cp->lval, CFA_CONTROLBODY[AGENT_CONTROL_AGENTACCESS].lval) == 0)
             {
                 ACCESSLIST = (Rlist *) retval.item;
-                CheckAgentAccess(ACCESSLIST, policy);
+                CheckAgentAccess(ACCESSLIST, InputFiles(ctx, policy));
                 continue;
             }
 
@@ -724,7 +703,7 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
                     // original commit says 'optimization'.
                     if (LogGetGlobalLevel() >= LOG_LEVEL_VERBOSE)
                     {
-                        PrependItem(&PROCESSREFRESH, RlistScalarValue(rp), NULL);
+                        PrependItem(&PROCESSREFRESH, rp->item, NULL);
                     }
                 }
                 continue;
@@ -740,7 +719,7 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
                 {
                     char name[CF_MAXVARSIZE] = "";
 
-                    strncpy(name, RlistScalarValue(rp), CF_MAXVARSIZE - 1);
+                    strncpy(name, rp->item, CF_MAXVARSIZE - 1);
 
                     EvalContextHeapAddAbort(ctx, name, cp->classes);
                 }
@@ -757,7 +736,7 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
                 for (rp = (Rlist *) retval.item; rp != NULL; rp = rp->next)
                 {
                     char name[CF_MAXVARSIZE] = "";
-                    strncpy(name, RlistScalarValue(rp), CF_MAXVARSIZE - 1);
+                    strncpy(name, rp->item, CF_MAXVARSIZE - 1);
 
                     EvalContextHeapAddAbortCurrentBundle(ctx, name, cp->classes);
                 }
@@ -774,7 +753,7 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
                 for (rp = (Rlist *) retval.item; rp != NULL; rp = rp->next)
                 {
                     Log(LOG_LEVEL_VERBOSE, "... %s", RlistScalarValue(rp));
-                    EvalContextClassPut(ctx, NULL, RlistScalarValue(rp), true, CONTEXT_SCOPE_NAMESPACE);
+                    EvalContextHeapAddSoft(ctx, rp->item, NULL);
                 }
 
                 continue;
@@ -987,7 +966,7 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
 
                 for (rp = (Rlist *) retval.item; rp != NULL; rp = rp->next)
                 {
-                    if (putenv(RlistScalarValue(rp)) != 0)
+                    if (putenv(rp->item) != 0)
                     {
                         Log(LOG_LEVEL_ERR, "Failed to set environment variable '%s'. (putenv: %s)",
                             RlistScalarValue(rp), GetErrorStr());
@@ -1032,7 +1011,9 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
         }
     }
 
+#ifdef HAVE_NOVA
     Nova_Initialize(ctx);
+#endif
 }
 
 /*********************************************************************/
@@ -1040,7 +1021,7 @@ void KeepControlPromises(EvalContext *ctx, Policy *policy)
 static void KeepPromiseBundles(EvalContext *ctx, Policy *policy, GenericAgentConfig *config)
 {
     Bundle *bp;
-    Rlist *rp, *args;
+    Rlist *rp, *params;
     FnCall *fp;
     char *name;
     Rval retval;
@@ -1059,11 +1040,11 @@ static void KeepPromiseBundles(EvalContext *ctx, Policy *policy, GenericAgentCon
 
     for (rp = (Rlist *) retval.item; rp != NULL; rp = rp->next)
     {
-        switch (rp->val.type)
+        switch (rp->type)
         {
         case RVAL_TYPE_SCALAR:
-            name = RlistScalarValue(rp);
-            args = NULL;
+            name = (char *) rp->item;
+            params = NULL;
 
             if (strcmp(name, CF_NULL_VALUE) == 0)
             {
@@ -1072,18 +1053,18 @@ static void KeepPromiseBundles(EvalContext *ctx, Policy *policy, GenericAgentCon
 
             break;
         case RVAL_TYPE_FNCALL:
-            fp = RlistFnCallValue(rp);
-            name = fp->name;
-            args = fp->args;
+            fp = (FnCall *) rp->item;
+            name = (char *) fp->name;
+            params = (Rlist *) fp->args;
             break;
 
         default:
             name = NULL;
-            args = NULL;
+            params = NULL;
             {
                 Writer *w = StringWriter();
                 WriterWrite(w, "Illegal item found in bundlesequence: ");
-                RvalWrite(w, rp->val);
+                RvalWrite(w, (Rval) {rp->item, rp->type});
                 Log(LOG_LEVEL_ERR, "%s", StringWriterData(w));
                 WriterClose(w);
             }
@@ -1126,28 +1107,51 @@ static void KeepPromiseBundles(EvalContext *ctx, Policy *policy, GenericAgentCon
 
     for (rp = (Rlist *) retval.item; rp != NULL; rp = rp->next)
     {
-        switch (rp->val.type)
+        switch (rp->type)
         {
         case RVAL_TYPE_FNCALL:
-            fp = RlistFnCallValue(rp);
-            name = fp->name;
-            args = fp->args;
+            fp = (FnCall *) rp->item;
+            name = (char *) fp->name;
+            params = (Rlist *) fp->args;
             break;
         default:
-            name = RlistScalarValue(rp);
-            args = NULL;
+            name = (char *) rp->item;
+            params = NULL;
             break;
         }
 
         if ((bp = PolicyGetBundle(policy, NULL, "agent", name)) || (bp = PolicyGetBundle(policy, NULL, "common", name)))
         {
-            BannerBundle(bp, args);
+            BannerBundle(bp, params);
 
-            EvalContextStackPushBundleFrame(ctx, bp, args, false);
+            EvalContextStackPushBundleFrame(ctx, bp, false);
+            ScopeAugment(ctx, bp, NULL, params);
 
             ScheduleAgentOperations(ctx, bp);
 
             EvalContextStackPopFrame(ctx);
+        }
+    }
+}
+
+static void SaveClassEnvironment(const EvalContext *ctx, Writer *writer)
+{
+    SetIterator it = EvalContextHeapIteratorHard(ctx);
+    const char *context;
+    while ((context = SetIteratorNext(&it)))
+    {
+        if (!EvalContextHeapContainsNegated(ctx, context))
+        {
+            WriterWriteF(writer, "%s\n", context);
+        }
+    }
+
+    it = EvalContextHeapIteratorSoft(ctx);
+    while ((context = SetIteratorNext(&it)))
+    {
+        if (!EvalContextHeapContainsNegated(ctx, context))
+        {
+            WriterWriteF(writer, "%s\n", context);
         }
     }
 }
@@ -1165,15 +1169,7 @@ static void AllClassesReport(const EvalContext *ctx)
     else
     {
         Writer *writer = FileWriter(fp);
-        ClassTableIterator *iter = EvalContextClassTableIteratorNewGlobal(ctx, NULL, true, true);
-        Class *cls = NULL;
-        while ((cls = ClassTableIteratorNext(iter)))
-        {
-            char *expr = ClassRefToString(cls->ns, cls->name);
-            WriterWriteF(writer, "%s\n", expr);
-            free(expr);
-        }
-        ClassTableIteratorDestroy(iter);
+        SaveClassEnvironment(ctx, writer);
         WriterClose(writer);
     }
 }
@@ -1206,7 +1202,7 @@ int ScheduleAgentOperations(EvalContext *ctx, Bundle *bp)
 
             BannerPromiseType(bp->name, sp->name, pass);
 
-            if (!NewTypeContext(ctx, type))
+            if (!NewTypeContext(type))
             {
                 continue;
             }
@@ -1219,7 +1215,7 @@ int ScheduleAgentOperations(EvalContext *ctx, Bundle *bp)
 
                 if (Abort())
                 {
-                    //NoteClassUsage(EvalContextStackFrameIteratorSoft(ctx) , false);
+                    NoteClassUsage(EvalContextStackFrameIteratorSoft(ctx) , false);
                     DeleteTypeContext(ctx, bp, type);
                     NoteBundleCompliance(bp, save_pr_kept, save_pr_repaired, save_pr_notkept);
                     return false;
@@ -1230,8 +1226,7 @@ int ScheduleAgentOperations(EvalContext *ctx, Bundle *bp)
         }
     }
 
-
-    //NoteClassUsage(EvalContextStackFrameIteratorSoft(ctx) , false);
+    NoteClassUsage(EvalContextStackFrameIteratorSoft(ctx) , false);
 
     return NoteBundleCompliance(bp, save_pr_kept, save_pr_repaired, save_pr_notkept);
 }
@@ -1240,63 +1235,59 @@ int ScheduleAgentOperations(EvalContext *ctx, Bundle *bp)
 
 #ifdef __MINGW32__
 
-static void CheckAgentAccess(Rlist *list, const Policy *policy)
+static void CheckAgentAccess(Rlist *list, const Rlist *input_files)
 {
 }
 
 #else
 
-static void CheckAgentAccess(Rlist *list, const Policy *policy)
+static void CheckAgentAccess(Rlist *list, const Rlist *input_files)
 {
-    uid_t uid = getuid();
+    struct stat sb;
+    uid_t uid;
+    int access = false;
+
+    uid = getuid();
 
     for (const Rlist *rp = list; rp != NULL; rp = rp->next)
     {
-        if (Str2Uid(RlistScalarValue(rp), NULL, NULL) == uid)
+        if (Str2Uid(rp->item, NULL, NULL) == uid)
         {
             return;
         }
     }
 
+    for (const Rlist *rp = input_files; rp != NULL; rp = rp->next)
     {
-        StringSet *input_files = PolicySourceFiles(policy);
-        StringSetIterator iter = StringSetIteratorInit(input_files);
-        const char *input_file = NULL;
-        while ((input_file = StringSetIteratorNext(&iter)))
+        stat(rp->item, &sb);
+
+        if (ACCESSLIST)
         {
-            struct stat sb;
-            stat(input_file, &sb);
-
-            if (ACCESSLIST)
+            for (const Rlist *rp2 = ACCESSLIST; rp2 != NULL; rp2 = rp2->next)
             {
-                bool access = false;
-                for (const Rlist *rp2 = ACCESSLIST; rp2 != NULL; rp2 = rp2->next)
+                if (Str2Uid(rp2->item, NULL, NULL) == sb.st_uid)
                 {
-                    if (Str2Uid(RlistScalarValue(rp2), NULL, NULL) == sb.st_uid)
-                    {
-                        access = true;
-                        break;
-                    }
-                }
-
-                if (!access)
-                {
-                    Log(LOG_LEVEL_ERR, "File '%s' is not owned by an authorized user (security exception)", input_file);
-                    exit(1);
+                    access = true;
+                    break;
                 }
             }
-            else if (CFPARANOID && IsPrivileged())
+
+            if (!access)
             {
-                if (sb.st_uid != getuid())
-                {
-                    Log(LOG_LEVEL_ERR, "File '%s' is not owned by uid %ju (security exception)", input_file,
-                          (uintmax_t)getuid());
-                    exit(1);
-                }
+                Log(LOG_LEVEL_ERR, "File '%s' is not owned by an authorized user (security exception)",
+                      RlistScalarValue(rp));
+                exit(1);
             }
         }
-
-        StringSetDestroy(input_files);
+        else if (CFPARANOID && IsPrivileged())
+        {
+            if (sb.st_uid != getuid())
+            {
+                Log(LOG_LEVEL_ERR, "File '%s' is not owned by uid %ju (security exception)", RlistScalarValue(rp),
+                      (uintmax_t)getuid());
+                exit(1);
+            }
+        }
     }
 
     Log(LOG_LEVEL_ERR, "You are denied access to run this policy");
@@ -1308,7 +1299,7 @@ static void CheckAgentAccess(Rlist *list, const Policy *policy)
 
 /**************************************************************/
 
-static PromiseResult DefaultVarPromise(EvalContext *ctx, const Promise *pp)
+static void DefaultVarPromise(EvalContext *ctx, const Promise *pp)
 {
     char *regex = ConstraintGetRvalValue(ctx, "if_match_regex", pp, RVAL_TYPE_SCALAR);
     Rval rval;
@@ -1316,63 +1307,58 @@ static PromiseResult DefaultVarPromise(EvalContext *ctx, const Promise *pp)
     Rlist *rp;
     bool okay = true;
 
-    {
-        VarRef *ref = VarRefParseFromScope(pp->promiser, "this");
-        EvalContextVariableGet(ctx, ref, &rval, &dt);
-        VarRefDestroy(ref);
-    }
+    EvalContextVariableGet(ctx, (VarRef) { NULL, "this", pp->promiser }, &rval, &dt);
 
     switch (dt)
-    {
-    case DATA_TYPE_STRING:
-    case DATA_TYPE_INT:
-    case DATA_TYPE_REAL:
-        if (regex && !FullTextMatch(ctx, regex, rval.item))
-        {
-            return PROMISE_RESULT_NOOP;
-        }
+       {
+       case DATA_TYPE_STRING:
+       case DATA_TYPE_INT:
+       case DATA_TYPE_REAL:
 
-        if (regex == NULL)
-        {
-            return PROMISE_RESULT_NOOP;
-        }
-        break;
+           if (regex && !FullTextMatch(regex,rval.item))
+              {
+              return;
+              }
 
-    case DATA_TYPE_STRING_LIST:
-    case DATA_TYPE_INT_LIST:
-    case DATA_TYPE_REAL_LIST:
-        if (regex)
-        {
-            for (rp = RvalRlistValue(rval); rp != NULL; rp = rp->next)
-            {
-                if (FullTextMatch(ctx, regex, RlistScalarValue(rp)))
-                {
+           if (regex == NULL)
+              {
+              return;
+              }
+
+           break;
+
+       case DATA_TYPE_STRING_LIST:
+       case DATA_TYPE_INT_LIST:
+       case DATA_TYPE_REAL_LIST:
+
+           if (regex)
+              {
+              for (rp = (Rlist *) rval.item; rp != NULL; rp = rp->next)
+                 {
+                 if (FullTextMatch(regex,rp->item))
+                    {
                     okay = false;
                     break;
-                }
-            }
+                    }
+                 }
 
-            if (okay)
-            {
-                return PROMISE_RESULT_NOOP;
-            }
-        }
-        break;
+              if (okay)
+                 {
+                 return;
+                 }
+              }
 
-    default:
-        break;
-    }
+       break;
 
-    {
-        VarRef *ref = VarRefParseFromBundle(pp->promiser, PromiseGetBundle(pp));
-        EvalContextVariableRemove(ctx, ref);
-        VarRefDestroy(ref);
-    }
+       default:
+           break;
+       }
 
-    return VerifyVarPromise(ctx, pp, true);
+    ScopeDeleteScalar((VarRef) { NULL, PromiseGetBundle(pp)->name, pp->promiser });
+    VerifyVarPromise(ctx, pp, true);
 }
 
-static PromiseResult KeepAgentPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED void *param)
+static void KeepAgentPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED void *param)
 {
     assert(param == NULL);
 
@@ -1392,12 +1378,12 @@ static PromiseResult KeepAgentPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED 
         {
             Log(LOG_LEVEL_VERBOSE, "Skipping next promise '%s', as context '%s' is not relevant", pp->promiser, pp->classes);
         }
-        return PROMISE_RESULT_NOOP;
+        return;
     }
 
     if (EvalContextPromiseIsDone(ctx, pp))
     {
-        return PROMISE_RESULT_NOOP;
+        return;
     }
 
     if (VarClassExcluded(ctx, pp, &sp))
@@ -1413,94 +1399,111 @@ static PromiseResult KeepAgentPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED 
         {
             Log(LOG_LEVEL_VERBOSE, "Skipping next promise '%s', as var-context '%s' is not relevant", pp->promiser, sp);
         }
-        return PROMISE_RESULT_NOOP;
+        return;
     }
 
 
     if (MissingDependencies(ctx, pp))
     {
-        return PROMISE_RESULT_NOOP;
+        return;
     }
     
 // Record promises examined for efficiency calc
 
     if (strcmp("meta", pp->parent_promise_type->name) == 0 || strcmp("vars", pp->parent_promise_type->name) == 0)
     {
-        return VerifyVarPromise(ctx, pp, true);
-    }
-    else if (strcmp("defaults", pp->parent_promise_type->name) == 0)
-    {
-        return DefaultVarPromise(ctx, pp);
-    }
-    else if (strcmp("classes", pp->parent_promise_type->name) == 0)
-    {
-        return VerifyClassPromise(ctx, pp, NULL);
-    }
-    else if (strcmp("processes", pp->parent_promise_type->name) == 0)
-    {
-        return VerifyProcessesPromise(ctx, pp);
-    }
-    else if (strcmp("storage", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = FindAndVerifyStoragePromises(ctx, pp);
-        EndMeasurePromise(ctx, start, pp);
-        return result;
-    }
-    else if (strcmp("packages", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = VerifyPackagesPromise(ctx, pp);
-        EndMeasurePromise(ctx, start, pp);
-        return result;
-    }
-    else if (strcmp("files", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = ParallelFindAndVerifyFilesPromises(ctx, pp);
-        EndMeasurePromise(ctx, start, pp);
-        return result;
-    }
-    else if (strcmp("commands", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = VerifyExecPromise(ctx, pp);
-        EndMeasurePromise(ctx, start, pp);
-        return result;
-    }
-    else if (strcmp("databases", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = VerifyDatabasePromises(ctx, pp);
-        EndMeasurePromise(ctx, start, pp);
-        return result;
-    }
-    else if (strcmp("methods", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = VerifyMethodsPromise(ctx, pp);
-        EndMeasurePromise(ctx, start, pp);
-        return result;
-    }
-    else if (strcmp("services", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = VerifyServicesPromise(ctx, pp);
-        EndMeasurePromise(ctx, start, pp);
-        return result;
-    }
-    else if (strcmp("guest_environments", pp->parent_promise_type->name) == 0)
-    {
-        PromiseResult result = VerifyEnvironmentsPromise(pp);
-        EndMeasurePromise(ctx, start, pp);
-        return result;
-    }
-    else if (strcmp("reports", pp->parent_promise_type->name) == 0)
-    {
-        return VerifyReportPromise(ctx, pp);
+        VerifyVarPromise(ctx, pp, true);
+        return;
     }
 
-    return PROMISE_RESULT_NOOP;
+    if (strcmp("defaults", pp->parent_promise_type->name) == 0)
+    {
+        DefaultVarPromise(ctx, pp);
+        return;
+    }
+
+    
+    if (strcmp("classes", pp->parent_promise_type->name) == 0)
+    {
+        VerifyClassPromise(ctx, pp, NULL);
+        return;
+    }
+
+    if (strcmp("processes", pp->parent_promise_type->name) == 0)
+    {
+        VerifyProcessesPromise(ctx, pp);
+        return;
+    }
+
+    if (strcmp("storage", pp->parent_promise_type->name) == 0)
+    {
+        FindAndVerifyStoragePromises(ctx, pp);
+        EndMeasurePromise(ctx, start, pp);
+        return;
+    }
+
+    if (strcmp("packages", pp->parent_promise_type->name) == 0)
+    {
+        VerifyPackagesPromise(ctx, pp);
+        EndMeasurePromise(ctx, start, pp);
+        return;
+    }
+
+    if (strcmp("files", pp->parent_promise_type->name) == 0)
+    {
+        ParallelFindAndVerifyFilesPromises(ctx, pp);
+
+        EndMeasurePromise(ctx, start, pp);
+        return;
+    }
+
+    if (strcmp("commands", pp->parent_promise_type->name) == 0)
+    {
+        VerifyExecPromise(ctx, pp);
+        EndMeasurePromise(ctx, start, pp);
+        return;
+    }
+
+    if (strcmp("databases", pp->parent_promise_type->name) == 0)
+    {
+        VerifyDatabasePromises(ctx, pp);
+        EndMeasurePromise(ctx, start, pp);
+        return;
+    }
+
+    if (strcmp("methods", pp->parent_promise_type->name) == 0)
+    {
+        VerifyMethodsPromise(ctx, pp);
+        EndMeasurePromise(ctx, start, pp);
+        return;
+    }
+
+    if (strcmp("services", pp->parent_promise_type->name) == 0)
+    {
+        VerifyServicesPromise(ctx, pp);
+        EndMeasurePromise(ctx, start, pp);
+        return;
+    }
+
+    if (strcmp("guest_environments", pp->parent_promise_type->name) == 0)
+    {
+        VerifyEnvironmentsPromise(pp);
+        EndMeasurePromise(ctx, start, pp);
+        return;
+    }
+
+    if (strcmp("reports", pp->parent_promise_type->name) == 0)
+    {
+        VerifyReportPromise(ctx, pp);
+        return;
+    }
 }
 
 /*********************************************************************/
 /* Type context                                                      */
 /*********************************************************************/
 
-static int NewTypeContext(EvalContext *ctx, TypeSequence type)
+static int NewTypeContext(TypeSequence type)
 {
 // get maxconnections
 
@@ -1517,7 +1520,7 @@ static int NewTypeContext(EvalContext *ctx, TypeSequence type)
 
     case TYPE_SEQUENCE_PROCESSES:
 
-        if (!LoadProcessTable(ctx, &PROCESSTABLE))
+        if (!LoadProcessTable(&PROCESSTABLE))
         {
             Log(LOG_LEVEL_ERR, "Unable to read the process table - cannot keep process promises");
             return false;
@@ -1527,10 +1530,10 @@ static int NewTypeContext(EvalContext *ctx, TypeSequence type)
     case TYPE_SEQUENCE_STORAGE:
 
 #ifndef __MINGW32__                   // TODO: Run if implemented on Windows
-        if (SeqLength(GetGlobalMountedFSList()))
+        if (MOUNTEDFSLIST != NULL)
         {
-            DeleteMountInfo(GetGlobalMountedFSList());
-            SeqClear(GetGlobalMountedFSList());
+            DeleteMountInfo(MOUNTEDFSLIST);
+            MOUNTEDFSLIST = NULL;
         }
 #endif /* !__MINGW32__ */
         break;
@@ -1551,7 +1554,7 @@ static void DeleteTypeContext(EvalContext *ctx, Bundle *bp, TypeSequence type)
     switch (type)
     {
     case TYPE_SEQUENCE_CONTEXTS:
-        BundleResolve(ctx, bp);
+        BundleHashVariables(ctx, bp);
         break;
 
     case TYPE_SEQUENCE_ENVIRONMENTS:
@@ -1598,13 +1601,12 @@ static void ClassBanner(EvalContext *ctx, TypeSequence type)
     {
         Log(LOG_LEVEL_VERBOSE, "     +  Private classes augmented:");
 
-        ClassTableIterator *iter = EvalContextClassTableIteratorNewLocal(ctx);
-        Class *cls = NULL;
-        while ((cls = ClassTableIteratorNext(iter)))
+        StringSetIterator it = EvalContextStackFrameIteratorSoft(ctx);
+        const char *context = NULL;
+        while ((context = StringSetIteratorNext(&it)))
         {
-            Log(LOG_LEVEL_VERBOSE, "     +       %s", cls->name);
+            Log(LOG_LEVEL_VERBOSE, "     +       %s", context);
         }
-        ClassTableIteratorDestroy(iter);
     }
     else
     {
@@ -1612,15 +1614,50 @@ static void ClassBanner(EvalContext *ctx, TypeSequence type)
         Writer *w = StringWriter();
 
         WriterWrite(w, "Private classes augmented:");
-        ClassTableIterator *iter = EvalContextClassTableIteratorNewLocal(ctx);
-        Class *cls = NULL;
-        while ((cls = ClassTableIteratorNext(iter)))
+        StringSetIterator it = EvalContextStackFrameIteratorSoft(ctx);
+        const char *context = NULL;
+        while ((context = StringSetIteratorNext(&it)))
         {
             WriterWriteChar(w, ' ');
-            WriterWrite(w, cls->name);
+            WriterWrite(w, context);
             have_classes = true;
         }
-        ClassTableIteratorDestroy(iter);
+
+        if (have_classes)
+        {
+            Log(LOG_LEVEL_VERBOSE, "%s", StringWriterData(w));
+        }
+
+        WriterClose(w);
+    }
+
+    if (LEGACY_OUTPUT)
+    {
+        Log(LOG_LEVEL_VERBOSE, "     -  Private classes diminished:");
+
+        {
+            StringSetIterator it = EvalContextHeapIteratorNegated(ctx);
+            const char *context = NULL;
+            while ((context = StringSetIteratorNext(&it)))
+            {
+                Log(LOG_LEVEL_VERBOSE, "     -       %s", context);
+            }
+        }
+    }
+    else
+    {
+        bool have_classes = false;
+        Writer *w = StringWriter();
+
+        WriterWrite(w, "Private classes diminished:");
+        StringSetIterator it = EvalContextHeapIteratorNegated(ctx);
+        const char *context = NULL;
+        while ((context = StringSetIteratorNext(&it)))
+        {
+            WriterWriteChar(w, ' ');
+            WriterWrite(w, context);
+            have_classes = true;
+        }
 
         if (have_classes)
         {
@@ -1637,7 +1674,7 @@ static void ClassBanner(EvalContext *ctx, TypeSequence type)
 
 #ifdef __MINGW32__
 
-static PromiseResult ParallelFindAndVerifyFilesPromises(EvalContext *ctx, Promise *pp)
+static void ParallelFindAndVerifyFilesPromises(EvalContext *ctx, Promise *pp)
 {
     int background = PromiseGetConstraintAsBoolean(ctx, "background", pp);
 
@@ -1646,16 +1683,15 @@ static PromiseResult ParallelFindAndVerifyFilesPromises(EvalContext *ctx, Promis
         Log(LOG_LEVEL_VERBOSE, "Background processing of files promises is not supported on Windows");
     }
 
-    return FindAndVerifyFilesPromises(ctx, pp);
+    FindAndVerifyFilesPromises(ctx, pp);
 }
 
 #else /* !__MINGW32__ */
 
-static PromiseResult ParallelFindAndVerifyFilesPromises(EvalContext *ctx, Promise *pp)
+static void ParallelFindAndVerifyFilesPromises(EvalContext *ctx, Promise *pp)
 {
     int background = PromiseGetConstraintAsBoolean(ctx, "background", pp);
     pid_t child = 1;
-    PromiseResult result = PROMISE_RESULT_NOOP;
 
     if (background)
     {
@@ -1669,33 +1705,32 @@ static PromiseResult ParallelFindAndVerifyFilesPromises(EvalContext *ctx, Promis
             {
                 ALARM_PID = -1;
 
-                result = PromiseResultUpdate(result, FindAndVerifyFilesPromises(ctx, pp));
+                FindAndVerifyFilesPromises(ctx, pp);
 
                 Log(LOG_LEVEL_VERBOSE, "Exiting backgrounded promise");
                 PromiseRef(LOG_LEVEL_VERBOSE, pp);
                 _exit(0);
-                // TODO: need to solve this
             }
         }
         else
         {
-            Log(LOG_LEVEL_VERBOSE, "Promised parallel execution promised but exceeded the max number of promised background tasks, so serializing");
+            Log(LOG_LEVEL_VERBOSE,
+                  " !> Promised parallel execution promised but exceeded the max number of promised background tasks, so serializing");
             background = 0;
         }
     }
-    else
-    {
-        result = PromiseResultUpdate(result, FindAndVerifyFilesPromises(ctx, pp));
-    }
 
-    return result;
+    if (!background)
+    {
+        FindAndVerifyFilesPromises(ctx, pp);
+    }
 }
 
 #endif /* !__MINGW32__ */
 
 /**************************************************************/
 
-static bool VerifyBootstrap(EvalContext *ctx)
+static bool VerifyBootstrap(void)
 {
     if (NULL_OR_EMPTY(POLICY_SERVER))
     {
@@ -1720,9 +1755,9 @@ static bool VerifyBootstrap(EvalContext *ctx)
     // embedded failsafe.cf (bootstrap.c) contains a promise to start cf-execd (executed while running this cf-agent)
     DeleteItemList(PROCESSTABLE);
     PROCESSTABLE = NULL;
-    LoadProcessTable(ctx, &PROCESSTABLE);
+    LoadProcessTable(&PROCESSTABLE);
 
-    if (!IsProcessNameRunning(ctx, ".*cf-execd.*"))
+    if (!IsProcessNameRunning(".*cf-execd.*"))
     {
         Log(LOG_LEVEL_ERR, "Bootstrapping failed, cf-execd is not running");
         return false;
@@ -1826,13 +1861,7 @@ static int AutomaticBootstrap(GenericAgentConfig *config)
         ret = -1;
     };
 
-	if (avahi_handle)
-	{
-		/*
-		 * This case happens when dlopen does not manage to open the library.
-		 */
-    	dlclose(avahi_handle);
-	}
+    dlclose(avahi_handle);
     ListDestroy(&foundhubs);
 
     return ret;

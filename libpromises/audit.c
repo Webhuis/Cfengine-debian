@@ -22,11 +22,11 @@
   included file COSL.txt.
 */
 
-#include <audit.h>
-#include <misc_lib.h>
-#include <conversion.h>
-#include <logging.h>
-#include <string_lib.h>
+#include "audit.h"
+#include "misc_lib.h"
+#include "conversion.h"
+#include "logging.h"
+#include "string_lib.h"
 
 int PR_KEPT;
 int PR_REPAIRED;
@@ -86,14 +86,10 @@ void EndAudit(const EvalContext *ctx, int background_tasks)
     {
         Rval track_value_rval = { 0 };
         bool track_value = false;
-
-        VarRef *ref = VarRefParseFromScope(CFA_CONTROLBODY[AGENT_CONTROL_TRACK_VALUE].lval, "control_agent");
-        if (EvalContextVariableGet(ctx, ref, &track_value_rval, NULL))
+        if (EvalContextVariableGet(ctx, (VarRef) { NULL, "control_agent", CFA_CONTROLBODY[AGENT_CONTROL_TRACK_VALUE].lval }, &track_value_rval, NULL))
         {
             track_value = BooleanFromString(track_value_rval.item);
         }
-
-        VarRefDestroy(ref);
 
         if (track_value)
         {

@@ -22,15 +22,15 @@
   included file COSL.txt.
 */
 
-#include <exec-config.h>
+#include "exec-config.h"
 
-#include <alloc.h>
-#include <string_lib.h>
+#include "alloc.h"
+#include "hashes.h"
 
-#include <rlist.h>
-#include <env_context.h>
-#include <conversion.h>
-#include <generic_agent.h> // TODO: fix
+#include "rlist.h"
+#include "env_context.h"
+#include "conversion.h"
+#include "generic_agent.h" // TODO: fix
 
 static void ExecConfigResetDefault(ExecConfig *exec_config)
 {
@@ -48,9 +48,6 @@ static void ExecConfigResetDefault(ExecConfig *exec_config)
 
     free(exec_config->mail_to_address);
     exec_config->mail_to_address = xstrdup("");
-
-    free(exec_config->mail_subject);
-    exec_config->mail_subject = xstrdup("");
 
     exec_config->mail_max_lines = 30;
     exec_config->agent_expireafter = 10800;
@@ -94,7 +91,6 @@ ExecConfig *ExecConfigCopy(const ExecConfig *config)
     copy->mail_server = xstrdup(config->mail_server);
     copy->mail_from_address = xstrdup(config->mail_from_address);
     copy->mail_to_address = xstrdup(config->mail_to_address);
-    copy->mail_subject = xstrdup(config->mail_subject);
     copy->fq_name = xstrdup(config->fq_name);
     copy->ip_address = xstrdup(config->ip_address);
     copy->mail_max_lines = config->mail_max_lines;
@@ -111,7 +107,6 @@ void ExecConfigDestroy(ExecConfig *exec_config)
         free(exec_config->mail_server);
         free(exec_config->mail_from_address);
         free(exec_config->mail_to_address);
-        free(exec_config->mail_subject);
         free(exec_config->log_facility);
         free(exec_config->fq_name);
         free(exec_config->ip_address);
@@ -126,7 +121,7 @@ static double GetSplay(void)
 {
     char splay[CF_BUFSIZE];
     snprintf(splay, CF_BUFSIZE, "%s+%s+%ju", VFQNAME, VIPADDRESS, (uintmax_t)getuid());
-    return ((double) StringHash(splay, 0, CF_HASHTABLESIZE)) / CF_HASHTABLESIZE;
+    return ((double) OatHash(splay, CF_HASHTABLESIZE)) / CF_HASHTABLESIZE;
 }
 
 void ExecConfigUpdate(const EvalContext *ctx, const Policy *policy, ExecConfig *exec_config)
@@ -145,18 +140,13 @@ void ExecConfigUpdate(const EvalContext *ctx, const Policy *policy, ExecConfig *
                 continue;
             }
 
-            VarRef *ref = VarRefParseFromScope(cp->lval, "control_executor");
-
             Rval retval;
-            if (!EvalContextVariableGet(ctx, ref, &retval, NULL))
+            if (!EvalContextVariableGet(ctx, (VarRef) { NULL, "control_executor", cp->lval }, &retval, NULL))
             {
                 // TODO: should've been checked before this point. change to programming error
                 Log(LOG_LEVEL_ERR, "Unknown lval '%s' in exec control body", cp->lval);
-                VarRefDestroy(ref);
                 continue;
             }
-
-            VarRefDestroy(ref);
 
             if (strcmp(cp->lval, CFEX_CONTROLBODY[EXEC_CONTROL_MAILFROM].lval) == 0)
             {
@@ -169,12 +159,6 @@ void ExecConfigUpdate(const EvalContext *ctx, const Policy *policy, ExecConfig *
                 free(exec_config->mail_to_address);
                 exec_config->mail_to_address = xstrdup(retval.item);
                 Log(LOG_LEVEL_DEBUG, "mailto '%s'", exec_config->mail_to_address);
-            }
-            else if (strcmp(cp->lval, CFEX_CONTROLBODY[EXEC_CONTROL_MAILSUBJECT].lval) == 0)
-            {
-                free(exec_config->mail_subject);
-                exec_config->mail_subject = xstrdup(retval.item);
-                Log(LOG_LEVEL_DEBUG, "mailsubject '%s'", exec_config->mail_subject);
             }
             else if (strcmp(cp->lval, CFEX_CONTROLBODY[EXEC_CONTROL_SMTPSERVER].lval) == 0)
             {

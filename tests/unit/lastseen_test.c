@@ -1,8 +1,7 @@
-#include <cf3.defs.h>
-#include <dbm_api.h>
-#include <test.h>
-#include <lastseen.h>
-#include <item_lib.h>
+#include "cf3.defs.h"
+#include "dbm_api.h"
+#include "test.h"
+#include "lastseen.h"
 
 #include <setjmp.h>
 #include <cmockery.h>
@@ -143,9 +142,7 @@ static void test_remove(void)
     UpdateLastSawHost("SHA-12345", "127.0.0.64", true, 555);
     UpdateLastSawHost("SHA-12345", "127.0.0.64", false, 556);
 
-    //RemoveHostFromLastSeen("SHA-12345");
-    int res;
-    res = DeleteDigestFromLastSeen("SHA-12345", NULL);
+    RemoveHostFromLastSeen("SHA-12345");
 
     DBHandle *db;
     OpenDB(&db, dbid_lastseen);
@@ -157,29 +154,6 @@ static void test_remove(void)
 
     CloseDB(db);
 }
-
-static void test_remove_ip(void)
-{
-    setup();
-
-    UpdateLastSawHost("SHA-12345", "127.0.0.64", true, 555);
-    UpdateLastSawHost("SHA-12345", "127.0.0.64", false, 556);
-
-    int res;
-    char digest[CF_BUFSIZE];
-    res = DeleteIpFromLastSeen("127.0.0.64", digest);
-
-    DBHandle *db;
-    OpenDB(&db, dbid_lastseen);
-
-    assert_int_equal(HasKeyDB(db, "qiSHA-12345", strlen("qiSHA-12345") + 1), false);
-    assert_int_equal(HasKeyDB(db, "qoSHA-12345", strlen("qoSHA-12345") + 1), false);
-    assert_int_equal(HasKeyDB(db, "kSHA-12345", strlen("kSHA-12345") + 1), false);
-    assert_int_equal(HasKeyDB(db, "a127.0.0.64", strlen("a127.0.0.64") + 1), false);
-
-    CloseDB(db);
-}
-
 
 int main()
 {
@@ -193,7 +167,6 @@ int main()
             unit_test(test_reverse_conflict),
             unit_test(test_reverse_missing_forward),
             unit_test(test_remove),
-            unit_test(test_remove_ip),
         };
 
     PRINT_TEST_BANNER();

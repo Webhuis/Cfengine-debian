@@ -22,21 +22,20 @@
   included file COSL.txt.
 */
 
-#include <cf-serverd-functions.h>
-#include <cf-serverd-enterprise-stubs.h>
+#include "cf-serverd-functions.h"
 
-#include <client_code.h>
-#include <server_transform.h>
-#include <bootstrap.h>
-#include <scope.h>
-#include <signals.h>
-#include <mutex.h>
-#include <locks.h>
-#include <exec_tools.h>
-#include <unix.h>
-#include <man.h>
-#include <tls_server.h>                              /* ServerTLSInitialize */
+#include "client_code.h"
+#include "server_transform.h"
+#include "bootstrap.h"
+#include "scope.h"
+#include "signals.h"
+#include "mutex.h"
+#include "locks.h"
+#include "exec_tools.h"
+#include "unix.h"
+#include "man.h"
 
+#include <assert.h>
 
 static const size_t QUEUESIZE = 50;
 int NO_FORK = false;
@@ -53,7 +52,7 @@ static const char *CF_SERVERD_MANPAGE_LONG_DESCRIPTION =
         "cf-serverd instance to request updated policy code, but may also request additional files for download. "
         "cf-serverd employs role based access control (defined in policy code) to authorize requests.";
 
-static const struct option OPTIONS[] =
+static const struct option OPTIONS[16] =
 {
     {"help", no_argument, 0, 'h'},
     {"debug", no_argument, 0, 'd'},
@@ -69,11 +68,10 @@ static const struct option OPTIONS[] =
     {"ld-library-path", required_argument, 0, 'L'},
     {"generate-avahi-conf", no_argument, 0, 'A'},
     {"legacy-output", no_argument, 0, 'l'},
-    {"color", optional_argument, 0, 'C'},
     {NULL, 0, 0, '\0'}
 };
 
-static const char *HINTS[] =
+static const char *HINTS[16] =
 {
     "Print the help message",
     "Enable debugging output",
@@ -89,7 +87,6 @@ static const char *HINTS[] =
     "Set the internal value of LD_LIBRARY_PATH for child processes",
     "Generates avahi configuration file to enable policy server to be discovered in the network",
     "Use legacy output format",
-    "Enable colorized output. Possible values: 'always', 'auto', 'never'. If option is used, the default value is 'auto'",
     NULL
 };
 
@@ -105,14 +102,19 @@ static void KeepHardClasses(EvalContext *ctx)
         {
             if (GetAmPolicyHub(CFWORKDIR))
             {
-                EvalContextClassPutHard(ctx, "am_policy_hub");
+                EvalContextHeapAddHard(ctx, "am_policy_hub");
             }
             free(existing_policy_server);
         }
     }
 
     /* FIXME: why is it not in generic_agent?! */
-    GenericAgentAddEditionClasses(ctx);
+#if defined HAVE_NOVA
+    EvalContextHeapAddHard(ctx, "nova_edition");
+    EvalContextHeapAddHard(ctx, "enterprise_edition");
+#else
+    EvalContextHeapAddHard(ctx, "community_edition");
+#endif
 }
 
 #ifdef HAVE_AVAHI_CLIENT_CLIENT_H
@@ -129,7 +131,7 @@ GenericAgentConfig *CheckOpts(int argc, char **argv)
     int c;
     GenericAgentConfig *config = GenericAgentConfigNewDefault(AGENT_TYPE_SERVER);
 
-    while ((c = getopt_long(argc, argv, "dvIKf:D:N:VSxLFMhAlC::", OPTIONS, &optindex)) != EOF)
+    while ((c = getopt_long(argc, argv, "dvIKf:D:N:VSxLFMhAl", OPTIONS, &optindex)) != EOF)
     {
         switch ((char) c)
         {
@@ -185,19 +187,11 @@ GenericAgentConfig *CheckOpts(int argc, char **argv)
             break;
 
         case 'V':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteVersion(w);
-                FileWriterDetach(w);
-            }
+            PrintVersion();
             exit(0);
 
         case 'h':
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-serverd", OPTIONS, HINTS, true);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-serverd", OPTIONS, HINTS, true);
             exit(0);
 
         case 'M':
@@ -231,19 +225,8 @@ GenericAgentConfig *CheckOpts(int argc, char **argv)
             Log(LOG_LEVEL_ERR, "Generating avahi configuration can only be done when avahi-daemon and libavahi are installed on the machine.");
             exit(0);
 
-        case 'C':
-            if (!GenericAgentConfigParseColor(config, optarg))
-            {
-                exit(EXIT_FAILURE);
-            }
-            break;
-
         default:
-            {
-                Writer *w = FileWriter(stdout);
-                GenericAgentWriteHelp(w, "cf-serverd", OPTIONS, HINTS, true);
-                FileWriterDetach(w);
-            }
+            PrintHelp("cf-serverd", OPTIONS, HINTS, true);
             exit(1);
 
         }
@@ -269,13 +252,12 @@ void ThisAgentInit(void)
 
 void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
 {
-    int sd = -1;
+    int sd = -1, sd_reply;
     fd_set rset;
     struct timeval timeout;
     int ret_val;
     CfLock thislock;
-    time_t last_collect = 0;
-    extern int COLLECT_WINDOW;
+    time_t starttime = time(NULL), last_collect = 0;
 
     struct sockaddr_storage cin;
     socklen_t addrlen = sizeof(cin);
@@ -287,9 +269,7 @@ void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
     signal(SIGUSR1, HandleSignalsForDaemon);
     signal(SIGUSR2, HandleSignalsForDaemon);
 
-    ServerTLSInitialize();
-
-    sd = SetServerListenState(ctx, QUEUESIZE, SERVER_LISTEN, &InitServer);
+    sd = SetServerListenState(ctx, QUEUESIZE);
 
     TransactionContext tc = {
         .ifelapsed = 0,
@@ -313,6 +293,8 @@ void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
         PolicyDestroy(server_cfengine_policy);
         return;
     }
+
+    Log(LOG_LEVEL_INFO, "cf-serverd starting %.24s", ctime(&starttime));
 
     if (sd != -1)
     {
@@ -367,7 +349,7 @@ void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
 
         if ((COLLECT_INTERVAL > 0) && ((now - last_collect) > COLLECT_INTERVAL))
         {
-            TryCollectCall(COLLECT_WINDOW, &ServerEntryPoint);
+            TryCollectCall();
             last_collect = now;
             continue;
         }
@@ -408,8 +390,7 @@ void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
 
             Log(LOG_LEVEL_VERBOSE, "Accepting a connection");
 
-            int sd_accepted = accept(sd, (struct sockaddr *) &cin, &addrlen);
-            if (sd_accepted != -1)
+            if ((sd_reply = accept(sd, (struct sockaddr *) &cin, &addrlen)) != -1)
             {
                 /* Just convert IP address to string, no DNS lookup. */
                 char ipaddr[CF_MAX_IP_LEN] = "";
@@ -417,7 +398,7 @@ void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
                             ipaddr, sizeof(ipaddr),
                             NULL, 0, NI_NUMERICHOST);
 
-                ServerEntryPoint(ctx, sd_accepted, ipaddr);
+                ServerEntryPoint(ctx, sd_reply, ipaddr);
             }
         }
     }
@@ -537,23 +518,20 @@ void CheckFileChanges(EvalContext *ctx, Policy **policy, GenericAgentConfig *con
 {
     Log(LOG_LEVEL_DEBUG, "Checking file updates for input file '%s'", config->input_file);
 
-    if (GenericAgentIsPolicyReloadNeeded(config, *policy))
+    if (NewPromiseProposals(ctx, config, InputFiles(ctx, *policy)))
     {
         Log(LOG_LEVEL_VERBOSE, "New promises detected...");
 
-        if (GenericAgentCheckPromises(config))
+        if (CheckPromises(config))
         {
             Log(LOG_LEVEL_INFO, "Rereading policy file '%s'", config->input_file);
 
             /* Free & reload -- lock this to avoid access errors during reload */
             
-            EvalContextClear(ctx);
+            EvalContextHeapClear(ctx);
 
             DeleteItemList(IPADDRESSES);
             IPADDRESSES = NULL;
-
-            free(SV.allowciphers);
-            SV.allowciphers = NULL;
 
             DeleteItemList(SV.trustkeylist);
             DeleteItemList(SV.skipverify);
@@ -568,6 +546,10 @@ void CheckFileChanges(EvalContext *ctx, Policy **policy, GenericAgentConfig *con
             DeleteAuthList(SV.vardeny);
 
             DeleteAuthList(SV.roles);
+
+            //DeleteRlist(VINPUTLIST); This is just a pointer, cannot free it
+
+            ScopeDeleteAll();
 
             strcpy(VDOMAIN, "undefined.domain");
             POLICY_SERVER[0] = '\0';
@@ -603,33 +585,30 @@ void CheckFileChanges(EvalContext *ctx, Policy **policy, GenericAgentConfig *con
             }
 
             GetNameInfo3(ctx, AGENT_TYPE_SERVER);
-            GetInterfacesInfo(ctx);
+            GetInterfacesInfo(ctx, AGENT_TYPE_SERVER);
             Get3Environment(ctx, AGENT_TYPE_SERVER);
             BuiltinClasses(ctx);
             OSClasses(ctx);
             KeepHardClasses(ctx);
 
-            EvalContextClassPutHard(ctx, CF_AGENTTYPES[config->agent_type]);
+            EvalContextHeapAddHard(ctx, CF_AGENTTYPES[config->agent_type]);
 
             SetReferenceTime(ctx, true);
             *policy = GenericAgentLoadPolicy(ctx, config);
             KeepPromises(ctx, *policy, config);
             Summarize();
+
         }
         else
         {
             Log(LOG_LEVEL_INFO, "File changes contain errors -- ignoring");
+            PROMISETIME = time(NULL);
         }
     }
     else
     {
         Log(LOG_LEVEL_DEBUG, "No new promises found");
     }
-}
-
-ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, FprintAvahiCfengineTag, FILE *, fp)
-{
-    fprintf(fp,"<name replace-wildcards=\"yes\" >CFEngine Community %s Policy Server on %s </name>\n", Version(), "%h");
 }
 
 #ifdef HAVE_AVAHI_CLIENT_CLIENT_H
@@ -649,7 +628,12 @@ static int GenerateAvahiConfig(const char *path)
     fprintf(fout, "<!DOCTYPE service-group SYSTEM \"avahi-service.dtd\">\n");
     XmlComment(writer, "This file has been automatically generated by cf-serverd.");
     XmlStartTag(writer, "service-group", 0);
-    FprintAvahiCfengineTag(fout);
+    /* FIXME: make it function */
+#ifdef HAVE_NOVA
+    fprintf(fout,"<name replace-wildcards=\"yes\" >CFEngine Enterprise %s Policy Hub on %s </name>\n", Version(), "%h");
+#else
+    fprintf(fout,"<name replace-wildcards=\"yes\" >CFEngine Community %s Policy Server on %s </name>\n", Version(), "%h");
+#endif
     XmlStartTag(writer, "service", 0);
     XmlTag(writer, "type", "_cfenginehub._tcp",0);
     DetermineCfenginePort();

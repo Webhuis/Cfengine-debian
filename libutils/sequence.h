@@ -25,7 +25,7 @@
 #ifndef CFENGINE_SEQUENCE_H
 #define CFENGINE_SEQUENCE_H
 
-#include <platform.h>
+#include "platform.h"
 
 /**
   @brief Sequence data-structure.
@@ -86,8 +86,6 @@ void SeqSoftDestroy(Seq *seq);
   @retval 1 if the first argument is bigger than the second
   */
 typedef int (*SeqItemComparator) (const void *, const void *, void *user_data);
-
-void SeqSet(Seq *set, size_t index, void *item);
 
 /**
   @brief Append a new item to the Sequence
@@ -161,20 +159,5 @@ void SeqReverse(Seq *seq);
  * @param seed Seed value for the PRNG
  */
 void SeqShuffle(Seq *seq, unsigned int seed);
-
-/**
- * @brief Remove all elements in sequence
- * @param seq
- */
-void SeqClear(Seq *seq);
-
-/**
-  @brief Get soft copy of sequence according to specified range
-  @param [in] seq Sequence select from
-  @param [in] start Start index of sub sequence.
-  @param [in] end End index which will be included into.
-  @return A pointer to sub sequence, NULL on error.
-  */
-Seq *SeqGetRange(Seq *seq, size_t start, size_t end);
 
 #endif

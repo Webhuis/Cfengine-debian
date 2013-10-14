@@ -22,47 +22,48 @@
   included file COSL.txt.
 */
 
-#include <verify_packages.h>
+#include "verify_packages.h"
 
-#include <actuator.h>
-#include <promises.h>
-#include <dir.h>
-#include <files_names.h>
-#include <files_interfaces.h>
-#include <vars.h>
-#include <conversion.h>
-#include <expand.h>
-#include <scope.h>
-#include <vercmp.h>
-#include <matching.h>
-#include <attributes.h>
-#include <string_lib.h>
-#include <pipes.h>
-#include <locks.h>
-#include <exec_tools.h>
-#include <policy.h>
-#include <misc_lib.h>
-#include <rlist.h>
-#include <ornaments.h>
-#include <env_context.h>
-#include <retcode.h>
-#include <cf-agent-enterprise-stubs.h>
-#include <cf-windows-functions.h>
+#include "promises.h"
+#include "dir.h"
+#include "files_names.h"
+#include "files_interfaces.h"
+#include "vars.h"
+#include "conversion.h"
+#include "expand.h"
+#include "scope.h"
+#include "vercmp.h"
+#include "matching.h"
+#include "attributes.h"
+#include "string_lib.h"
+#include "pipes.h"
+#include "locks.h"
+#include "exec_tools.h"
+#include "policy.h"
+#include "misc_lib.h"
+#include "rlist.h"
+#include "ornaments.h"
+#include "env_context.h"
+#include "retcode.h"
+
+#ifdef HAVE_NOVA
+#include "agent_reports.h"
+#endif
 
 /** Entry points from VerifyPackagesPromise **/
 
 static int PackageSanityCheck(EvalContext *ctx, Attributes a, Promise *pp);
 
-static int VerifyInstalledPackages(EvalContext *ctx, PackageManager **alllists, const char *default_arch, Attributes a, Promise *pp, PromiseResult *result);
+static int VerifyInstalledPackages(EvalContext *ctx, PackageManager **alllists, const char *default_arch, Attributes a, Promise *pp);
 
-static PromiseResult VerifyPromisedPackage(EvalContext *ctx, Attributes a, Promise *pp);
-static PromiseResult VerifyPromisedPatch(EvalContext *ctx, Attributes a, Promise *pp);
+static void VerifyPromisedPackage(EvalContext *ctx, Attributes a, Promise *pp);
+static void VerifyPromisedPatch(EvalContext *ctx, Attributes a, Promise *pp);
 
 /** Utils **/
 
 static char *GetDefaultArch(const char *command);
 
-static int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdClasses, Attributes a, Promise *pp, PromiseResult *result);
+static int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdClasses, Attributes a, Promise *pp);
 
 static int PrependPatchItem(EvalContext *ctx, PackageItem ** list, char *item, PackageItem * chklist, const char *default_arch, Attributes a, Promise *pp);
 static int PrependMultiLinePackageItem(EvalContext *ctx, PackageItem ** list, char *item, int reset, const char *default_arch, Attributes a, Promise *pp);
@@ -73,10 +74,12 @@ static void DeletePackageManagers(PackageManager *newlist);
 
 static char *PrefixLocalRepository(Rlist *repositories, char *package);
 
-ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, ReportPatches, ARG_UNUSED PackageManager *, list)
+#ifndef HAVE_NOVA
+void ReportPatches(ARG_UNUSED PackageManager *list)
 {
     Log(LOG_LEVEL_VERBOSE, "Patch reporting feature is only available in the enterprise version");
 }
+#endif
 
 /*****************************************************************************/
 
@@ -87,7 +90,7 @@ PackageManager *INSTALLED_PACKAGE_LISTS = NULL;
 
 /*****************************************************************************/
 
-PromiseResult VerifyPackagesPromise(EvalContext *ctx, Promise *pp)
+void VerifyPackagesPromise(EvalContext *ctx, Promise *pp)
 {
     Attributes a = { {0} };
     CfLock thislock;
@@ -106,8 +109,7 @@ PromiseResult VerifyPackagesPromise(EvalContext *ctx, Promise *pp)
 
     if (!PackageSanityCheck(ctx, a, pp))
     {
-        Log(LOG_LEVEL_VERBOSE, "Package promise %s failed sanity check", pp->promiser);
-        return PROMISE_RESULT_FAIL;
+        return;
     }
 
     PromiseBanner(pp);
@@ -120,7 +122,7 @@ PromiseResult VerifyPackagesPromise(EvalContext *ctx, Promise *pp)
 
     if (thislock.lock == NULL)
     {
-        return PROMISE_RESULT_NOOP;
+        return;
     }
 
 // Start by reseting the root directory in case yum tries to glob regexs(!)
@@ -135,16 +137,14 @@ PromiseResult VerifyPackagesPromise(EvalContext *ctx, Promise *pp)
     if (default_arch == NULL)
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Unable to obtain default architecture for package manager - aborting");
-        return PROMISE_RESULT_FAIL;
+        return;
     }
 
-    Log(LOG_LEVEL_VERBOSE, "Default package architecture for promise %s is '%s'", pp->promiser, default_arch);
-    PromiseResult result = PROMISE_RESULT_NOOP;
-    if (!VerifyInstalledPackages(ctx, &INSTALLED_PACKAGE_LISTS, default_arch, a, pp, &result))
+    if (!VerifyInstalledPackages(ctx, &INSTALLED_PACKAGE_LISTS, default_arch, a, pp))
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Unable to obtain a list of installed packages - aborting");
         free(default_arch);
-        return PROMISE_RESULT_FAIL;
+        return;
     }
 
     free(default_arch);
@@ -152,19 +152,15 @@ PromiseResult VerifyPackagesPromise(EvalContext *ctx, Promise *pp)
     switch (a.packages.package_policy)
     {
     case PACKAGE_ACTION_PATCH:
-        Log(LOG_LEVEL_VERBOSE, "Verifying patch action for promise %s", pp->promiser);
-        result = PromiseResultUpdate(result, VerifyPromisedPatch(ctx, a, pp));
+        VerifyPromisedPatch(ctx, a, pp);
         break;
 
     default:
-        Log(LOG_LEVEL_VERBOSE, "Verifying action for promise %s", pp->promiser);
-        result = PromiseResultUpdate(result, VerifyPromisedPackage(ctx, a, pp));
+        VerifyPromisedPackage(ctx, a, pp);
         break;
     }
 
     YieldCurrentLock(thislock);
-
-    return result;
 }
 
 /** Pre-check of promise contents **/
@@ -212,7 +208,7 @@ static int PackageSanityCheck(EvalContext *ctx, Attributes a, Promise *pp)
 
         for (rp = a.packages.package_file_repositories; rp != NULL; rp = rp->next)
         {
-            if (strlen(RlistScalarValue(rp)) > CF_MAXVARSIZE - 1)
+            if (strlen(rp->item) > CF_MAXVARSIZE - 1)
             {
                 cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "The repository path '%s' is too long", RlistScalarValue(rp));
                 return false;
@@ -377,12 +373,11 @@ static int PackageSanityCheck(EvalContext *ctx, Attributes a, Promise *pp)
 
 /** Get the list of installed packages **/
 
-static bool PackageListInstalledFromCommand(EvalContext *ctx, PackageItem **installed_list, const char *default_arch,
-                                            Attributes a, Promise *pp, PromiseResult *result)
+static bool PackageListInstalledFromCommand(EvalContext *ctx, PackageItem **installed_list, const char *default_arch, Attributes a, Promise *pp)
 {
     if (a.packages.package_list_update_command != NULL)
     {
-        ExecPackageCommand(ctx, a.packages.package_list_update_command, false, false, a, pp, result);
+        ExecPackageCommand(ctx, a.packages.package_list_update_command, false, false, a, pp);
     }
 
     if (LEGACY_OUTPUT)
@@ -436,7 +431,7 @@ static bool PackageListInstalledFromCommand(EvalContext *ctx, PackageItem **inst
 
         if (a.packages.package_multiline_start)
         {
-            if (FullTextMatch(ctx, a.packages.package_multiline_start, buf))
+            if (FullTextMatch(a.packages.package_multiline_start, buf))
             {
                 PrependMultiLinePackageItem(ctx, installed_list, buf, reset, default_arch, a, pp);
             }
@@ -447,7 +442,7 @@ static bool PackageListInstalledFromCommand(EvalContext *ctx, PackageItem **inst
         }
         else
         {
-            if (!FullTextMatch(ctx, a.packages.package_installed_regex, buf))
+            if (!FullTextMatch(a.packages.package_installed_regex, buf))
             {
                 continue;
             }
@@ -586,8 +581,7 @@ static PackageItem *GetCachedPackageList(EvalContext *ctx, PackageManager *manag
     return list;
 }
 
-static int VerifyInstalledPackages(EvalContext *ctx, PackageManager **all_mgrs, const char *default_arch,
-                                   Attributes a, Promise *pp, PromiseResult *result)
+static int VerifyInstalledPackages(EvalContext *ctx, PackageManager **all_mgrs, const char *default_arch, Attributes a, Promise *pp)
 {
     PackageManager *manager = NewPackageManager(all_mgrs, a.packages.package_list_command, PACKAGE_ACTION_NONE, PACKAGE_ACTION_POLICY_NONE);
     char vbuff[CF_BUFSIZE];
@@ -624,7 +618,7 @@ static int VerifyInstalledPackages(EvalContext *ctx, PackageManager **all_mgrs, 
     }
     else
     {
-        if(!PackageListInstalledFromCommand(ctx, &(manager->pack_list), default_arch, a, pp, result))
+        if(!PackageListInstalledFromCommand(ctx, &(manager->pack_list), default_arch, a, pp))
         {
             Log(LOG_LEVEL_ERR, "Could not get list of installed packages");
             return false;
@@ -635,7 +629,7 @@ static int VerifyInstalledPackages(EvalContext *ctx, PackageManager **all_mgrs, 
 
     if (a.packages.package_list_command)
     {
-        if(!PackageListInstalledFromCommand(ctx, &(manager->pack_list), default_arch, a, pp, result))
+        if(!PackageListInstalledFromCommand(ctx, &(manager->pack_list), default_arch, a, pp))
         {
             Log(LOG_LEVEL_ERR, "Could not get list of installed packages");
             return false;
@@ -705,7 +699,7 @@ static int VerifyInstalledPackages(EvalContext *ctx, PackageManager **all_mgrs, 
 
             // assume patch_list_command lists available patches/updates by default
             if ((a.packages.package_patch_installed_regex == NULL)
-                || (!FullTextMatch(ctx, a.packages.package_patch_installed_regex, vbuff)))
+                || (!FullTextMatch(a.packages.package_patch_installed_regex, vbuff)))
             {
                 PrependPatchItem(ctx, &(manager->patch_avail), vbuff, manager->patch_list, default_arch, a, pp);
                 continue;
@@ -740,7 +734,7 @@ static int VerifyInstalledPackages(EvalContext *ctx, PackageManager **all_mgrs, 
 /** Evaluate what needs to be done **/
 
 int FindLargestVersionAvail(EvalContext *ctx, char *matchName, char *matchVers, const char *refAnyVer, const char *ver,
-                            Rlist *repositories, Attributes a, Promise *pp, PromiseResult *result)
+                            PackageVersionComparator package_select, Rlist *repositories, Attributes a, Promise *pp)
 /* Returns true if a version gt/ge ver is found in local repos, false otherwise */
 {
     Rlist *rp;
@@ -761,6 +755,11 @@ int FindLargestVersionAvail(EvalContext *ctx, char *matchName, char *matchVers, 
     else
     {
         snprintf(largestVer, sizeof(largestVer), "%s", ver);
+
+        if (package_select == PACKAGE_VERSION_COMPARATOR_GT)   // either gt or ge
+        {
+            largestVer[strlen(largestVer) - 1]++;
+        }
     }
 
     for (rp = repositories; rp != NULL; rp = rp->next)
@@ -775,12 +774,16 @@ int FindLargestVersionAvail(EvalContext *ctx, char *matchName, char *matchVers, 
 
         for (dirp = DirRead(dirh); dirp != NULL; dirp = DirRead(dirh))
         {
-            if (FullTextMatch(ctx, refAnyVer, dirp->d_name))
+            if (FullTextMatch(refAnyVer, dirp->d_name))
             {
                 matchVer = ExtractFirstReference(refAnyVer, dirp->d_name);
 
+                /* Horrible */
+                Attributes a2 = a;
+                a2.packages.package_select = PACKAGE_VERSION_COMPARATOR_GT;
+
                 // check if match is largest so far
-                if (CompareVersions(ctx, matchVer, largestVer, a, pp, result) == VERCMP_MATCH)
+                if (CompareVersions(ctx, matchVer, largestVer, a2, pp) == VERCMP_MATCH)
                 {
                     snprintf(largestVer, sizeof(largestVer), "%s", matchVer);
                     snprintf(largestVerName, sizeof(largestVerName), "%s", dirp->d_name);
@@ -805,8 +808,7 @@ int FindLargestVersionAvail(EvalContext *ctx, char *matchName, char *matchVers, 
     return match;
 }
 
-static int IsNewerThanInstalled(EvalContext *ctx, const char *n, const char *v, const char *a, char *instV, char *instA, Attributes attr,
-                                Promise *pp, PromiseResult *result)
+static int IsNewerThanInstalled(EvalContext *ctx, const char *n, const char *v, const char *a, char *instV, char *instA, Attributes attr, Promise *pp)
 /* Returns true if a package (n, a) is installed and v is larger than
  * the installed version. instV and instA are the version and arch installed. */
 {
@@ -821,13 +823,13 @@ static int IsNewerThanInstalled(EvalContext *ctx, const char *n, const char *v, 
         }
     }
 
-    Log(LOG_LEVEL_VERBOSE, "Looking for an installed package older than (%s,%s,%s) [name,version,arch]", n, v, a);
+    Log(LOG_LEVEL_VERBOSE, "Looking for an installed package older than (%s,%s,%s)", n, v, a);
 
     for (pi = mp->pack_list; pi != NULL; pi = pi->next)
     {
         if ((strcmp(n, pi->name) == 0) && (((strcmp(a, "*") == 0)) || (strcmp(a, pi->arch) == 0)))
         {
-            Log(LOG_LEVEL_VERBOSE, "Found installed package (%s,%s,%s) [name,version,arch]", pi->name, pi->version, pi->arch);
+            Log(LOG_LEVEL_VERBOSE, "Found installed package (%s,%s,%s)", pi->name, pi->version, pi->arch);
 
             snprintf(instV, CF_MAXVARSIZE, "%s", pi->version);
             snprintf(instA, CF_MAXVARSIZE, "%s", pi->arch);
@@ -836,7 +838,7 @@ static int IsNewerThanInstalled(EvalContext *ctx, const char *n, const char *v, 
             Attributes attr2 = attr;
             attr2.packages.package_select = PACKAGE_VERSION_COMPARATOR_LT;
 
-            if (CompareVersions(ctx, pi->version, v, attr2, pp, result) == VERCMP_MATCH)
+            if (CompareVersions(ctx, pi->version, v, attr2, pp) == VERCMP_MATCH)
             {
                 return true;
             }
@@ -847,7 +849,7 @@ static int IsNewerThanInstalled(EvalContext *ctx, const char *n, const char *v, 
         }
     }
 
-    Log(LOG_LEVEL_VERBOSE, "Package (%s,%s) [name,arch] is not installed", n, a);
+    Log(LOG_LEVEL_VERBOSE, "Package (%s,%s) is not installed", n, a);
     return false;
 }
 
@@ -874,30 +876,7 @@ static const char *PackageAction2String(PackageAction pa)
     }
 }
 
-static PromiseResult AddPackageToSchedule(EvalContext *ctx, const Attributes *a, char *mgr, PackageAction pa,
-                                          const char *name, const char *version, const char *arch, Promise *pp)
-{
-    PackageManager *manager;
-
-    switch (a->transaction.action)
-    {
-    case cfa_warn:
-
-        cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, *a, "Need to repair promise '%s' by '%s' package '%s'",
-             pp->promiser, PackageAction2String(pa), name);
-        return PROMISE_RESULT_WARN;
-
-    case cfa_fix:
-        manager = NewPackageManager(&PACKAGE_SCHEDULE, mgr, pa, a->packages.package_changes);
-        PrependPackageItem(ctx, &(manager->pack_list), name, version, arch, pp);
-        return PROMISE_RESULT_CHANGE;
-
-    default:
-        ProgrammingError("CFEngine: internal error: illegal file action");
-    }
-}
-
-static PromiseResult AddPatchToSchedule(EvalContext *ctx, const Attributes *a, char *mgr, PackageAction pa,
+static void AddPackageToSchedule(EvalContext *ctx, const Attributes *a, char *mgr, PackageAction pa,
                                  const char *name, const char *version, const char *arch, Promise *pp)
 {
     PackageManager *manager;
@@ -908,29 +887,53 @@ static PromiseResult AddPatchToSchedule(EvalContext *ctx, const Attributes *a, c
 
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, *a, "Need to repair promise '%s' by '%s' package '%s'",
              pp->promiser, PackageAction2String(pa), name);
-        return PROMISE_RESULT_WARN;
+        break;
+
+    case cfa_fix:
+
+        manager = NewPackageManager(&PACKAGE_SCHEDULE, mgr, pa, a->packages.package_changes);
+        PrependPackageItem(ctx, &(manager->pack_list), name, version, arch, pp);
+        break;
+
+    default:
+        ProgrammingError("CFEngine: internal error: illegal file action");
+    }
+}
+
+static void AddPatchToSchedule(EvalContext *ctx, const Attributes *a, char *mgr, PackageAction pa,
+                                 const char *name, const char *version, const char *arch, Promise *pp)
+{
+    PackageManager *manager;
+
+    switch (a->transaction.action)
+    {
+    case cfa_warn:
+
+        cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, *a, "Need to repair promise '%s' by '%s' package '%s'",
+             pp->promiser, PackageAction2String(pa), name);
+        break;
 
     case cfa_fix:
 
         manager = NewPackageManager(&PACKAGE_SCHEDULE, mgr, pa, a->packages.package_changes);
         PrependPackageItem(ctx, &(manager->patch_list), name, version, arch, pp);
-        return PROMISE_RESULT_CHANGE;
+        break;
 
     default:
         ProgrammingError("Illegal file action");
     }
 }
 
-static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const char *version, const char *arch, int installed, int matched,
-                                       int no_version_specified, Attributes a, Promise *pp)
+static void SchedulePackageOp(EvalContext *ctx, const char *name, const char *version, const char *arch, int installed, int matched,
+                              int no_version_specified, Attributes a, Promise *pp)
 {
     char reference[CF_EXPANDSIZE], reference2[CF_EXPANDSIZE];
     char refAnyVer[CF_EXPANDSIZE];
     char refAnyVerEsc[CF_EXPANDSIZE];
     char largestVerAvail[CF_MAXVARSIZE];
     char largestPackAvail[CF_MAXVARSIZE];
-    char inst_ver[CF_MAXVARSIZE];
-    char inst_arch[CF_MAXVARSIZE];
+    char instVer[CF_MAXVARSIZE];
+    char instArch[CF_MAXVARSIZE];
     char idBuf[CF_MAXVARSIZE];
     char *id_del;
     char id[CF_EXPANDSIZE];
@@ -938,30 +941,25 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
     int package_select_in_range = false;
     PackageAction policy;
 
-    Log(LOG_LEVEL_VERBOSE, "Checking if package (%s,%s,%s) [name,version,arch] is at the desired state (installed=%d,matched=%d)",
+    Log(LOG_LEVEL_VERBOSE, "Checking if package (%s,%s,%s) is at the desired state (installed=%d,matched=%d)",
           name, version, arch, installed, matched);
 
 /* Now we need to know the name-convention expected by the package manager */
 
     if ((a.packages.package_name_convention) || (a.packages.package_delete_convention))
     {
-        VarRef *ref_name = VarRefParseFromScope("name", "cf_pack_context");
-        EvalContextVariablePut(ctx, ref_name, name, DATA_TYPE_STRING);
-
-        VarRef *ref_version = VarRefParseFromScope("version", "cf_pack_context");
-        EvalContextVariablePut(ctx, ref_version, version, DATA_TYPE_STRING);
-
-        VarRef *ref_arch = VarRefParseFromScope("arch", "cf_pack_context");
-        EvalContextVariablePut(ctx, ref_arch, arch, DATA_TYPE_STRING);
+        EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context", "name" }, (Rval) { name, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+        EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context", "version" }, (Rval) { version, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+        EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context", "arch" }, (Rval) { arch, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
 
         if ((a.packages.package_delete_convention) && (a.packages.package_policy == PACKAGE_ACTION_DELETE))
         {
-            ExpandScalar(ctx, NULL, "cf_pack_context", a.packages.package_delete_convention, reference);
+            ExpandScalar(ctx, "cf_pack_context", a.packages.package_delete_convention, reference);
             strlcpy(id, reference, CF_EXPANDSIZE);
         }
         else if (a.packages.package_name_convention)
         {
-            ExpandScalar(ctx, NULL, "cf_pack_context", a.packages.package_name_convention, reference);
+            ExpandScalar(ctx, "cf_pack_context", a.packages.package_name_convention, reference);
             strlcpy(id, reference, CF_EXPANDSIZE);
         }
         else
@@ -969,14 +967,7 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
             strlcpy(id, name, CF_EXPANDSIZE);
         }
 
-        EvalContextVariableRemove(ctx, ref_name);
-        VarRefDestroy(ref_name);
-
-        EvalContextVariableRemove(ctx, ref_version);
-        VarRefDestroy(ref_version);
-
-        EvalContextVariableRemove(ctx, ref_arch);
-        VarRefDestroy(ref_arch);
+        ScopeClear("cf_pack_context");
     }
     else
     {
@@ -1012,41 +1003,28 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
         }
     }
 
-    PromiseResult result = PROMISE_RESULT_NOOP;
     switch (policy)
     {
     case PACKAGE_ACTION_ADD:
 
         if (installed == 0)
         {
-            if ((a.packages.package_file_repositories != NULL))
+            if ((a.packages.package_file_repositories != NULL) &&
+                ((a.packages.package_select == PACKAGE_VERSION_COMPARATOR_GT) || (a.packages.package_select == PACKAGE_VERSION_COMPARATOR_GE)))
             {
                 {
-                    VarRef *ref_name = VarRefParseFromScope("name", "cf_pack_context_anyver");
-                    EvalContextVariablePut(ctx, ref_name, name, DATA_TYPE_STRING);
+                    EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context_anyver", "name" }, (Rval) { name, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                    EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context_anyver", "version" }, (Rval) { "(.*)", RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                    EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context_anyver", "arch" }, (Rval) { arch, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                    ExpandScalar(ctx, "cf_pack_context_anyver", a.packages.package_name_convention, refAnyVer);
 
-                    VarRef *ref_version = VarRefParseFromScope("version", "cf_pack_context_anyver");
-                    EvalContextVariablePut(ctx, ref_version, "(.*)", DATA_TYPE_STRING);
-
-                    VarRef *ref_arch = VarRefParseFromScope("arch", "cf_pack_context_anyver");
-                    EvalContextVariablePut(ctx, ref_arch, arch, DATA_TYPE_STRING);
-
-                    ExpandScalar(ctx, NULL, "cf_pack_context_anyver", a.packages.package_name_convention, refAnyVer);
-
-                    EvalContextVariableRemove(ctx, ref_name);
-                    VarRefDestroy(ref_name);
-
-                    EvalContextVariableRemove(ctx, ref_version);
-                    VarRefDestroy(ref_version);
-
-                    EvalContextVariableRemove(ctx, ref_arch);
-                    VarRefDestroy(ref_arch);
+                    ScopeClear("cf_pack_context_anyver");
                 }
 
                 EscapeSpecialChars(refAnyVer, refAnyVerEsc, sizeof(refAnyVerEsc), "(.*)","");
 
-                if (FindLargestVersionAvail(ctx, largestPackAvail, largestVerAvail, refAnyVerEsc, version,
-                                            a.packages.package_file_repositories, a, pp, &result))
+                if (FindLargestVersionAvail(ctx, largestPackAvail, largestVerAvail, refAnyVerEsc, version, a.packages.package_select,
+                                            a.packages.package_file_repositories, a, pp))
                 {
                     Log(LOG_LEVEL_VERBOSE, "Using latest version in file repositories; '%s'", largestPackAvail);
                     strlcpy(id, largestPackAvail, CF_EXPANDSIZE);
@@ -1063,11 +1041,9 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
             if (a.packages.package_add_command == NULL)
             {
                 cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a, "Package add command undefined");
-                return PROMISE_RESULT_FAIL;
+                return;
             }
-            result = PromiseResultUpdate(result,
-                                         AddPackageToSchedule(ctx, &a, a.packages.package_add_command,
-                                                              PACKAGE_ACTION_ADD, id, "any", "any", pp));
+            AddPackageToSchedule(ctx, &a, a.packages.package_add_command, PACKAGE_ACTION_ADD, id, "any", "any", pp);
         }
         else
         {
@@ -1085,7 +1061,7 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
             if (a.packages.package_delete_command == NULL)
             {
                 cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a, "Package delete command undefined");
-                return PROMISE_RESULT_FAIL;
+                return;
             }
             // expand local repository in the name convetion, if present
             if (a.packages.package_file_repositories)
@@ -1112,9 +1088,7 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
                 }
             }
 
-            result = PromiseResultUpdate(result,
-                                         AddPackageToSchedule(ctx, &a, a.packages.package_delete_command,
-                                                              PACKAGE_ACTION_DELETE, id, "any", "any", pp));
+            AddPackageToSchedule(ctx, &a, a.packages.package_delete_command, PACKAGE_ACTION_DELETE, id, "any", "any", pp);
         }
         else
         {
@@ -1126,7 +1100,7 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
         if (a.packages.package_delete_command == NULL)
         {
             cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a, "Package delete command undefined");
-            return PROMISE_RESULT_FAIL;
+            return;
         }
 
         if (!no_version_specified)
@@ -1135,61 +1109,43 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
             if (a.packages.package_add_command == NULL)
             {
                 cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a, "Package add command undefined");
-                return PROMISE_RESULT_FAIL;
+                return;
             }
             if ((matched && package_select_in_range) || (installed && no_version_specified))
             {
-                result = PromiseResultUpdate(result,
-                                             AddPackageToSchedule(ctx, &a, a.packages.package_delete_command,
-                                                                  PACKAGE_ACTION_DELETE, id, "any", "any", pp));
+                AddPackageToSchedule(ctx, &a, a.packages.package_delete_command, PACKAGE_ACTION_DELETE, id, "any", "any", pp);
             }
-
-            result = PromiseResultUpdate(result,
-                                         AddPackageToSchedule(ctx, &a, a.packages.package_add_command,
-                                                              PACKAGE_ACTION_ADD, id, "any", "any", pp));
+            AddPackageToSchedule(ctx, &a, a.packages.package_add_command, PACKAGE_ACTION_ADD, id, "any", "any", pp);
         }
         else
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                  "Package reinstallation cannot be promised -- insufficient version info or no match");
-            return PROMISE_RESULT_FAIL;
         }
+
         break;
 
     case PACKAGE_ACTION_UPDATE:
 
-        *inst_ver = '\0';
-        *inst_arch = '\0';
+        *instVer = '\0';
+        *instArch = '\0';
 
-        if ((a.packages.package_file_repositories != NULL))
+        if ((a.packages.package_file_repositories != NULL) &&
+            ((a.packages.package_select == PACKAGE_VERSION_COMPARATOR_GT) || (a.packages.package_select == PACKAGE_VERSION_COMPARATOR_GE)))
         {
             {
-                VarRef *ref_name = VarRefParseFromScope("name", "cf_pack_context_anyver");
-                EvalContextVariablePut(ctx, ref_name, name, DATA_TYPE_STRING);
+                EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context_anyver", "name" }, (Rval) { name, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context_anyver", "version" }, (Rval) { "(.*)", RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context_anyver", "arch" }, (Rval) { arch, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                ExpandScalar(ctx, "cf_pack_context_anyver", a.packages.package_name_convention, refAnyVer);
 
-                VarRef *ref_version = VarRefParseFromScope("version", "cf_pack_context_anyver");
-                EvalContextVariablePut(ctx, ref_version, "(.*)", DATA_TYPE_STRING);
-
-                VarRef *ref_arch = VarRefParseFromScope("arch", "cf_pack_context_anyver");
-                EvalContextVariablePut(ctx, ref_arch, arch, DATA_TYPE_STRING);
-
-                ExpandScalar(ctx, NULL, "cf_pack_context_anyver", a.packages.package_name_convention, refAnyVer);
-
-                EvalContextVariableRemove(ctx, ref_name);
-                VarRefDestroy(ref_name);
-
-                EvalContextVariableRemove(ctx, ref_version);
-                VarRefDestroy(ref_version);
-
-                EvalContextVariableRemove(ctx, ref_arch);
-                VarRefDestroy(ref_arch);
+                ScopeClear("cf_pack_context_anyver");
             }
-
 
             EscapeSpecialChars(refAnyVer, refAnyVerEsc, sizeof(refAnyVerEsc), "(.*)","");
 
-            if (FindLargestVersionAvail(ctx, largestPackAvail, largestVerAvail, refAnyVerEsc, version,
-                                        a.packages.package_file_repositories, a, pp, &result))
+            if (FindLargestVersionAvail(ctx, largestPackAvail, largestVerAvail, refAnyVerEsc, version, a.packages.package_select,
+                                        a.packages.package_file_repositories, a, pp))
             {
                 Log(LOG_LEVEL_VERBOSE, "Using latest version in file repositories; '%s'", largestPackAvail);
                 strlcpy(id, largestPackAvail, CF_EXPANDSIZE);
@@ -1208,11 +1164,11 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
         if (installed)
         {
             Log(LOG_LEVEL_VERBOSE, "Checking if latest available version is newer than installed...");
-            if (IsNewerThanInstalled(ctx, name, largestVerAvail, arch, inst_ver, inst_arch, a, pp, &result))
+            if (IsNewerThanInstalled(ctx, name, largestVerAvail, arch, instVer, instArch, a, pp))
             {
                 Log(LOG_LEVEL_VERBOSE,
-                      "Installed package (%s,%s,%s) [name,version,arch] is older than latest available (%s,%s,%s) [name,version,arch] - updating", name,
-                      inst_ver, inst_arch, name, largestVerAvail, arch);
+                      "Installed package (%s,%s,%s) is older than latest available (%s,%s,%s) - updating", name,
+                      instVer, instArch, name, largestVerAvail, arch);
             }
             else
             {
@@ -1230,38 +1186,27 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
                 // we need to have the version of installed package
                 if (a.packages.package_delete_convention)
                 {
-                    if (*inst_ver == '\0')
+                    if (*instVer == '\0')
                     {
-                        inst_ver[0] = '*';
-                        inst_ver[1] = '\0';
+                        instVer[0] = '*';
+                        instVer[1] = '\0';
                     }
 
-                    if (*inst_arch == '\0')
+                    if (*instArch == '\0')
                     {
-                        inst_arch[0] = '*';
-                        inst_arch[1] = '\0';
+                        instArch[0] = '*';
+                        instArch[1] = '\0';
                     }
 
-                    VarRef *ref_name = VarRefParseFromScope("name", "cf_pack_context");
-                    EvalContextVariablePut(ctx, ref_name, name, DATA_TYPE_STRING);
+                    {
+                        EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context", "name" }, (Rval) { name, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                        EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context", "version" }, (Rval) { instVer, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                        EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context", "arch" }, (Rval) { instArch, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                        ExpandScalar(ctx, "cf_pack_context", a.packages.package_delete_convention, reference2);
+                        id_del = reference2;
 
-                    VarRef *ref_version = VarRefParseFromScope("version", "cf_pack_context");
-                    EvalContextVariablePut(ctx, ref_version, inst_ver, DATA_TYPE_STRING);
-
-                    VarRef *ref_arch = VarRefParseFromScope("arch", "cf_pack_context");
-                    EvalContextVariablePut(ctx, ref_arch, inst_arch, DATA_TYPE_STRING);
-
-                    ExpandScalar(ctx, NULL, "cf_pack_context", a.packages.package_delete_convention, reference2);
-                    id_del = reference2;
-
-                    EvalContextVariableRemove(ctx, ref_name);
-                    VarRefDestroy(ref_name);
-
-                    EvalContextVariableRemove(ctx, ref_version);
-                    VarRefDestroy(ref_version);
-
-                    EvalContextVariableRemove(ctx, ref_arch);
-                    VarRefDestroy(ref_arch);
+                        ScopeClear("cf_pack_context");
+                    }
                 }
                 else
                 {
@@ -1273,34 +1218,27 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
                 if (a.packages.package_add_command == NULL)
                 {
                     cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a, "Package add command undefined");
-                    return PROMISE_RESULT_FAIL;
+                    return;
                 }
                 if (a.packages.package_delete_command == NULL)
                 {
                     cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a, "Package delete command undefined");
-                    return PROMISE_RESULT_FAIL;
+                    return;
                 }
-                result = PromiseResultUpdate(result,
-                                             AddPackageToSchedule(ctx, &a, a.packages.package_delete_command,
-                                                                  PACKAGE_ACTION_DELETE, id_del, "any", "any", pp));
+                AddPackageToSchedule(ctx, &a, a.packages.package_delete_command, PACKAGE_ACTION_DELETE, id_del, "any", "any", pp);
 
-                result = PromiseResultUpdate(result,
-                                             AddPackageToSchedule(ctx, &a, a.packages.package_add_command,
-                                                                  PACKAGE_ACTION_ADD, id, "any", "any", pp));
+                AddPackageToSchedule(ctx, &a, a.packages.package_add_command, PACKAGE_ACTION_ADD, id, "any", "any", pp);
             }
             else
             {
                 Log(LOG_LEVEL_VERBOSE, "Schedule package for update");
-                result = PromiseResultUpdate(result,
-                                             AddPackageToSchedule(ctx, &a, a.packages.package_update_command,
-                                                                  PACKAGE_ACTION_UPDATE, id, "any", "any", pp));
+                AddPackageToSchedule(ctx, &a, a.packages.package_update_command, PACKAGE_ACTION_UPDATE, id, "any", "any", pp);
             }
         }
         else
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Package '%s' cannot be updated -- no match or not installed",
                  pp->promiser);
-            result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
         }
         break;
 
@@ -1309,9 +1247,7 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
         if (matched && (!installed))
         {
             Log(LOG_LEVEL_VERBOSE, "Schedule package for patching");
-            result = PromiseResultUpdate(result,
-                                         AddPatchToSchedule(ctx, &a, a.packages.package_patch_command,
-                                                            PACKAGE_ACTION_PATCH, id, "any", "any", pp));
+            AddPatchToSchedule(ctx, &a, a.packages.package_patch_command, PACKAGE_ACTION_PATCH, id, "any", "any", pp);
         }
         else
         {
@@ -1325,14 +1261,11 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
         if ((matched && package_select_in_range) || (installed && no_version_specified))
         {
             Log(LOG_LEVEL_VERBOSE, "Schedule package for verification");
-            result = PromiseResultUpdate(result,
-                                         AddPackageToSchedule(ctx, &a, a.packages.package_verify_command,
-                                                              PACKAGE_ACTION_VERIFY, id, "any", "any", pp));
+            AddPackageToSchedule(ctx, &a, a.packages.package_verify_command, PACKAGE_ACTION_VERIFY, id, "any", "any", pp);
         }
         else
         {
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Package '%s' cannot be verified -- no match", pp->promiser);
-            return PROMISE_RESULT_FAIL;
         }
 
         break;
@@ -1340,25 +1273,16 @@ static PromiseResult SchedulePackageOp(EvalContext *ctx, const char *name, const
     default:
         break;
     }
-
-    return result;
 }
 
-VersionCmpResult ComparePackages(EvalContext *ctx,
-                                 const char *n, const char *v, const char *arch,
-                                 PackageItem *pi, Attributes a,
-                                 Promise *pp,
-                                 const char *mode,
-                                 PromiseResult *result)
+VersionCmpResult ComparePackages(EvalContext *ctx, const char *n, const char *v, const char *arch, PackageItem * pi, Attributes a, Promise *pp)
 {
-    Log(LOG_LEVEL_VERBOSE, "Comparing %s package (%s,%s,%s) with given (%s,%s,%s) [name,version,arch]", mode, pi->name, pi->version, pi->arch, n, v, arch);
-
     if (CompareCSVName(n, pi->name) != 0)
     {
         return VERCMP_NO_MATCH;
     }
 
-    Log(LOG_LEVEL_VERBOSE, "Matched %s name '%s'", mode, n);
+    Log(LOG_LEVEL_VERBOSE, "Matched name '%s'", n);
 
     if (strcmp(arch, "*") != 0)
     {
@@ -1367,41 +1291,24 @@ VersionCmpResult ComparePackages(EvalContext *ctx,
             return VERCMP_NO_MATCH;
         }
 
-        Log(LOG_LEVEL_VERBOSE, "Matched %s arch '%s'", mode, arch);
-    }
-    else
-    {
-        Log(LOG_LEVEL_VERBOSE, "Matched %s wildcard arch '%s'", mode, arch);
+        Log(LOG_LEVEL_VERBOSE, "Matched arch '%s'", arch);
     }
 
     if (strcmp(v, "*") == 0)
     {
-        Log(LOG_LEVEL_VERBOSE, "Matched %s wildcard version '%s'", mode, v);
+        Log(LOG_LEVEL_VERBOSE, "Matched version *");
         return VERCMP_MATCH;
     }
 
-    VersionCmpResult vc =  CompareVersions(ctx, pi->version, v, a, pp, result);
-    Log(LOG_LEVEL_VERBOSE,
-        "Version comparison returned %s for %s package (%s,%s,%s) against given (%s,%s,%s) [name,version,arch]",
-        vc == VERCMP_MATCH ? "MATCH" : vc == VERCMP_NO_MATCH ? "NO_MATCH" : "ERROR",
-        mode,
-        pi->name, pi->version, pi->arch,
-        n, v, arch);
-
-    return vc;
+    return CompareVersions(ctx, pi->version, v, a, pp);
 
 }
 
-static VersionCmpResult PatchMatch(EvalContext *ctx,
-                                   const char *n, const char *v, const char *a,
-                                   Attributes attr, Promise *pp,
-                                   const char* mode,
-                                   PromiseResult *result)
+static VersionCmpResult PatchMatch(EvalContext *ctx, const char *n, const char *v, const char *a, Attributes attr, Promise *pp)
 {
     PackageManager *mp = NULL;
     PackageItem *pi;
 
-    // This REALLY needs some commenting
     for (mp = INSTALLED_PACKAGE_LISTS; mp != NULL; mp = mp->next)
     {
         if (strcmp(mp->manager, attr.packages.package_list_command) == 0)
@@ -1410,44 +1317,36 @@ static VersionCmpResult PatchMatch(EvalContext *ctx,
         }
     }
 
-    Log(LOG_LEVEL_VERBOSE, "Looking for %s (%s,%s,%s) [name,version,arch] in package manager %s", mode, n, v, a, mp->manager);
+    Log(LOG_LEVEL_VERBOSE, "Looking for (%s,%s,%s)", n, v, a);
 
     for (pi = mp->patch_list; pi != NULL; pi = pi->next)
     {
-        if (FullTextMatch(ctx, n, pi->name)) /* Check regexes */
+        if (FullTextMatch(n, pi->name)) /* Check regexes */
         {
-            Log(LOG_LEVEL_VERBOSE, "Regular expression match succeeded for %s against %s", n, pi->name);
             return VERCMP_MATCH;
         }
         else
         {
-            VersionCmpResult res = ComparePackages(ctx, n, v, a, pi, attr, pp, mode, result);
+            VersionCmpResult res = ComparePackages(ctx, n, v, a, pi, attr, pp);
             if (res != VERCMP_NO_MATCH)
             {
-                Log(LOG_LEVEL_VERBOSE, "Package comparison for %s was decisive: %s", pi->name, res == VERCMP_MATCH ? "MATCH" : "ERROR");
                 return res;
             }
         }
     }
 
-    Log(LOG_LEVEL_VERBOSE, "PatchMatch did not match the constraints of promise (%s,%s,%s) [name,version,arch]", n, v, a);
+    Log(LOG_LEVEL_VERBOSE, "Unsatisfied constraints in promise (%s,%s,%s)", n, v, a);
     return VERCMP_NO_MATCH;
 }
 
-static VersionCmpResult PackageMatch(EvalContext *ctx,
-                                     const char *n, const char *v, const char *a,
-                                     Attributes attr, Promise *pp,
-                                     const char* mode,
-                                     PromiseResult *result)
+static VersionCmpResult PackageMatch(EvalContext *ctx, const char *n, const char *v, const char *a, Attributes attr, Promise *pp)
 /*
  * Returns VERCMP_MATCH if any installed packages match (n,v,a), VERCMP_NO_MATCH otherwise, VERCMP_ERROR on error.
- * The mode is informational
  */
 {
     PackageManager *mp = NULL;
     PackageItem *pi;
 
-    // This REALLY needs some commenting
     for (mp = INSTALLED_PACKAGE_LISTS; mp != NULL; mp = mp->next)
     {
         if (strcmp(mp->manager, attr.packages.package_list_command) == 0)
@@ -1456,20 +1355,19 @@ static VersionCmpResult PackageMatch(EvalContext *ctx,
         }
     }
 
-    Log(LOG_LEVEL_VERBOSE, "Looking for %s (%s,%s,%s) [name,version,arch] in package manager %s", mode, n, v, a, mp->manager);
+    Log(LOG_LEVEL_VERBOSE, "Looking for (%s,%s,%s)", n, v, a);
 
     for (pi = mp->pack_list; pi != NULL; pi = pi->next)
     {
-        VersionCmpResult res = ComparePackages(ctx, n, v, a, pi, attr, pp, mode, result);
+        VersionCmpResult res = ComparePackages(ctx, n, v, a, pi, attr, pp);
 
         if (res != VERCMP_NO_MATCH)
         {
-            Log(LOG_LEVEL_VERBOSE, "Package comparison for %s %s was decisive: %s", mode, pi->name, res == VERCMP_MATCH ? "MATCH" : "ERROR");
             return res;
         }
     }
 
-    Log(LOG_LEVEL_VERBOSE, "PackageMatch did not find %s packages to match the constraints of promise (%s,%s,%s) [name,version,arch]", mode, n, v, a);
+    Log(LOG_LEVEL_VERBOSE, "No installed packages matched (%s,%s,%s)", n, v, a);
     return VERCMP_NO_MATCH;
 }
 
@@ -1483,20 +1381,13 @@ static int VersionCheckSchedulePackage(EvalContext *ctx, Attributes a, Promise *
     case PACKAGE_ACTION_DELETE:
         if (matches && installed)
         {
-            Log(LOG_LEVEL_VERBOSE, "VersionCheckSchedulePackage: Package %s to be deleted is installed.", pp->promiser);
             return true;
-        }
-        else
-        {
-            cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, a, "Package %s to be deleted does not exist anywhere",
-                 pp->promiser);
         }
         break;
 
     case PACKAGE_ACTION_REINSTALL:
         if (matches && installed)
         {
-            Log(LOG_LEVEL_VERBOSE, "VersionCheckSchedulePackage: Package %s to be reinstalled is already installed.", pp->promiser);
             return true;
         }
         else
@@ -1509,11 +1400,6 @@ static int VersionCheckSchedulePackage(EvalContext *ctx, Attributes a, Promise *
     default:
         if ((!installed) || (!matches))
         {
-            if (matches && !installed)
-            {
-                Log(LOG_LEVEL_VERBOSE, "VersionCheckSchedulePackage: Package %s is not installed.", pp->promiser);
-            }
-
             return true;
         }
         else
@@ -1527,39 +1413,24 @@ static int VersionCheckSchedulePackage(EvalContext *ctx, Attributes a, Promise *
     return false;
 }
 
-static PromiseResult CheckPackageState(EvalContext *ctx, Attributes a, Promise *pp, const char *name, const char *version, const char *arch, bool no_version)
+static void CheckPackageState(EvalContext *ctx, Attributes a, Promise *pp, const char *name, const char *version, const char *arch, bool no_version)
 {
-    PromiseResult result = PROMISE_RESULT_NOOP;
-
-    /* Horrible */
-    Attributes a2 = a;
-    a2.packages.package_select = PACKAGE_VERSION_COMPARATOR_EQ;
-
-    VersionCmpResult installed = PackageMatch(ctx, name, "*", arch, a2, pp, "[installed]", &result);
-    Log(LOG_LEVEL_VERBOSE, "Installed package match for (%s,%s,%s) [name,version,arch] was decisive: %s",
-        name, "*", arch, installed == VERCMP_MATCH ? "MATCH" : "ERROR-OR-NOMATCH");
-
-    VersionCmpResult matches = PackageMatch(ctx, name, version, arch, a2, pp, "[available]", &result);
-    Log(LOG_LEVEL_VERBOSE, "Available package match for (%s,%s,%s) [name,version,arch] was decisive: %s",
-        name, version, arch, matches == VERCMP_MATCH ? "MATCH" : "ERROR-OR-NOMATCH");
+    VersionCmpResult installed = PackageMatch(ctx, name, "*", arch, a, pp);
+    VersionCmpResult matches = PackageMatch(ctx, name, version, arch, a, pp);
 
     if ((installed == VERCMP_ERROR) || (matches == VERCMP_ERROR))
     {
-        cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a2, "Failure trying to compare package versions");
-        result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-        return result;
+        cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Failure trying to compare package versions");
+        return;
     }
 
-    if (VersionCheckSchedulePackage(ctx, a2, pp, matches, installed))
+    if (VersionCheckSchedulePackage(ctx, a, pp, matches, installed))
     {
-        Log(LOG_LEVEL_VERBOSE, "CheckPackageState: matched package (%s,%s,%s) [name,version,arch]; scheduling operation", name, version, arch);
-        return SchedulePackageOp(ctx, name, version, arch, installed, matches, no_version, a, pp);
+        SchedulePackageOp(ctx, name, version, arch, installed, matches, no_version, a, pp);
     }
-
-    return result;
 }
 
-static PromiseResult VerifyPromisedPatch(EvalContext *ctx, Attributes a, Promise *pp)
+static void VerifyPromisedPatch(EvalContext *ctx, Attributes a, Promise *pp)
 {
     char version[CF_MAXVARSIZE];
     char name[CF_MAXVARSIZE];
@@ -1568,102 +1439,92 @@ static PromiseResult VerifyPromisedPatch(EvalContext *ctx, Attributes a, Promise
     int matches = 0, installed = 0, no_version = false;
     Rlist *rp;
 
-    /* Horrible */
-    Attributes a2 = a;
-    a2.packages.package_select = PACKAGE_VERSION_COMPARATOR_EQ;
-
-    PromiseResult result = PROMISE_RESULT_NOOP;
-    if (a2.packages.package_version)
+    if (a.packages.package_version)
     {
         /* The version is specified separately */
 
-        for (rp = a2.packages.package_architectures; rp != NULL; rp = rp->next)
+        for (rp = a.packages.package_architectures; rp != NULL; rp = rp->next)
         {
             strncpy(name, pp->promiser, CF_MAXVARSIZE - 1);
-            strncpy(version, a2.packages.package_version, CF_MAXVARSIZE - 1);
-            strncpy(arch, RlistScalarValue(rp), CF_MAXVARSIZE - 1);
-            VersionCmpResult installed1 = PatchMatch(ctx, name, "*", "*", a2, pp, "[installed1]", &result);
-            VersionCmpResult matches1 = PatchMatch(ctx, name, version, arch, a2, pp, "[available1]", &result);
+            strncpy(version, a.packages.package_version, CF_MAXVARSIZE - 1);
+            strncpy(arch, rp->item, CF_MAXVARSIZE - 1);
+            VersionCmpResult installed1 = PatchMatch(ctx, name, "*", "*", a, pp);
+            VersionCmpResult matches1 = PatchMatch(ctx, name, version, arch, a, pp);
 
             if ((installed1 == VERCMP_ERROR) || (matches1 == VERCMP_ERROR))
             {
-                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a2, "Failure trying to compare package versions");
-                result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-                return result;
+                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Failure trying to compare package versions");
+                return;
             }
 
             installed += installed1;
             matches += matches1;
         }
 
-        if (a2.packages.package_architectures == NULL)
+        if (a.packages.package_architectures == NULL)
         {
             strncpy(name, pp->promiser, CF_MAXVARSIZE - 1);
-            strncpy(version, a2.packages.package_version, CF_MAXVARSIZE - 1);
+            strncpy(version, a.packages.package_version, CF_MAXVARSIZE - 1);
             strncpy(arch, "*", CF_MAXVARSIZE - 1);
-            installed = PatchMatch(ctx, name, "*", "*", a2, pp, "[installed]", &result);
-            matches = PatchMatch(ctx, name, version, arch, a2, pp, "[available]", &result);
+            installed = PatchMatch(ctx, name, "*", "*", a, pp);
+            matches = PatchMatch(ctx, name, version, arch, a, pp);
 
             if ((installed == VERCMP_ERROR) || (matches == VERCMP_ERROR))
             {
-                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a2, "Failure trying to compare package versions");
-                result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-                return result;
+                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Failure trying to compare package versions");
+                return;
             }
         }
     }
-    else if (a2.packages.package_version_regex)
+    else if (a.packages.package_version_regex)
     {
         /* The name, version and arch are to be extracted from the promiser */
-        strncpy(version, ExtractFirstReference(a2.packages.package_version_regex, package), CF_MAXVARSIZE - 1);
-        strncpy(name, ExtractFirstReference(a2.packages.package_name_regex, package), CF_MAXVARSIZE - 1);
-        strncpy(arch, ExtractFirstReference(a2.packages.package_arch_regex, package), CF_MAXVARSIZE - 1);
-        installed = PatchMatch(ctx, name, "*", "*", a2, pp, "[installed]", &result);
-        matches = PatchMatch(ctx, name, version, arch, a2, pp, "[available]", &result);
+        strncpy(version, ExtractFirstReference(a.packages.package_version_regex, package), CF_MAXVARSIZE - 1);
+        strncpy(name, ExtractFirstReference(a.packages.package_name_regex, package), CF_MAXVARSIZE - 1);
+        strncpy(arch, ExtractFirstReference(a.packages.package_arch_regex, package), CF_MAXVARSIZE - 1);
+        installed = PatchMatch(ctx, name, "*", "*", a, pp);
+        matches = PatchMatch(ctx, name, version, arch, a, pp);
 
         if ((installed == VERCMP_ERROR) || (matches == VERCMP_ERROR))
         {
-            cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a2, "Failure trying to compare package versions");
-            result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-            return result;
+            cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Failure trying to compare package versions");
+            return;
         }
     }
     else
     {
         no_version = true;
 
-        for (rp = a2.packages.package_architectures; rp != NULL; rp = rp->next)
+        for (rp = a.packages.package_architectures; rp != NULL; rp = rp->next)
         {
             strncpy(name, pp->promiser, CF_MAXVARSIZE - 1);
             strncpy(version, "*", CF_MAXVARSIZE - 1);
-            strncpy(arch, RlistScalarValue(rp), CF_MAXVARSIZE - 1);
-            VersionCmpResult installed1 = PatchMatch(ctx, name, "*", "*", a2, pp, "[installed1]", &result);
-            VersionCmpResult matches1 = PatchMatch(ctx, name, version, arch, a2, pp, "[available1]", &result);
+            strncpy(arch, rp->item, CF_MAXVARSIZE - 1);
+            VersionCmpResult installed1 = PatchMatch(ctx, name, "*", "*", a, pp);
+            VersionCmpResult matches1 = PatchMatch(ctx, name, version, arch, a, pp);
 
             if ((installed1 == VERCMP_ERROR) || (matches1 == VERCMP_ERROR))
             {
-                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a2, "Failure trying to compare package versions");
-                result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-                return result;
+                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Failure trying to compare package versions");
+                return;
             }
 
             installed += installed1;
             matches += matches1;
         }
 
-        if (a2.packages.package_architectures == NULL)
+        if (a.packages.package_architectures == NULL)
         {
             strncpy(name, pp->promiser, CF_MAXVARSIZE - 1);
             strncpy(version, "*", CF_MAXVARSIZE - 1);
             strncpy(arch, "*", CF_MAXVARSIZE - 1);
-            installed = PatchMatch(ctx, name, "*", "*", a2, pp, "[installed]", &result);
-            matches = PatchMatch(ctx, name, version, arch, a2, pp, "[available]", &result);
+            installed = PatchMatch(ctx, name, "*", "*", a, pp);
+            matches = PatchMatch(ctx, name, version, arch, a, pp);
 
             if ((installed == VERCMP_ERROR) || (matches == VERCMP_ERROR))
             {
-                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a2, "Failure trying to compare package versions");
-                result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-                return result;
+                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Failure trying to compare package versions");
+                return;
             }
         }
     }
@@ -1672,40 +1533,34 @@ static PromiseResult VerifyPromisedPatch(EvalContext *ctx, Attributes a, Promise
     Log(LOG_LEVEL_VERBOSE, "%d patch(es) match the promise body's criteria fully", matches);
 
     SchedulePackageOp(ctx, name, version, arch, installed, matches, no_version, a, pp);
-
-    return PROMISE_RESULT_NOOP;
 }
 
-static PromiseResult VerifyPromisedPackage(EvalContext *ctx, Attributes a, Promise *pp)
+static void VerifyPromisedPackage(EvalContext *ctx, Attributes a, Promise *pp)
 {
     const char *package = pp->promiser;
 
-    PromiseResult result = PROMISE_RESULT_NOOP;
     if (a.packages.package_version)
     {
         /* The version is specified separately */
-        Log(LOG_LEVEL_VERBOSE, "Package version %s specified explicitly in promise body", a.packages.package_version);
+        Log(LOG_LEVEL_VERBOSE, "Package version specified explicitly in promise body");
 
         if (a.packages.package_architectures == NULL)
         {
-            Log(LOG_LEVEL_VERBOSE, " ... trying any arch '*'");
-            result = PromiseResultUpdate(result, CheckPackageState(ctx, a, pp, package, a.packages.package_version, "*", false));
+            CheckPackageState(ctx, a, pp, package, a.packages.package_version, "*", false);
         }
         else
         {
             for (Rlist *rp = a.packages.package_architectures; rp != NULL; rp = rp->next)
             {
                 Log(LOG_LEVEL_VERBOSE, " ... trying listed arch '%s'", RlistScalarValue(rp));
-                result = PromiseResultUpdate(result,
-                                             CheckPackageState(ctx, a, pp, package, a.packages.package_version,
-                                                               RlistScalarValue(rp), false));
+                CheckPackageState(ctx, a, pp, package, a.packages.package_version, RlistScalarValue(rp), false);
             }
         }
     }
     else if (a.packages.package_version_regex)
     {
         /* The name, version and arch are to be extracted from the promiser */
-        Log(LOG_LEVEL_VERBOSE, "Package version %s specified implicitly in promiser's name", a.packages.package_version_regex);
+        Log(LOG_LEVEL_VERBOSE, "Package version specified implicitly in promiser's name");
 
         char version[CF_MAXVARSIZE];
         char name[CF_MAXVARSIZE];
@@ -1724,8 +1579,7 @@ static PromiseResult VerifyPromisedPackage(EvalContext *ctx, Attributes a, Promi
             strcpy(arch, "*");
         }
 
-        Log(LOG_LEVEL_VERBOSE, " ... trying arch '%s' and version '%s'", arch, version);
-        result = PromiseResultUpdate(result, CheckPackageState(ctx, a, pp, name, version, arch, false));
+        CheckPackageState(ctx, a, pp, name, version, arch, false);
     }
     else
     {
@@ -1733,20 +1587,17 @@ static PromiseResult VerifyPromisedPackage(EvalContext *ctx, Attributes a, Promi
 
         if (a.packages.package_architectures == NULL)
         {
-            Log(LOG_LEVEL_VERBOSE, " ... trying any arch '*' and any version '*'");
-            result = PromiseResultUpdate(result, CheckPackageState(ctx, a, pp, package, "*", "*", true));
+            CheckPackageState(ctx, a, pp, package, "*", "*", true);
         }
         else
         {
             for (Rlist *rp = a.packages.package_architectures; rp != NULL; rp = rp->next)
             {
-                Log(LOG_LEVEL_VERBOSE, " ... trying listed arch '%s' and any version '*'", RlistScalarValue(rp));
-                result = PromiseResultUpdate(result, CheckPackageState(ctx, a, pp, package, "*", RlistScalarValue(rp), true));
+                Log(LOG_LEVEL_VERBOSE, " ... trying listed arch '%s'", RlistScalarValue(rp));
+                CheckPackageState(ctx, a, pp, package, "*", rp->item, true);
             }
         }
     }
-
-    return result;
 }
 
 /** Execute scheduled operations **/
@@ -1767,7 +1618,7 @@ static void InvalidateSoftwareCache(void)
     }
 }
 
-static int ExecuteSchedule(EvalContext *ctx, PackageManager *schedule, PackageAction action, PromiseResult *result)
+static int ExecuteSchedule(EvalContext *ctx, PackageManager *schedule, PackageAction action)
 {
     PackageItem *pi;
     PackageManager *pm;
@@ -1896,7 +1747,7 @@ static int ExecuteSchedule(EvalContext *ctx, PackageManager *schedule, PackageAc
         {
             *(command_string + strlen(command_string) - 1) = '\0';
             Log(LOG_LEVEL_VERBOSE, "Command does not allow arguments");
-            if (ExecPackageCommand(ctx, command_string, verify, true, a, pp, result))
+            if (ExecPackageCommand(ctx, command_string, verify, true, a, pp))
             {
                 Log(LOG_LEVEL_VERBOSE, "Package schedule execution ok (outcome cannot be promised by cf-agent)");
             }
@@ -1930,7 +1781,7 @@ static int ExecuteSchedule(EvalContext *ctx, PackageManager *schedule, PackageAc
                         }
                         else
                         {
-                            continue;
+                            break;
                         }
                     }
                     else
@@ -1938,7 +1789,7 @@ static int ExecuteSchedule(EvalContext *ctx, PackageManager *schedule, PackageAc
                         strcat(offset, pi->name);
                     }
 
-                    if (ExecPackageCommand(ctx, command_string, verify, true, a, pp, result))
+                    if (ExecPackageCommand(ctx, command_string, verify, true, a, pp))
                     {
                         Log(LOG_LEVEL_VERBOSE,
                             "Package schedule execution ok for '%s' (outcome cannot be promised by cf-agent)",
@@ -1982,7 +1833,7 @@ static int ExecuteSchedule(EvalContext *ctx, PackageManager *schedule, PackageAc
                     }
                 }
 
-                ok = ExecPackageCommand(ctx, command_string, verify, true, a, pp, result);
+                ok = ExecPackageCommand(ctx, command_string, verify, true, a, pp);
 
                 for (pi = pm->pack_list; pi != NULL; pi = pi->next)
                 {
@@ -2021,7 +1872,7 @@ static int ExecuteSchedule(EvalContext *ctx, PackageManager *schedule, PackageAc
     return retval;
 }
 
-static int ExecutePatch(EvalContext *ctx, PackageManager *schedule, PackageAction action, PromiseResult *result)
+static int ExecutePatch(EvalContext *ctx, PackageManager *schedule, PackageAction action)
 {
     PackageItem *pi;
     PackageManager *pm;
@@ -2080,7 +1931,6 @@ static int ExecutePatch(EvalContext *ctx, PackageManager *schedule, PackageActio
             if (a.packages.package_patch_command == NULL)
             {
                 cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a, "Package patch command undefined");
-                *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
                 return false;
             }
 
@@ -2090,7 +1940,6 @@ static int ExecutePatch(EvalContext *ctx, PackageManager *schedule, PackageActio
 
         default:
             cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a, "Unknown action attempted");
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
             return false;
         }
 
@@ -2100,7 +1949,7 @@ static int ExecutePatch(EvalContext *ctx, PackageManager *schedule, PackageActio
         {
             *(command_string + strlen(command_string) - 1) = '\0';
             Log(LOG_LEVEL_VERBOSE, "Command does not allow arguments");
-            if (ExecPackageCommand(ctx, command_string, verify, true, a, pp, result))
+            if (ExecPackageCommand(ctx, command_string, verify, true, a, pp))
             {
                 Log(LOG_LEVEL_VERBOSE, "Package patching seemed to succeed (outcome cannot be promised by cf-agent)");
             }
@@ -2127,7 +1976,7 @@ static int ExecutePatch(EvalContext *ctx, PackageManager *schedule, PackageActio
 
                     strcat(offset, pi->name);
 
-                    if (ExecPackageCommand(ctx, command_string, verify, true, a, pp, result))
+                    if (ExecPackageCommand(ctx, command_string, verify, true, a, pp))
                     {
                         Log(LOG_LEVEL_VERBOSE,
                             "Package schedule execution ok for '%s' (outcome cannot be promised by cf-agent)",
@@ -2154,7 +2003,7 @@ static int ExecutePatch(EvalContext *ctx, PackageManager *schedule, PackageActio
                     }
                 }
 
-                ok = ExecPackageCommand(ctx, command_string, verify, true, a, pp, result);
+                ok = ExecPackageCommand(ctx, command_string, verify, true, a, pp);
 
                 for (pi = pm->patch_list; pi != NULL; pi = pi->next)
                 {
@@ -2191,7 +2040,7 @@ static int ExecutePatch(EvalContext *ctx, PackageManager *schedule, PackageActio
     return retval;
 }
 
-static PromiseResult ExecutePackageSchedule(EvalContext *ctx, PackageManager *schedule)
+static void ExecutePackageSchedule(EvalContext *ctx, PackageManager *schedule)
 {
     if (LEGACY_OUTPUT)
     {
@@ -2207,44 +2056,41 @@ static PromiseResult ExecutePackageSchedule(EvalContext *ctx, PackageManager *sc
 
     /* Normal ordering */
 
-    PromiseResult result = PROMISE_RESULT_NOOP;
     Log(LOG_LEVEL_VERBOSE, "Deletion schedule...");
 
-    if (!ExecuteSchedule(ctx, schedule, PACKAGE_ACTION_DELETE, &result))
+    if (!ExecuteSchedule(ctx, schedule, PACKAGE_ACTION_DELETE))
     {
         Log(LOG_LEVEL_ERR, "Aborting package schedule");
-        return result;
+        return;
     }
 
     Log(LOG_LEVEL_VERBOSE, "Addition schedule...");
 
-    if (!ExecuteSchedule(ctx, schedule, PACKAGE_ACTION_ADD, &result))
+    if (!ExecuteSchedule(ctx, schedule, PACKAGE_ACTION_ADD))
     {
-        return result;
+        return;
     }
 
     Log(LOG_LEVEL_VERBOSE, "Update schedule...");
 
-    if (!ExecuteSchedule(ctx, schedule, PACKAGE_ACTION_UPDATE, &result))
+    if (!ExecuteSchedule(ctx, schedule, PACKAGE_ACTION_UPDATE))
     {
-        return result;
+        return;
     }
 
     Log(LOG_LEVEL_VERBOSE, "Patch schedule...");
 
-    if (!ExecutePatch(ctx, schedule, PACKAGE_ACTION_PATCH, &result))
+    if (!ExecutePatch(ctx, schedule, PACKAGE_ACTION_PATCH))
     {
-        return result;
+        return;
     }
 
     Log(LOG_LEVEL_VERBOSE, "Verify schedule...");
 
-    if (!ExecuteSchedule(ctx, schedule, PACKAGE_ACTION_VERIFY, &result))
+    if (!ExecuteSchedule(ctx, schedule, PACKAGE_ACTION_VERIFY))
     {
-        return result;
+        return;
     }
-
-    return result;
 }
 
 void ExecuteScheduledPackages(EvalContext *ctx)
@@ -2331,7 +2177,7 @@ char *PrefixLocalRepository(Rlist *repositories, char *package)
 
     for (rp = repositories; rp != NULL; rp = rp->next)
     {
-        strncpy(path, RlistScalarValue(rp), CF_MAXVARSIZE);
+        strncpy(path, rp->item, CF_MAXVARSIZE);
 
         AddSlash(path);
 
@@ -2347,8 +2193,7 @@ char *PrefixLocalRepository(Rlist *repositories, char *package)
     return NULL;
 }
 
-int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdClasses, Attributes a,
-                       Promise *pp, PromiseResult *result)
+int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdClasses, Attributes a, Promise *pp)
 {
     int retval = true;
     char line[CF_BUFSIZE], lineSafe[CF_BUFSIZE], *cmd;
@@ -2358,7 +2203,6 @@ int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdCl
     if ((!a.packages.package_commands_useshell) && (!IsExecutable(CommandArg0(command))))
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "The proposed package schedule command '%s' was not executable", command);
-        *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
         return false;
     }
 
@@ -2376,7 +2220,6 @@ int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdCl
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Couldn't start command '%20s'. (cf_popen_sh: %s)",
                  command, GetErrorStr());
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
             return false;
         }
     }
@@ -2386,7 +2229,6 @@ int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdCl
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Couldn't start command '%20s'. (cf_popen: %s)",
                  command, GetErrorStr());
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
             return false;
         }
     }
@@ -2416,7 +2258,6 @@ int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdCl
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Unable to read output from command '%20s'. (fread: %s)",
                  command, GetErrorStr());
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
             cf_pclose(pfp);
             return false;
         }
@@ -2428,10 +2269,9 @@ int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdCl
         {
             if (a.packages.package_noverify_regex)
             {
-                if (FullTextMatch(ctx, a.packages.package_noverify_regex, line))
+                if (FullTextMatch(a.packages.package_noverify_regex, line))
                 {
                     cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Package verification error in %-.40s ... :%s", cmd, lineSafe);
-                    *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
                     retval = false;
                 }
             }
@@ -2446,13 +2286,11 @@ int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdCl
         if (a.packages.package_noverify_returncode == packmanRetval)
         {
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Package verification error (returned %d)", packmanRetval);
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
             retval = false;
         }
         else
         {
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_NOOP, pp, a, "Package verification succeeded (returned %d)", packmanRetval);
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
         }
     }
     else if (verify && (a.packages.package_noverify_regex))
@@ -2465,7 +2303,7 @@ int ExecPackageCommand(EvalContext *ctx, char *command, int verify, int setCmdCl
     }
     else if (setCmdClasses)     // generic return code check
     {
-        retval = VerifyCommandRetcode(ctx, packmanRetval, true, a, pp, result);
+        retval = VerifyCommandRetcode(ctx, packmanRetval, true, a, pp);
     }
 
     return retval;
@@ -2480,7 +2318,7 @@ int PrependPackageItem(EvalContext *ctx, PackageItem ** list, const char *name, 
         return false;
     }
 
-    Log(LOG_LEVEL_VERBOSE, "Package (%s,%s,%s) [name,version,arch] found", name, version, arch);
+    Log(LOG_LEVEL_VERBOSE, "Package (%s,%s,%s) found", name, version, arch);
 
     pi = xmalloc(sizeof(PackageItem));
 
@@ -2556,7 +2394,7 @@ static int PrependPatchItem(EvalContext *ctx, PackageItem ** list, char *item, P
 
     if (PackageInItemList(chklist, name, version, arch))
     {
-        Log(LOG_LEVEL_VERBOSE, "Patch for (%s,%s,%s) [name,version,arch] found, but it appears to be installed already", name, version,
+        Log(LOG_LEVEL_VERBOSE, "Patch for (%s,%s,%s) found, but it appears to be installed already", name, version,
               arch);
         return false;
     }
@@ -2590,19 +2428,19 @@ static int PrependMultiLinePackageItem(EvalContext *ctx, PackageItem ** list, ch
         strcpy(arch, default_arch);
     }
 
-    if (FullTextMatch(ctx, a.packages.package_list_name_regex, item))
+    if (FullTextMatch(a.packages.package_list_name_regex, item))
     {
         strlcpy(vbuff, ExtractFirstReference(a.packages.package_list_name_regex, item), CF_MAXVARSIZE);
         sscanf(vbuff, "%s", name);      /* trim */
     }
 
-    if (FullTextMatch(ctx, a.packages.package_list_version_regex, item))
+    if (FullTextMatch(a.packages.package_list_version_regex, item))
     {
         strncpy(vbuff, ExtractFirstReference(a.packages.package_list_version_regex, item), CF_MAXVARSIZE - 1);
         sscanf(vbuff, "%s", version);   /* trim */
     }
 
-    if ((a.packages.package_list_arch_regex) && (FullTextMatch(ctx, a.packages.package_list_arch_regex, item)))
+    if ((a.packages.package_list_arch_regex) && (FullTextMatch(a.packages.package_list_arch_regex, item)))
     {
         if (a.packages.package_list_arch_regex)
         {

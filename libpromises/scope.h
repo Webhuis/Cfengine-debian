@@ -25,25 +25,54 @@
 #ifndef CFENGINE_SCOPE_H
 #define CFENGINE_SCOPE_H
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-#include <var_expressions.h>
+#include "var_expressions.h"
+#include "assoc.h"
 
-typedef enum
-{
-    SPECIAL_SCOPE_CONST,
-    SPECIAL_SCOPE_EDIT,
-    SPECIAL_SCOPE_MATCH,
-    SPECIAL_SCOPE_MON,
-    SPECIAL_SCOPE_SYS,
-    SPECIAL_SCOPE_THIS,
-    SPECIAL_SCOPE_BODY,
+/**
+ * @deprecated
+ */
+Scope *ScopeNew(const char *name);
 
-    SPECIAL_SCOPE_NONE
-} SpecialScope;
+void ScopePutMatch(int index, const char *value);
 
-const char *SpecialScopeToString(SpecialScope scope);
-SpecialScope SpecialScopeFromString(const char *scope);
+bool ScopeExists(const char *name);
+
+/**
+ * @deprecated
+ */
+void ScopeSetCurrent(const char *name);
+
+/**
+ * @deprecated
+ */
+Scope *ScopeGetCurrent(void);
+
+/**
+ * @brief Clears all variables from a scope
+ * @param name
+ */
+void ScopeClear(const char *name);
+
+/**
+ * @brief find a Scope in VSCOPE
+ * @param scope
+ * @return
+ */
+Scope *ScopeGet(const char *scope);
+
+/**
+ * @brief copy an existing Scope, prepend to VSCOPE with a new name
+ * @param new_scopename
+ * @param old_scopename
+ */
+void ScopeCopy(const char *new_scopename, const Scope *old_scope);
+
+/**
+ * @brief clear VSCOPE
+ */
+void ScopeDeleteAll(void);
 
 /**
  * @brief augments a scope, expecting corresponding lists of lvals and rvals (implying same length).
@@ -52,7 +81,31 @@ SpecialScope SpecialScopeFromString(const char *scope);
  */
 void ScopeAugment(EvalContext *ctx, const Bundle *bp, const Promise *pp, const Rlist *arguments);
 
-void ScopeMapBodyArgs(EvalContext *ctx, const Body *body, const Rlist *args);
+/**
+ * @brief prepend GetScope("this") to CF_STCK
+ */
+void ScopePushThis(void);
+
+/**
+ * @brief pop a scope from CF_STCK, names the scope "this" by force, not sure why because the Scope is dealloced
+ */
+void ScopePopThis(void);
+
+
+void ScopeToList(Scope *sp, Rlist **list);
+void ScopeNewSpecial(EvalContext *ctx, const char *scope, const char *lval, const void *rval, DataType dt);
+void ScopeDeleteScalar(VarRef lval);
+void ScopeDeleteSpecial(const char *scope, const char *lval);
+bool ScopeIsReserved(const char *scope);
+
+void ScopeDeleteVariable(const char *scope, const char *id);
+
+void ScopeDeRefListsInHashtable(char *scope, Rlist *list, Rlist *reflist);
+
+int ScopeMapBodyArgs(EvalContext *ctx, const char *scopeid, Rlist *give, const Rlist *take);
+
+int CompareVariableValue(Rval rval, CfAssoc *ap);
+bool UnresolvedVariables(const CfAssoc *ap, RvalType rtype);
 
 // TODO: namespacing utility functions. there are probably a lot of these floating around, but probably best
 // leave them until we get a proper symbol table

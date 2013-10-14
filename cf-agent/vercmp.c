@@ -22,18 +22,18 @@
   included file COSL.txt.
 */
 
-#include <cf3.defs.h>
-#include <vercmp.h>
-#include <vercmp_internal.h>
+#include "cf3.defs.h"
+#include "vercmp.h"
+#include "vercmp_internal.h"
 
-#include <actuator.h>
-#include <scope.h>
+/* SetNewScope / DeleteScope */
+#include "scope.h"
 /* ExpandScalar */
-#include <expand.h>
-#include <vars.h>
-#include <pipes.h>
-#include <misc_lib.h>
-#include <env_context.h>
+#include "expand.h"
+#include "vars.h"
+#include "pipes.h"
+#include "misc_lib.h"
+#include "env_context.h"
 
 static VersionCmpResult InvertResult(VersionCmpResult result)
 {
@@ -59,25 +59,16 @@ static VersionCmpResult AndResults(VersionCmpResult lhs, VersionCmpResult rhs)
     }
 }
 
-static VersionCmpResult RunCmpCommand(EvalContext *ctx, const char *command, const char *v1, const char *v2, Attributes a,
-                                      Promise *pp, PromiseResult *result)
+static VersionCmpResult RunCmpCommand(EvalContext *ctx, const char *command, const char *v1, const char *v2, Attributes a, Promise *pp)
 {
     char expanded_command[CF_EXPANDSIZE];
 
     {
-        VarRef *ref_v1 = VarRefParseFromScope("v1", "cf_pack_context");
-        EvalContextVariablePut(ctx, ref_v1, v1, DATA_TYPE_STRING);
+        EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context", "v1" }, (Rval) { v1, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+        EvalContextVariablePut(ctx, (VarRef) { NULL, "cf_pack_context", "v2" }, (Rval) { v2, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+        ExpandScalar(ctx, "cf_pack_context", command, expanded_command);
 
-        VarRef *ref_v2 = VarRefParseFromScope("v2", "cf_pack_context");
-        EvalContextVariablePut(ctx, ref_v2, v2, DATA_TYPE_STRING);
-
-        ExpandScalar(ctx, NULL, "cf_pack_context", command, expanded_command);
-
-        EvalContextVariableRemove(ctx, ref_v1);
-        VarRefDestroy(ref_v1);
-
-        EvalContextVariableRemove(ctx, ref_v2);
-        VarRefDestroy(ref_v2);
+        ScopeClear("cf_pack_context");
     }
 
     FILE *pfp = a.packages.package_commands_useshell ? cf_popen_sh(expanded_command, "w") : cf_popen(expanded_command, "w", true);
@@ -86,7 +77,6 @@ static VersionCmpResult RunCmpCommand(EvalContext *ctx, const char *command, con
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Can not start package version comparison command '%s'. (cf_popen: %s)",
              expanded_command, GetErrorStr());
-        *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
         return VERCMP_ERROR;
     }
 
@@ -98,36 +88,35 @@ static VersionCmpResult RunCmpCommand(EvalContext *ctx, const char *command, con
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Error during package version comparison command execution '%s'. (cf_pclose: %s)",
             expanded_command, GetErrorStr());
-        *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
         return VERCMP_ERROR;
     }
 
     return retcode == 0;
 }
 
-static VersionCmpResult CompareVersionsLess(EvalContext *ctx, const char *v1, const char *v2, Attributes a, Promise *pp, PromiseResult *result)
+static VersionCmpResult CompareVersionsLess(EvalContext *ctx, const char *v1, const char *v2, Attributes a, Promise *pp)
 {
     if (a.packages.package_version_less_command)
     {
-        return RunCmpCommand(ctx, a.packages.package_version_less_command, v1, v2, a, pp, result);
+        return RunCmpCommand(ctx, a.packages.package_version_less_command, v1, v2, a, pp);
     }
     else
     {
-        return ComparePackageVersionsInternal(v1, v2, PACKAGE_VERSION_COMPARATOR_LT);
+        return ComparePackageVersionsInternal(v1, v2, PACKAGE_VERSION_COMPARATOR_GT) ? VERCMP_MATCH : VERCMP_NO_MATCH;
     }
 }
 
-static VersionCmpResult CompareVersionsEqual(EvalContext *ctx, const char *v1, const char *v2, Attributes a, Promise *pp, PromiseResult *result)
+static VersionCmpResult CompareVersionsEqual(EvalContext *ctx, const char *v1, const char *v2, Attributes a, Promise *pp)
 {
     if (a.packages.package_version_equal_command)
     {
-        return RunCmpCommand(ctx, a.packages.package_version_equal_command, v1, v2, a, pp, result);
+        return RunCmpCommand(ctx, a.packages.package_version_equal_command, v1, v2, a, pp);
     }
     else if (a.packages.package_version_less_command)
     {
         /* emulate v1 == v2 by !(v1 < v2) && !(v2 < v1)  */
-        return AndResults(InvertResult(CompareVersionsLess(ctx, v1, v2, a, pp, result)),
-                          InvertResult(CompareVersionsLess(ctx, v2, v1, a, pp, result)));
+        return AndResults(InvertResult(CompareVersionsLess(ctx, v1, v2, a, pp)),
+                          InvertResult(CompareVersionsLess(ctx, v2, v1, a, pp)));
     }
     else
     {
@@ -136,57 +125,24 @@ static VersionCmpResult CompareVersionsEqual(EvalContext *ctx, const char *v1, c
     }
 }
 
-VersionCmpResult CompareVersions(EvalContext *ctx, const char *v1, const char *v2, Attributes a, Promise *pp, PromiseResult *result)
+VersionCmpResult CompareVersions(EvalContext *ctx, const char *v1, const char *v2, Attributes a, Promise *pp)
 {
-    VersionCmpResult cmp_result;
-    const char *cmp_operator = "";
     switch (a.packages.package_select)
     {
     case PACKAGE_VERSION_COMPARATOR_EQ:
     case PACKAGE_VERSION_COMPARATOR_NONE:
-        cmp_result = CompareVersionsEqual(ctx, v1, v2, a, pp, result);
-        cmp_operator = "==";
-        break;
+        return CompareVersionsEqual(ctx, v1, v2, a, pp);
     case PACKAGE_VERSION_COMPARATOR_NEQ:
-        cmp_result = InvertResult(CompareVersionsEqual(ctx, v1, v2, a, pp, result));
-        cmp_operator = "!=";
-        break;
+        return InvertResult(CompareVersionsEqual(ctx, v1, v2, a, pp));
     case PACKAGE_VERSION_COMPARATOR_LT:
-        cmp_result = CompareVersionsLess(ctx, v1, v2, a, pp, result);
-        cmp_operator = "<";
-        break;
+        return CompareVersionsLess(ctx, v1, v2, a, pp);
     case PACKAGE_VERSION_COMPARATOR_GT:
-        cmp_result = CompareVersionsLess(ctx, v2, v1, a, pp, result);
-        cmp_operator = ">";
-        break;
+        return CompareVersionsLess(ctx, v2, v1, a, pp);
     case PACKAGE_VERSION_COMPARATOR_GE:
-        cmp_result = InvertResult(CompareVersionsLess(ctx, v1, v2, a, pp, result));
-        cmp_operator = ">=";
-        break;
+        return InvertResult(CompareVersionsLess(ctx, v1, v2, a, pp));
     case PACKAGE_VERSION_COMPARATOR_LE:
-        cmp_result = InvertResult(CompareVersionsLess(ctx, v2, v1, a, pp, result));
-        cmp_operator = "<=";
-        break;
+        return InvertResult(CompareVersionsLess(ctx, v2, v1, a, pp));
     default:
         ProgrammingError("Unexpected comparison value: %d", a.packages.package_select);
-        break;
     }
-
-    const char *text_result;
-    switch (cmp_result)
-    {
-    case VERCMP_NO_MATCH:
-        text_result = "no";
-        break;
-    case VERCMP_MATCH:
-        text_result = "yes";
-        break;
-    default:
-        text_result = "Incompatible version format. Can't decide";
-        break;
-    }
-
-    Log(LOG_LEVEL_VERBOSE, "Checking whether package version %s %s %s: %s", v1, cmp_operator, v2, text_result);
-
-    return cmp_result;
 }

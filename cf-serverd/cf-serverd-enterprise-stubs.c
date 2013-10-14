@@ -22,55 +22,51 @@
   included file COSL.txt.
 */
 
-#include <cf-serverd-enterprise-stubs.h>
+#include "cf-serverd-enterprise-stubs.h"
 
-#include <server.h>
-#include <cf-serverd-functions.h>
+#include "server.h"
+#include "cf-serverd-functions.h"
 
-ENTERPRISE_VOID_FUNC_3ARG_DEFINE_STUB(void, RegisterLiteralServerData, ARG_UNUSED EvalContext *, ctx, ARG_UNUSED const char *, handle, ARG_UNUSED Promise *, pp)
+void RegisterLiteralServerData(ARG_UNUSED EvalContext *ctx, ARG_UNUSED const char *handle, ARG_UNUSED Promise *pp)
 {
     Log(LOG_LEVEL_VERBOSE, "Access to server literals is only available in CFEngine Enterprise");
 }
 
-ENTERPRISE_FUNC_3ARG_DEFINE_STUB(int, ReturnLiteralData, ARG_UNUSED EvalContext *, ctx, ARG_UNUSED char *, handle, ARG_UNUSED char *, ret)
+int ReturnLiteralData(ARG_UNUSED EvalContext *ctx, ARG_UNUSED char *handle, ARG_UNUSED char *ret)
 {
     Log(LOG_LEVEL_VERBOSE, "Access to server literals is only available in CFEngine Enterprise");
     return 0;
 }
 
-ENTERPRISE_FUNC_4ARG_DEFINE_STUB(int, SetServerListenState, ARG_UNUSED EvalContext *, ctx, ARG_UNUSED size_t, queue_size, ARG_UNUSED bool, server_listen,
-                                 InitServerFunction, InitServerPtr)
+int SetServerListenState(ARG_UNUSED EvalContext *ctx, ARG_UNUSED size_t queue_size)
 {
-    if (!server_listen)
+    if (!SERVER_LISTEN)
     {
         Log(LOG_LEVEL_VERBOSE, "Disable listening on port is only supported in CFEngine Enterprise");
     }
 
-    return InitServerPtr(queue_size);
+    return InitServer(queue_size);
 }
 
-ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, TryCollectCall, ARG_UNUSED int, collect_window, ARG_UNUSED ServerEntryPointFunction, server_entry_point)
+void TryCollectCall(void)
 {
     Log(LOG_LEVEL_VERBOSE, "Collect calling is only supported in CFEngine Enterprise");
 }
 
-ENTERPRISE_FUNC_1ARG_DEFINE_STUB(int, ReceiveCollectCall, ARG_UNUSED ServerConnectionState *, conn)
+int ReceiveCollectCall(ARG_UNUSED struct ServerConnectionState *conn)
 {
     Log(LOG_LEVEL_VERBOSE, "  Collect Call only supported in the CFEngine Enterprise");
     return false;
 }
 
-ENTERPRISE_FUNC_3ARG_DEFINE_STUB(bool, ReturnQueryData, ARG_UNUSED ServerConnectionState *, conn, ARG_UNUSED char *, menu, ARG_UNUSED int, encrypt)
+bool ReturnQueryData(ARG_UNUSED struct ServerConnectionState *conn, ARG_UNUSED char *menu)
 {
     return false;
 }
 
-ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, KeepReportDataSelectAccessPromise, ARG_UNUSED Promise *, pp)
+void KeepReportDataSelectAccessPromise(Promise *pp)
 {
     Log(LOG_LEVEL_ERR, "Report data select is only available in CFEngine Enterprise");
 }
 
-ENTERPRISE_VOID_FUNC_0ARG_DEFINE_STUB(void, CleanReportBookFilterSet)
-{
-    return;
-}
+void CleanReportBookFilterSet(void){}

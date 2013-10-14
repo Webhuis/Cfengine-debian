@@ -22,13 +22,10 @@
   included file COSL.txt.
 */
 
-#include <cf3.defs.h>
-#include <sysinfo.h>
+#include "cf3.defs.h"
 
-#include <prototypes3.h>
-#include <syntax.h>
-
-#include <enterprise_extension.h>
+#include "prototypes3.h"
+#include "syntax.h"
 
 /*
  * This module contains numeruous functions which don't use all their parameters
@@ -48,13 +45,9 @@ extern int PR_KEPT;
 extern int PR_REPAIRED;
 extern int PR_NOTKEPT;
 
-ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, Nova_Initialize, EvalContext *, ctx)
-{
-}
-
 /* all agents: generic_agent.c */
 
-ENTERPRISE_FUNC_0ARG_DEFINE_STUB(const char *, GetConsolePrefix)
+const char *GetConsolePrefix(void)
 {
     return "cf3";
 }
@@ -62,11 +55,11 @@ ENTERPRISE_FUNC_0ARG_DEFINE_STUB(const char *, GetConsolePrefix)
 
 /* all agents: sysinfo.c */
 
-ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, EnterpriseContext, ARG_UNUSED EvalContext *, ctx)
+void EnterpriseContext(ARG_UNUSED EvalContext *ctx)
 {
 }
 
-ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, LoadSlowlyVaryingObservations, ARG_UNUSED EvalContext *, ctx)
+void LoadSlowlyVaryingObservations(EvalContext *ctx)
 {
     Log(LOG_LEVEL_VERBOSE, "Extended system discovery is only available in CFEngine Enterprise");
 }
@@ -74,7 +67,7 @@ ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, LoadSlowlyVaryingObservations, ARG_U
 /* all agents: cfstream.c, expand.c, generic_agent.c */
 
 
-ENTERPRISE_FUNC_1ARG_DEFINE_STUB(const char *, PromiseID, ARG_UNUSED const Promise *, pp)
+const char *PromiseID(ARG_UNUSED const Promise *pp)
 {
     return "";
 }
@@ -83,16 +76,15 @@ ENTERPRISE_FUNC_1ARG_DEFINE_STUB(const char *, PromiseID, ARG_UNUSED const Promi
 /* all agents: logging.c */
 
 
-ENTERPRISE_VOID_FUNC_3ARG_DEFINE_STUB(void, NotePromiseCompliance, ARG_UNUSED const Promise *, pp,
-                                      ARG_UNUSED PromiseState, state, ARG_UNUSED const char *, reason)
+void NotePromiseCompliance(ARG_UNUSED const Promise *pp, ARG_UNUSED PromiseState state, ARG_UNUSED const char *reason)
 {
 }
 
-ENTERPRISE_VOID_FUNC_4ARG_DEFINE_STUB(void, TrackValue, char *, date, double, kept, double, repaired, double, notkept)
+void TrackValue(char *date, double kept, double repaired, double notkept)
 {
 }
 
-ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, LogTotalCompliance, const char *, version, int, background_tasks)
+void LogTotalCompliance(const char *version, int background_tasks)
 {
     double total = (double) (PR_KEPT + PR_NOTKEPT + PR_REPAIRED) / 100.0;
 
@@ -108,7 +100,7 @@ ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, LogTotalCompliance, const char *, ve
     Log(LOG_LEVEL_VERBOSE, "Logging total compliance, total '%s'", string);
 
     char filename[CF_BUFSIZE];
-    snprintf(filename, CF_BUFSIZE, "%s/%s", GetLogDir(), CF_PROMISE_LOG);
+    snprintf(filename, CF_BUFSIZE, "%s/%s", CFWORKDIR, CF_PROMISE_LOG);
     MapName(filename);
 
     FILE *fout = fopen(filename, "a");
@@ -127,74 +119,72 @@ ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, LogTotalCompliance, const char *, ve
 /* network communication: cf-serverd.c, client_protocol.c, client_code.c, crypto.c */
 
 
-ENTERPRISE_FUNC_1ARG_DEFINE_STUB(int, CfSessionKeySize, char, type)
+int CfSessionKeySize(char type)
 {
     return CF_BLOWFISHSIZE;
 }
 
-ENTERPRISE_FUNC_0ARG_DEFINE_STUB(char, CfEnterpriseOptions)
+char CfEnterpriseOptions(void)
 {
     return 'c';
 }
 
-ENTERPRISE_FUNC_1ARG_DEFINE_STUB(const EVP_CIPHER *, CfengineCipher, char, type)
+const EVP_CIPHER *CfengineCipher(char type)
 {
     return EVP_bf_cbc();
 }
 
 /* cf-agent: evalfunction.c */
 
-ENTERPRISE_FUNC_6ARG_DEFINE_STUB(char *, GetRemoteScalar, EvalContext *, ctx, char *, proto, char *, handle,
-                                 char *, server, int, encrypted, char *, rcv)
+char *GetRemoteScalar(EvalContext *ctx, char *proto, char *handle, char *server, int encrypted, char *rcv)
 {
     Log(LOG_LEVEL_VERBOSE, "Access to server literals is only available in CFEngine Enterprise");
     return "";
 }
 
-ENTERPRISE_VOID_FUNC_3ARG_DEFINE_STUB(void, CacheUnreliableValue, char *, caller, char *, handle, char *, buffer)
+void CacheUnreliableValue(char *caller, char *handle, char *buffer)
 {
     Log(LOG_LEVEL_VERBOSE, "Value fault-tolerance only available in CFEngine Enterprise");
 }
 
-ENTERPRISE_FUNC_3ARG_DEFINE_STUB(int, RetrieveUnreliableValue, char *, caller, char *, handle, char *, buffer)
+int RetrieveUnreliableValue(char *caller, char *handle, char *buffer)
 {
     Log(LOG_LEVEL_VERBOSE, "Value fault-tolerance only available in CFEngine Enterprise");
     return false;
 }
 
 #if defined(__MINGW32__)
-ENTERPRISE_FUNC_4ARG_DEFINE_STUB(int, GetRegistryValue, char *, key, char *, name, char *, buf, int, bufSz)
+int GetRegistryValue(char *key, char *name, char *buf, int bufSz)
 {
     return 0;
 }
 #endif
 
-ENTERPRISE_FUNC_6ARG_DEFINE_STUB(void *, CfLDAPValue, char *, uri, char *, dn, char *, filter, char *, name, char *, scope, char *, sec)
+void *CfLDAPValue(char *uri, char *dn, char *filter, char *name, char *scope, char *sec)
 {
     Log(LOG_LEVEL_ERR, "LDAP support only available in CFEngine Enterprise");
     return NULL;
 }
 
-ENTERPRISE_FUNC_6ARG_DEFINE_STUB(void *, CfLDAPList, char *, uri, char *, dn, char *, filter, char *, name, char *, scope, char *, sec)
+void *CfLDAPList(char *uri, char *dn, char *filter, char *name, char *scope, char *sec)
 {
     Log(LOG_LEVEL_ERR, "LDAP support only available in CFEngine Enterprise");
     return NULL;
 }
 
-ENTERPRISE_FUNC_8ARG_DEFINE_STUB(void *, CfLDAPArray, EvalContext *, ctx, const Bundle *, caller, char *, array, char *, uri, char *, dn,
-                                 char *, filter, char *, scope, char *, sec)
+void *CfLDAPArray(EvalContext *ctx, const Bundle *caller, char *array, char *uri, char *dn, char *filter, char *scope, char *sec)
 {
     Log(LOG_LEVEL_ERR, "LDAP support only available in CFEngine Enterprise");
     return NULL;
 }
 
-ENTERPRISE_FUNC_8ARG_DEFINE_STUB(void *, CfRegLDAP, EvalContext *, ctx, char *, uri, char *, dn, char *, filter, char *, name, char *, scope, char *, regex, char *, sec)
+void *CfRegLDAP(char *uri, char *dn, char *filter, char *name, char *scope, char *regex, char *sec)
 {
     Log(LOG_LEVEL_ERR, "LDAP support only available in CFEngine Enterprise");
     return NULL;
 }
 
-ENTERPRISE_FUNC_4ARG_DEFINE_STUB(bool, ListHostsWithClass, EvalContext *, ctx, Rlist **, return_list, char *, class_name, char *, return_format)
+bool CFDB_HostsWithClass(EvalContext *ctx, Rlist **return_list, char *class_name, char *return_format)
 {
     Log(LOG_LEVEL_ERR, "Host class counting is only available in CFEngine Enterprise");
     return false;
@@ -202,16 +192,16 @@ ENTERPRISE_FUNC_4ARG_DEFINE_STUB(bool, ListHostsWithClass, EvalContext *, ctx, R
 
 /* cf-serverd: server_transform.c, cf-serverd.c */
 
-ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, TranslatePath, char *, new, const char *, old)
+void TranslatePath(char *new, const char *old)
 {
     strncpy(new, old, CF_BUFSIZE - 1);
 }
 
 
-ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, ShowPromises, ARG_UNUSED const Seq *, bundles, ARG_UNUSED const Seq *, bodies)
+void ShowPromises(ARG_UNUSED const Seq *bundles, ARG_UNUSED const Seq *bodies)
 {
 }
 
-ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, ShowPromise, ARG_UNUSED const Promise *, pp)
+void ShowPromise(ARG_UNUSED const Promise *pp)
 {
 }

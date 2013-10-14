@@ -24,26 +24,26 @@
 
 /* This is a root node in the syntax tree */
 
-#include <mod_common.h>
+#include "mod_common.h"
 
-#include <mod_environ.h>
-#include <mod_outputs.h>
-#include <mod_access.h>
-#include <mod_storage.h>
-#include <mod_databases.h>
-#include <mod_packages.h>
-#include <mod_report.h>
-#include <mod_files.h>
-#include <mod_exec.h>
-#include <mod_methods.h>
-#include <mod_process.h>
-#include <mod_services.h>
-#include <mod_measurement.h>
-#include <mod_knowledge.h>
+#include "mod_environ.h"
+#include "mod_outputs.h"
+#include "mod_access.h"
+#include "mod_storage.h"
+#include "mod_databases.h"
+#include "mod_packages.h"
+#include "mod_report.h"
+#include "mod_files.h"
+#include "mod_exec.h"
+#include "mod_methods.h"
+#include "mod_process.h"
+#include "mod_services.h"
+#include "mod_measurement.h"
+#include "mod_knowledge.h"
 
-#include <conversion.h>
-#include <policy.h>
-#include <syntax.h>
+#include "conversion.h"
+#include "policy.h"
+#include "syntax.h"
 
 static const char *POLICY_ERROR_VARS_CONSTRAINT_DUPLICATE_TYPE = "Variable contains existing data type contstraint %s, tried to redefine with %s";
 static const char *POLICY_ERROR_VARS_PROMISER_NUMERICAL = "Variable promises cannot have a purely numerical promiser (name)";
@@ -120,7 +120,6 @@ const ConstraintSyntax CF_VARBODY[] =
     ConstraintSyntaxNewStringList("slist", "", "A list of scalar strings", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewIntList("ilist", "A list of integers", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewRealList("rlist", "A list of real numbers", SYNTAX_STATUS_NORMAL),
-    ConstraintSyntaxNewContainer("container", "A container", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewOption("policy", "free,overridable,constant,ifdefined", "The policy for (dis)allowing (re)definition of variables", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewNull()
 };
@@ -169,7 +168,7 @@ static bool VarsParseTreeCheck(const Promise *pp, Seq *errors)
         {
             Constraint *cp = SeqAt(pp->conlist, i);
 
-            if (DataTypeFromString(cp->lval) != DATA_TYPE_NONE)
+            if (IsDataType(cp->lval))
             {
                 if (data_type != NULL)
                 {
@@ -321,7 +320,6 @@ const ConstraintSyntax CFS_CONTROLBODY[] =
     ConstraintSyntaxNewStringList("skipverify", "", "List of IPs or hostnames for which we expect no DNS binding and cannot verify", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewStringList("trustkeysfrom", "", "List of IPs from whom we accept public keys on trust", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("listen", "true/false enable server deamon to listen on defined port. Default value: true", SYNTAX_STATUS_NORMAL),
-    ConstraintSyntaxNewString("allowciphers", "", "List of ciphers the server accepts. For Syntax help see man page for \"openssl ciphers\". Default is \"AES256-GCM-SHA384:AES256-SHA\"", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewNull()
 };
 
@@ -355,7 +353,6 @@ const ConstraintSyntax CFEX_CONTROLBODY[] = /* enum cfexcontrol */
     ConstraintSyntaxNewInt("splaytime", CF_VALRANGE, "Time in minutes to splay this host based on its name hash. Default value: 0", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewString("mailfrom", ".*@.*", "Email-address cfengine mail appears to come from", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewString("mailto", ".*@.*", "Email-address cfengine mail is sent to", SYNTAX_STATUS_NORMAL),
-    ConstraintSyntaxNewString("mailsubject", "", "Define a custom mailsubject for the email message", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewString("smtpserver", ".*", "Name or IP of a willing smtp server for sending email", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewInt("mailmaxlines", "0,1000", "Maximum number of lines of output to send by email. Default value: 30", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewStringList("schedule", "", "The class schedule used by cf-execd for activating cf-agent", SYNTAX_STATUS_NORMAL),
@@ -374,10 +371,9 @@ const ConstraintSyntax CFH_CONTROLBODY[] =  /* enum cfh_control */
     ConstraintSyntaxNewNull()
 };
 
-const ConstraintSyntax file_control_constraints[] =  /* enum cfh_control */
+const ConstraintSyntax CFFILE_CONTROLBODY[] =  /* enum cfh_control */
 {
     ConstraintSyntaxNewString("namespace", CF_IDRANGE, "Switch to a private namespace to protect current file from duplicate definitions", SYNTAX_STATUS_NORMAL),
-    ConstraintSyntaxNewStringList("inputs", ".*", "List of additional filenames to parse for promises", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewNull()
 };
 
@@ -436,7 +432,7 @@ const BodySyntax CONTROL_BODIES[] =
     BodySyntaxNew(CF_RUNC, CFR_CONTROLBODY, NULL, SYNTAX_STATUS_NORMAL),
     BodySyntaxNew(CF_EXECC, CFEX_CONTROLBODY, NULL, SYNTAX_STATUS_NORMAL),
     BodySyntaxNew(CF_HUBC, CFH_CONTROLBODY, NULL, SYNTAX_STATUS_NORMAL),
-    BodySyntaxNew("file", file_control_constraints, NULL, SYNTAX_STATUS_NORMAL),
+    BodySyntaxNew("file", CFFILE_CONTROLBODY, NULL, SYNTAX_STATUS_NORMAL),
 
     BodySyntaxNew("reporter", CFRE_CONTROLBODY, NULL, SYNTAX_STATUS_REMOVED),
     BodySyntaxNew("knowledge", CFK_CONTROLBODY, NULL, SYNTAX_STATUS_REMOVED),

@@ -1,26 +1,20 @@
-noinst_LTLIBRARIES = libcf-key.la
+sbin_PROGRAMS = cf-key
 
 AM_CPPFLAGS = @CPPFLAGS@ \
 	-I$(srcdir)/../libutils \
 	-I$(srcdir)/../libcfnet \
 	-I$(srcdir)/../libpromises \
-	$(ENTERPRISE_CPPFLAGS)
+	$(NOVA_CPPFLAGS)
 
 AM_CFLAGS = @CFLAGS@ \
-	$(ENTERPRISE_CFLAGS)
+	$(NOVA_CFLAGS)
 
-libcf_key_la_SOURCES = \
+cf_key_SOURCES = \
 	cf-key.c \
         cf-key-functions.c cf-key-functions.h
 
 
-libcf_key_la_LIBADD = ../libpromises/libpromises.la
-
-if !BUILTIN_EXTENSIONS
- sbin_PROGRAMS = cf-key
- cf_key_LDADD = libcf-key.la
- cf_key_SOURCES =
-endif
+LDADD = ../libpromises/libpromises.la
 
 CLEANFILES = *.gcno *.gcda
 

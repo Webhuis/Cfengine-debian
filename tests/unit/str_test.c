@@ -1,66 +1,12 @@
-#include <cf3.defs.h>
-#include <string_lib.h>
+#include "cf3.defs.h"
+#include "string_lib.h"
 
-#include <conversion.h>
+#include "conversion.h"
 
-#include <test.h>
+#include "test.h"
 
 static const char *lo_alphabet = "abcdefghijklmnopqrstuvwxyz";
 static const char *hi_alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-static void test_get_token(void)
-{
-    {
-        const char *str = "  abc def ,efg ";
-        size_t len = strlen(str);
-
-        assert_int_equal(3, StringCountTokens(str, len, ", "));
-
-        {
-            StringRef ref = StringGetToken(str, len, 0, ", ");
-            assert_int_equal(3, ref.len);
-            assert_memory_equal("abc", ref.data, 3);
-        }
-
-        {
-            StringRef ref = StringGetToken(str, len, 1, ", ");
-            assert_int_equal(3, ref.len);
-            assert_memory_equal("def", ref.data, 3);
-        }
-
-        {
-            StringRef ref = StringGetToken(str, len, 2, ", ");
-            assert_int_equal(3, ref.len);
-            assert_memory_equal("efg", ref.data, 3);
-        }
-    }
-
-    {
-        const char *str = "abc";
-        size_t len = strlen(str);
-
-        assert_int_equal(1, StringCountTokens(str, len, ", "));
-
-        {
-            StringRef ref = StringGetToken(str, len, 0, ", ");
-            assert_int_equal(3, ref.len);
-            assert_memory_equal("abc", ref.data, 3);
-        }
-    }
-
-    {
-        const char *str = "abc ";
-        size_t len = strlen(str);
-
-        assert_int_equal(1, StringCountTokens(str, len, ", "));
-
-        {
-            StringRef ref = StringGetToken(str, len, 0, ", ");
-            assert_int_equal(3, ref.len);
-            assert_memory_equal("abc", ref.data, 3);
-        }
-    }
-}
 
 static void test_mix_case_tolower(void)
 {
@@ -308,11 +254,6 @@ static void test_string_to_double(void)
     assert_true(1234.1234 == StringToDouble("1234.1234"));
 }
 
-static void test_string_from_double(void)
-{
-    assert_string_equal("1234.12", StringFromDouble(1234.1234));
-}
-
 static void test_safe_compare(void)
 {
     assert_true(StringSafeCompare(NULL, NULL) == 0);
@@ -532,8 +473,6 @@ int main()
     PRINT_TEST_BANNER();
     const UnitTest tests[] =
     {
-        unit_test(test_get_token),
-
         unit_test(test_mix_case_tolower),
         unit_test(test_empty_tolower),
         unit_test(test_weird_chars_tolower),
@@ -567,7 +506,6 @@ int main()
         unit_test(test_string_to_long),
         unit_test(test_string_from_long),
         unit_test(test_string_to_double),
-        unit_test(test_string_from_double),
 
         unit_test(test_safe_compare),
         unit_test(test_safe_equal),

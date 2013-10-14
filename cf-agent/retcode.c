@@ -22,15 +22,13 @@
   included file COSL.txt.
 */
 
-#include <retcode.h>
+#include "retcode.h"
+#include "rlist.h"
 
-#include <actuator.h>
-#include <rlist.h>
-
-int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes a, Promise *pp, PromiseResult *result)
+int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes a, Promise *pp)
 {
     char retcodeStr[128] = { 0 };
-    bool result_retcode = true;
+    int result = true;
     int matched = false;
 
     if ((a.classes.retcode_kept) || (a.classes.retcode_repaired) || (a.classes.retcode_failed))
@@ -43,7 +41,7 @@ int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_NOOP, pp, a,
                  "Command related to promiser '%s' returned code defined as promise kept %d", pp->promiser,
                  retcode);
-            result_retcode = true;
+            result = true;
             matched = true;
         }
 
@@ -52,8 +50,7 @@ int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_CHANGE, pp, a,
                  "Command related to promiser '%s' returned code defined as promise repaired %d", pp->promiser,
                  retcode);
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
-            result_retcode = true;
+            result = true;
             matched = true;
         }
 
@@ -62,8 +59,7 @@ int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a,
                  "Command related to promiser '%s' returned code defined as promise failed %d", pp->promiser,
                  retcode);
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
-            result_retcode = false;
+            result = false;
             matched = true;
         }
 
@@ -81,18 +77,16 @@ int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes
         {
             cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_CHANGE, pp, a, "Finished command related to promiser '%s' -- succeeded",
                  pp->promiser);
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
-            result_retcode = true;
+            result = true;
         }
         else
         {
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a,
                  "Finished command related to promiser '%s' -- an error occurred, returned %d", pp->promiser,
                  retcode);
-            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
-            result_retcode = false;
+            result = false;
         }
     }
 
-    return result_retcode;
+    return result;
 }

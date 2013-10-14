@@ -22,9 +22,10 @@
   included file COSL.txt.
 */
 
-#include <granules.h>
-#include <misc_lib.h>
-
+#include "granules.h"
+#include "misc_lib.h"
+#include <math.h>
+#include <assert.h>
 
 char *GenTimeKey(time_t now)
 {

@@ -1,5 +1,5 @@
 ############################################################################
-#  Copyright (C) CFEngine AS
+#  Copyright (C) Cfengine AS
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of the GNU Lesser General Public License LGPL as published by the
@@ -11,16 +11,16 @@
 #  GNU General Public License for more details.
 #
 #  To the extent this program is licensed as part of the Enterprise
-#  versions of CFEngine, the applicable Commerical Open Source License
+#  versions of Cfengine, the applicable Commerical Open Source License
 #  (COSL) may apply to this file if you as a licensee so wish it. See
 #  included file COSL.txt.
 ###########################################################################
 #
-# CFEngine Community Open Promise-Body Library
+# Cfengine Community Open Promise-Body Library
 #
-# This initiative started by CFEngine promotes a
+# This initiative started by Cfengine promotes a
 # standardized set of names and promise specifications
-# for template functionality within CFEngine 3.
+# for template functionality within Cfengine 3.
 #
 # The aim is to promote an industry standard for
 # naming of configuration patterns, leading to a
@@ -30,7 +30,7 @@
 # minimal to assist readability and comprehensibility.
 
 # Contributions to this file are voluntarily given to
-# the cfengine community, and are moderated by CFEngine.
+# the cfengine community, and are moderated by Cfengine.
 # No liability or warranty for misuse is implied.
 #
 # If you add to this file, please try to make the
@@ -39,11 +39,11 @@
 # the online docs
 #
 
-# For CFEngine Core: 3.5.1 to 3.5.x
+# For Cfengine Core: 3.5.1 to 3.5.x
 # Bundles
 
 ###################################################
-# If you find CFEngine useful, please consider    #
+# If you find Cfengine useful, please consider    #
 # purchasing a commercial version of the software.#
 ###################################################
 
@@ -53,38 +53,38 @@
 
 bundle agent cronjob(commands,user,hours,mins)
 
-# For adding lines to crontab for a user
-# methods:
-#  "cron" usebundle => cronjob("/bin/ls","mark","*","5,10");
+ # For adding lines to crontab for a user
+ # methods:
+ #  "cron" usebundle => cronjob("/bin/ls","mark","*","5,10");
 
 {
-  vars:
-    SuSE::
-      "crontab" string => "/var/spool/cron/tabs";
-    redhat|fedora::
-      "crontab" string => "/var/spool/cron";
-    freebsd::
-      "crontab" string => "/var/cron/tabs";
-    !(SuSE|redhat|fedora|freebsd)::
-      "crontab" string => "/var/spool/cron/crontabs";
+vars:
+  SuSE::
+   "crontab" string => "/var/spool/cron/tabs";
+  redhat|fedora::
+   "crontab" string => "/var/spool/cron";
+  freebsd::
+   "crontab" string => "/var/cron/tabs";
+ !(SuSE|redhat|fedora|freebsd)::
+    "crontab" string => "/var/spool/cron/crontabs";
 
-  files:
+files:
 
-    !windows::
-      "$(crontab)/$(user)"
+!windows::
+  "$(crontab)/$(user)"
 
-      comment => "A user's regular batch jobs are added to this file",
-      create => "true",
-      edit_line => append_if_no_line("$(mins) $(hours) * * * $(commands)"),
+    comment => "A user's regular batch jobs are added to this file",
+     create => "true",
+  edit_line => append_if_no_line("$(mins) $(hours) * * * $(commands)"),
       perms => mo("600","$(user)"),
-      classes => if_repaired("changed_crontab");
+    classes => if_repaired("changed_crontab");
 
-  processes:
+processes:
 
-    changed_crontab::
-      "cron"
-      comment => "Most crons need to be huped after file changes",
-      signals => { "hup" };
+changed_crontab::
+   "cron"
+         comment => "Most crons need to be huped after file changes",
+         signals => { "hup" };
 
 }
 
@@ -108,7 +108,7 @@ bundle agent rm_rf(name)
 bundle agent fileinfo(f)
 {
   vars:
-      "fields" slist => splitstring("size,gid,uid,ino,nlink,ctime,atime,mtime,mode,modeoct,permstr,permoct,type,devno,dev_minor,dev_major,basename,dirname,linktarget,linktarget_shallow", ",", 999);
+      "fields" slist => splitstring("size,gid,uid,ino,nlink,ctime,atime,mtime,mode,modeoct,permstr,permoct,type,devno,dev_minor,dev_major,basename,dirname", ",", 999);
 
       "stat[$(f)][$(fields)]" string => filestat($(f), $(fields));
 
@@ -116,31 +116,3 @@ bundle agent fileinfo(f)
     verbose_mode::
       "$(this.bundle): file $(f) has $(fields) = $(stat[$(f)][$(fields)])";
 }
-
-bundle agent logrotate(log_files, max_size, rotate_levels)
-{
-
-# Rotate the specified "log_files" files if their size is above "max_size". 
-# Keep "rotate_levels" versions of the files, before overwriting the oldest ones
-
-  files:
-    "$(log_files)"
-      comment     => "Rotate file if above specified size",
-      rename      => rotate("$(rotate_levels)"),
-      file_select => bigger_than("$(max_size)");
-}
-
-bundle agent prunedir(dir, max_days)
-{
-
-# Delete plain files inside "dir" older than "max_days"
-# Don't delete recursively
-
-  files:
-    "$(dir)"
-      comment       => "Delete plain files inside directory older than max_days",
-      delete        => tidy,
-      file_select   => filetype_older_than("plain", "$(max_days)"),
-      depth_search  => recurse("1");
-}
-

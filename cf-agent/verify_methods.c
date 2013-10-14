@@ -22,49 +22,46 @@
   included file COSL.txt.
 */
 
-#include <verify_methods.h>
+#include "verify_methods.h"
 
-#include <actuator.h>
-#include <env_context.h>
-#include <vars.h>
-#include <expand.h>
-#include <files_names.h>
-#include <scope.h>
-#include <hashes.h>
-#include <unix.h>
-#include <attributes.h>
-#include <locks.h>
-#include <generic_agent.h> // HashVariables
-#include <fncall.h>
-#include <rlist.h>
-#include <ornaments.h>
-#include <string_lib.h>
+#include "env_context.h"
+#include "vars.h"
+#include "expand.h"
+#include "files_names.h"
+#include "scope.h"
+#include "hashes.h"
+#include "unix.h"
+#include "attributes.h"
+#include "locks.h"
+#include "generic_agent.h" // HashVariables
+#include "fncall.h"
+#include "rlist.h"
+#include "ornaments.h"
 
-static void GetReturnValue(EvalContext *ctx, const Bundle *callee, Promise *caller);
+static void GetReturnValue(EvalContext *ctx, char *scope, Promise *pp);
 
 /*****************************************************************************/
 
-PromiseResult VerifyMethodsPromise(EvalContext *ctx, Promise *pp)
+void VerifyMethodsPromise(EvalContext *ctx, Promise *pp)
 {
     Attributes a = { {0} };
 
     a = GetMethodAttributes(ctx, pp);
 
-    PromiseResult result = VerifyMethod(ctx, "usebundle", a, pp);
-    EvalContextVariableRemoveSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser");
-
-    return result;
+    VerifyMethod(ctx, "usebundle", a, pp);
+    ScopeDeleteSpecial("this", "promiser");
 }
 
 /*****************************************************************************/
 
-PromiseResult VerifyMethod(EvalContext *ctx, char *attrname, Attributes a, Promise *pp)
+int VerifyMethod(EvalContext *ctx, char *attrname, Attributes a, Promise *pp)
 {
     Bundle *bp;
     void *vp;
     FnCall *fp;
-    char method_name[CF_EXPANDSIZE];
-    Rlist *args = NULL;
+    char method_name[CF_EXPANDSIZE], qualified_method[CF_BUFSIZE], *method_deref;
+    Rlist *params = NULL;
+    int retval = false;
     CfLock thislock;
     char lockname[CF_BUFSIZE];
 
@@ -73,77 +70,88 @@ PromiseResult VerifyMethod(EvalContext *ctx, char *attrname, Attributes a, Promi
         if ((vp = ConstraintGetRvalValue(ctx, attrname, pp, RVAL_TYPE_FNCALL)))
         {
             fp = (FnCall *) vp;
-            ExpandScalar(ctx, PromiseGetBundle(pp)->ns, PromiseGetBundle(pp)->name, fp->name, method_name);
-            args = fp->args;
+            ExpandScalar(ctx, PromiseGetBundle(pp)->name, fp->name, method_name);
+            params = fp->args;
         }
         else if ((vp = ConstraintGetRvalValue(ctx, attrname, pp, RVAL_TYPE_SCALAR)))
         {
-            ExpandScalar(ctx, PromiseGetBundle(pp)->ns, PromiseGetBundle(pp)->name, (char *) vp, method_name);
-            args = NULL;
+            ExpandScalar(ctx, PromiseGetBundle(pp)->name, (char *) vp, method_name);
+            params = NULL;
         }
         else
         {
-            return PROMISE_RESULT_NOOP;
+            return false;
         }
     }
 
-    GetLockName(lockname, "method", pp->promiser, args);
+    GetLockName(lockname, "method", pp->promiser, params);
 
     thislock = AcquireLock(ctx, lockname, VUQNAME, CFSTARTTIME, a.transaction, pp, false);
 
     if (thislock.lock == NULL)
     {
-        return PROMISE_RESULT_NOOP;
+        return false;
     }
 
     PromiseBanner(pp);
 
-    char ns[CF_MAXVARSIZE] = "";
-    char bundle_name[CF_MAXVARSIZE] = "";
-    SplitScopeName(method_name, ns, bundle_name);
+    if (strncmp(method_name,"default:",strlen("default:")) == 0) // CF_NS == ':'
+    {
+        method_deref = strchr(method_name, CF_NS) + 1;
+    }
+    else if ((strchr(method_name, CF_NS) == NULL) && (strcmp(PromiseGetNamespace(pp), "default") != 0))
+    {
+        snprintf(qualified_method, CF_BUFSIZE, "%s%c%s", PromiseGetNamespace(pp), CF_NS, method_name);
+        method_deref = qualified_method;
+    }
+    else
+    {
+         method_deref = method_name;
+    }
     
-    bp = PolicyGetBundle(PolicyFromPromise(pp), EmptyString(ns) ? NULL : ns, "agent", bundle_name);
+    bp = PolicyGetBundle(PolicyFromPromise(pp), NULL, "agent", method_deref);
     if (!bp)
     {
-        bp = PolicyGetBundle(PolicyFromPromise(pp), EmptyString(ns) ? NULL : ns, "common", bundle_name);
+        bp = PolicyGetBundle(PolicyFromPromise(pp), NULL, "common", method_deref);
     }
 
-    PromiseResult result = PROMISE_RESULT_NOOP;
     if (bp)
     {
-        BannerSubBundle(bp, args);
+        BannerSubBundle(bp, params);
 
-        EvalContextStackPushBundleFrame(ctx, bp, args, a.inherit);
-        BundleResolve(ctx, bp);
+        EvalContextStackPushBundleFrame(ctx, bp, a.inherit);
 
-        result = ScheduleAgentOperations(ctx, bp);
+        ScopeClear(bp->name);
+        BundleHashVariables(ctx, bp);
 
-        GetReturnValue(ctx, bp, pp);
+        ScopeAugment(ctx, bp, pp, params);
+
+        retval = ScheduleAgentOperations(ctx, bp);
+
+        GetReturnValue(ctx, bp->name, pp);
 
         EvalContextStackPopFrame(ctx);
 
-        switch (result)
+        switch (retval)
         {
         case PROMISE_RESULT_FAIL:
-            cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Method '%s' failed in some repairs or aborted", bp->name);
+            cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Method \"%s\" failed in some repairs or aborted", bp->name);
             break;
 
         case PROMISE_RESULT_CHANGE:
-            cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_CHANGE, pp, a, "Method '%s' invoked repairs", bp->name);
+            cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_CHANGE, pp, a, "Method \"%s\" invoked repairs", bp->name);
             break;
 
         default:
-            cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, a, "Method '%s' verified", bp->name);
+            cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, a, "Method \"%s\" verified", bp->name);
             break;
 
         }
 
         for (const Rlist *rp = bp->args; rp; rp = rp->next)
         {
-            const char *lval = RlistScalarValue(rp);
-            VarRef *ref = VarRefParseFromBundle(lval, bp);
-            EvalContextVariableRemove(ctx, ref);
-            VarRefDestroy(ref);
+            const char *lval = rp->item;
+            ScopeDeleteScalar((VarRef) { NULL, bp->name, lval });
         }
     }
     else
@@ -156,51 +164,74 @@ PromiseResult VerifyMethod(EvalContext *ctx, char *attrname, Attributes a, Promi
         if (bp && (bp->name))
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Method '%s' was used but was not defined", bp->name);
-            result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
         }
         else
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                  "A method attempted to use a bundle '%s' that was apparently not defined", method_name);
-            result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
         }
     }
 
     
     YieldCurrentLock(thislock);
-    return result;
+    return retval;
 }
 
 /***********************************************************************/
 
-static void GetReturnValue(EvalContext *ctx, const Bundle *callee, Promise *caller)
+static void GetReturnValue(EvalContext *ctx, char *scope, Promise *pp)
 {
-    char *result = ConstraintGetRvalValue(ctx, "useresult", caller, RVAL_TYPE_SCALAR);
+    char *result = ConstraintGetRvalValue(ctx, "useresult", pp, RVAL_TYPE_SCALAR);
 
     if (result)
     {
-        VarRef *ref = VarRefParseFromBundle("last-result", callee);
-        VariableTableIterator *iter = EvalContextVariableTableIteratorNew(ctx, ref);
-        Variable *result_var = NULL;
-        while ((result_var = VariableTableIteratorNext(iter)))
+        AssocHashTableIterator i;
+        CfAssoc *assoc;
+        char newname[CF_BUFSIZE];                 
+        Scope *ptr;
+        char index[CF_MAXVARSIZE], match[CF_MAXVARSIZE];    
+
+        if ((ptr = ScopeGet(scope)) == NULL)
         {
-            assert(result_var->ref->num_indices == 1);
-            if (result_var->ref->num_indices != 1)
-            {
-                continue;
-            }
-
-            VarRef *new_ref = VarRefParseFromBundle(result, PromiseGetBundle(caller));
-            VarRefAddIndex(new_ref, result_var->ref->indices[0]);
-
-            EvalContextVariablePut(ctx, new_ref, result_var->rval.item, result_var->type);
-
-            VarRefDestroy(new_ref);
+            Log(LOG_LEVEL_INFO, "useresult was specified but the method returned no data");
+            return;
         }
+    
+        i = HashIteratorInit(ptr->hashtable);
+    
+        while ((assoc = HashIteratorNext(&i)))
+        {
+            snprintf(match, CF_MAXVARSIZE - 1, "last-result[");
 
-        VarRefDestroy(ref);
-        VariableTableIteratorDestroy(iter);
+            if (strncmp(match, assoc->lval, strlen(match)) == 0)
+            {
+                char *sp;
+          
+                index[0] = '\0';
+                sscanf(assoc->lval + strlen(match), "%127[^\n]", index);
+                if ((sp = strchr(index, ']')))
+                {
+                    *sp = '\0';
+                }
+                else
+                {
+                    index[strlen(index) - 1] = '\0';
+                }
+          
+                if (strlen(index) > 0)
+                {
+                    snprintf(newname, CF_BUFSIZE, "%s[%s]", result, index);
+                }
+                else
+                {
+                    snprintf(newname, CF_BUFSIZE, "%s", result);
+                }
+
+                EvalContextVariablePut(ctx, (VarRef) { NULL, PromiseGetBundle(pp)->name, newname }, assoc->rval, DATA_TYPE_STRING);
+            }
+        }
+        
     }
-
+    
 }
 

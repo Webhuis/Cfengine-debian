@@ -30,9 +30,9 @@
   FIXME: move to the libcompat/ directory or to the apropriate source file.
 */
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-#include <audit.h>
+#include "audit.h"
 
 static char *cf_format_strtimestamp(struct tm *tm, char *buf);
 
@@ -144,16 +144,10 @@ char *MapNameForward(char *s)
 /*********************************************************/
 
 #ifndef HAVE_SETNETGRENT
-#if SETNETGRENT_RETURNS_INT
-int
-#else
-void
-#endif
-setnetgrent(const char *netgroup)
+
+int setnetgrent(const char *netgroup)
 {
-#if SETNETGRENT_RETURNS_INT
     return 0;
-#endif
 }
 
 #endif
@@ -175,16 +169,10 @@ int getnetgrent(char **machinep, char **userp, char **domainp)
 /***********************************************************/
 
 #ifndef HAVE_ENDNETGRENT
-#if ENDNETGRENT_RETURNS_INT
-int
-#else
-void
-#endif
-endnetgrent(void)
+
+int endnetgrent(void)
 {
-#if ENDNETGRENT_RETURNS_INT
     return 1;
-#endif
 }
 
 #endif

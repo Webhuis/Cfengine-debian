@@ -25,7 +25,7 @@
 #ifndef CFENGINE_SYSINFO_H
 #define CFENGINE_SYSINFO_H
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
 void DiscoverVersion(EvalContext *ctx);
 
@@ -36,13 +36,10 @@ void OSClasses(EvalContext *ctx);
 bool IsInterfaceAddress(const char *adr);
 void DetectDomainName(EvalContext *ctx, const char *orig_nodename);
 const char *GetWorkDir(void);
-const char *GetLogDir(void);
 
 void CreateHardClassesFromCanonification(EvalContext *ctx, const char *canonified);
 
 // FIX: win_proc.c?
 int GetCurrentUserName(char *userName, int userNameLen);
-
-int GetUptimeMinutes(time_t now);
 
 #endif

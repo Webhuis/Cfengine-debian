@@ -26,11 +26,11 @@
  * Implementation using Tokyo Cabinet hash API.
  */
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
-#include <dbm_priv.h>
-#include <logging.h>
-#include <string_lib.h>
+#include "dbm_priv.h"
+#include "logging.h"
+#include "string_lib.h"
 
 #ifdef TCDB
 
@@ -117,39 +117,7 @@ static bool OpenTokyoDatabase(const char *filename, TCHDB **hdb)
         return false;
     }
 
-    static int threshold = -1; 
-
-    if (threshold == -1)
-    {
-        /** 
-           Optimize always if TCDB_OPTIMIZE_PERCENT is equal to 100
-           Never optimize if  TCDB_OPTIMIZE_PERCENT is equal to 0
-         */
-        const char *perc = getenv("TCDB_OPTIMIZE_PERCENT");
-        if (perc != NULL)
-        {
-            /* Environment variable exists */
-            char *end;
-            long result = strtol(perc, &end, 10);
- 
-            /* Environment variable is a number and in 0..100 range */
-            if (!*end && result >-1 && result < 101)
-            {
-               threshold = 100 - (int)result;
-            }
-            else
-            {
-                /* This corresponds to 1% */
-                threshold = 99; 
-            }
-        }
-        else
-        {
-            /* This corresponds to 1% */
-            threshold = 99; 
-        }
-    }
-    if ((threshold != 100) && (threshold == 0 || (int)(rand()%threshold) == 0))
+    if (rand() % 100 < 1)                              /* corresponds to 1% */
     {
         if (!tchdboptimize(*hdb, -1, -1, -1, false))
         {
@@ -427,7 +395,6 @@ char *DBPrivDiagnose(const char *dbpath)
     memcpy(&declared_size, hbuf+56, sizeof(uint64_t));
     if(declared_size == size)
     {
-        fclose(fp);
         return NULL; // all is well
     }
     else

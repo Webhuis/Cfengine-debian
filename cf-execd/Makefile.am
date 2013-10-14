@@ -1,27 +1,27 @@
-noinst_LTLIBRARIES = libcf-execd.la
+sbin_PROGRAMS = cf-execd
 
 AM_CPPFLAGS = @CPPFLAGS@ \
 	-I$(srcdir)/../libpromises \
 	-I$(srcdir)/../libutils \
 	-I$(srcdir)/../libcfnet \
-	$(ENTERPRISE_CPPFLAGS)
+	$(NOVA_CPPFLAGS)
+
+if HAVE_NOVA
+AM_CPPFLAGS += -I$(abs_top_srcdir)/nova/libcfexecd
+endif
 
 AM_CFLAGS = @CFLAGS@ \
-	$(ENTERPRISE_CFLAGS)
+	$(NOVA_CFLAGS)
 
-libcf_execd_la_LIBADD = ../libpromises/libpromises.la
+LDADD = ../libpromises/libpromises.la
+if HAVE_NOVA
+LDADD += ../nova/libcfexecd/libcfexecd.la
+endif
 
-libcf_execd_la_SOURCES = \
+cf_execd_SOURCES = \
         cf-execd.c cf-execd.h \
         cf-execd-runner.c cf-execd-runner.h \
         exec-config.c exec-config.h
-
-if !BUILTIN_EXTENSIONS
- sbin_PROGRAMS = cf-execd
- # Workaround for automake madness (try removing it if you want to know why).
- cf_execd_CFLAGS = $(AM_CFLAGS)
- cf_execd_LDADD = libcf-execd.la
-endif
 
 CLEANFILES = *.gcno *.gcda
 

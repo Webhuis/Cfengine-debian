@@ -22,17 +22,16 @@
   included file COSL.txt.
 */
 
-#include <matching.h>
+#include "matching.h"
 
-#include <env_context.h>
-#include <vars.h>
-#include <promises.h>
-#include <item_lib.h>
-#include <conversion.h>
-#include <scope.h>
-#include <misc_lib.h>
-#include <rlist.h>
-#include <string_lib.h>
+#include "env_context.h"
+#include "vars.h"
+#include "promises.h"
+#include "item_lib.h"
+#include "conversion.h"
+#include "scope.h"
+#include "misc_lib.h"
+#include "rlist.h"
 
 /* Pure */
 static pcre *CompileRegExp(const char *regexp)
@@ -53,19 +52,18 @@ static pcre *CompileRegExp(const char *regexp)
 }
 
 /* Sets variables */
-static int RegExMatchSubString(EvalContext *ctx, pcre *rx, const char *teststring, int *start, int *end)
+static int RegExMatchSubString(pcre *rx, const char *teststring, int *start, int *end)
 {
-    int ovector[OVECCOUNT];
-    int rc = 0;
+    int ovector[OVECCOUNT], i, rc;
 
     if ((rc = pcre_exec(rx, NULL, teststring, strlen(teststring), 0, 0, ovector, OVECCOUNT)) >= 0)
     {
         *start = ovector[0];
         *end = ovector[1];
 
-        EvalContextVariableClearMatch(ctx);
+        ScopeClear("match");
 
-        for (int i = 0; i < rc; i++)        /* make backref vars $(1),$(2) etc */
+        for (i = 0; i < rc; i++)        /* make backref vars $(1),$(2) etc */
         {
             const char *backref_start = teststring + ovector[i * 2];
             int backref_len = ovector[i * 2 + 1] - ovector[i * 2];
@@ -77,9 +75,7 @@ static int RegExMatchSubString(EvalContext *ctx, pcre *rx, const char *teststrin
                 strlcpy(substring, backref_start, MIN(CF_MAXVARSIZE, backref_len + 1));
                 if (THIS_AGENT_TYPE == AGENT_TYPE_AGENT)
                 {
-                    char *index = StringFromLong(i);
-                    EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_MATCH, index, substring, DATA_TYPE_STRING);
-                    free(index);
+                    ScopePutMatch(i, substring);
                 }
             }
         }
@@ -95,12 +91,12 @@ static int RegExMatchSubString(EvalContext *ctx, pcre *rx, const char *teststrin
 }
 
 /* Sets variables */
-static int RegExMatchFullString(EvalContext *ctx, pcre *rx, const char *teststring)
+static int RegExMatchFullString(pcre *rx, const char *teststring)
 {
     int match_start;
     int match_len;
 
-    if (RegExMatchSubString(ctx, rx, teststring, &match_start, &match_len))
+    if (RegExMatchSubString(rx, teststring, &match_start, &match_len))
     {
         return (match_start == 0) && (match_len == strlen(teststring));
     }
@@ -149,7 +145,7 @@ bool ValidateRegEx(const char *regex)
     return regex_valid;
 }
 
-int FullTextMatch(EvalContext *ctx, const char *regexp, const char *teststring)
+int FullTextMatch(const char *regexp, const char *teststring)
 {
     pcre *rx;
 
@@ -165,7 +161,7 @@ int FullTextMatch(EvalContext *ctx, const char *regexp, const char *teststring)
         return false;
     }
 
-    if (RegExMatchFullString(ctx, rx, teststring))
+    if (RegExMatchFullString(rx, teststring))
     {
         return true;
     }
@@ -204,7 +200,7 @@ char *ExtractFirstReference(const char *regexp, const char *teststring)
     return backreference;
 }
 
-int BlockTextMatch(EvalContext *ctx, const char *regexp, const char *teststring, int *start, int *end)
+int BlockTextMatch(const char *regexp, const char *teststring, int *start, int *end)
 {
     pcre *rx = CompileRegExp(regexp);
 
@@ -213,7 +209,7 @@ int BlockTextMatch(EvalContext *ctx, const char *regexp, const char *teststring,
         return 0;
     }
 
-    if (RegExMatchSubString(ctx, rx, teststring, start, end))
+    if (RegExMatchSubString(rx, teststring, start, end))
     {
         return true;
     }
@@ -371,7 +367,7 @@ int IsPathRegex(char *str)
 
 /* Checks whether item matches a list of wildcards */
 
-int IsRegexItemIn(EvalContext *ctx, Item *list, char *regex)
+int IsRegexItemIn(const EvalContext *ctx, Item *list, char *regex)
 {
     Item *ptr;
 
@@ -391,7 +387,7 @@ int IsRegexItemIn(EvalContext *ctx, Item *list, char *regex)
 
         /* Make it commutative */
 
-        if ((FullTextMatch(ctx, regex, ptr->name)) || (FullTextMatch(ctx, ptr->name, regex)))
+        if ((FullTextMatch(regex, ptr->name)) || (FullTextMatch(ptr->name, regex)))
         {
             return true;
         }
@@ -400,7 +396,7 @@ int IsRegexItemIn(EvalContext *ctx, Item *list, char *regex)
     return false;
 }
 
-int MatchPolicy(EvalContext *ctx, const char *camel, const char *haystack, Rlist *insert_match, const Promise *pp)
+int MatchPolicy(const char *camel, const char *haystack, Rlist *insert_match, const Promise *pp)
 {
     Rlist *rp;
     char *sp, *spto, *firstchar, *lastchar;
@@ -428,7 +424,7 @@ int MatchPolicy(EvalContext *ctx, const char *camel, const char *haystack, Rlist
 
         for (rp = insert_match; rp != NULL; rp = rp->next)
         {
-            opt = InsertMatchTypeFromString(RlistScalarValue(rp));
+            opt = InsertMatchTypeFromString(rp->item);
 
             /* Exact match can be done immediately */
 
@@ -514,7 +510,7 @@ int MatchPolicy(EvalContext *ctx, const char *camel, const char *haystack, Rlist
                 }
             }
 
-            ok = ok || (FullTextMatch(ctx, final, haystack));
+            ok = ok || (FullTextMatch(final, haystack));
         }
 
         if (!ok)                // All lines in region need to match to avoid insertions
@@ -529,7 +525,7 @@ int MatchPolicy(EvalContext *ctx, const char *camel, const char *haystack, Rlist
 
 
 /* Checks whether item matches a list of wildcards */
-int MatchRlistItem(EvalContext *ctx, Rlist *listofregex, const char *teststring)
+int MatchRlistItem(Rlist *listofregex, const char *teststring)
 {
     Rlist *rp;
 
@@ -537,14 +533,14 @@ int MatchRlistItem(EvalContext *ctx, Rlist *listofregex, const char *teststring)
     {
         /* Avoid using regex if possible, due to memory leak */
 
-        if (strcmp(teststring, RlistScalarValue(rp)) == 0)
+        if (strcmp(teststring, rp->item) == 0)
         {
             return (true);
         }
 
         /* Make it commutative */
 
-        if (FullTextMatch(ctx, RlistScalarValue(rp), teststring))
+        if (FullTextMatch(rp->item, teststring))
         {
             return true;
         }

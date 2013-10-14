@@ -25,17 +25,21 @@
 #ifndef CFENGINE_CFKEYFUNCTIONS_H
 #define CFENGINE_CFKEYFUNCTIONS_H
 
-#include <generic_agent.h>
+#include "generic_agent.h"
 
-#include <lastseen.h>
-#include <dir.h>
-#include <scope.h>
-#include <files_copy.h>
-#include <files_interfaces.h>
-#include <files_hashes.h>
-#include <keyring.h>
-#include <env_context.h>
-#include <crypto.h>
+#include "lastseen.h"
+#include "dir.h"
+#include "scope.h"
+#include "files_copy.h"
+#include "files_interfaces.h"
+#include "files_hashes.h"
+#include "keyring.h"
+#include "env_context.h"
+#include "crypto.h"
+
+#ifdef HAVE_NOVA
+#include "license.h"
+#endif
 
 RSA* LoadPublicKey(const char* filename);
 char* GetPubkeyDigest(const char* pubkey);
@@ -43,8 +47,10 @@ int PrintDigest(const char* pubkey);
 int TrustKey(const char* pubkey);
 bool ShowHost(const char *hostkey, const char *address, bool incoming, const KeyHostSeen *quality, void *ctx);
 void ShowLastSeenHosts();
-int RemoveKeys(const char *input, bool must_be_coherent);
+int RemoveKeys(const char *host);
 void KeepKeyPromises(const char *public_key_file, const char *private_key_file);
+
+bool LicenseInstall(char *path_source);
 
 
 #endif // CFKEYFUNCTIONS_H

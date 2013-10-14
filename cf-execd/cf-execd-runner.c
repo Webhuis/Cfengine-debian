@@ -22,26 +22,25 @@
   included file COSL.txt.
 */
 
-#include <cf3.defs.h>
-#include <cf-execd-runner.h>
+#include "cf3.defs.h"
+#include "cf-execd-runner.h"
 
-#include <files_names.h>
-#include <files_interfaces.h>
-#include <hashes.h>
-#include <string_lib.h>
-#include <pipes.h>
-#include <unix.h>
-#include <mutex.h>
-#include <exec_tools.h>
-#include <misc_lib.h>
-#include <assert.h>
-#include <crypto.h>
-#include <sysinfo.h>
-#include <bootstrap.h>
-#include <files_hashes.h>
-#include <item_lib.h>
+#include "files_names.h"
+#include "files_interfaces.h"
+#include "hashes.h"
+#include "string_lib.h"
+#include "pipes.h"
+#include "unix.h"
+#include "mutex.h"
+#include "exec_tools.h"
+#include "misc_lib.h"
+#include "assert.h"
 
-#include <cf-windows-functions.h>
+#ifdef HAVE_NOVA
+# if defined(__MINGW32__)
+#  include "win_execd_pipe.h"
+# endif
+#endif
 
 /*******************************************************************/
 
@@ -633,61 +632,18 @@ static void MailResult(const ExecConfig *config, const char *file)
         goto mail_err;
     }
 
-    char mailsubject_anomaly_prefix[8];
     if (anomaly)
     {
-        sprintf(mailsubject_anomaly_prefix,"**!! ");
-    }
-    else
-    {
-        mailsubject_anomaly_prefix[0] = '\0';
-    }
-
-    if (SafeStringLength(config->mail_subject) == 0)
-    {
-        snprintf(vbuff, sizeof(vbuff), "Subject: %s[%s/%s]\r\n", mailsubject_anomaly_prefix, config->fq_name, config->ip_address);
+        sprintf(vbuff, "Subject: **!! [%s/%s]\r\n", config->fq_name, config->ip_address);
         Log(LOG_LEVEL_DEBUG, "%s", vbuff);
     }
     else
     {
-        snprintf(vbuff, sizeof(vbuff), "Subject: %s%s\r\n", mailsubject_anomaly_prefix, config->mail_subject);
+        sprintf(vbuff, "Subject: [%s/%s]\r\n", config->fq_name, config->ip_address);
         Log(LOG_LEVEL_DEBUG, "%s", vbuff);
     }
 
     send(sd, vbuff, strlen(vbuff), 0);
-
-    /* send X-CFEngine SMTP header if mailsubject set */
-    if (SafeStringLength(config->mail_subject) > 0)
-    {
-        unsigned char digest[EVP_MAX_MD_SIZE + 1];
-        char buffer[EVP_MAX_MD_SIZE * 4];
-
-        char *existing_policy_server = ReadPolicyServerFile(GetWorkDir());
-
-        HashPubKey(PUBKEY, digest, CF_DEFAULT_DIGEST);
-
-        char ipbuf[CF_MAXVARSIZE];
-        memset(ipbuf, '\0', sizeof(CF_MAXVARSIZE));
-
-        for (Item *iptr = IPADDRESSES; iptr != NULL; iptr = iptr->next)
-        {
-            if ((SafeStringLength(ipbuf) + SafeStringLength(iptr->name)) < sizeof(ipbuf))
-            {
-                strcat(ipbuf, iptr->name);
-                strcat(ipbuf, " ");
-            }
-            else
-            {
-                break;
-            }
-        }
-        Chop(ipbuf, sizeof(ipbuf));
-
-        snprintf(vbuff, sizeof(vbuff), "X-CFEngine: vfqhost=\"%s\";ip-addresses=\"%s\";policyhub=\"%s\";pkhash=\"%s\"\r\n", VFQNAME, ipbuf, existing_policy_server, HashPrintSafe(CF_DEFAULT_DIGEST, digest, buffer));
-
-        send(sd, vbuff, strlen(vbuff), 0);
-        free(existing_policy_server);
-    }
 
 #if defined __linux__ || defined __NetBSD__ || defined __FreeBSD__ || defined __OpenBSD__
     strftime(vbuff, CF_BUFSIZE, "Date: %a, %d %b %Y %H:%M:%S %z\r\n", localtime(&now));

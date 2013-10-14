@@ -22,8 +22,8 @@
   included file COSL.txt.
 */
 
-#include <ornaments.h>
-#include <rlist.h>
+#include "ornaments.h"
+#include "rlist.h"
 
 void PromiseBanner(const Promise *pp)
 {
@@ -120,13 +120,12 @@ void BannerSubPromiseType(const EvalContext *ctx, const char *bundlename, const 
         {
             Log(LOG_LEVEL_VERBOSE, "     ??? Local class context: ");
 
-            ClassTableIterator *iter = EvalContextClassTableIteratorNewLocal(ctx);
-            Class *cls = NULL;
-            while ((cls = ClassTableIteratorNext(iter)))
+            StringSetIterator it = EvalContextStackFrameIteratorSoft(ctx);
+            const char *context = NULL;
+            while ((context = StringSetIteratorNext(&it)))
             {
-                Log(LOG_LEVEL_VERBOSE, "       %s", cls->name);
+                Log(LOG_LEVEL_VERBOSE, "       %s", context);
             }
-            ClassTableIteratorDestroy(iter);
 
             Log(LOG_LEVEL_VERBOSE, "\n");
         }

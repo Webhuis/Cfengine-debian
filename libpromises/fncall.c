@@ -22,17 +22,17 @@
   included file COSL.txt.
 */
 
-#include <fncall.h>
+#include "fncall.h"
 
-#include <env_context.h>
-#include <files_names.h>
-#include <expand.h>
-#include <vars.h>
-#include <args.h>
-#include <evalfunction.h>
-#include <policy.h>
-#include <string_lib.h>
+#include "env_context.h"
+#include "files_names.h"
+#include "expand.h"
+#include "vars.h"
+#include "args.h"
+#include "evalfunction.h"
+#include "policy.h"
 
+#include <assert.h>
 
 /*******************************************************************/
 
@@ -90,22 +90,11 @@ void FnCallDestroy(FnCall *fp)
     free(fp);
 }
 
-unsigned FnCallHash(const FnCall *fp, unsigned seed, unsigned max)
+/*********************************************************************/
+
+FnCall *ExpandFnCall(EvalContext *ctx, const char *contextid, FnCall *f)
 {
-    unsigned hash = StringHash(fp->name, seed, max);
-
-    for (const Rlist *rp = fp->args; rp; rp = rp->next)
-    {
-        hash = RvalHash(rp->val, hash, max);
-    }
-
-    return hash;
-}
-
-
-FnCall *ExpandFnCall(EvalContext *ctx, const char *ns, const char *scope, FnCall *f)
-{
-    return FnCallNew(f->name, ExpandList(ctx, ns, scope, f->args, false));
+    return FnCallNew(f->name, ExpandList(ctx, contextid, f->args, false));
 }
 
 
@@ -117,14 +106,14 @@ void FnCallShow(FILE *fout, const FnCall *fp)
 
     for (const Rlist *rp = fp->args; rp != NULL; rp = rp->next)
     {
-        switch (rp->val.type)
+        switch (rp->type)
         {
         case RVAL_TYPE_SCALAR:
-            fprintf(fout, "%s,", RlistScalarValue(rp));
+            fprintf(fout, "%s,", (char *) rp->item);
             break;
 
         case RVAL_TYPE_FNCALL:
-            FnCallShow(fout, RlistFnCallValue(rp));
+            FnCallShow(fout, (FnCall *) rp->item);
             break;
 
         default:

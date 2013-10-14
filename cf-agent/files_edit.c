@@ -22,17 +22,16 @@
   included file COSL.txt.
 */
 
-#include <files_edit.h>
+#include "files_edit.h"
 
-#include <actuator.h>
-#include <env_context.h>
-#include <files_names.h>
-#include <files_interfaces.h>
-#include <files_operators.h>
-#include <files_lib.h>
-#include <files_editxml.h>
-#include <item_lib.h>
-#include <policy.h>
+#include "env_context.h"
+#include "files_names.h"
+#include "files_interfaces.h"
+#include "files_operators.h"
+#include "files_lib.h"
+#include "files_editxml.h"
+#include "item_lib.h"
+#include "policy.h"
 
 /*****************************************************************************/
 
@@ -86,26 +85,21 @@ EditContext *NewEditContext(char *filename, Attributes a)
 
 /*****************************************************************************/
 
-PromiseResult FinishEditContext(EvalContext *ctx, EditContext *ec, Attributes a, const Promise *pp)
+void FinishEditContext(EvalContext *ctx, EditContext *ec, Attributes a, const Promise *pp)
 {
-    PromiseResult result = PROMISE_RESULT_NOOP;
     if (DONTDO || (a.transaction.action == cfa_warn))
     {
-        if (ec && (!CompareToFile(ctx, ec->file_start, ec->filename, a, pp, &result)) && (ec->num_edits > 0))
+        if (ec && (!CompareToFile(ctx, ec->file_start, ec->filename, a, pp)) && (ec->num_edits > 0))
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, a, "Should edit file '%s' but only a warning promised", ec->filename);
-            return PROMISE_RESULT_WARN;
         }
-        else
-        {
-            return PROMISE_RESULT_NOOP;
-        }
+        return;
     }
     else if (ec && (ec->num_edits > 0))
     {
         if (a.haveeditline)
         {
-            if (CompareToFile(ctx, ec->file_start, ec->filename, a, pp, &result))
+            if (CompareToFile(ctx, ec->file_start, ec->filename, a, pp))
             {
                 if (ec)
                 {
@@ -117,12 +111,10 @@ PromiseResult FinishEditContext(EvalContext *ctx, EditContext *ec, Attributes a,
                 if (SaveItemListAsFile(ec->file_start, ec->filename, a))
                 {
                     cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_CHANGE, pp, a, "Edit file '%s'", ec->filename);
-                    result = PromiseResultUpdate(result, PROMISE_RESULT_CHANGE);
                 }
                 else
                 {
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Unable to save file '%s' after editing", ec->filename);
-                    result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
                 }
             }
         }
@@ -142,18 +134,15 @@ PromiseResult FinishEditContext(EvalContext *ctx, EditContext *ec, Attributes a,
                 if (SaveXmlDocAsFile(ec->xmldoc, ec->filename, a))
                 {
                     cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_CHANGE, pp, a, "Edited xml file '%s'", ec->filename);
-                    result = PromiseResultUpdate(result, PROMISE_RESULT_CHANGE);
                 }
                 else
                 {
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Failed to edit XML file '%s'", ec->filename);
-                    result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
                 }
             }
             xmlFreeDoc(ec->xmldoc);
 #else
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Cannot edit XML files without LIBXML2");
-            result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
 #endif
         }
     }
@@ -169,8 +158,6 @@ PromiseResult FinishEditContext(EvalContext *ctx, EditContext *ec, Attributes a,
     {
         DeleteItemList(ec->file_start);
     }
-
-    return result;
 }
 
 /*********************************************************************/

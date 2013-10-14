@@ -25,7 +25,7 @@
 #ifndef VERIFY_ACL_H
 #define VERIFY_ACL_H
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
 // Valid generic permissions
 #define CF_VALID_GPERMS "rwx"
@@ -37,6 +37,6 @@
 #define CF_VALID_NPERMS_POSIX "rwx"
 #define CF_VALID_NPERMS_NTFS "drtxTwabBpcoD"
 
-PromiseResult VerifyACL(EvalContext *ctx, const char *file, Attributes a, Promise *pp);
+void VerifyACL(EvalContext *ctx, char *file, Attributes a, Promise *pp);
 
 #endif

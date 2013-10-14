@@ -30,8 +30,8 @@
  * promises.
  */
 
-#include <cf3.defs.h>
-#include <policy.h>
+#include "cf3.defs.h"
+#include "policy.h"
 
 /**
  * @brief Binds logging in current thread to EvalContext.
@@ -43,14 +43,12 @@ void PromiseLoggingInit(const EvalContext *ctx);
  */
 void PromiseLoggingPromiseEnter(const EvalContext *ctx, const Promise *pp);
 
-const char *PromiseLoggingLastMessage(const EvalContext *ctx);
-
 /**
  * @brief Finishes processing the promise and looks up the last error message associated with it.
  *
  * @return Last log message recorded for the promise, or NULL if there were none. Caller owns the memory.
  */
-void PromiseLoggingPromiseFinish(const EvalContext *ctx, const Promise *pp);
+char *PromiseLoggingPromiseFinish(const EvalContext *ctx, const Promise *pp);
 
 /**
  * @brief Unbinds logging from EvalContext.

@@ -22,43 +22,40 @@
   included file COSL.txt.
 */
 
-#include <verify_acl.h>
+#include "verify_acl.h"
 
-#include <actuator.h>
-#include <acl_posix.h>
-#include <files_names.h>
-#include <promises.h>
-#include <string_lib.h>
-#include <rlist.h>
-#include <env_context.h>
-#include <cf-agent-enterprise-stubs.h>
+#include "acl_posix.h"
+#include "files_names.h"
+#include "promises.h"
+#include "string_lib.h"
+#include "rlist.h"
+#include "env_context.h"
+#include "cf-agent-enterprise-stubs.h"
 
 // Valid operations (first char of mode)
 #define CF_VALID_OPS_METHOD_OVERWRITE "=+-"
 #define CF_VALID_OPS_METHOD_APPEND "=+-"
 
-static int CheckACLSyntax(const char *file, Acl acl, Promise *pp);
+static int CheckACLSyntax(char *file, Acl acl, Promise *pp);
 
-static void SetACLDefaults(const char *path, Acl *acl);
+static void SetACLDefaults(char *path, Acl *acl);
 static int CheckACESyntax(char *ace, char *valid_nperms, char *valid_ops, int deny_support, int mask_support,
                         Promise *pp);
 static int CheckModeSyntax(char **mode_p, char *valid_nperms, char *valid_ops, Promise *pp);
 static int CheckPermTypeSyntax(char *permt, int deny_support, Promise *pp);
-static int CheckAclDefault(const char *path, Acl *acl, Promise *pp);
+static int CheckAclDefault(char *path, Acl *acl, Promise *pp);
 
 
-PromiseResult VerifyACL(EvalContext *ctx, const char *file, Attributes a, Promise *pp)
+void VerifyACL(EvalContext *ctx, char *file, Attributes a, Promise *pp)
 {
     if (!CheckACLSyntax(file, a.acl, pp))
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_INTERRUPTED, pp, a, "Syntax error in access control list for '%s'", file);
         PromiseRef(LOG_LEVEL_ERR, pp);
-        return PROMISE_RESULT_INTERRUPTED;
+        return;
     }
 
     SetACLDefaults(file, &a.acl);
-
-    PromiseResult result = PROMISE_RESULT_NOOP;
 
 // decide which ACL API to use
     switch (a.acl.acl_type)
@@ -67,9 +64,9 @@ PromiseResult VerifyACL(EvalContext *ctx, const char *file, Attributes a, Promis
     case ACL_TYPE_GENERIC:
 
 #if defined(__linux__)
-        result = PromiseResultUpdate(result, CheckPosixLinuxACL(ctx, file, a.acl, a, pp));
+        CheckPosixLinuxACL(ctx, file, a.acl, a, pp);
 #elif defined(__MINGW32__)
-        result = PromiseResultUpdate(result, Nova_CheckNtACL(ctx, file, a.acl, a, pp));
+        Nova_CheckNtACL(ctx, file, a.acl, a, pp);
 #else
         Log(LOG_LEVEL_INFO, "ACLs are not yet supported on this system.");
 #endif
@@ -78,25 +75,23 @@ PromiseResult VerifyACL(EvalContext *ctx, const char *file, Attributes a, Promis
     case ACL_TYPE_POSIX:
 
 #if defined(__linux__)
-        result = PromiseResultUpdate(result, CheckPosixLinuxACL(ctx, file, a.acl, a, pp));
+        CheckPosixLinuxACL(ctx, file, a.acl, a, pp);
 #else
         Log(LOG_LEVEL_INFO, "Posix ACLs are not supported on this system");
 #endif
         break;
 
     case ACL_TYPE_NTFS_:
-        result = PromiseResultUpdate(result, Nova_CheckNtACL(ctx, file, a.acl, a, pp));
+        Nova_CheckNtACL(ctx, file, a.acl, a, pp);
         break;
 
     default:
         Log(LOG_LEVEL_ERR, "Unknown ACL type - software error");
         break;
     }
-
-    return result;
 }
 
-static int CheckACLSyntax(const char *file, Acl acl, Promise *pp)
+static int CheckACLSyntax(char *file, Acl acl, Promise *pp)
 {
     int valid = true;
     int deny_support = false;
@@ -171,7 +166,7 @@ static int CheckACLSyntax(const char *file, Acl acl, Promise *pp)
 
     for (rp = acl.acl_default_entries; rp != NULL; rp = rp->next)
     {
-        valid = CheckACESyntax(RlistScalarValue(rp), valid_ops, valid_nperms, deny_support, mask_support, pp);
+        valid = CheckACESyntax(rp->item, valid_ops, valid_nperms, deny_support, mask_support, pp);
 
         if (!valid)             // wrong syntax in this ace
         {
@@ -188,7 +183,7 @@ static int CheckACLSyntax(const char *file, Acl acl, Promise *pp)
  * Set unset fields with documented defaults, to these defaults.
  **/
 
-static void SetACLDefaults(const char *path, Acl *acl)
+static void SetACLDefaults(char *path, Acl *acl)
 {
 // default: acl_method => append
 
@@ -212,7 +207,7 @@ static void SetACLDefaults(const char *path, Acl *acl)
     }
 }
 
-static int CheckAclDefault(const char *path, Acl *acl, Promise *pp)
+static int CheckAclDefault(char *path, Acl *acl, Promise *pp)
 /*
   Checks that acl_default is set to a valid value for this acl type.
   Returns true if so, or false otherwise.

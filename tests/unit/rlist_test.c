@@ -1,13 +1,12 @@
-#include <test.h>
+#include "test.h"
 
 #include <stdlib.h>
 #include <assert.h>
 
-#include <rlist.h>
-#include <string_lib.h>
+#include "rlist.h"
 
-#include <assoc.h>
-#include <env_context.h>
+#include "assoc.h"
+#include "env_context.h"
 
 /* Stubs */
 
@@ -17,16 +16,30 @@ void FatalError(char *s, ...)
     abort();
 }
 
+/* Test cases */
+
+static void test_prepend_scalar(void)
+{
+    Rlist *list = NULL;
+
+    RlistPrependScalar(&list, "stuff");
+    RlistPrependScalar(&list, "more-stuff");
+
+    assert_string_equal(list->item, "more-stuff");
+
+    RlistDestroy(list);
+}
+
 static void test_length(void)
 {
     Rlist *list = NULL;
 
     assert_int_equal(RlistLen(list), 0);
 
-    RlistPrepend(&list, "stuff", RVAL_TYPE_SCALAR);
+    RlistPrependScalar(&list, "stuff");
     assert_int_equal(RlistLen(list), 1);
 
-    RlistPrepend(&list, "more-stuff", RVAL_TYPE_SCALAR);
+    RlistPrependScalar(&list, "more-stuff");
     assert_int_equal(RlistLen(list), 2);
 
     RlistDestroy(list);
@@ -39,7 +52,7 @@ static void test_prepend_scalar_idempotent(void)
     RlistPrependScalarIdemp(&list, "stuff");
     RlistPrependScalarIdemp(&list, "stuff");
 
-    assert_string_equal(RlistScalarValue(list), "stuff");
+    assert_string_equal(list->item, "stuff");
     assert_int_equal(RlistLen(list), 1);
 
     RlistDestroy(list);
@@ -49,13 +62,13 @@ static void test_copy(void)
 {
     Rlist *list = NULL, *copy = NULL;
 
-    RlistPrepend(&list, "stuff", RVAL_TYPE_SCALAR);
-    RlistPrepend(&list, "more-stuff", RVAL_TYPE_SCALAR);
+    RlistPrependScalar(&list, "stuff");
+    RlistPrependScalar(&list, "more-stuff");
 
     copy = RlistCopy(list);
 
-    assert_string_equal(RlistScalarValue(list), RlistScalarValue(copy));
-    assert_string_equal(RlistScalarValue(list->next), RlistScalarValue(copy->next));
+    assert_string_equal(list->item, copy->item);
+    assert_string_equal(list->next->item, copy->next->item);
 
     RlistDestroy(list);
     RlistDestroy(copy);
@@ -110,9 +123,10 @@ static void test_last(void)
 
 static bool is_even(void *item, void *data)
 {
-    long d = StringToLong(data);
-    long i = StringToLong(item);
-    return i % 2 == d;
+    int *d = data;
+
+    int *i = item;
+    return *i % 2 == *d;
 }
 
 static void test_filter(void)
@@ -120,8 +134,8 @@ static void test_filter(void)
     Rlist *list = NULL;
     for (int i = 0; i < 10; i++)
     {
-        char *item = StringFromLong(i);
-        RlistAppend(&list, item, RVAL_TYPE_SCALAR);
+        void *item = xmemdup(&i, sizeof(int));
+        RlistAppendAlien(&list, item);
     }
 
     assert_int_equal(10, RlistLen(list));
@@ -132,8 +146,11 @@ static void test_filter(void)
     int i = 0;
     for (Rlist *rp = list; rp; rp = rp->next)
     {
-        int k = StringToLong(rp->val.item);
-        assert_int_equal(i, k);
+        int *k = rp->item;
+        assert_int_equal(i, *k);
+
+        free(k);
+        rp->item = NULL;
 
         i += 2;
     }
@@ -146,8 +163,8 @@ static void test_filter_everything(void)
     Rlist *list = NULL;
     for (int i = 1; i < 10; i += 2)
     {
-        char *item = StringFromLong(i);
-        RlistAppend(&list, item, RVAL_TYPE_SCALAR);
+        void *item = xmemdup(&i, sizeof(int));
+        RlistAppendAlien(&list, item);
     }
 
     assert_int_equal(5, RlistLen(list));
@@ -163,9 +180,9 @@ static void test_reverse(void)
     Rlist *list = RlistFromSplitString("a,b,c", ',');
 
     RlistReverse(&list);
-    assert_string_equal("c", RlistScalarValue(list));
-    assert_string_equal("b", RlistScalarValue(list->next));
-    assert_string_equal("a", RlistScalarValue(list->next->next));
+    assert_string_equal("c", list->item);
+    assert_string_equal("b", list->next->item);
+    assert_string_equal("a", list->next->next->item);
 
     RlistDestroy(list);
 }
@@ -479,6 +496,7 @@ int main()
     PRINT_TEST_BANNER();
     const UnitTest tests[] =
     {
+        unit_test(test_prepend_scalar),
         unit_test(test_prepend_scalar_idempotent),
         unit_test(test_length),
         unit_test(test_copy),
@@ -513,7 +531,12 @@ int FullTextMatch(const char *regptr, const char *cmpptr)
     fail();
 }
 
-bool EvalContextVariableGet(const EvalContext *ctx, const VarRef *lval, Rval *rval_out, DataType *type_out)
+bool EvalContextVariableGet(const EvalContext *ctx, VarRef lval, Rval *rval_out, DataType *type_out)
+{
+    fail();
+}
+
+Scope *ScopeGetCurrent(void)
 {
     fail();
 }

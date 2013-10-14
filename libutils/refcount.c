@@ -22,8 +22,10 @@
   included file COSL.txt.
 */
 
-#include <alloc.h>
-#include <refcount.h>
+#include <assert.h>
+
+#include "alloc.h"
+#include "refcount.h"
 
 void RefCountNew(RefCount **ref)
 {
@@ -83,15 +85,6 @@ int RefCountDetach(RefCount *ref, void *owner)
     {
         return -1;
     }
-    assert(ref->user_count > 1);
-    if (ref->user_count <= 1)
-    {
-        /*
-         * Semantics: If 1 that means that we are the only users, if 0 nobody is using it.
-         * In either case we are safe to destroy the refcount.
-         */
-        return -1;
-    }
     RefCountNode *p = NULL;
     int found = 0;
     for (p = ref->users; p; p = p->next)
@@ -143,7 +136,7 @@ int RefCountIsShared(RefCount *ref)
     {
         return 0;
     }
-    return (ref->user_count > 1);
+    return (ref->user_count != 1);
 }
 
 int RefCountIsEqual(RefCount *a, RefCount *b)

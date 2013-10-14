@@ -22,21 +22,25 @@
   included file COSL.txt.
 */
 
-#include <verify_measurements.h>
+#include "verify_measurements.h"
 
-#include <promises.h>
-#include <files_names.h>
-#include <attributes.h>
-#include <policy.h>
-#include <cf-monitord-enterprise-stubs.h>
-#include <env_context.h>
-#include <ornaments.h>
+#include "promises.h"
+#include "files_names.h"
+#include "attributes.h"
+#include "policy.h"
+#include "cf-monitord-enterprise-stubs.h"
+#include "env_context.h"
+#include "ornaments.h"
+
+#ifdef HAVE_NOVA
+#include "history.h"
+#endif
 
 static bool CheckMeasureSanity(Measurement m, Promise *pp);
 
 /*****************************************************************************/
 
-PromiseResult VerifyMeasurementPromise(EvalContext *ctx, double *measurement, Promise *pp)
+void VerifyMeasurementPromise(EvalContext *ctx, double *this, Promise *pp)
 {
     Attributes a = { {0} };
 
@@ -51,7 +55,7 @@ PromiseResult VerifyMeasurementPromise(EvalContext *ctx, double *measurement, Pr
             Log(LOG_LEVEL_VERBOSE, "Skipping static observation '%s', already done", pp->promiser);
         }
 
-        return PROMISE_RESULT_NOOP;
+        return;
     }
 
     PromiseBanner(pp);
@@ -61,10 +65,10 @@ PromiseResult VerifyMeasurementPromise(EvalContext *ctx, double *measurement, Pr
     if (!CheckMeasureSanity(a.measure, pp))
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_INTERRUPTED, pp, a, "Measurement promise is not valid");
-        return PROMISE_RESULT_INTERRUPTED;
+        return;
     }
 
-    return VerifyMeasurement(ctx, measurement, a, pp);
+    VerifyMeasurement(ctx, this, a, pp);
 }
 
 /*****************************************************************************/

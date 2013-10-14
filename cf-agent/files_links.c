@@ -22,18 +22,17 @@
   included file COSL.txt.
 */
 
-#include <files_links.h>
+#include "files_links.h"
 
-#include <actuator.h>
-#include <promises.h>
-#include <files_names.h>
-#include <files_interfaces.h>
-#include <files_operators.h>
-#include <files_lib.h>
-#include <locks.h>
-#include <string_lib.h>
-#include <misc_lib.h>
-#include <env_context.h>
+#include "promises.h"
+#include "files_names.h"
+#include "files_interfaces.h"
+#include "files_operators.h"
+#include "files_lib.h"
+#include "locks.h"
+#include "string_lib.h"
+#include "misc_lib.h"
+#include "env_context.h"
 
 #define CF_MAXLINKLEVEL 4
 
@@ -120,24 +119,13 @@ PromiseResult VerifyLink(EvalContext *ctx, char *destination, const char *source
         }
         else
         {
-            PromiseResult result = PROMISE_RESULT_NOOP;
-            if (!MoveObstruction(ctx, destination, attr, pp, &result))
+            if (!MoveObstruction(ctx, destination, attr, pp))
             {
                 cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, attr, "Unable to create link '%s' -> '%s'", destination, to);
-                result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-                return result;
+                return PROMISE_RESULT_FAIL;
             }
 
-            if (MakeLink(ctx, destination, source, attr, pp))
-            {
-                result = PromiseResultUpdate(result, PROMISE_RESULT_CHANGE);
-            }
-            else
-            {
-                result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-            }
-
-            return result;
+            return MakeLink(ctx, destination, source, attr, pp) ? PROMISE_RESULT_CHANGE : PROMISE_RESULT_FAIL;
         }
     }
     else
@@ -387,23 +375,12 @@ PromiseResult VerifyHardLink(EvalContext *ctx, char *destination, const char *so
 
     Log(LOG_LEVEL_INFO, "'%s' does not appear to be a hard link to '%s'", destination, to);
 
-    PromiseResult result = PROMISE_RESULT_NOOP;
-    if (!MoveObstruction(ctx, destination, attr, pp, &result))
+    if (!MoveObstruction(ctx, destination, attr, pp))
     {
-        result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-        return result;
+        return PROMISE_RESULT_FAIL;
     }
 
-    if (MakeHardLink(ctx, destination, to, attr, pp))
-    {
-        result = PromiseResultUpdate(result, PROMISE_RESULT_CHANGE);
-    }
-    else
-    {
-        result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
-    }
-
-    return result;
+    return MakeHardLink(ctx, destination, to, attr, pp) ? PROMISE_RESULT_CHANGE : PROMISE_RESULT_FAIL;
 }
 
 /*****************************************************************************/

@@ -1,6 +1,0 @@
-bunndle agent foo
-{
-    report:
-        any::
-            "Hello World";
-}

@@ -25,13 +25,13 @@
 #ifndef CFENGINE_VERIFY_STORAGE_H
 #define CFENGINE_VERIFY_STORAGE_H
 
-#include <cf3.defs.h>
+#include "cf3.defs.h"
 
+extern Rlist *MOUNTEDFSLIST;
 extern bool CF_MOUNTALL;
 
-PromiseResult FindAndVerifyStoragePromises(EvalContext *ctx, Promise *pp);
-PromiseResult VerifyStoragePromise(EvalContext *ctx, char *path, Promise *pp);
-Seq *GetGlobalMountedFSList(void);
+void *FindAndVerifyStoragePromises(EvalContext *ctx, Promise *pp);
+void VerifyStoragePromise(EvalContext *ctx, char *path, Promise *pp);
 
 void DeleteStorageContext(void);
 

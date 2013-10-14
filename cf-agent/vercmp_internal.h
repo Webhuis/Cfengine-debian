@@ -25,8 +25,6 @@
 #ifndef CFENGINE_VERCMP_INTERNAL_H
 #define CFENGINE_VERCMP_INTERNAL_H
 
-#include <vercmp.h>
-
-VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, PackageVersionComparator cmp);
+bool ComparePackageVersionsInternal(const char *v1, const char *v2, PackageVersionComparator cmp);
 
 #endif

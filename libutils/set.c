@@ -22,12 +22,13 @@
   included file COSL.txt.
 */
 
-#include <set.h>
+#include "set.h"
 
-#include <alloc.h>
-#include <string_lib.h>
+#include "alloc.h"
+#include "string_lib.h"
+#include "hashes.h"
 
-TYPED_SET_DEFINE(String, char *, (MapHashFn)&StringHash, (MapKeyEqualFn)&StringSafeEqual, &free)
+TYPED_SET_DEFINE(String, char *, (MapHashFn)&OatHash, (MapKeyEqualFn)&StringSafeEqual, &free)
 
 Set *SetNew(MapHashFn element_hash_fn,
             MapKeyEqualFn element_equal_fn,

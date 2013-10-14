@@ -1,25 +1,22 @@
-3.6.0
-
-       Changes:
-       - add process name and pid in syslog message (GitHub #789)
-       - process_results default to AND'ing of set attributes if not specified (Redmine #3224)
-       - interface is now canonified in sys.hardware_mac[interface] to align with sys.ipv4[interface] (Redmine #3418)
-       - #TODO# network protocol on top of TLS
-
-       New features:
-       - support colorized output for agent binaries with command line option --color
-       - Introduced alias 'policy_server' for context 'am_policy_hub' (the latter will be deprecated)
-       - #TODO# new sys variables
-       - #TODO# new functions
-          - findfiles
-       - #TODO# replace_patterns changes
-
+3.5.2
        Bug fixes:
-       - #TODO# goodness from evaluator and variable table refactoring
-          - `this` and similar variables 
+       - fix delayed abortclasses checking (Redmine #2316, #3114, #3003)
+       - fix maplist arguments bug (Redmine #3256)
+       - fix segfaults in cf-pomises (Redmine #3173, 3194)
+       - fix build on Solaris 10/SmartOS (Redmine #3097)
+       - sanitize characters from /etc/issue in sys.flavor for Debian (Redmine #2988)
+       - Fix segfault when dealing with files or data > 4K (Redmine #2912, 2698)
+       - Don't truncate keys to 126 characters in getindices (Redmine #2626)
+       - files created via log_* actions now have mode 600 (Redmine #1578)
+       - fix wrong log message when a promise is ignored due to 'ifvarclass' not matching
+       - fix lifetime of persistent classes (Redmine #3259)
+       - fix segfault when process_select body had no process_result attribute
+         Default to AND'ed expression of all specified attributes (Redmine #3224)
+       - include system message in output when acl promises fail
+       - fix invocation of standard_services bundle and corresponding promise compliance (Redmine #2869) 
+
 
 3.5.1
-
        Changes:
        - file changes are logged with log level Notice, not Error
        - the CFEngine Standard Library in masterfiles/libraries is now split into
