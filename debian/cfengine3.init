@@ -19,7 +19,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin
 
 DESC="datacenter management platform"
 NAME=cfengine3
-PIDROOT=/var/run
+PIDROOT=/run/cfengine3
 SCRIPTNAME=/etc/init.d/$NAME
 
 CFEXECD_DAEMON=/usr/sbin/cf-execd
@@ -48,6 +48,18 @@ RUN_CFSERVERD=1
 # Define LSB log_* functions.
 # Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
 . /lib/lsb/init-functions
+
+
+#
+# Function that checks if /run/cfengine3 exists
+#
+check_run_dir()
+{
+    if [ ! -d $PIDROOT ]
+    then
+        mkdir $PIDROOT
+    fi
+}
 
 #
 # Function that starts the daemon/service
@@ -180,6 +192,7 @@ status_cfengine() {
 
 case "$1" in
   start)
+	check_run_dir
 	[ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
         start_cfengine 
 	case "$?" in
