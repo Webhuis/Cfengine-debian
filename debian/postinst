@@ -17,16 +17,25 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
-INPUTS=/var/lib/cfengine3/inputs
+WORKDIR=/var/lib/cfengine3
+INPUTS=$WORKDIR/inputs
+
+set_permissions() {
+    chmod 700 $WORKDIR/ppkeys
+    chmod 700 $WORKDIR/modules
+    chmod 700 $WORKDIR/inputs
+    chmod 700 $WORKDIR/outputs
+}
 
 make_key () {
-    if [ ! -f /var/lib/cfengine3/ppkeys/localhost.priv ]; then
+    if [ ! -f $WORKDIR/ppkeys/localhost.priv ]; then
         cf-key
     fi
 }
 
 case "$1" in
     configure)
+        set_permissions
         make_key
     ;;
 
