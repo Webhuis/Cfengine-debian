@@ -2,3 +2,4 @@ add-configure-logdir-option.patch
 piddir.patch
 strftime_unit_test.patch
 kfreebsd-support.patch
+docdir.patch
