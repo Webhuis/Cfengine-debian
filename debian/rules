@@ -36,8 +36,13 @@ override_dh_strip:
 	dh_strip --dbg-package=cfengine3-dbg
 
 override_dh_installchangelogs:
-	#rm debian/cfengine3/usr/share/doc/cfengine3/ChangeLog
+	rm debian/cfengine3/usr/share/doc/cfengine3/ChangeLog
 	dh_installchangelogs
+
+##  There is no html documentation
+#
+override_dh_installdocs:
+	dh_installdocs
 
 override_dh_install:
 	dh_testdir
@@ -51,3 +56,4 @@ override_dh_install:
 	/bin/mv $(CURDIR)/debian/cfengine3/usr/bin $(CURDIR)/debian/cfengine3/usr/sbin
 
 	/bin/rmdir $(CURDIR)/debian/cfengine3/var/lib/cfengine3/inputs
+	/bin/rm $(CURDIR)/debian/cfengine3/usr/lib/*.la
