@@ -1,6 +1,6 @@
 --- a/configure.ac
 +++ b/configure.ac
-@@ -837,7 +837,7 @@
+@@ -847,7 +847,7 @@
     aix*)
          CPPFLAGS="$CPPFLAGS -w"
          ;;
