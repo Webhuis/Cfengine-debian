@@ -21,7 +21,8 @@ override_dh_auto_configure:
 				--mandir=\$${prefix}/share/man \
 				--infodir=\$${prefix}/share/info \
 				--htmldir=\$${prefix}/share/doc/cfengine3/html \
-				CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs"
+				CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs,-z,relro" \
+				CPPFLAGS=-D_FORTIFY_SOURCE=2
 
 override_dh_clean:
 	dh_autoreconf_clean
