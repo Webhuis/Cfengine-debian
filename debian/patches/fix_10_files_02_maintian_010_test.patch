@@ -1,0 +1,12 @@
+diff --git a/tests/acceptance/10_files/02_maintain/010.cf b/tests/acceptance/10_files/02_maintain/010.cf
+index a4b0434..88e88fc 100644
+--- a/tests/acceptance/10_files/02_maintain/010.cf
++++ b/tests/acceptance/10_files/02_maintain/010.cf
+@@ -57,6 +57,7 @@ body copy_from sync_cp(from)
+ source      => "$(from)";
+ purge       => "true";
+ preserve    => "true";
++type_check  => "true";
+ }
+ 
+ body depth_search recurse(d)
