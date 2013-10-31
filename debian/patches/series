@@ -6,3 +6,4 @@ docdir.patch
 spelling_mistakes.patch
 copy_to_symlinked_dir.patch
 fix_10_files_02_maintian_010_test.patch
+datadir.patch
