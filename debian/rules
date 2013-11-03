@@ -18,6 +18,7 @@ override_dh_auto_configure:
 				--with-logdir=/var/log/cfengine3 \
 				--with-piddir=/run/cfengine3 \
 				--docdir=\$${prefix}/share/doc/cfengine3 \
+				--datadir=\$${prefix}/share/cfengine3 \
 				--mandir=\$${prefix}/share/man \
 				--infodir=\$${prefix}/share/info \
 				--htmldir=\$${prefix}/share/doc/cfengine3/html \
