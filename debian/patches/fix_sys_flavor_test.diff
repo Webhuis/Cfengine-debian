@@ -1,0 +1,11 @@
+--- a/tests/acceptance/00_basics/01_compiler/800.cf
++++ b/tests/acceptance/00_basics/01_compiler/800.cf
+@@ -22,7 +22,7 @@
+ {
+  vars:
+    debian::
+-     "myflavor" string => execresult("/bin/grep Debian.*GNU /etc/issue | /usr/bin/cut -d' ' -f3 | cut -d. -f1", "useshell");
++     "myflavor" string => execresult("cat /etc/debian_version | /usr/bin/cut -d. -f1 | /usr/bin/cut -d/ -f1", "useshell");
+ 
+ }
+ 
