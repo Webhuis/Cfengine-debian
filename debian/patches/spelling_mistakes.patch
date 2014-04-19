@@ -1,0 +1,154 @@
+--- a/cf-agent/verify_users.c
++++ b/cf-agent/verify_users.c
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/cf-agent/verify_users.h
++++ b/cf-agent/verify_users.h
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/cf-agent/verify_users_pam.c
++++ b/cf-agent/verify_users_pam.c
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/cf-agent/verify_users_stub.c
++++ b/cf-agent/verify_users_stub.c
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libcfnet/connection_info.c
++++ b/libcfnet/connection_info.c
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libcfnet/connection_info.h
++++ b/libcfnet/connection_info.h
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libcfnet/key.c
++++ b/libcfnet/key.c
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libcfnet/key.h
++++ b/libcfnet/key.h
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libpromises/mod_users.c
++++ b/libpromises/mod_users.c
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libpromises/mod_users.h
++++ b/libpromises/mod_users.h
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libutils/hash.c
++++ b/libutils/hash.c
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libutils/hash.h
++++ b/libutils/hash.h
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libutils/unicode.c
++++ b/libutils/unicode.c
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */
+--- a/libutils/unicode.h
++++ b/libutils/unicode.h
+@@ -17,7 +17,7 @@
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+ 
+   To the extent this program is licensed as part of the Enterprise
+-  versions of CFEngine, the applicable Commerical Open Source License
++  versions of CFEngine, the applicable Commercial Open Source License
+   (COSL) may apply to this file if you as a licensee so wish it. See
+   included file COSL.txt.
+ */

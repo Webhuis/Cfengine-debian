@@ -1,10 +1,1 @@
-add-configure-logdir-option.patch 
-piddir.patch
-strftime_unit_test.patch
-kfreebsd-support.patch
-docdir.patch
 spelling_mistakes.patch
-copy_to_symlinked_dir.patch
-fix_10_files_02_maintian_010_test.patch
-datadir.patch
-fix_sys_flavor_test.diff
