@@ -17,23 +17,23 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
-#include "cfnet.h"                                       /* AgentConnection */
+#include <cf3.defs.h>
+#include <cfnet.h>                                       /* AgentConnection */
 
 #ifndef CFENGINE_VERIFY_FILES_HASHES_H
 #define CFENGINE_VERIFY_FILES_HASHES_H
 
-int FileHashChanged(EvalContext *ctx, char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type, Attributes attr, Promise *pp);
-int CompareFileHashes(char *file1, char *file2, struct stat *sstat, struct stat *dstat, FileCopy fc, AgentConnection *conn);
-int CompareBinaryFiles(char *file1, char *file2, struct stat *sstat, struct stat *dstat, FileCopy fc, AgentConnection *conn);
+int FileHashChanged(EvalContext *ctx, const char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type, Attributes attr, const Promise *pp, PromiseResult *result);
+int CompareFileHashes(const char *file1, const char *file2, struct stat *sstat, struct stat *dstat, FileCopy fc, AgentConnection *conn);
+int CompareBinaryFiles(const char *file1, const char *file2, struct stat *sstat, struct stat *dstat, FileCopy fc, AgentConnection *conn);
 
-void PurgeHashes(EvalContext *ctx, char *file, Attributes attr, Promise *pp);
+PromiseResult PurgeHashes(EvalContext *ctx, char *file, Attributes attr, const Promise *pp) FUNC_WARN_UNUSED_RESULT;
 
-void LogHashChange(char *file, FileState status, char *msg, Promise *pp);
+void LogHashChange(const char *file, FileState status, char *msg, const Promise *pp);
 
 #endif

@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,11 +25,12 @@
 #ifndef CFENGINE_POLICY_H
 #define CFENGINE_POLICY_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "writer.h"
-#include "sequence.h"
-#include "json.h"
+#include <writer.h>
+#include <sequence.h>
+#include <json.h>
+#include <set.h>
 
 typedef enum
 {
@@ -50,6 +51,8 @@ typedef struct
 
 struct Policy_
 {
+    char *release_id;
+
     Seq *bundles;
     Seq *bodies;
 };
@@ -129,7 +132,7 @@ struct Constraint_
     char *lval;
     Rval rval;
 
-    char *classes;              /* only used within bodies */
+    char *classes;
     bool references_body;
 
     SourceOffset offset;
@@ -140,6 +143,9 @@ const char *NamespaceDefault(void);
 Policy *PolicyNew(void);
 int PolicyCompare(const void *a, const void *b);
 void PolicyDestroy(Policy *policy);
+unsigned PolicyHash(const Policy *policy);
+
+StringSet *PolicySourceFiles(const Policy *policy);
 
 /**
  * @brief Merge two partial policy objects. The memory for the child objects of the original policies are transfered to the new parent.
@@ -181,7 +187,7 @@ bool PolicyIsRunnable(const Policy *policy);
  * @param promise
  * @return Policy object
  */
-Policy *PolicyFromPromise(const Promise *promise);
+const Policy *PolicyFromPromise(const Promise *promise);
 char *BundleQualifiedName(const Bundle *bundle);
 
 PolicyError *PolicyErrorNew(PolicyElementType type, const void *subject, const char *error_msg, ...);
@@ -205,7 +211,7 @@ bool PolicyCheckPartial(const Policy *policy, Seq *errors);
  */
 bool PolicyCheckRunnable(const EvalContext *ctx, const Policy *policy, Seq *errors, bool ignore_missing_bundles);
 
-Bundle *PolicyAppendBundle(Policy *policy, const char *ns, const char *name, const char *type, Rlist *args, const char *source_path);
+Bundle *PolicyAppendBundle(Policy *policy, const char *ns, const char *name, const char *type, const Rlist *args, const char *source_path);
 Body *PolicyAppendBody(Policy *policy, const char *ns, const char *name, const char *type, Rlist *args, const char *source_path);
 
 /**
@@ -230,7 +236,7 @@ Policy *PolicyFromJson(JsonElement *json_policy);
 void PolicyToString(const Policy *policy, Writer *writer);
 
 PromiseType *BundleAppendPromiseType(Bundle *bundle, const char *name);
-PromiseType *BundleGetPromiseType(Bundle *bp, const char *name);
+const PromiseType *BundleGetPromiseType(const Bundle *bp, const char *name);
 
 Constraint *BodyAppendConstraint(Body *body, const char *lval, Rval rval, const char *classes, bool references_body);
 
@@ -251,10 +257,16 @@ void PromiseTypeDestroy(PromiseType *promise_type);
 
 void PromiseDestroy(Promise *pp);
 
-Constraint *PromiseAppendConstraint(Promise *promise, const char *lval, Rval rval, const char *classes, bool references_body);
+Constraint *PromiseAppendConstraint(Promise *promise, const char *lval, Rval rval, bool references_body);
 
 const char *PromiseGetNamespace(const Promise *pp);
 const Bundle *PromiseGetBundle(const Promise *pp);
+const Policy *PromiseGetPolicy(const Promise *pp);
+
+/**
+ * @brief Write a string describing the promise location in policy, e.g. /default/foo/packages/'emacs'
+ */
+void PromisePath(Writer *w, const Promise *pp);
 
 /**
  * @brief Return handle of the promise.
@@ -311,7 +323,7 @@ Rlist *PromiseGetConstraintAsList(const EvalContext *ctx, const char *lval, cons
 
 bool PromiseBundleConstraintExists(const EvalContext *ctx, const char *lval, const Promise *pp);
 
-void PromiseRecheckAllConstraints(EvalContext *ctx, Promise *pp);
+void PromiseRecheckAllConstraints(const EvalContext *ctx, const Promise *pp);
 
 /**
  * @brief Get the trinary boolean value of the first effective constraint found matching, from a promise
@@ -327,7 +339,7 @@ int PromiseGetConstraintAsBoolean(const EvalContext *ctx, const char *lval, cons
  * @param lval
  * @return Effective constraint if found, otherwise NULL
  */
-Constraint *PromiseGetConstraint(const EvalContext *ctx, const Promise *promise, const char *lval);
+Constraint *PromiseGetConstraint(const Promise *promise, const char *lval);
 
 /**
  * @brief Get the first constraint from the promise. Checks that constraint does
@@ -367,7 +379,7 @@ Constraint *EffectiveConstraint(const EvalContext *ctx, Seq *constraints);
  * @param type
  * @return Rval value if found, NULL otherwise
  */
-void *ConstraintGetRvalValue(const EvalContext *ctx, const char *lval, const Promise *promise, RvalType type);
+void *PromiseGetConstraintAsRval(const Promise *promise, const char *lval, RvalType type);
 
 /**
  * @brief Get the Rval value of the first constraint that matches the given

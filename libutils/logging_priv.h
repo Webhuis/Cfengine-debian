@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,7 @@
 #ifndef CFENGINE_LOGGING_PRIV_H
 #define CFENGINE_LOGGING_PRIV_H
 
-#include "logging.h"
+#include <logging.h>
 
 /*
  * This interface is private and intended only for use by logging extensions (such as one defined in libpromises).
@@ -33,7 +33,7 @@
 
 typedef struct LoggingPrivContext LoggingPrivContext;
 
-typedef const char *(*LoggingPrivLogHook)(LoggingPrivContext *context, const char *message);
+typedef char *(*LoggingPrivLogHook)(LoggingPrivContext *context, LogLevel level, const char *message);
 
 struct LoggingPrivContext
 {

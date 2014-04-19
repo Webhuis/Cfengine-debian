@@ -17,30 +17,32 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
-#include "cf-execd-runner.h"
+#include <cf3.defs.h>
+#include <cf-execd-runner.h>
 
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "hashes.h"
-#include "string_lib.h"
-#include "pipes.h"
-#include "unix.h"
-#include "mutex.h"
-#include "exec_tools.h"
-#include "misc_lib.h"
-#include "assert.h"
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <hashes.h>
+#include <string_lib.h>
+#include <pipes.h>
+#include <unix.h>
+#include <mutex.h>
+#include <exec_tools.h>
+#include <misc_lib.h>
+#include <file_lib.h>
+#include <assert.h>
+#include <crypto.h>
+#include <known_dirs.h>
+#include <bootstrap.h>
+#include <files_hashes.h>
+#include <item_lib.h>
 
-#ifdef HAVE_NOVA
-# if defined(__MINGW32__)
-#  include "win_execd_pipe.h"
-# endif
-#endif
+#include <cf-windows-functions.h>
 
 /*******************************************************************/
 
@@ -200,19 +202,21 @@ void LocalExec(const ExecConfig *config)
     char esc_command[CF_BUFSIZE];
     strncpy(esc_command, MapName(cmd), CF_BUFSIZE - 1);
 
-    char line[CF_BUFSIZE];
-    snprintf(line, CF_BUFSIZE - 1, "_%jd_%s", (intmax_t) starttime, CanonifyName(ctime(&starttime)));
 
     char filename[CF_BUFSIZE];
     {
-        char canonified_fq_name[CF_BUFSIZE];
+        char line[CF_BUFSIZE];
+        snprintf(line, CF_BUFSIZE - 1, "_%jd_%s", (intmax_t) starttime, CanonifyName(ctime(&starttime)));
+        {
+            char canonified_fq_name[CF_BUFSIZE];
 
-        strlcpy(canonified_fq_name, config->fq_name, CF_BUFSIZE);
-        CanonifyNameInPlace(canonified_fq_name);
+            strlcpy(canonified_fq_name, config->fq_name, CF_BUFSIZE);
+            CanonifyNameInPlace(canonified_fq_name);
 
 
-        snprintf(filename, CF_BUFSIZE - 1, "%s/outputs/cf_%s_%s_%p", CFWORKDIR, canonified_fq_name, line, thread_name);
-        MapName(filename);
+            snprintf(filename, CF_BUFSIZE - 1, "%s/outputs/cf_%s_%s_%p", CFWORKDIR, canonified_fq_name, line, thread_name);
+            MapName(filename);
+        }
     }
 
 
@@ -249,6 +253,10 @@ void LocalExec(const ExecConfig *config)
     Log(LOG_LEVEL_VERBOSE, "Command is executing...%s", esc_command);
 
     int count = 0;
+
+    size_t line_size = CF_BUFSIZE;
+    char *line = xmalloc(line_size);
+
     for (;;)
     {
         if(!IsReadReady(fileno(pp), (config->agent_expireafter * SECONDS_PER_MINUTE)))
@@ -275,18 +283,20 @@ void LocalExec(const ExecConfig *config)
             break;
         }
 
-        ssize_t res = CfReadLine(line, CF_BUFSIZE, pp);
-
-        if (res == 0)
-        {
-            break;
-        }
-
+        ssize_t res = CfReadLine(&line, &line_size, pp);
         if (res == -1)
         {
-            Log(LOG_LEVEL_ERR, "Unable to read output from command '%s'. (cfread: %s)", cmd, GetErrorStr());
-            cf_pclose(pp);
-            return;
+            if (!feof(pp))
+            {
+                Log(LOG_LEVEL_ERR, "Unable to read output from command '%s'. (cfread: %s)", cmd, GetErrorStr());
+                cf_pclose(pp);
+                free(line);
+                return;
+            }
+            else
+            {
+                break;
+            }
         }
 
         bool print = false;
@@ -302,11 +312,8 @@ void LocalExec(const ExecConfig *config)
 
         if (print)
         {
-            char line_escaped[sizeof(line) * 2];
-
-            // we must escape print format chars (%) from output
-
-            ReplaceStr(line, line_escaped, sizeof(line_escaped), "%", "%%");
+            char *line_escaped = xmalloc(2 * line_size);
+            ReplaceStr(line, line_escaped, 2 * line_size, "%", "%%");
 
             fprintf(fp, "%s\n", line_escaped);
             count++;
@@ -325,10 +332,11 @@ void LocalExec(const ExecConfig *config)
             }
 
             line[0] = '\0';
-            line_escaped[0] = '\0';
+            free(line_escaped);
         }
     }
 
+    free(line);
     cf_pclose(pp);
     Log(LOG_LEVEL_DEBUG, "Closing fp");
     fclose(fp);
@@ -353,8 +361,8 @@ static int CompareResult(const char *filename, const char *prev_file)
 
     int rtn = 0;
 
-    FILE *old_fp = fopen(prev_file, "r");
-    FILE *new_fp = fopen(filename, "r");
+    FILE *old_fp = safe_fopen(prev_file, "r");
+    FILE *new_fp = safe_fopen(filename, "r");
     if (old_fp && new_fp)
     {
         const char *errptr;
@@ -374,24 +382,30 @@ static int CompareResult(const char *filename, const char *prev_file)
 
         while (regex)
         {
-            char old_line[CF_BUFSIZE];
-            char new_line[CF_BUFSIZE];
-            char *old_msg = old_line;
-            char *new_msg = new_line;
-            if (CfReadLine(old_line, sizeof(old_line), old_fp) <= 0)
+            size_t old_line_size = CF_BUFSIZE;
+            char *old_line = xmalloc(old_line_size);
+            char *old_msg = NULL;
+            if (CfReadLine(&old_line, &old_line_size, old_fp) >= 0)
             {
-                old_msg = NULL;
+                old_msg = old_line;
             }
-            if (CfReadLine(new_line, sizeof(new_line), new_fp) <= 0)
+
+            size_t new_line_size = CF_BUFSIZE;
+            char *new_line = xmalloc(new_line_size);
+            char *new_msg = NULL;
+            if (CfReadLine(&new_line, &new_line_size, new_fp) >= 0)
             {
-                new_msg = NULL;
+                new_msg = new_line;
             }
+
             if (!old_msg || !new_msg)
             {
                 if (old_msg != new_msg)
                 {
                     rtn = 1;
                 }
+                free(old_line);
+                free(new_line);
                 break;
             }
 
@@ -416,15 +430,20 @@ static int CompareResult(const char *filename, const char *prev_file)
             if (strcmp(old_msg, new_msg) != 0)
             {
                 rtn = 1;
+                free(old_line);
+                free(new_line);
                 break;
             }
+
+            free(old_line);
+            free(new_line);
         }
 
         if (regex_extra)
         {
             free(regex_extra);
         }
-        free(regex);
+        pcre_free(regex);
     }
     else
     {
@@ -632,18 +651,46 @@ static void MailResult(const ExecConfig *config, const char *file)
         goto mail_err;
     }
 
+    char mailsubject_anomaly_prefix[8];
     if (anomaly)
     {
-        sprintf(vbuff, "Subject: **!! [%s/%s]\r\n", config->fq_name, config->ip_address);
+        strcpy(mailsubject_anomaly_prefix, "**!! ");
+    }
+    else
+    {
+        mailsubject_anomaly_prefix[0] = '\0';
+    }
+
+    if (SafeStringLength(config->mail_subject) == 0)
+    {
+        snprintf(vbuff, sizeof(vbuff), "Subject: %s[%s/%s]\r\n", mailsubject_anomaly_prefix, config->fq_name, config->ip_address);
         Log(LOG_LEVEL_DEBUG, "%s", vbuff);
     }
     else
     {
-        sprintf(vbuff, "Subject: [%s/%s]\r\n", config->fq_name, config->ip_address);
+        snprintf(vbuff, sizeof(vbuff), "Subject: %s%s\r\n", mailsubject_anomaly_prefix, config->mail_subject);
         Log(LOG_LEVEL_DEBUG, "%s", vbuff);
     }
 
     send(sd, vbuff, strlen(vbuff), 0);
+
+    /* send X-CFEngine SMTP header if mailsubject set */
+    if (SafeStringLength(config->mail_subject) > 0)
+    {
+        unsigned char digest[EVP_MAX_MD_SIZE + 1];
+        char buffer[EVP_MAX_MD_SIZE * 4];
+
+        char *existing_policy_server = ReadPolicyServerFile(GetWorkDir());
+
+        HashPubKey(PUBKEY, digest, CF_DEFAULT_DIGEST);
+
+        snprintf(vbuff, sizeof(vbuff), "X-CFEngine: vfqhost=\"%s\";ip-addresses=\"%s\";policyhub=\"%s\";pkhash=\"%s\"\r\n",
+                 VFQNAME, config->ip_addresses, existing_policy_server,
+                 HashPrintSafe(CF_DEFAULT_DIGEST, true, digest, buffer));
+
+        send(sd, vbuff, strlen(vbuff), 0);
+        free(existing_policy_server);
+    }
 
 #if defined __linux__ || defined __NetBSD__ || defined __FreeBSD__ || defined __OpenBSD__
     strftime(vbuff, CF_BUFSIZE, "Date: %a, %d %b %Y %H:%M:%S %z\r\n", localtime(&now));

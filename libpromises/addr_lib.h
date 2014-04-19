@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,12 +25,14 @@
 #ifndef CFENGINE_ADDR_LIB_H
 #define CFENGINE_ADDR_LIB_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 bool IsLoopbackAddress(const char *address);
 int FuzzySetMatch(const char *s1, const char *s2);
-int FuzzyHostParse(char *arg2);
-int FuzzyHostMatch(char *arg0, char *arg1, char *basename);
-int FuzzyMatchParse(char *item);
+bool FuzzyHostParse(const char *arg2);
+int FuzzyHostMatch(const char *arg0, const char *arg1, const char *basename);
+bool FuzzyMatchParse(const char *item);
+bool IsInterfaceAddress(const Item *ip_addresses, const char *adr);
+void ParseHostPort(char *s, char **hostname, char **port);
 
 #endif

@@ -17,36 +17,17 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "hashes.h"
-
-int OatHash(const char *key, unsigned int max)
-{
-    unsigned const char *p = key;
-    unsigned h = 0;
-    int i, len = strlen(key);
-
-    for (i = 0; i < len; i++)
-    {
-        h += p[i];
-        h += (h << 10);
-        h ^= (h >> 6);
-    }
-
-    h += (h << 3);
-    h ^= (h >> 11);
-    h += (h << 15);
-
-    return (h & (max - 1));
-}
+#include <hashes.h>
+#include <file_lib.h>
 
 int FileChecksum(const char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1])
 {
-    FILE *file = fopen(filename, "rb");
+    FILE *file = safe_fopen(filename, "rb");
     if (!file)
     {
         printf("%s can't be opened\n", filename);

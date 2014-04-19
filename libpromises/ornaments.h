@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -29,15 +29,15 @@
  * Various ornaments in output
  */
 
-#include "cf3.defs.h"
-#include "policy.h"
-#include "env_context.h"
+#include <cf3.defs.h>
+#include <policy.h>
+#include <eval_context.h>
 
 void PromiseBanner(const Promise *pp);
 void BannerSubBundle(const Bundle *bp, const Rlist *params);
 void BannerPromiseType(const char *bundlename, const char *type, int p);
 void BannerSubPromiseType(const EvalContext *ctx, const char *bundlename, const char *type);
 void Banner(const char *s);
-void BannerBundle(Bundle *bp, Rlist *params);
+void BannerBundle(const Bundle *bp, const Rlist *params);
 
 #endif

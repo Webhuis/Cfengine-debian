@@ -17,12 +17,12 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 #ifdef HAVE_SYS_STATFS_H
 # include <sys/statfs.h>
@@ -39,7 +39,7 @@
 
 #ifndef __MINGW32__
 
-off_t GetDiskUsage(char *file, enum cfsizes type)
+off_t GetDiskUsage(char *file, CfSize type)
 {
 # if defined __sun || defined sco || defined __OpenBSD__ || (defined(__NetBSD__) && __NetBSD_Version__ >= 200040000)
     struct statvfs buf;
@@ -95,7 +95,7 @@ off_t GetDiskUsage(char *file, enum cfsizes type)
 
     Log(LOG_LEVEL_DEBUG, "GetDiskUsage(%s) = %" PRIdMAX "/%" PRIdMAX, file, (intmax_t) avail, (intmax_t) capacity);
 
-    if (type == cfabs)
+    if (type == CF_SIZE_ABS)
     {
         return avail;
     }

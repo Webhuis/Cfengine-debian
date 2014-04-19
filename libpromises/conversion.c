@@ -17,22 +17,21 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "conversion.h"
+#include <conversion.h>
 
-#include "promises.h"
-#include "files_names.h"
-#include "dbm_api.h"
-#include "mod_access.h"
-#include "item_lib.h"
-#include "logging.h"
-#include "rlist.h"
+#include <promises.h>
+#include <files_names.h>
+#include <dbm_api.h>
+#include <mod_access.h>
+#include <item_lib.h>
+#include <logging.h>
+#include <rlist.h>
 
-#include <assert.h>
 
 static int IsSpace(char *remainder);
 
@@ -43,7 +42,7 @@ const char *MapAddress(const char *unspec_address)
 
     if (strncmp(unspec_address, "::ffff:", 7) == 0)
     {
-        return (char *) (unspec_address + 7);
+        return unspec_address + 7;
     }
     else
     {
@@ -51,7 +50,7 @@ const char *MapAddress(const char *unspec_address)
     }
 }
 
-int FindTypeInArray(const char **haystack, const char *needle, int default_value, int null_value)
+int FindTypeInArray(const char *const haystack[], const char *needle, int default_value, int null_value)
 {
     if (needle == NULL)
     {
@@ -71,30 +70,34 @@ int FindTypeInArray(const char **haystack, const char *needle, int default_value
 
 MeasurePolicy MeasurePolicyFromString(const char *s)
 {
-    static const char *MEASURE_POLICY_TYPES[] = { "average", "sum", "first", "last",  NULL };
+    static const char *const MEASURE_POLICY_TYPES[] =
+        { "average", "sum", "first", "last",  NULL };
 
     return FindTypeInArray(MEASURE_POLICY_TYPES, s, MEASURE_POLICY_AVERAGE, MEASURE_POLICY_NONE);
 }
 
 EnvironmentState EnvironmentStateFromString(const char *s)
 {
-    static const char *ENV_STATE_TYPES[] = { "create", "delete", "running", "suspended", "down", NULL };
+    static const char *const ENV_STATE_TYPES[] =
+        { "create", "delete", "running", "suspended", "down", NULL };
 
     return FindTypeInArray(ENV_STATE_TYPES, s, ENVIRONMENT_STATE_NONE, ENVIRONMENT_STATE_CREATE);
 }
 
 InsertMatchType InsertMatchTypeFromString(const char *s)
 {
-    static const char *INSERT_MATCH_TYPES[] = { "ignore_leading", "ignore_trailing", "ignore_embedded",
-                                                "exact_match", NULL };
+    static const char *const INSERT_MATCH_TYPES[] =
+        { "ignore_leading", "ignore_trailing", "ignore_embedded",
+          "exact_match", NULL };
 
     return FindTypeInArray(INSERT_MATCH_TYPES, s, INSERT_MATCH_TYPE_EXACT, INSERT_MATCH_TYPE_EXACT);
 }
 
 int SyslogPriorityFromString(const char *s)
 {
-    static const char *SYSLOG_PRIORITY_TYPES[] =
-    { "emergency", "alert", "critical", "error", "warning", "notice", "info", "debug", NULL };
+    static const char *const SYSLOG_PRIORITY_TYPES[] =
+    { "emergency", "alert", "critical", "error", "warning", "notice",
+      "info", "debug", NULL };
 
     return FindTypeInArray(SYSLOG_PRIORITY_TYPES, s, 3, 3);
 }
@@ -146,29 +149,47 @@ ShellType ShellTypeFromString(const char *string)
 
 DatabaseType DatabaseTypeFromString(const char *s)
 {
-    static const char *DB_TYPES[] = { "mysql", "postgres", NULL };
+    static const char *const DB_TYPES[] = { "mysql", "postgres", NULL };
 
     return FindTypeInArray(DB_TYPES, s, DATABASE_TYPE_NONE, DATABASE_TYPE_NONE);
 }
 
+UserState UserStateFromString(const char *s)
+{
+    static const char *const U_TYPES[] =
+        { "present", "absent", "locked", NULL };
+
+    return FindTypeInArray(U_TYPES, s, USER_STATE_NONE, USER_STATE_NONE);
+}
+
+PasswordFormat PasswordFormatFromString(const char *s)
+{
+    static const char *const U_TYPES[] = { "plaintext", "hash", NULL };
+
+    return FindTypeInArray(U_TYPES, s, PASSWORD_FORMAT_NONE, PASSWORD_FORMAT_NONE);
+}
+
 PackageAction PackageActionFromString(const char *s)
 {
-    static const char *PACKAGE_ACTION_TYPES[] =
-    { "add", "delete", "reinstall", "update", "addupdate", "patch", "verify", NULL };
+    static const char *const PACKAGE_ACTION_TYPES[] =
+    { "add", "delete", "reinstall", "update", "addupdate", "patch",
+      "verify", NULL };
 
     return FindTypeInArray(PACKAGE_ACTION_TYPES, s, PACKAGE_ACTION_NONE, PACKAGE_ACTION_NONE);
 }
 
 PackageVersionComparator PackageVersionComparatorFromString(const char *s)
 {
-    static const char *PACKAGE_SELECT_TYPES[] = { "==", "!=", ">", "<", ">=", "<=", NULL };
+    static const char *const PACKAGE_SELECT_TYPES[] =
+        { "==", "!=", ">", "<", ">=", "<=", NULL };
 
     return FindTypeInArray(PACKAGE_SELECT_TYPES, s, PACKAGE_VERSION_COMPARATOR_NONE, PACKAGE_VERSION_COMPARATOR_NONE);
 }
 
 PackageActionPolicy PackageActionPolicyFromString(const char *s)
 {
-    static const char *ACTION_POLICY_TYPES[] = { "individual", "bulk", NULL };
+    static const char *const ACTION_POLICY_TYPES[] =
+        { "individual", "bulk", NULL };
 
     return FindTypeInArray(ACTION_POLICY_TYPES, s, PACKAGE_ACTION_POLICY_NONE, PACKAGE_ACTION_POLICY_NONE);
 }
@@ -184,7 +205,7 @@ char *Rlist2String(Rlist *list, char *sep)
 
     for (rp = list; rp != NULL; rp = rp->next)
     {
-        strcat(line, (char *) rp->item);
+        strcat(line, RlistScalarValue(rp));
 
         if (rp->next)
         {
@@ -253,48 +274,50 @@ int SignalFromString(const char *s)
 
 ContextScope ContextScopeFromString(const char *scope_str)
 {
-    static const char *CONTEXT_SCOPES[] = { "namespace", "bundle" };
+    static const char *const CONTEXT_SCOPES[] = { "namespace", "bundle" };
     return FindTypeInArray(CONTEXT_SCOPES, scope_str, CONTEXT_SCOPE_NAMESPACE, CONTEXT_SCOPE_NONE);
 }
 
 FileLinkType FileLinkTypeFromString(const char *s)
 {
-    static const char *LINK_TYPES[] = { "symlink", "hardlink", "relative", "absolute", NULL };
+    static const char *const LINK_TYPES[] =
+        { "symlink", "hardlink", "relative", "absolute", NULL };
 
     return FindTypeInArray(LINK_TYPES, s, FILE_LINK_TYPE_SYMLINK, FILE_LINK_TYPE_SYMLINK);
 }
 
 FileComparator FileComparatorFromString(const char *s)
 {
-    static const char *FILE_COMPARISON_TYPES[] =
+    static const char *const FILE_COMPARISON_TYPES[] =
     { "atime", "mtime", "ctime", "digest", "hash", "binary", "exists", NULL };
 
     return FindTypeInArray(FILE_COMPARISON_TYPES, s, FILE_COMPARATOR_NONE, FILE_COMPARATOR_NONE);
 }
 
-static const char *datatype_strings[] =
+static const char *const datatype_strings[] =
 {
-    [DATA_TYPE_STRING] = "string",
-    [DATA_TYPE_INT] = "int",
-    [DATA_TYPE_REAL] = "real",
-    [DATA_TYPE_STRING_LIST] = "slist",
-    [DATA_TYPE_INT_LIST] = "ilist",
-    [DATA_TYPE_REAL_LIST] = "rlist",
-    [DATA_TYPE_OPTION] = "option",
-    [DATA_TYPE_OPTION_LIST] = "olist",
-    [DATA_TYPE_BODY] = "body",
-    [DATA_TYPE_BUNDLE] = "bundle",
-    [DATA_TYPE_CONTEXT] = "context",
-    [DATA_TYPE_CONTEXT_LIST] = "clist",
-    [DATA_TYPE_INT_RANGE] = "irange",
-    [DATA_TYPE_REAL_RANGE] = "rrange",
-    [DATA_TYPE_COUNTER] = "counter",
-    [DATA_TYPE_NONE] = "none"
+    [CF_DATA_TYPE_STRING] = "string",
+    [CF_DATA_TYPE_INT] = "int",
+    [CF_DATA_TYPE_REAL] = "real",
+    [CF_DATA_TYPE_STRING_LIST] = "slist",
+    [CF_DATA_TYPE_INT_LIST] = "ilist",
+    [CF_DATA_TYPE_REAL_LIST] = "rlist",
+    [CF_DATA_TYPE_OPTION] = "option",
+    [CF_DATA_TYPE_OPTION_LIST] = "olist",
+    [CF_DATA_TYPE_BODY] = "body",
+    [CF_DATA_TYPE_BUNDLE] = "bundle",
+    [CF_DATA_TYPE_CONTEXT] = "context",
+    [CF_DATA_TYPE_CONTEXT_LIST] = "clist",
+    [CF_DATA_TYPE_INT_RANGE] = "irange",
+    [CF_DATA_TYPE_REAL_RANGE] = "rrange",
+    [CF_DATA_TYPE_COUNTER] = "counter",
+    [CF_DATA_TYPE_CONTAINER] = "data",
+    [CF_DATA_TYPE_NONE] = "none"
 };
 
 DataType DataTypeFromString(const char *name)
 {
-    for (int i = 0; i < DATA_TYPE_NONE; i++)
+    for (int i = 0; i < CF_DATA_TYPE_NONE; i++)
     {
         if (strcmp(datatype_strings[i], name) == 0)
         {
@@ -302,12 +325,12 @@ DataType DataTypeFromString(const char *name)
         }
     }
 
-    return DATA_TYPE_NONE;
+    return CF_DATA_TYPE_NONE;
 }
 
 const char *DataTypeToString(DataType type)
 {
-    assert(type < DATA_TYPE_NONE);
+    assert(type < CF_DATA_TYPE_NONE);
     return datatype_strings[type];
 }
 
@@ -323,7 +346,7 @@ DataType ConstraintSyntaxGetDataType(const ConstraintSyntax *body_syntax, const 
         }
     }
 
-    return DATA_TYPE_NONE;
+    return CF_DATA_TYPE_NONE;
 }
 
 /****************************************************************************/
@@ -386,14 +409,11 @@ long IntFromString(const char *s)
 
     if ((a == CF_NOINT) || (!IsSpace(remainder)))
     {
-        if (THIS_AGENT_TYPE == AGENT_TYPE_COMMON)
+        Log(LOG_LEVEL_INFO, "Error reading assumed integer value '%s' => 'non-value', found remainder '%s'",
+              s, remainder);
+        if (strchr(s, '$'))
         {
-            Log(LOG_LEVEL_INFO, "Error reading assumed integer value '%s' => 'non-value', found remainder '%s'",
-                  s, remainder);
-            if (strchr(s, '$'))
-            {
-                Log(LOG_LEVEL_INFO, "The variable might not yet be expandable - not necessarily an error");
-            }
+            Log(LOG_LEVEL_INFO, "The variable might not yet be expandable - not necessarily an error");
         }
     }
     else
@@ -442,132 +462,12 @@ long IntFromString(const char *s)
     return a;
 }
 
-/****************************************************************************/
-
-static const long DAYS[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-
-static int GetMonthLength(int month, int year)
-{
-    /* FIXME: really? */
-    if ((month == 1) && (year % 4 == 0))
-    {
-        return 29;
-    }
-    else
-    {
-        return DAYS[month];
-    }
-}
-
-long TimeAbs2Int(const char *s)
-{
-    time_t cftime;
-    int i;
-    char mon[4], h[3], m[3];
-    long month = 0, day = 0, hour = 0, min = 0, year = 0;
-
-    if (s == NULL)
-    {
-        return CF_NOINT;
-    }
-
-    year = IntFromString(VYEAR);
-
-    if (strstr(s, ":"))         /* Hr:Min */
-    {
-        sscanf(s, "%2[^:]:%2[^:]:", h, m);
-        month = Month2Int(VMONTH);
-        day = IntFromString(VDAY);
-        hour = IntFromString(h);
-        min = IntFromString(m);
-    }
-    else                        /* date Month */
-    {
-        sscanf(s, "%3[a-zA-Z] %ld", mon, &day);
-
-        month = Month2Int(mon);
-
-        if (Month2Int(VMONTH) < month)
-        {
-            /* Wrapped around */
-            year--;
-        }
-    }
-
-    cftime = 0;
-    cftime += min * 60;
-    cftime += hour * 3600;
-    cftime += (day - 1) * 24 * 3600;
-    cftime += 24 * 3600 * ((year - 1970) / 4);  /* Leap years */
-
-    for (i = 0; i < month - 1; i++)
-    {
-        cftime += GetMonthLength(i, year) * 24 * 3600;
-    }
-
-    cftime += (year - 1970) * 365 * 24 * 3600;
-
-    return (long) cftime;
-}
-
-/****************************************************************************/
-
-long Months2Seconds(int m)
-{
-    long tot_days = 0;
-    int this_month, i, month, year;
-
-    if (m == 0)
-    {
-        return 0;
-    }
-
-    this_month = Month2Int(VMONTH);
-    year = IntFromString(VYEAR);
-
-    for (i = 0; i < m; i++)
-    {
-        month = (this_month - i) % 12;
-
-        while (month < 0)
-        {
-            month += 12;
-            year--;
-        }
-
-        tot_days += GetMonthLength(month, year);
-    }
-
-    return (long) tot_days *3600 * 24;
-}
-
-/*********************************************************************/
-
 Interval IntervalFromString(const char *string)
 {
-    static const char *INTERVAL_TYPES[] = { "hourly", "daily", NULL };
+    static const char *const INTERVAL_TYPES[] = { "hourly", "daily", NULL };
 
     return FindTypeInArray(INTERVAL_TYPES, string, INTERVAL_NONE, INTERVAL_NONE);
 }
-
-/*********************************************************************/
-
-int Day2Number(const char *datestring)
-{
-    int i = 0;
-
-    for (i = 0; i < 7; i++)
-    {
-        if (strncmp(datestring, DAY_TEXT[i], 3) == 0)
-        {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-/****************************************************************************/
 
 bool DoubleFromString(const char *s, double *value_out)
 {
@@ -684,14 +584,16 @@ bool IntegerRangeFromString(const char *intrange, long *min_out, long *max_out)
 
 AclMethod AclMethodFromString(const char *string)
 {
-    static const char *ACL_METHOD_TYPES[] = { "append", "overwrite", NULL };
+    static const char *const ACL_METHOD_TYPES[] =
+        { "append", "overwrite", NULL };
 
     return FindTypeInArray(ACL_METHOD_TYPES, string, ACL_METHOD_NONE, ACL_METHOD_NONE);
 }
 
 AclType AclTypeFromString(const char *string)
 {
-    static const char *ACL_TYPES[]= { "generic", "posix", "ntfs", NULL };
+    static const char *const ACL_TYPES[]=
+        { "generic", "posix", "ntfs", NULL };
 
     return FindTypeInArray(ACL_TYPES, string, ACL_TYPE_NONE, ACL_TYPE_NONE);
 }
@@ -699,14 +601,16 @@ AclType AclTypeFromString(const char *string)
 /* For the deprecated attribute acl_directory_inherit. */
 AclDefault AclInheritanceFromString(const char *string)
 {
-    static const char *ACL_INHERIT_TYPES[5] = { "nochange", "specify", "parent", "clear", NULL };
+    static const char *const ACL_INHERIT_TYPES[5] =
+        { "nochange", "specify", "parent", "clear", NULL };
 
     return FindTypeInArray(ACL_INHERIT_TYPES, string, ACL_DEFAULT_NONE, ACL_DEFAULT_NONE);
 }
 
 AclDefault AclDefaultFromString(const char *string)
 {
-    static const char *ACL_DEFAULT_TYPES[5] = { "nochange", "specify", "access", "clear", NULL };
+    static const char *const ACL_DEFAULT_TYPES[5] =
+        { "nochange", "specify", "access", "clear", NULL };
 
     return FindTypeInArray(ACL_DEFAULT_TYPES, string, ACL_DEFAULT_NONE, ACL_DEFAULT_NONE);
 }
@@ -744,7 +648,8 @@ AclInherit AclInheritFromString(const char *string)
 
 ServicePolicy ServicePolicyFromString(const char *string)
 {
-    static const char *SERVICE_POLICY_TYPES[] = { "start", "stop", "disable", "restart", "reload", NULL };
+    static const char *const SERVICE_POLICY_TYPES[] =
+        { "start", "stop", "disable", "restart", "reload", NULL };
 
     return FindTypeInArray(SERVICE_POLICY_TYPES, string, SERVICE_POLICY_START, SERVICE_POLICY_START);
 }
@@ -796,6 +701,36 @@ const char *DataTypeShortToType(char *short_type)
     return "unknown type";
 }
 
+int CoarseLaterThan(const char *bigger, const char *smaller)
+{
+    char month_small[CF_SMALLBUF];
+    char month_big[CF_SMALLBUF];
+    int m_small, day_small, year_small, m_big, year_big, day_big;
+
+    sscanf(smaller, "%d %s %d", &day_small, month_small, &year_small);
+    sscanf(bigger, "%d %s %d", &day_big, month_big, &year_big);
+
+    if (year_big < year_small)
+    {
+        return false;
+    }
+
+    m_small = Month2Int(month_small);
+    m_big = Month2Int(month_big);
+
+    if (m_big < m_small)
+    {
+        return false;
+    }
+
+    if (day_big < day_small && m_big == m_small && year_big == year_small)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 int Month2Int(const char *string)
 {
     int i;
@@ -834,16 +769,57 @@ void TimeToDateStr(time_t t, char *outStr, int outStrSz)
 
 /*********************************************************************/
 
+/**
+ * Copy first argument of #src to #dst. Argument is delimited either by double
+ * quotes if first character is double quotes, or by space.
+ *
+ * @note Thread-safe version of CommandArg0().
+ *
+ * @return The length of #dst, or (size_t) -1 in case of overflow.
+ */
+size_t CommandArg0_bound(char *dst, const char *src, size_t dst_size)
+{
+    const char *start;
+    char end_delimiter;
+
+    if(src[0] == '\"')
+    {
+        start = &src[1];
+        end_delimiter = '\"';
+    }
+    else
+    {
+        start = src;
+        end_delimiter = ' ';
+    }
+
+    char *end = strchr(start, end_delimiter);
+    size_t len = end - start;
+    if (len < dst_size)
+    {
+        memcpy(dst, start, len);
+        dst[len] = '\0';
+        return len;
+    }
+    else
+    {
+        /* Check return value! If -1, the user should never use dst. */
+        strlcpy(dst, "BUG: COMMANDARG0_TOO_LONG",
+                MIN(dst_size - 1, strlen("BUG: COMMANDARG0_TOO_LONG")));
+        return (size_t) -1;
+    }
+}
+
 const char *CommandArg0(const char *execstr)
-/** 
+/**
  * WARNING: Not thread-safe.
  **/
 {
-    static char arg[CF_BUFSIZE];
+    static char arg[CF_BUFSIZE]; /* GLOBAL_R, no initialization needed */
 
     const char *start;
     char end_delimiter;
-    
+
     if(execstr[0] == '\"')
     {
         start = execstr + 1;
@@ -856,9 +832,9 @@ const char *CommandArg0(const char *execstr)
     }
 
     strlcpy(arg, start, sizeof(arg));
-    
+
     char *cut = strchr(arg, end_delimiter);
-    
+
     if(cut)
     {
         *cut = '\0';
@@ -922,15 +898,27 @@ bool IsRealNumber(const char *s)
     return true;
 }
 
+#ifndef __MINGW32__
+
 /*******************************************************************/
 /* Unix-only functions                                             */
 /*******************************************************************/
 
-#ifndef __MINGW32__
-
 /****************************************************************************/
 /* Rlist to Uid/Gid lists                                                   */
 /****************************************************************************/
+
+void UidListDestroy(UidList *uids)
+{
+
+    while (uids)
+    {
+        UidList *ulp = uids;
+        uids = uids->next;
+        free(ulp->uidname);
+        free(ulp);
+    }
+}
 
 static void AddSimpleUidItem(UidList ** uidlist, uid_t uid, char *uidname)
 {
@@ -947,12 +935,13 @@ static void AddSimpleUidItem(UidList ** uidlist, uid_t uid, char *uidname)
     {
         *uidlist = ulp;
     }
-    else
+    else /* Hang new element off end of list: */
     {
-        UidList *u;
+        UidList *u = *uidlist;
 
-        for (u = *uidlist; u->next != NULL; u = u->next)
+        while (u->next != NULL)
         {
+            u = u->next;
         }
         u->next = ulp;
     }
@@ -968,7 +957,7 @@ UidList *Rlist2UidList(Rlist *uidnames, const Promise *pp)
     for (rp = uidnames; rp != NULL; rp = rp->next)
     {
         username[0] = '\0';
-        uid = Str2Uid(rp->item, username, pp);
+        uid = Str2Uid(RlistScalarValue(rp), username, pp);
         AddSimpleUidItem(&uidlist, uid, username);
     }
 
@@ -977,10 +966,21 @@ UidList *Rlist2UidList(Rlist *uidnames, const Promise *pp)
         AddSimpleUidItem(&uidlist, CF_SAME_OWNER, NULL);
     }
 
-    return (uidlist);
+    return uidlist;
 }
 
 /*********************************************************************/
+
+void GidListDestroy(GidList *gids)
+{
+    while (gids)
+    {
+        GidList *glp = gids;
+        gids = gids->next;
+        free(glp->gidname);
+        free(glp);
+    }
+}
 
 static void AddSimpleGidItem(GidList ** gidlist, gid_t gid, char *gidname)
 {
@@ -997,12 +997,12 @@ static void AddSimpleGidItem(GidList ** gidlist, gid_t gid, char *gidname)
     {
         *gidlist = glp;
     }
-    else
+    else /* Hang new element off end of list: */
     {
-        GidList *g;
-
-        for (g = *gidlist; g->next != NULL; g = g->next)
+        GidList *g = *gidlist;
+        while (g->next != NULL)
         {
+            g = g->next;
         }
         g->next = glp;
     }
@@ -1018,7 +1018,7 @@ GidList *Rlist2GidList(Rlist *gidnames, const Promise *pp)
     for (rp = gidnames; rp != NULL; rp = rp->next)
     {
         groupname[0] = '\0';
-        gid = Str2Gid(rp->item, groupname, pp);
+        gid = Str2Gid(RlistScalarValue(rp), groupname, pp);
         AddSimpleGidItem(&gidlist, gid, groupname);
     }
 
@@ -1027,12 +1027,12 @@ GidList *Rlist2GidList(Rlist *gidnames, const Promise *pp)
         AddSimpleGidItem(&gidlist, CF_SAME_GROUP, NULL);
     }
 
-    return (gidlist);
+    return gidlist;
 }
 
 /*********************************************************************/
 
-uid_t Str2Uid(char *uidbuff, char *usercopy, const Promise *pp)
+uid_t Str2Uid(const char *uidbuff, char *usercopy, const Promise *pp)
 {
     Item *ip, *tmplist;
     struct passwd *pw;
@@ -1120,7 +1120,7 @@ uid_t Str2Uid(char *uidbuff, char *usercopy, const Promise *pp)
 
 /*********************************************************************/
 
-gid_t Str2Gid(char *gidbuff, char *groupcopy, const Promise *pp)
+gid_t Str2Gid(const char *gidbuff, char *groupcopy, const Promise *pp)
 {
     struct group *gr;
     int gid = -2, tmp = -2;
@@ -1157,4 +1157,22 @@ gid_t Str2Gid(char *gidbuff, char *groupcopy, const Promise *pp)
     return gid;
 }
 
-#endif /* !__MINGW32__ */
+#else /* !__MINGW32__ */
+
+/* Release everything NovaWin_Rlist2SidList() allocates: */
+void UidListDestroy(UidList *uids)
+{
+    while (uids)
+    {
+        UidList *ulp = uids;
+        uids = uids->next;
+        free(ulp);
+    }
+}
+
+void GidListDestroy(ARG_UNUSED GidList *gids)
+{
+    assert(gids == NULL);
+}
+
+#endif

@@ -17,31 +17,33 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "retcode.h"
-#include "rlist.h"
+#include <retcode.h>
 
-int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes a, Promise *pp)
+#include <printsize.h>
+#include <actuator.h>
+#include <rlist.h>
+
+int VerifyCommandRetcode(EvalContext *ctx, int retcode, Attributes a, const Promise *pp, PromiseResult *result)
 {
-    char retcodeStr[128] = { 0 };
-    int result = true;
-    int matched = false;
+    bool result_retcode = true;
 
     if ((a.classes.retcode_kept) || (a.classes.retcode_repaired) || (a.classes.retcode_failed))
     {
-
-        snprintf(retcodeStr, sizeof(retcodeStr), "%d", retcode);
+        int matched = false;
+        char retcodeStr[PRINTSIZE(retcode)];
+        sprintf(retcodeStr, "%d", retcode);
 
         if (RlistKeyIn(a.classes.retcode_kept, retcodeStr))
         {
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_NOOP, pp, a,
                  "Command related to promiser '%s' returned code defined as promise kept %d", pp->promiser,
                  retcode);
-            result = true;
+            result_retcode = true;
             matched = true;
         }
 
@@ -50,16 +52,18 @@ int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_CHANGE, pp, a,
                  "Command related to promiser '%s' returned code defined as promise repaired %d", pp->promiser,
                  retcode);
-            result = true;
+            *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
+            result_retcode = true;
             matched = true;
         }
 
         if (RlistKeyIn(a.classes.retcode_failed, retcodeStr))
         {
-            cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a,
+            cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                  "Command related to promiser '%s' returned code defined as promise failed %d", pp->promiser,
                  retcode);
-            result = false;
+            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
+            result_retcode = false;
             matched = true;
         }
 
@@ -71,22 +75,24 @@ int VerifyCommandRetcode(EvalContext *ctx, int retcode, int fallback, Attributes
         }
 
     }
-    else if (fallback)          // default: 0 is success, != 0 is failure
+    else // default: 0 is success, != 0 is failure
     {
         if (retcode == 0)
         {
             cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_CHANGE, pp, a, "Finished command related to promiser '%s' -- succeeded",
                  pp->promiser);
-            result = true;
+            *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
+            result_retcode = true;
         }
         else
         {
-            cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a,
+            cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                  "Finished command related to promiser '%s' -- an error occurred, returned %d", pp->promiser,
                  retcode);
-            result = false;
+            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
+            result_retcode = false;
         }
     }
 
-    return result;
+    return result_retcode;
 }

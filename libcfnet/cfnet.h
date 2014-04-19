@@ -17,29 +17,32 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
+
 #ifndef CFENGINE_CFNET_H
 #define CFENGINE_CFNET_H
 
-#include "platform.h"
+
+#include <platform.h>
 
 
-/* ************************************************ */
-/* The following were copied from cf3.defs.h and still exist there, TODO */
+/* Only set with DetermineCfenginePort() and from cf-serverd */
+extern char CFENGINE_PORT_STR[16];                     /* GLOBAL_P GLOBAL_E */
+extern int CFENGINE_PORT;                              /* GLOBAL_P GLOBAL_E */
+
 
 /* max size of plaintext in one transaction, see
    net.c:SendTransaction(), leave space for encryption padding
-   (assuming max 64*8 = 512-bit cipher block size)*/
+   (assuming max 64*8 = 512-bit cipher block size). */
 #define CF_BUFSIZE 4096
 #define CF_SMALLBUF 128
-#define CF_MAX_IP_LEN 64        /* numerical ip length */
-/* ************************************************ */
-
-
+#define CF_MAX_IP_LEN 64                    /* max IPv4/IPv6 address length */
+#define CF_DONE 't'
+#define CF_MORE 'm'
 #define SOCKET_INVALID -1
 #define MAXIP4CHARLEN 16
 #define CF_RSA_PROTO_OFFSET 24
@@ -47,7 +50,42 @@
 #define CF_INBAND_OFFSET 8
 
 
+/**
+  Available protocol versions. When connection is initialised ProtocolVersion
+  is 0, i.e. undefined. It is after the call to ServerConnection() that
+  protocol version is decided, according to body copy_from and body common
+  control. All protocol numbers are numbered incrementally starting from 1.
+ */
+typedef enum
+{
+    CF_PROTOCOL_UNDEFINED = 0,
+    CF_PROTOCOL_CLASSIC = 1,
+    /* --- Greater versions use TLS as secure communications layer --- */
+    CF_PROTOCOL_TLS = 2
+} ProtocolVersion;
 
+/* We use CF_PROTOCOL_LATEST as the default for new connections. */
+#define CF_PROTOCOL_LATEST CF_PROTOCOL_TLS
+
+static const char * const PROTOCOL_VERSION_STRING[CF_PROTOCOL_LATEST + 1] = {
+    "undefined",
+    "classic",
+    "latest"
+};
+
+typedef struct
+{
+    ProtocolVersion protocol_version : 3;
+    bool            cache_connection : 1;
+    bool            force_ipv4       : 1;
+    bool            trust_server     : 1;
+} ConnectionFlags;
+
+
+#include "connection_info.h"                       /* needs ProtocolVersion */
+
+
+/* TODO Shouldn't this be in libutils? */
 typedef enum
 {
     FILE_TYPE_REGULAR,
@@ -59,7 +97,6 @@ typedef enum
     FILE_TYPE_SOCK
 } FileType;
 
-/* TODO Shouldn't this be in libutils? */
 typedef struct Stat_ Stat;
 struct Stat_
 {
@@ -83,24 +120,33 @@ struct Stat_
     Stat *next;
 };
 
+
+/*
+ * TLS support
+ */
+#define DEFAULT_TLS_TIMEOUT_SECONDS     5
+#define DEFAULT_TLS_TIMEOUT_USECONDS    0
+#define SET_DEFAULT_TLS_TIMEOUT(x) \
+    x.tv_sec = DEFAULT_TLS_TIMEOUT_SECONDS; \
+    x.tv_usec = DEFAULT_TLS_TIMEOUT_USECONDS
+#define DEFAULT_TLS_TRIES 5
+
 typedef struct
 {
-    int sd;
-    int trust;                  /* true if key being accepted on trust */
+    ConnectionInfo *conn_info;
     int authenticated;
-    int protoversion;
-    int family;                 /* AF_INET or AF_INET6 */
     char username[CF_SMALLBUF];
     /* Unused for now... */
     /* char localip[CF_MAX_IP_LEN]; */
     char remoteip[CF_MAX_IP_LEN];
-    unsigned char digest[EVP_MAX_MD_SIZE + 1];
     unsigned char *session_key;
     char encryption_type;
     short error;
+    ConnectionFlags flags;        /* mostly copy_from connection attributes */
     char *this_server;
-    Stat *cache; /* Cache for network connection (READDIR result) */
+    Stat *cache;                        /* cache for stat() (SYNCH command) */
 } AgentConnection;
+
 
 
 /* misc.c */

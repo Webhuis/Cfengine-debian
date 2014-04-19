@@ -17,29 +17,28 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "files_names.h"
+#include <files_names.h>
 
-#include "policy.h"
-#include "promises.h"
-#include "cf3.defs.h"
-#include "dir.h"
-#include "item_lib.h"
-#include "assert.h"
-#include "files_interfaces.h"
-#include "string_lib.h"
+#include <policy.h>
+#include <promises.h>
+#include <cf3.defs.h>
+#include <dir.h>
+#include <item_lib.h>
+#include <files_interfaces.h>
+#include <string_lib.h>
+#include <known_dirs.h>
+#include <conversion.h>
 
-#ifdef HAVE_NOVA
-# include "cf.nova.h"
-#endif
+#include <cf-windows-functions.h>
 
 /*********************************************************************/
 
-int IsNewerFileTree(char *dir, time_t reftime)
+int IsNewerFileTree(const char *dir, time_t reftime)
 {
     const struct dirent *dirp;
     char path[CF_BUFSIZE] = { 0 };
@@ -122,7 +121,7 @@ int IsNewerFileTree(char *dir, time_t reftime)
 
 /*********************************************************************/
 
-int IsDir(char *path)
+int IsDir(const char *path)
 /*
 Checks if the object pointed to by path exists and is a directory.
 Returns true if so, false otherwise.
@@ -172,7 +171,7 @@ char *JoinPath(char *path, const char *leaf)
 
 /*********************************************************************/
 
-char *JoinSuffix(char *path, char *leaf)
+char *JoinSuffix(char *path, const char *leaf)
 {
     int len = strlen(leaf);
 
@@ -193,7 +192,7 @@ char *JoinSuffix(char *path, char *leaf)
     return path;
 }
 
-int IsAbsPath(char *path)
+int IsAbsPath(const char *path)
 {
     if (IsFileSep(*path))
     {
@@ -431,7 +430,7 @@ void TransformNameInPlace(char *s, char from, char to)
 
 char *CanonifyName(const char *str)
 {
-    static char buffer[CF_BUFSIZE];
+    static char buffer[CF_BUFSIZE]; /* GLOBAL_R, no initialization needed */
 
     strncpy(buffer, str, CF_BUFSIZE);
     CanonifyNameInPlace(buffer);
@@ -442,7 +441,7 @@ char *CanonifyName(const char *str)
 
 char *CanonifyChar(const char *str, char ch)
 {
-    static char buffer[CF_BUFSIZE];
+    static char buffer[CF_BUFSIZE]; /* GLOBAL_R, no initialization needed */
     char *sp;
 
     strncpy(buffer, str, CF_BUFSIZE - 1);
@@ -600,7 +599,7 @@ FilePathType FilePathGetType(const char *file_path)
     {
         return FILE_PATH_TYPE_ABSOLUTE;
     }
-    else if (IsFileOutsideDefaultRepository(file_path))
+    else if (*file_path == '.')
     {
         return FILE_PATH_TYPE_RELATIVE;
     }
@@ -612,7 +611,7 @@ FilePathType FilePathGetType(const char *file_path)
 
 bool IsFileOutsideDefaultRepository(const char *f)
 {
-    return (*f == '.') || (IsAbsoluteFileName(f));
+    return !StringStartsWith(f, GetWorkDir());
 }
 
 /*******************************************************************/
@@ -691,4 +690,57 @@ const char *GetSoftwareCacheFilename(char *buffer)
     snprintf(buffer, CF_MAXVARSIZE, "%s/state/%s", CFWORKDIR, SOFTWARE_PACKAGES_CACHE);
     MapName(buffer);
     return buffer;
+}
+
+/* Buffer should be at least CF_MAXVARSIZE large */
+const char *GetSoftwarePatchesFilename(char *buffer)
+{
+    snprintf(buffer, CF_MAXVARSIZE, "%s/state/%s", CFWORKDIR, SOFTWARE_PATCHES_CACHE);
+    MapName(buffer);
+    return buffer;
+}
+
+const char *RealPackageManager(const char *manager)
+{
+    const char *pos = strchr(manager, ' ');
+    if (strncmp(manager, "env ", 4) != 0
+        && (!pos || pos - manager < 4 || strncmp(pos - 4, "/env", 4) != 0))
+    {
+        return CommandArg0(manager);
+    }
+
+    // Look for variable assignments.
+    const char *last_pos;
+    bool eq_sign_found = false;
+    while (true)
+    {
+        if (eq_sign_found)
+        {
+            last_pos = pos + 1;
+        }
+        else
+        {
+            last_pos = pos + strspn(pos, " "); // Skip over consecutive spaces.
+        }
+        pos = strpbrk(last_pos, "= ");
+        if (!pos)
+        {
+            break;
+        }
+        if (*pos == '=')
+        {
+            eq_sign_found = true;
+        }
+        else if (eq_sign_found)
+        {
+            eq_sign_found = false;
+        }
+        else
+        {
+            return CommandArg0(last_pos);
+        }
+    }
+
+    // Reached the end? Weird. Must be env command with no real command.
+    return CommandArg0(manager);
 }

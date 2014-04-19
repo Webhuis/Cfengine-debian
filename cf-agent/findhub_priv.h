@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,8 +25,8 @@
 #ifndef CFENGINE_FINDHUB_PRIV_H
 #define CFENGINE_FINDHUB_PRIV_H
 
-#include "load_avahi.h"
-#include "list.h"
+#include <load_avahi.h>
+#include <list.h>
 
 AvahiSimplePoll *spoll;
 
@@ -38,8 +38,8 @@ typedef struct
 } HostProperties;
 
 void resolve_callback(AvahiServiceResolver *r,
-                      AVAHI_GCC_UNUSED AvahiIfIndex interface,
-                      AVAHI_GCC_UNUSED AvahiProtocol protocol,
+                      AvahiIfIndex interface,
+                      AvahiProtocol protocol,
                       AvahiResolverEvent event,
                       const char *name,
                       const char *type,
@@ -49,8 +49,8 @@ void resolve_callback(AvahiServiceResolver *r,
                       uint16_t port,
                       AvahiStringList *txt,
                       AvahiLookupFlags flags,
-                      AVAHI_GCC_UNUSED void* userdata
-                      );
+                      void* userdata);
+
 void browse_callback(AvahiServiceBrowser *b,
                      AvahiIfIndex interface,
                      AvahiProtocol protocol,
@@ -58,9 +58,10 @@ void browse_callback(AvahiServiceBrowser *b,
                      const char *name,
                      const char *type,
                      const char *domain,
-                     AVAHI_GCC_UNUSED AvahiLookupResultFlags flags,
+                     AvahiLookupResultFlags flags,
                      void *userdata);
+
 void client_callback(AvahiClient *c,
                      AvahiClientState state,
-                     AVAHI_GCC_UNUSED void *userdata);
+                     void *userdata);
 #endif

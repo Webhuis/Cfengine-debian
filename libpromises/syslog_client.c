@@ -17,22 +17,33 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "syslog_client.h"
+#include <syslog_client.h>
+#include <printsize.h>
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
+/*
+ * Set by cf-agent/cf-serverd from body agent/server control.
+ */
 static char SYSLOG_HOST[MAXHOSTNAMELEN] = "localhost";
+/*
+ * Set by cf-agent/cf-serverd from body agent/server control.
+ */
 static uint16_t SYSLOG_PORT = 514;
-int FACILITY;
+/*
+ * Set by cf-agent/cf-serverd/cf-execd from body agent/exec/server control.
+ */
+static int SYSLOG_FACILITY = LOG_USER;
+
 
 void SetSyslogFacility(int facility)
 {
-    FACILITY = facility;
+    SYSLOG_FACILITY = facility;
 }
 
 bool SetSyslogHost(const char *host)
@@ -55,29 +66,25 @@ void SetSyslogPort(uint16_t port)
 
 void RemoteSysLog(int log_priority, const char *log_string)
 {
-    int sd, rfc3164_len = 1024;
-    char message[CF_BUFSIZE];
     time_t now = time(NULL);
-    int pri = log_priority | FACILITY;
 
-    int err;
-    struct addrinfo query, *response, *ap;
-    char strport[CF_MAXVARSIZE];
+    struct addrinfo query = { 0 }, *response;
+    char strport[PRINTSIZE(unsigned)];
+    sprintf(strport, "%u", (unsigned) SYSLOG_PORT);
 
-    snprintf(strport, CF_MAXVARSIZE - 1, "%u", (unsigned) SYSLOG_PORT);
-    memset(&query, 0, sizeof(query));
     query.ai_family = AF_UNSPEC;
     query.ai_socktype = SOCK_DGRAM;
 
-    if ((err = getaddrinfo(SYSLOG_HOST, strport, &query, &response)) != 0)
+    int err = getaddrinfo(SYSLOG_HOST, strport, &query, &response);
+    if (err != 0)
     {
         Log(LOG_LEVEL_INFO,
-              "Unable to find syslog_host or service: (%s/%s) %s",
-              SYSLOG_HOST, strport, gai_strerror(err));
+            "Unable to find syslog_host or service: (%s/%s) %s",
+            SYSLOG_HOST, strport, gai_strerror(err));
         return;
     }
 
-    for (ap = response; ap != NULL; ap = ap->ai_next)
+    for (const struct addrinfo *ap = response; ap != NULL; ap = ap->ai_next)
     {
         /* No DNS lookup, just convert IP address to string. */
         char txtaddr[CF_MAX_IP_LEN] = "";
@@ -86,26 +93,31 @@ void RemoteSysLog(int log_priority, const char *log_string)
                     NULL, 0, NI_NUMERICHOST);
         Log(LOG_LEVEL_VERBOSE,
             "Connect to syslog '%s' = '%s' on port '%s'",
-              SYSLOG_HOST, txtaddr, strport);
+            SYSLOG_HOST, txtaddr, strport);
 
-        if ((sd = socket(ap->ai_family, ap->ai_socktype, IPPROTO_UDP)) == -1)
+        int sd = socket(ap->ai_family, ap->ai_socktype, IPPROTO_UDP);
+        if (sd == -1)
         {
             Log(LOG_LEVEL_INFO, "Couldn't open a socket. (socket: %s)", GetErrorStr());
             continue;
         }
         else
         {
+            const size_t rfc3164_len = 1024;
+            char message[rfc3164_len];
             char timebuffer[26];
+            pid_t pid = getpid();
 
-            snprintf(message, rfc3164_len, "<%u>%.15s %s %s",
-                     pri, cf_strtimestamp_local(now, timebuffer) + 4,
-                     VFQNAME, log_string);
+            snprintf(message, sizeof(message), "<%i>%.15s %s %s[%d]: %s",
+                     log_priority | SYSLOG_FACILITY,
+                     cf_strtimestamp_local(now, timebuffer) + 4,
+                     VFQNAME, VPREFIX, pid, log_string);
             err = sendto(sd, message, strlen(message),
                          0, ap->ai_addr, ap->ai_addrlen);
             if (err == -1)
             {
                 Log(LOG_LEVEL_VERBOSE, "Couldn't send '%s' to syslog server '%s'. (sendto: %s)",
-                      message, SYSLOG_HOST, GetErrorStr());
+                    message, SYSLOG_HOST, GetErrorStr());
             }
             else
             {

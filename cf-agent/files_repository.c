@@ -17,26 +17,26 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "files_lib.h"
-#include "files_copy.h"
-#include "item_lib.h"
-#include "mutex.h"
-#include "policy.h"
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <files_lib.h>
+#include <files_copy.h>
+#include <item_lib.h>
+#include <mutex.h>
+#include <policy.h>
 
 /*********************************************************************/
 
-static Item *VREPOSLIST;
-static char REPOSCHAR;
-static char *VREPOSITORY = NULL;
+static Item *VREPOSLIST = NULL; /* GLOBAL_X */
+static char REPOSCHAR = '_'; /* GLOBAL_P */
+static char *VREPOSITORY = NULL; /* GLOBAL_P */
 
 /*********************************************************************/
 

@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,14 +25,27 @@
 #ifndef CFENGINE_FILES_EDIT_H
 #define CFENGINE_FILES_EDIT_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
+#include <file_lib.h>
 
+typedef struct
+{
+    char *filename;
+    Item *file_start;
+    int num_edits;
+#ifdef HAVE_LIBXML2
+    xmlDocPtr xmldoc;
+#endif
+    NewLineMode new_line_mode;
+} EditContext;
+
+// filename must not be freed until FinishEditContext.
 EditContext *NewEditContext(char *filename, Attributes a);
-void FinishEditContext(EvalContext *ctx, EditContext *ec, Attributes a, const Promise *pp);
+PromiseResult FinishEditContext(EvalContext *ctx, EditContext *ec, Attributes a, const Promise *pp);
 
 #ifdef HAVE_LIBXML2
 int LoadFileAsXmlDoc(xmlDocPtr *doc, const char *file, EditDefaults ed);
-int SaveXmlDocAsFile(xmlDocPtr doc, const char *file, Attributes a);
+bool SaveXmlDocAsFile(xmlDocPtr doc, const char *file, Attributes a, NewLineMode new_line_mode);
 #endif
 
 #endif

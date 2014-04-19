@@ -17,21 +17,21 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
 #define ALLOC_IMPL
-#include "platform.h"
-#include "alloc.h"
+#include <platform.h>
+#include <alloc.h>
 
 static void *CheckResult(void *ptr, const char *fn, bool check_result)
 {
     if ((ptr == NULL) && (check_result))
     {
         fputs(fn, stderr);
-        fputs(": Unable to allocate memory\n", stderr);
+        fputs("CRITICAL: Unable to allocate memory\n", stderr);
         exit(255);
     }
     return ptr;

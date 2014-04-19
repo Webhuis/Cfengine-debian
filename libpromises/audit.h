@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -29,13 +29,13 @@
  * This module keeps track of amount and value of promises kept/repaired/not-kept
  */
 
-#include "cf3.defs.h"
-#include "policy.h"
-#include "env_context.h"
+#include <cf3.defs.h>
+#include <policy.h>
+#include <eval_context.h>
 
 void BeginAudit(void);
 
-void UpdatePromiseCounters(PromiseResult status, TransactionContext tc);
+void UpdatePromiseCounters(PromiseResult status);
 
 void EndAudit(const EvalContext *ctx, int background_tasks);
 

@@ -17,32 +17,34 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "verify_exec.h"
+#include <verify_exec.h>
 
-#include "promises.h"
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "vars.h"
-#include "conversion.h"
-#include "instrumentation.h"
-#include "attributes.h"
-#include "pipes.h"
-#include "locks.h"
-#include "evalfunction.h"
-#include "exec_tools.h"
-#include "misc_lib.h"
-#include "writer.h"
-#include "policy.h"
-#include "string_lib.h"
-#include "scope.h"
-#include "ornaments.h"
-#include "env_context.h"
-#include "retcode.h"
+#include <actuator.h>
+#include <promises.h>
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <vars.h>
+#include <conversion.h>
+#include <instrumentation.h>
+#include <attributes.h>
+#include <pipes.h>
+#include <locks.h>
+#include <evalfunction.h>
+#include <exec_tools.h>
+#include <misc_lib.h>
+#include <writer.h>
+#include <policy.h>
+#include <string_lib.h>
+#include <scope.h>
+#include <ornaments.h>
+#include <eval_context.h>
+#include <retcode.h>
+#include <timeout.h>
 
 typedef enum
 {
@@ -51,75 +53,73 @@ typedef enum
     ACTION_RESULT_FAILED
 } ActionResult;
 
-static bool SyntaxCheckExec(Attributes a, Promise *pp);
-static bool PromiseKeptExec(Attributes a, Promise *pp);
-static char *GetLockNameExec(Attributes a, Promise *pp);
-static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp);
+static bool SyntaxCheckExec(Attributes a, const Promise *pp);
+static bool PromiseKeptExec(Attributes a, const Promise *pp);
+static char *GetLockNameExec(Attributes a, const Promise *pp);
+static ActionResult RepairExec(EvalContext *ctx, Attributes a, const Promise *pp, PromiseResult *result);
 
 static void PreviewProtocolLine(char *line, char *comm);
 
-void VerifyExecPromise(EvalContext *ctx, Promise *pp)
+PromiseResult VerifyExecPromise(EvalContext *ctx, const Promise *pp)
 {
-    Attributes a = { {0} };
-
-    a = GetExecAttributes(ctx, pp);
-
-    ScopeNewSpecial(ctx, "this", "promiser", pp->promiser, DATA_TYPE_STRING);
+    Attributes a = GetExecAttributes(ctx, pp);
 
     if (!SyntaxCheckExec(a, pp))
     {
-        // cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "");
-        ScopeDeleteSpecial("this", "promiser");
-        return;
+        return PROMISE_RESULT_FAIL;
     }
 
     if (PromiseKeptExec(a, pp))
     {
-        // cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_NOOP, pp, a, "");
-        ScopeDeleteSpecial("this", "promiser");
-        return;
+        return PROMISE_RESULT_NOOP;
     }
 
     char *lock_name = GetLockNameExec(a, pp);
     CfLock thislock = AcquireLock(ctx, lock_name, VUQNAME, CFSTARTTIME, a.transaction, pp, false);
     free(lock_name);
-
     if (thislock.lock == NULL)
     {
-        // cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "");
-        ScopeDeleteSpecial("this", "promiser");
-        return;
+        return PROMISE_RESULT_SKIPPED;
     }
 
     PromiseBanner(pp);
 
-    switch (RepairExec(ctx, a, pp))
+    PromiseResult result = PROMISE_RESULT_NOOP;
+    switch (RepairExec(ctx, a, pp, &result))
     {
     case ACTION_RESULT_OK:
-        // cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_CHANGE, pp, a, "");
+        result = PromiseResultUpdate(result, PROMISE_RESULT_NOOP);
         break;
 
     case ACTION_RESULT_TIMEOUT:
-        // cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_TIMEOUT, pp, a, "");
+        result = PromiseResultUpdate(result, PROMISE_RESULT_TIMEOUT);
         break;
 
     case ACTION_RESULT_FAILED:
-        // cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "");
+        result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
         break;
 
     default:
         ProgrammingError("Unexpected ActionResult value");
     }
 
+    // explicitly set commands promises that end up changing to KEPT. This is because commands promises
+    // shares code with packages promises (VerifyCommandRetcode), so we enforce this condition here.
+    if (result == PROMISE_RESULT_CHANGE)
+    {
+        result = PROMISE_RESULT_NOOP;
+    }
+
     YieldCurrentLock(thislock);
-    ScopeDeleteSpecial("this", "promiser");
+
+    return result;
 }
 
 /*****************************************************************************/
 /* Level                                                                     */
 /*****************************************************************************/
 
-static bool SyntaxCheckExec(Attributes a, Promise *pp)
+static bool SyntaxCheckExec(Attributes a, const Promise *pp)
 {
     if ((a.contain.nooutput) && (a.contain.preview))
     {
@@ -159,12 +159,12 @@ static bool SyntaxCheckExec(Attributes a, Promise *pp)
     return true;
 }
 
-static bool PromiseKeptExec(ARG_UNUSED Attributes a, ARG_UNUSED Promise *pp)
+static bool PromiseKeptExec(ARG_UNUSED Attributes a, ARG_UNUSED const Promise *pp)
 {
     return false;
 }
 
-static char *GetLockNameExec(Attributes a, Promise *pp)
+static char *GetLockNameExec(Attributes a, const Promise *pp)
 {
     Writer *w = StringWriter();
     if (a.args)
@@ -181,9 +181,10 @@ static char *GetLockNameExec(Attributes a, Promise *pp)
 
 /*****************************************************************************/
 
-static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
+static ActionResult RepairExec(EvalContext *ctx, Attributes a,
+                               const Promise *pp, PromiseResult *result)
 {
-    char line[CF_BUFSIZE], eventname[CF_BUFSIZE];
+    char eventname[CF_BUFSIZE];
     char cmdline[CF_BUFSIZE];
     char comm[20];
     int outsourced, count = 0;
@@ -194,12 +195,16 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
     char cmdOutBuf[CF_BUFSIZE];
     int cmdOutBufPos = 0;
     int lineOutLen;
+    char module_context[CF_BUFSIZE];
+
+    module_context[0] = '\0';
 
     if (IsAbsoluteFileName(CommandArg0(pp->promiser)) || a.contain.shelltype == SHELL_TYPE_NONE)
     {
         if (!IsExecutable(CommandArg0(pp->promiser)))
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "'%s' promises to be executable but isn't", pp->promiser);
+            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
 
             if (strchr(pp->promiser, ' '))
             {
@@ -245,12 +250,14 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
     if (DONTDO && (!a.contain.preview))
     {
         Log(LOG_LEVEL_ERR, "Would execute script '%s'", cmdline);
+        *result = PromiseResultUpdate(*result, PROMISE_RESULT_WARN);
         return ACTION_RESULT_OK;
     }
 
     if (a.transaction.action != cfa_fix)
     {
         Log(LOG_LEVEL_ERR, "Command '%s' needs to be executed, but only warning was promised", cmdline);
+        *result = PromiseResultUpdate(*result, PROMISE_RESULT_WARN);
         return ACTION_RESULT_OK;
     }
 
@@ -317,20 +324,27 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
             return ACTION_RESULT_FAILED;
         }
 
+        StringSet *module_tags = StringSetNew();
+
+        size_t line_size = CF_BUFSIZE;
+        char *line = xmalloc(line_size);
+
         for (;;)
         {
-            ssize_t res = CfReadLine(line, CF_BUFSIZE, pfp);
-
-            if (res == 0)
-            {
-                break;
-            }
-
+            ssize_t res = CfReadLine(&line, &line_size, pfp);
             if (res == -1)
             {
-                Log(LOG_LEVEL_ERR, "Unable to read output from command '%s'. (fread: %s)", cmdline, GetErrorStr());
-                cf_pclose(pfp);
-                return ACTION_RESULT_FAILED;
+                if (!feof(pfp))
+                {
+                    Log(LOG_LEVEL_ERR, "Unable to read output from command '%s'. (fread: %s)", cmdline, GetErrorStr());
+                    cf_pclose(pfp);
+                    free(line);
+                    return ACTION_RESULT_FAILED;
+                }
+                else
+                {
+                    break;
+                }
             }
 
             if (strstr(line, "cfengine-die"))
@@ -345,7 +359,7 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
 
             if (a.module)
             {
-                ModuleProtocol(ctx, cmdline, line, !a.contain.nooutput, PromiseGetNamespace(pp));
+                ModuleProtocol(ctx, cmdline, line, !a.contain.nooutput, module_context, module_tags);
             }
             else if ((!a.contain.nooutput) && (!EmptyString(line)))
             {
@@ -369,6 +383,10 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
                 count++;
             }
         }
+
+        StringSetDestroy(module_tags);
+        free(line);
+
 #ifdef __MINGW32__
         if (outsourced)     // only get return value if we waited for command execution
         {
@@ -381,11 +399,12 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
 
             if (ret == -1)
             {
-                cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Finished script '%s' - failed (abnormal termination)", pp->promiser);
+                cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Finished script '%s' - failed (abnormal termination)", pp->promiser);
+                *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
             }
             else
             {
-                VerifyCommandRetcode(ctx, ret, true, a, pp);
+                VerifyCommandRetcode(ctx, ret, a, pp, result);
             }
         }
     }
@@ -417,7 +436,7 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a, Promise *pp)
     if ((a.transaction.background) && outsourced)
     {
         Log(LOG_LEVEL_VERBOSE, "Backgrounded command '%s' is done - exiting", cmdline);
-        exit(0);
+        exit(EXIT_SUCCESS);
     }
 #endif /* !__MINGW32__ */
 

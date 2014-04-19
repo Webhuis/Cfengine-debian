@@ -1,7 +1,7 @@
-#include "cf3.defs.h"
-#include "dbm_api.h"
-#include "test.h"
-#include "lastseen.h"
+#include <cf3.defs.h>
+#include <dbm_api.h>
+#include <test.h>
+#include <lastseen.h>
 
 #include <setjmp.h>
 #include <cmockery.h>
@@ -166,8 +166,6 @@ int main()
 }
 
 /* STUBS */
-const char *DAY_TEXT[] = {};
-const char *MONTH_TEXT[] = {};
 
 void __ProgrammingError(const char *file, int lineno, const char *format, ...)
 {
@@ -179,19 +177,4 @@ void FatalError(char *s, ...)
 {
     fail();
     exit(42);
-}
-
-void Log(LogLevel level, const char *fmt, ...)
-{
-    fprintf(stderr, "CFOUT<%d>: ", level);
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-    fprintf(stderr, "\n");
-}
-
-const char *GetErrorStr(void)
-{
-    return strerror(errno);
 }

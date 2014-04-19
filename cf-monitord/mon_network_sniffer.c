@@ -17,22 +17,22 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "sysinfo.h"
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "mon.h"
-#include "item_lib.h"
-#include "pipes.h"
-#include "signals.h"
-#include "string_lib.h"
-#include "misc_lib.h"
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <mon.h>
+#include <item_lib.h>
+#include <pipes.h>
+#include <signals.h>
+#include <string_lib.h>
+#include <misc_lib.h>
+#include <addr_lib.h>
 
 typedef enum
 {
@@ -51,7 +51,7 @@ typedef enum
 
 static const int SLEEPTIME = 2.5 * 60;  /* Should be a fraction of 5 minutes */
 
-static const char *TCPNAMES[CF_NETATTR] =
+static const char *const TCPNAMES[CF_NETATTR] =
 {
     "icmp",
     "udp",
@@ -64,26 +64,26 @@ static const char *TCPNAMES[CF_NETATTR] =
 
 /* Global variables */
 
-static bool TCPDUMP;
-static bool TCPPAUSE;
-static FILE *TCPPIPE;
+static bool TCPDUMP = false;
+static bool TCPPAUSE = false;
+static FILE *TCPPIPE = NULL;
 
-static Item *NETIN_DIST[CF_NETATTR];
-static Item *NETOUT_DIST[CF_NETATTR];
+static Item *NETIN_DIST[CF_NETATTR] = { NULL };
+static Item *NETOUT_DIST[CF_NETATTR] = { NULL };
 
 /* Prototypes */
 
-static void Sniff(long iteration, double *cf_this);
-static void AnalyzeArrival(long iteration, char *arrival, double *cf_this);
+static void Sniff(Item *ip_addresses, long iteration, double *cf_this);
+static void AnalyzeArrival(Item *ip_addresses, long iteration, char *arrival, double *cf_this);
 static void DePort(char *address);
 
 /* Implementation */
 
-void MonNetworkSnifferSniff(long iteration, double *cf_this)
+void MonNetworkSnifferSniff(Item *ip_addresses, long iteration, double *cf_this)
 {
     if (TCPDUMP)
     {
-        Sniff(iteration, cf_this);
+        Sniff(ip_addresses, iteration, cf_this);
     }
     else
     {
@@ -146,7 +146,7 @@ static void CfenvTimeOut(ARG_UNUSED int signum)
 
 /******************************************************************************/
 
-static void Sniff(long iteration, double *cf_this)
+static void Sniff(Item *ip_addresses, long iteration, double *cf_this)
 {
     char tcpbuffer[CF_BUFSIZE];
 
@@ -185,7 +185,7 @@ static void Sniff(long iteration, double *cf_this)
             break;
         }
 
-        AnalyzeArrival(iteration, tcpbuffer, cf_this);
+        AnalyzeArrival(ip_addresses, iteration, tcpbuffer, cf_this);
     }
 
     signal(SIGALRM, SIG_DFL);
@@ -205,11 +205,9 @@ static void IncrementCounter(Item **list, char *name)
     IncrementItemListCounter(*list, name);
 }
 
-/******************************************************************************/
-
 /* This coarsely classifies TCP dump data */
 
-static void AnalyzeArrival(long iteration, char *arrival, double *cf_this)
+static void AnalyzeArrival(Item *ip_addresses, long iteration, char *arrival, double *cf_this)
 {
     char src[CF_BUFSIZE], dest[CF_BUFSIZE], flag = '.', *arr;
     int isme_dest, isme_src;
@@ -258,8 +256,8 @@ static void AnalyzeArrival(long iteration, char *arrival, double *cf_this)
         sscanf(arr, "%s %*c %s %c ", src, dest, &flag);
         DePort(src);
         DePort(dest);
-        isme_dest = IsInterfaceAddress(dest);
-        isme_src = IsInterfaceAddress(src);
+        isme_dest = IsInterfaceAddress(ip_addresses, dest);
+        isme_src = IsInterfaceAddress(ip_addresses, src);
 
         switch (flag)
         {
@@ -312,8 +310,8 @@ static void AnalyzeArrival(long iteration, char *arrival, double *cf_this)
         sscanf(arr, "%s %*c %s %c ", src, dest, &flag);
         DePort(src);
         DePort(dest);
-        isme_dest = IsInterfaceAddress(dest);
-        isme_src = IsInterfaceAddress(src);
+        isme_dest = IsInterfaceAddress(ip_addresses, dest);
+        isme_src = IsInterfaceAddress(ip_addresses, src);
 
         Log(LOG_LEVEL_DEBUG, "%ld: DNS packet from '%s' to '%s'", iteration, src, dest);
         if (isme_dest)
@@ -332,8 +330,8 @@ static void AnalyzeArrival(long iteration, char *arrival, double *cf_this)
         sscanf(arr, "%s %*c %s %c ", src, dest, &flag);
         DePort(src);
         DePort(dest);
-        isme_dest = IsInterfaceAddress(dest);
-        isme_src = IsInterfaceAddress(src);
+        isme_dest = IsInterfaceAddress(ip_addresses, dest);
+        isme_src = IsInterfaceAddress(ip_addresses, src);
 
         Log(LOG_LEVEL_DEBUG, "%ld: UDP packet from '%s' to '%s'", iteration, src, dest);
         if (isme_dest)
@@ -352,8 +350,8 @@ static void AnalyzeArrival(long iteration, char *arrival, double *cf_this)
         sscanf(arr, "%s %*c %s %c ", src, dest, &flag);
         DePort(src);
         DePort(dest);
-        isme_dest = IsInterfaceAddress(dest);
-        isme_src = IsInterfaceAddress(src);
+        isme_dest = IsInterfaceAddress(ip_addresses, dest);
+        isme_src = IsInterfaceAddress(ip_addresses, src);
 
         Log(LOG_LEVEL_DEBUG, "%ld: ICMP packet from '%s' to '%s'", iteration, src, dest);
 
@@ -461,7 +459,8 @@ void MonNetworkSnifferGatherData(void)
 
         if (stat(vbuff, &statbuf) != -1)
         {
-            if ((ByteSizeList(NETIN_DIST[i]) < statbuf.st_size) && (now < statbuf.st_mtime + 40 * 60))
+            if (ItemListSize(NETIN_DIST[i]) < statbuf.st_size &&
+                now < statbuf.st_mtime + 40 * 60)
             {
                 Log(LOG_LEVEL_VERBOSE, "New state %s is smaller, retaining old for 40 mins longer", TCPNAMES[i]);
                 DeleteItemList(NETIN_DIST[i]);
@@ -489,7 +488,8 @@ void MonNetworkSnifferGatherData(void)
 
         if (stat(vbuff, &statbuf) != -1)
         {
-            if ((ByteSizeList(NETOUT_DIST[i]) < statbuf.st_size) && (now < statbuf.st_mtime + 40 * 60))
+            if (ItemListSize(NETOUT_DIST[i]) < statbuf.st_size &&
+                now < statbuf.st_mtime + 40 * 60)
             {
                 Log(LOG_LEVEL_VERBOSE, "New state '%s' is smaller, retaining old for 40 mins longer", TCPNAMES[i]);
                 DeleteItemList(NETOUT_DIST[i]);

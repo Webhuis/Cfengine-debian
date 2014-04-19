@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,7 @@
 #ifndef CFENGINE_FNCALL_H
 #define CFENGINE_FNCALL_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 struct FnCall_
 {
@@ -35,18 +35,62 @@ struct FnCall_
     const Promise *caller;
 };
 
+typedef enum FnCallStatus
+{
+    FNCALL_SUCCESS,
+    FNCALL_FAILURE
+} FnCallStatus;
+
+typedef struct
+{
+    FnCallStatus status;
+    Rval rval;
+} FnCallResult;
+
+typedef struct
+{
+    const char *pattern;
+    DataType dtype;
+    const char *description;
+} FnCallArg;
+
+typedef enum
+{
+    FNCALL_OPTION_NONE = 0,
+    FNCALL_OPTION_VARARG = 1 << 0,
+    FNCALL_OPTION_CACHED = 1 << 1
+} FnCallOption;
+
+typedef struct
+{
+    const char *name;
+    DataType dtype;
+    const FnCallArg *args;
+    FnCallResult (*impl)(EvalContext *, const Policy *, const FnCall *, const Rlist *);
+    const char *description;
+    FnCallOption options;
+    FnCallCategory category;
+    SyntaxStatus status;
+} FnCallType;
+
+extern const FnCallType CF_FNCALL_TYPES[];
+
 bool FnCallIsBuiltIn(Rval rval);
 
 FnCall *FnCallNew(const char *name, Rlist *args);
 FnCall *FnCallCopy(const FnCall *f);
 void FnCallDestroy(FnCall *fp);
-FnCallResult FnCallEvaluate(EvalContext *ctx, FnCall *fp, const Promise *caller);
+unsigned FnCallHash(const FnCall *fp, unsigned seed, unsigned max);
+void FnCallWrite(Writer *writer, const FnCall *call);
+
+
+FnCallResult FnCallEvaluate(EvalContext *ctx, const Policy *policy, FnCall *fp, const Promise *caller);
 
 const FnCallType *FnCallTypeGet(const char *name);
 
-FnCall *ExpandFnCall(EvalContext *ctx, const char *contextid, FnCall *f);
+FnCall *ExpandFnCall(EvalContext *ctx, const char *ns, const char *scope, const FnCall *f);
 
 // TODO: should probably demolish this eventually
-void FnCallShow(FILE *fout, const FnCall *fp);
+void FnCallShow(FILE *fout, const char *prefix, const FnCall *fp, const Rlist *args);
 
 #endif

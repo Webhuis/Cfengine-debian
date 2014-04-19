@@ -17,10 +17,7 @@ bundle agent init
 {
   vars:
       # we don't use locale-sensitive formats!
-      "results" slist => { "1973-03-03 09:46:40",
-                           "124 1 18 200000000",
-                           $(dow)
-      };
+      "results" slist => { "1973-03-03 09:46:40", "124 1 18 200000000", $(dow) };
 
     Monday::
       "dow" string => "1";
@@ -35,7 +32,7 @@ bundle agent init
     Saturday::
       "dow" string => "6";
     Sunday::
-      "dow" string => "7";
+      "dow" string => "0";
 
   files:
       "$(G.testfile).expected"

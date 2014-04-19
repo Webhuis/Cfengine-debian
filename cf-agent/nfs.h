@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,14 +25,14 @@
 #ifndef CFENGINE_NFS_H
 #define CFENGINE_NFS_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-bool LoadMountInfo(Rlist **list);
-void DeleteMountInfo(Rlist *list);
-int VerifyNotInFstab(EvalContext *ctx, char *name, Attributes a, Promise *pp);
-int VerifyInFstab(EvalContext *ctx, char *name, Attributes a, Promise *pp);
-int VerifyMount(EvalContext *ctx, char *name, Attributes a, Promise *pp);
-int VerifyUnmount(EvalContext *ctx, char *name, Attributes a, Promise *pp);
+bool LoadMountInfo(Seq *list);
+void DeleteMountInfo(Seq *list);
+int VerifyNotInFstab(EvalContext *ctx, char *name, Attributes a, const Promise *pp, PromiseResult *result);
+int VerifyInFstab(EvalContext *ctx, char *name, Attributes a, const Promise *pp, PromiseResult *result);
+PromiseResult VerifyMount(EvalContext *ctx, char *name, Attributes a, const Promise *pp);
+PromiseResult VerifyUnmount(EvalContext *ctx, char *name, Attributes a, const Promise *pp);
 void CleanupNFS(void);
 void MountAll(void);
 

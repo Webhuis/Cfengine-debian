@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,8 +25,8 @@
 #ifndef CFENGINE_LOGGING_H
 #define CFENGINE_LOGGING_H
 
-#include "platform.h"
-#include "compiler.h"
+#include <platform.h>
+#include <compiler.h>
 
 // Does not include timezone, since it is hard to match on Windows.
 #define LOGGING_TIMESTAMP_REGEX "^20[0-9][0-9]-[01][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-5][0-9]"
@@ -45,15 +45,29 @@ typedef enum
 
 const char *LogLevelToString(LogLevel level);
 
+/**
+ * @brief Return the standard timestamp format used in logging.
+ * @param dest Output buffer
+ * @param n size of output buffer
+ * @param timestamp Timespec to format
+ * @return True if successful, otherwise "<unknown>" will be printed to buffer
+ */
+bool LoggingFormatTimestamp(char dest[64], size_t n, struct tm *timestamp);
+
+
 void Log(LogLevel level, const char *fmt, ...) FUNC_ATTR_PRINTF(2, 3);
+void LogRaw(LogLevel level, const char *prefix, const void *buf, size_t buflen);
 void VLog(LogLevel level, const char *fmt, va_list ap);
 
 void LogSetGlobalLevel(LogLevel level);
 LogLevel LogGetGlobalLevel(void);
 
+void LoggingSetColor(bool enabled);
+
 /*
  * Portable strerror(errno)
  */
 const char *GetErrorStr(void);
+const char *GetErrorStrFromCode(int error_code);
 
 #endif

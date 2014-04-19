@@ -17,29 +17,50 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "parser.h"
-#include "parser_state.h"
+#include <parser.h>
+#include <parser_state.h>
 
-#include "misc_lib.h"
+#include <misc_lib.h>
+#include <file_lib.h>
 
 #include <errno.h>
 
 int yyparse(void);
 
-ParserState P = { 0 };
+ParserState P = { 0 }; /* GLOBAL_X */
 
 extern FILE *yyin;
 
-static void ParserStateReset(ParserState *p)
+static void ParserStateReset(ParserState *p, bool discard)
 {
+    p->agent_type = AGENT_TYPE_COMMON;
+    p->warnings = PARSER_WARNING_ALL;
     p->policy = NULL;
 
-    p->warnings = PARSER_WARNING_ALL;
+    int i = CF_MAX_NESTING;
+    while (i-- > 0) /* Clear stacks from top down */
+    {
+        if (discard)
+        {
+            free(p->currentfnid[i]);
+            RlistDestroy(p->giveargs[i]);
+            FnCallDestroy(p->currentfncall[i]);
+        }
+        else
+        {
+            assert(!p->currentfnid[i]);
+            assert(!p->giveargs[i]);
+            assert(!p->currentfncall[i]);
+        }
+        p->currentfnid[i] = NULL;
+        p->giveargs[i] = NULL;
+        p->currentfncall[i] = NULL;
+    }
 
     free(p->current_line);
     p->current_line = NULL;
@@ -75,11 +96,20 @@ static void ParserStateReset(ParserState *p)
     p->promiser = NULL;
     p->blockid[0] = '\0';
     p->blocktype[0] = '\0';
+    p->rval = RvalNew(NULL, RVAL_TYPE_NOPROMISEE);
 }
 
-Policy *ParserParseFile(const char *path, unsigned int warnings, unsigned int warnings_error)
+static void ParserStateClean(ParserState *p)
 {
-    ParserStateReset(&P);
+    free(p->current_namespace);
+    p->current_namespace = NULL;
+}
+
+Policy *ParserParseFile(AgentType agent_type, const char *path, unsigned int warnings, unsigned int warnings_error)
+{
+    ParserStateReset(&P, false);
+
+    P.agent_type = agent_type;
     P.policy = PolicyNew();
 
     P.warnings = warnings;
@@ -87,11 +117,11 @@ Policy *ParserParseFile(const char *path, unsigned int warnings, unsigned int wa
 
     strncpy(P.filename, path, CF_MAXVARSIZE);
 
-    yyin = fopen(path, "r");
+    yyin = safe_fopen(path, "rt");
     if (yyin == NULL)
     {
         Log(LOG_LEVEL_ERR, "While opening file '%s' for parsing. (fopen: %s)", path, GetErrorStr());
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     while (!feof(yyin))
@@ -101,7 +131,7 @@ Policy *ParserParseFile(const char *path, unsigned int warnings, unsigned int wa
         if (ferror(yyin))
         {
             perror("cfengine");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -110,12 +140,14 @@ Policy *ParserParseFile(const char *path, unsigned int warnings, unsigned int wa
     if (P.error_count > 0)
     {
         PolicyDestroy(P.policy);
-        ParserStateReset(&P);
+        ParserStateReset(&P, true);
+        ParserStateClean(&P);
         return NULL;
     }
 
     Policy *policy = P.policy;
-    ParserStateReset(&P);
+    ParserStateReset(&P, false);
+    ParserStateClean(&P);
     return policy;
 }
 

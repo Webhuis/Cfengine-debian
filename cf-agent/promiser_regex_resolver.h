@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,6 +25,7 @@
 #ifndef CFENGINE_PROMISER_REGEX_RESOLVER_H
 #define CFENGINE_PROMISER_REGEX_RESOLVER_H
 
-void LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, Promise *pp, void (*fnptr) (EvalContext *ctx, char *path, Promise *ptr));
+PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, const Promise *pp,
+                                      PromiseResult (*fnptr) (EvalContext *ctx, char *path, const Promise *ptr));
 
 #endif

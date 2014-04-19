@@ -1,19 +1,15 @@
-sbin_PROGRAMS = cf-agent
+noinst_LTLIBRARIES = libcf-agent.la
 
 AM_CPPFLAGS = @CPPFLAGS@ -I$(srcdir)/../libpromises -I$(srcdir)/../libutils \
 	-I$(srcdir)/../libcfnet \
-	$(NOVA_CPPFLAGS) \
+	$(ENTERPRISE_CPPFLAGS) \
 	$(LIBVIRT_CPPFLAGS) \
 	$(POSTGRESQL_CPPFLAGS) \
 	$(MYSQL_CPPFLAGS) \
 	$(LIBXML2_CPPFLAGS)
 
-if HAVE_NOVA
-AM_CPPFLAGS += -I$(abs_top_srcdir)/nova/libcfagent
-endif
-
 AM_CFLAGS = @CFLAGS@ \
-	$(NOVA_CFLAGS) \
+	$(ENTERPRISE_CFLAGS) \
 	$(LIBVIRT_CFLAGS) \
 	$(POSTGRESQL_CFLAGS) \
 	$(MYSQL_CFLAGS) \
@@ -25,30 +21,32 @@ AM_LDFLAGS = \
 	$(MYSQL_LDFLAGS) \
 	$(LIBXML2_LDFLAGS)
 
+if !FREEBSD
 if HAVE_AVAHI_COMMON
 if HAVE_AVAHI_CLIENT
 AM_LDFLAGS += -ldl
 endif
 endif
+endif
 
-LDADD = ../libpromises/libpromises.la \
+libcf_agent_la_LIBADD = ../libpromises/libpromises.la \
 	$(LIBVIRT_LIBS) \
 	$(POSTGRESQL_LIBS) \
 	$(MYSQL_LIBS) \
-	$(LIBXML2_LIBS)
-if HAVE_NOVA
-LDADD += ../nova/libcfagent/libcfagent.la
-endif
+	$(LIBXML2_LIBS) \
+	$(PAM_LIBS)
 
-cf_agent_SOURCES = \
+libcf_agent_la_SOURCES = \
         agent-diagnostics.c agent-diagnostics.h \
         tokyo_check.c tokyo_check.h \
         abstract_dir.c abstract_dir.h \
         cf-agent.c \
+	cf-agent-enterprise-stubs.c cf-agent-enterprise-stubs.h \
         comparray.c comparray.h \
         acl_posix.c acl_posix.h \
         cf_sql.c cf_sql.h \
         promiser_regex_resolver.c promiser_regex_resolver.h \
+        match_scope.c match_scope.h \
         retcode.c retcode.h \
         verify_acl.c verify_acl.h \
         verify_files.c verify_files.h \
@@ -71,22 +69,33 @@ cf_agent_SOURCES = \
         files_select.c files_select.h \
         vercmp_internal.c vercmp_internal.h \
         vercmp.c vercmp.h \
-        verify_packages.c verify_packages.h
+        verify_packages.c verify_packages.h \
+        verify_users.c verify_users.h \
+        cf-agent-windows-functions.h
 
 if !NT
-cf_agent_SOURCES += nfs.c nfs.h
-endif
+libcf_agent_la_SOURCES += nfs.c nfs.h
 
-if !HAVE_NOVA
-cf_agent_SOURCES += cf-agent-enterprise-stubs.c cf-agent-enterprise-stubs.h
+if HAVE_PAM_USERPROGS
+  libcf_agent_la_SOURCES += verify_users_pam.c
+else
+  libcf_agent_la_SOURCES += verify_users_stub.c
+endif
 endif
 
 if HAVE_AVAHI_CLIENT
 if HAVE_AVAHI_COMMON
-cf_agent_SOURCES += \
+libcf_agent_la_SOURCES += \
 		findhub.c findhub_priv.h findhub.h \
 		load_avahi.c load_avahi.h
 endif
+endif
+
+if !BUILTIN_EXTENSIONS
+ sbin_PROGRAMS = cf-agent
+ # Workaround for automake madness (try removing it if you want to know why).
+ cf_agent_CFLAGS = $(AM_CFLAGS)
+ cf_agent_LDADD = libcf-agent.la
 endif
 
 CLEANFILES = *.gcno *.gcda

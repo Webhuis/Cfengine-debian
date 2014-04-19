@@ -17,41 +17,44 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "dbm_api.h"
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "item_lib.h"
-#include "vars.h"
-#include "sort.h"
-#include "attributes.h"
-#include "communication.h"
-#include "locks.h"
-#include "string_lib.h"
-#include "misc_lib.h"
-#include "policy.h"
-#include "scope.h"
-#include "ornaments.h"
-#include "env_context.h"
+#include <dbm_api.h>
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <item_lib.h>
+#include <vars.h>
+#include <sort.h>
+#include <attributes.h>
+#include <communication.h>
+#include <locks.h>
+#include <string_lib.h>
+#include <misc_lib.h>
+#include <file_lib.h>
+#include <policy.h>
+#include <scope.h>
+#include <ornaments.h>
+#include <eval_context.h>
+#include <actuator.h>
 
-static void PrintFile(EvalContext *ctx, Attributes a, Promise *pp);
+static bool PrintFile(const char *filename, size_t max_lines);
 static void ReportToFile(const char *logfile, const char *message);
+static void ReportToLog(const char *message);
 
-void VerifyReportPromise(EvalContext *ctx, Promise *pp)
+PromiseResult VerifyReportPromise(EvalContext *ctx, const Promise *pp)
 {
-    Attributes a = { {0} };
     CfLock thislock;
     char unique_name[CF_EXPANDSIZE];
 
-    a = GetReportsAttributes(ctx, pp);
+    Attributes a = GetReportsAttributes(ctx, pp);
 
-    snprintf(unique_name, CF_EXPANDSIZE - 1, "%s_%zu", pp->promiser, pp->offset.line);
+    // We let AcquireLock worry about making a unique name
+    snprintf(unique_name, CF_EXPANDSIZE - 1, "%s", pp->promiser);
     thislock = AcquireLock(ctx, unique_name, VUQNAME, CFSTARTTIME, a.transaction, pp, false);
 
     // Handle return values before locks, as we always do this
@@ -68,15 +71,20 @@ void VerifyReportPromise(EvalContext *ctx, Promise *pp)
             snprintf(unique_name, CF_BUFSIZE, "last-result");
         }
 
-        EvalContextVariablePut(ctx, (VarRef) { NULL, PromiseGetBundle(pp)->name, unique_name }, (Rval) { pp->promiser, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
-        return;
+        VarRef *ref = VarRefParseFromBundle(unique_name, PromiseGetBundle(pp));
+        EvalContextVariablePut(ctx, ref, pp->promiser, CF_DATA_TYPE_STRING, "source=bundle");
+        VarRefDestroy(ref);
+
+        if (thislock.lock)
+        {
+            YieldCurrentLock(thislock);
+        }
+        return PROMISE_RESULT_NOOP;
     }
-       
-    // Now do regular human reports
     
     if (thislock.lock == NULL)
     {
-        return;
+        return PROMISE_RESULT_SKIPPED;
     }
 
     PromiseBanner(pp);
@@ -85,10 +93,8 @@ void VerifyReportPromise(EvalContext *ctx, Promise *pp)
     {
         cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_WARN, pp, a, "Need to repair reports promise: %s", pp->promiser);
         YieldCurrentLock(thislock);
-        return;
+        return PROMISE_RESULT_WARN;
     }
-
-    cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_CHANGE, pp, a, "Report: %s", pp->promiser);
 
     if (a.report.to_file)
     {
@@ -96,31 +102,36 @@ void VerifyReportPromise(EvalContext *ctx, Promise *pp)
     }
     else
     {
-        Log(LOG_LEVEL_NOTICE, "R: %s", pp->promiser);
+        ReportToLog(pp->promiser);
     }
 
+    PromiseResult result = PROMISE_RESULT_NOOP;
     if (a.report.haveprintfile)
     {
-        PrintFile(ctx, a, pp);
-    }
-
-    if (a.report.showstate)
-    {
-        /* Do nothing. Deprecated. */
-    }
-
-    if (a.report.havelastseen)
-    {
-        /* Do nothing. Deprecated. */
+        if (!PrintFile(a.report.filename, a.report.numlines))
+        {
+            result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
+        }
     }
 
     YieldCurrentLock(thislock);
+
+    ClassAuditLog(ctx, pp, a, result);
+    return result;
+}
+
+static void ReportToLog(const char *message)
+{
+    fprintf(stdout, "R: %s\n", message);
+#ifndef __MINGW32__
+    syslog(LOG_NOTICE, "R: %s", message);
+#endif
 }
 
 static void ReportToFile(const char *logfile, const char *message)
 {
-    FILE *fp = fopen(logfile, "a");
-    if (fp == NULL)
+    FILE *fp = safe_fopen(logfile, "a");
+    if (!fp)
     {
         Log(LOG_LEVEL_ERR, "Could not open log file '%s', message '%s'. (fopen: %s)", logfile, message, GetErrorStr());
     }
@@ -131,41 +142,45 @@ static void ReportToFile(const char *logfile, const char *message)
     }
 }
 
-static void PrintFile(EvalContext *ctx, Attributes a, Promise *pp)
+static bool PrintFile(const char *filename, size_t max_lines)
 {
-    FILE *fp;
-    char buffer[CF_BUFSIZE];
-    int lines = 0;
-
-    if (a.report.filename == NULL)
+    if (!filename)
     {
         Log(LOG_LEVEL_VERBOSE, "Printfile promise was incomplete, with no filename.");
-        return;
+        return false;
     }
 
-    if ((fp = fopen(a.report.filename, "r")) == NULL)
+    FILE *fp = safe_fopen(filename, "r");
+    if (!fp)
     {
-        cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_INTERRUPTED, pp, a, "Printing of file '%s' was not possible. (fopen: %s)", a.report.filename, GetErrorStr());
-        return;
+        Log(LOG_LEVEL_ERR, "Printing of file '%s' was not possible. (fopen: %s)", filename, GetErrorStr());
+        return false;
     }
 
-    while ((lines < a.report.numlines))
+    size_t line_size = CF_BUFSIZE;
+    char *line = xmalloc(line_size);
+
+    for (size_t i = 0; i < max_lines; i++)
     {
-        if (fgets(buffer, sizeof(buffer), fp) == NULL)
+        if (CfReadLine(&line, &line_size, fp) == -1)
         {
             if (ferror(fp))
             {
-                UnexpectedError("Failed to read line from stream");
-                break;
+                Log(LOG_LEVEL_ERR, "Failed to read line from stream, (getline: %s)", GetErrorStr());
+                free(line);
+                return false;
             }
-            else /* feof */
+            else
             {
                 break;
             }
         }
-        Log(LOG_LEVEL_ERR, "R: %s", buffer);
-        lines++;
+
+        ReportToLog(line);
     }
 
     fclose(fp);
+    free(line);
+
+    return true;
 }

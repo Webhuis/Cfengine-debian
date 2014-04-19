@@ -17,19 +17,19 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "mon.h"
-#include "files_interfaces.h"
+#include <mon.h>
+#include <files_interfaces.h>
 
 /* Globals */
 
-static double LASTQ[CF_OBSERVABLES];
+static double LASTQ[CF_OBSERVABLES] = { 0.0 };
 
 /* Prototypes */
 
@@ -45,7 +45,7 @@ void MonDiskGatherData(double *cf_this)
     char messages[CF_BUFSIZE];
 
     Log(LOG_LEVEL_VERBOSE, "Gathering disk data");
-    cf_this[ob_diskfree] = GetDiskUsage("/", cfpercent);
+    cf_this[ob_diskfree] = GetDiskUsage("/", CF_SIZE_PERCENT);
     Log(LOG_LEVEL_VERBOSE, "Disk free = %.0lf%%", cf_this[ob_diskfree]);
 
 /* Here would should have some detection based on OS type VSYSTEMHARDCLASS */
@@ -80,7 +80,8 @@ static int GetFileGrowth(const char *filename, enum observables index)
 
     q = statbuf.st_size;
 
-    Log(LOG_LEVEL_VERBOSE, "GetFileGrowth(%s) = %zu", filename, q);
+    Log(LOG_LEVEL_VERBOSE, "GetFileGrowth(%s) = %llu",
+        filename, (unsigned long long)q);
 
     dq = (double) q - LASTQ[index];
 

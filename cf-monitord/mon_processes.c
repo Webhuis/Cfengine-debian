@@ -17,21 +17,19 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "mon.h"
-#include "item_lib.h"
-#include "files_interfaces.h"
-#include "pipes.h"
+#include <mon.h>
+#include <item_lib.h>
+#include <files_interfaces.h>
+#include <pipes.h>
 
-#ifdef HAVE_NOVA
-# include "cf.nova.h"
-#endif
+#include <cf-windows-functions.h>
 
 /* Prototypes */
 
@@ -60,7 +58,7 @@ void MonProcessesGatherData(double *cf_this)
 
     snprintf(vbuff, CF_MAXVARSIZE, "%s/state/cf_users", CFWORKDIR);
     MapName(vbuff);
-    RawSaveItemList(userList, vbuff);
+    RawSaveItemList(userList, vbuff, NewLineMode_Unix);
 
     DeleteItemList(userList);
 
@@ -75,7 +73,6 @@ static bool GatherProcessUsers(Item **userList, int *userListSz, int *numRootPro
     FILE *pp;
     char pscomm[CF_BUFSIZE];
     char user[CF_MAXVARSIZE];
-    char vbuff[CF_BUFSIZE];
 
     snprintf(pscomm, CF_BUFSIZE, "%s %s", VPSCOMM[VSYSTEMHARDCLASS], VPSOPTS[VSYSTEMHARDCLASS]);
 
@@ -85,28 +82,35 @@ static bool GatherProcessUsers(Item **userList, int *userListSz, int *numRootPro
         return false;
     }
 
+    size_t vbuff_size = CF_BUFSIZE;
+    char *vbuff = xmalloc(vbuff_size);
+
     /* Ignore first line -- header */
-    ssize_t res = CfReadLine(vbuff, CF_BUFSIZE, pp);
-    if (res == -1 || res == 0)
+    ssize_t res = CfReadLine(&vbuff, &vbuff_size, pp);
+    if (res <= 0)
     {
         /* FIXME: no logging */
         cf_pclose(pp);
+        free(vbuff);
         return false;
     }
 
     for (;;)
     {
-        ssize_t res = CfReadLine(vbuff, CF_BUFSIZE, pp);
-        if (res == 0)
-        {
-            break;
-        }
-
+        ssize_t res = CfReadLine(&vbuff, &vbuff_size, pp);
         if (res == -1)
         {
-            /* FIXME: no logging */
-            cf_pclose(pp);
-            return false;
+            if (!feof(pp))
+            {
+                /* FIXME: no logging */
+                cf_pclose(pp);
+                free(vbuff);
+                return false;
+            }
+            else
+            {
+                break;
+            }
         }
 
         sscanf(vbuff, "%s", user);
@@ -133,6 +137,7 @@ static bool GatherProcessUsers(Item **userList, int *userListSz, int *numRootPro
     }
 
     cf_pclose(pp);
+    free(vbuff);
     return true;
 }
 

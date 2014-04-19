@@ -40,11 +40,7 @@
 #endif // _WIN32
 #include <assert.h>
 #include <cmockery.h>
-#include "schema.h"
-
-#ifdef _WIN32
-# define vsnprintf _vsnprintf
-#endif // _WIN32
+#include <schema.h>
 
 /* Backwards compatibility with headers shipped with Visual Studio 2005 and
  * earlier. */
@@ -191,10 +187,10 @@ static int check_for_leftover_values(const ListNode *const map_head, const char 
                                      const size_t number_of_symbol_names);
 // This must be called at the beginning of a test to initialize some data
 // structures.
-static void initialize_testing(const char *test_name);
+static void initialize_testing(void);
 
 // This must be called at the end of a test to free() allocated structures.
-static void teardown_testing(const char *test_name);
+static void teardown_testing(void);
 
 // Keeps track of the calling context returned by setenv() so that the fail()
 // method can jump out of a test.
@@ -226,11 +222,9 @@ static ListNode global_allocated_blocks;
 
 // Data of running tests for XML output.
 static int global_errors;
-const char *global_casename;
-const char *global_filename;
-const char *global_path;
-const char *global_suitename;
-const char *global_xmlfile;
+static const char *global_filename;
+static const char *global_xmlfile;
+static int global_is_file_writer_test; /* bool, but type not defined here */
 
 #ifndef _WIN32
 // Signals caught by exception_handler().
@@ -336,7 +330,7 @@ static void set_source_location(SourceLocation *const location, const char *cons
 }
 
 // Create function results and expected parameter lists.
-void initialize_testing(const char *test_name)
+void initialize_testing(void)
 {
     list_initialize(&global_function_result_map_head);
     initialize_source_location(&global_last_mock_value_location);
@@ -375,7 +369,7 @@ static void fail_if_leftover_values(const char *test_name)
     }
 }
 
-void teardown_testing(const char *test_name)
+void teardown_testing(void)
 {
     list_free(&global_function_result_map_head, free_symbol_map_value, (void *) 0);
     initialize_source_location(&global_last_mock_value_location);
@@ -495,8 +489,14 @@ static int list_first(ListNode *const head, ListNode **output)
     return 1;
 }
 
+#if defined(__GNUC__) && ((__GNUC__ * 100 +  __GNUC_MINOR__ * 10) >= 240)
+# define ARG_UNUSED __attribute__((unused))
+#else
+# define ARG_UNUSED
+#endif
+
 // Deallocate a value referenced by a list.
-static void free_value(const void *value, void *cleanup_value_data)
+static void free_value(const void *value, ARG_UNUSED void *cleanup_value_data)
 {
     assert_true(value);
     free((void *) value);
@@ -1206,7 +1206,7 @@ void _expect_not_memory(const char *const function, const char *const parameter,
 }
 
 // CheckParameterValue callback that always returns 1.
-static int check_any(const LargestIntegralType value, const LargestIntegralType check_value_data)
+static int check_any(ARG_UNUSED const LargestIntegralType value, ARG_UNUSED const LargestIntegralType check_value_data)
 {
     return 1;
 }
@@ -1674,10 +1674,8 @@ static LONG WINAPI exception_filter(EXCEPTION_POINTERS *exception_pointers)
 
 void vinit_xml (const char *const format, va_list args)
 {
-    char buffer[1024] = {0};
     FILE* xmlfile = fopen(global_xmlfile, "w");
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    fprintf(xmlfile, "%s", buffer);
+    vfprintf(xmlfile, format, args);
     fclose(xmlfile);
 #ifdef _WIN32
     OutputDebugString(buffer);
@@ -1686,7 +1684,7 @@ void vinit_xml (const char *const format, va_list args)
 
 void init_xml (const char *const format, ...)
 {
-    if(strcmp(global_suitename, "file_writer_test") != 0)
+    if (!global_is_file_writer_test)
     {
         va_list args;
         va_start(args, format);
@@ -1697,10 +1695,8 @@ void init_xml (const char *const format, ...)
 
 void vprint_xml(const char *const format, va_list args)
 {
-    char buffer[1024] = {0};
     FILE* xmlfile = fopen(global_xmlfile, "a");
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    fprintf(xmlfile, "%s", buffer);
+    vfprintf(xmlfile, format, args);
     fclose(xmlfile);
 #ifdef _WIN32
     OutputDebugString(buffer);
@@ -1709,7 +1705,7 @@ void vprint_xml(const char *const format, va_list args)
 
 void print_xml(const char *const format, ...)
 {
-    if(strcmp(global_suitename, "file_writer_test") != 0)
+    if (!global_is_file_writer_test)
     {
         va_list args;
         va_start(args, format);
@@ -1720,7 +1716,7 @@ void print_xml(const char *const format, ...)
 
 void append_xml(const char *ofile, const char *ifile)
 {
-    if(strcmp(global_suitename, "file_writer_test") != 0)
+    if (!global_is_file_writer_test)
     {
         char ch;
         FILE* xmlfile = fopen(ofile, "ab");
@@ -1741,10 +1737,7 @@ void append_xml(const char *ofile, const char *ifile)
 // Standard output and error print methods.
 void vprint_message(const char *const format, va_list args)
 {
-    char buffer[1024];
-
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    printf("%s", buffer);
+    vprintf(format, args);
 #ifdef _WIN32
     OutputDebugString(buffer);
 #endif // _WIN32
@@ -1752,10 +1745,7 @@ void vprint_message(const char *const format, va_list args)
 
 void vprint_error(const char *const format, va_list args)
 {
-    char buffer[1024];
-
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    fprintf(stderr, "%s", buffer);
+    vfprintf(stderr, format, args);
 #ifdef _WIN32
     OutputDebugString(buffer);
 #endif // _WIN32
@@ -1812,7 +1802,7 @@ int _run_test(const char *const function_name, const UnitTestFunction Function,
     {
         print_message("%s: Starting test\n", function_name);
     }
-    initialize_testing(function_name);
+    initialize_testing();
     global_running_test = 1;
     if (setjmp(global_run_test_env) == 0)
     {
@@ -1847,7 +1837,7 @@ int _run_test(const char *const function_name, const UnitTestFunction Function,
         global_running_test = 0;
         print_message("%s: Test failed.\n", function_name);
     }
-    teardown_testing(function_name);
+    teardown_testing();
 
     if (handle_exceptions)
     {
@@ -1925,7 +1915,7 @@ int _run_tests(const UnitTest *const tests, const size_t number_of_tests, const 
     char xmlfile[1024]     = {0};
     int len;
 
-    sprintf(path, "%s", file);
+    strcpy(path, file);
     strcpy(filename, basename(path));
     len = strrchr(filename, '.')-filename;
 
@@ -1933,9 +1923,8 @@ int _run_tests(const UnitTest *const tests, const size_t number_of_tests, const 
     strncat(suitename, filename, len);
     strcpy(xmlfile, "xml_tmp_suite");
 
-    global_path = path;
     global_filename = filename;
-    global_suitename = suitename;
+    global_is_file_writer_test = (0 == strcmp(suitename, "file_writer_test"));
     global_xmlfile = xmlfile;
     global_errors = 0;
 
@@ -1994,7 +1983,6 @@ int _run_tests(const UnitTest *const tests, const size_t number_of_tests, const 
         {
             strcpy(casename, test->name);
             strcpy(xmlfile, "xml_tmp_case");
-            global_casename = casename;
             init_xml("");
             time(&time_case);
             int failed = _run_test(test->name, test->f.function, current_state,

@@ -17,25 +17,26 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "pipes.h"
+#include <pipes.h>
 
-#include "mutex.h"
-#include "exec_tools.h"
-#include "rlist.h"
-#include "policy.h"
-#include "env_context.h"
+#include <mutex.h>
+#include <exec_tools.h>
+#include <rlist.h>
+#include <policy.h>
+#include <eval_context.h>
+#include <file_lib.h>
 
 static int CfSetuid(uid_t uid, gid_t gid);
 
 static int cf_pwait(pid_t pid);
 
-static pid_t *CHILDREN;
-static int MAX_FD = 128;               /* Max number of simultaneous pipes */
+static pid_t *CHILDREN = NULL; /* GLOBAL_X */
+static int MAX_FD = 128; /* GLOBAL_X */ /* Max number of simultaneous pipes */
 
 static int InitChildrenFD()
 {
@@ -126,6 +127,12 @@ static pid_t CreatePipeAndFork(const char *type, int *pd)
 
     signal(SIGCHLD, SIG_DFL);
 
+    // Redmine #2971: reset SIGPIPE signal handler to have a sane behavior of piped commands within child
+    if (pid == 0)
+    {
+        signal(SIGPIPE, SIG_DFL);
+    }
+
     ALARM_PID = (pid != 0 ? pid : -1);
 
     return pid;
@@ -193,7 +200,7 @@ FILE *cf_popen(const char *command, const char *type, bool capture_stderr)
             Log(LOG_LEVEL_ERR, "Couldn't run '%s'. (execv: %s)", argv[0], GetErrorStr());
         }
 
-        _exit(1);
+        _exit(EXIT_FAILURE);
     }
     else
     {
@@ -286,7 +293,7 @@ FILE *cf_popensetuid(const char *command, const char *type, uid_t uid, gid_t gid
 
         if (chdirv && (strlen(chdirv) != 0))
         {
-            if (chdir(chdirv) == -1)
+            if (safe_chdir(chdirv) == -1)
             {
                 Log(LOG_LEVEL_ERR, "Couldn't chdir to '%s'. (chdir: %s)", chdirv, GetErrorStr());
                 ArgFree(argv);
@@ -296,7 +303,7 @@ FILE *cf_popensetuid(const char *command, const char *type, uid_t uid, gid_t gid
 
         if (!CfSetuid(uid, gid))
         {
-            _exit(1);
+            _exit(EXIT_FAILURE);
         }
 
         if (execv(argv[0], argv) == -1)
@@ -304,7 +311,7 @@ FILE *cf_popensetuid(const char *command, const char *type, uid_t uid, gid_t gid
             Log(LOG_LEVEL_ERR, "Couldn't run '%s'. (execv: %s)", argv[0], GetErrorStr());
         }
 
-        _exit(1);
+        _exit(EXIT_FAILURE);
     }
     else
     {
@@ -385,7 +392,7 @@ FILE *cf_popen_sh(const char *command, const char *type)
         CloseChildrenFD();
 
         execl(SHELL_PATH, "sh", "-c", command, NULL);
-        _exit(1);
+        _exit(EXIT_FAILURE);
     }
     else
     {
@@ -474,7 +481,7 @@ FILE *cf_popen_shsetuid(const char *command, const char *type, uid_t uid, gid_t 
 
         if (chdirv && (strlen(chdirv) != 0))
         {
-            if (chdir(chdirv) == -1)
+            if (safe_chdir(chdirv) == -1)
             {
                 Log(LOG_LEVEL_ERR, "Couldn't chdir to '%s'. (chdir: %s)", chdirv, GetErrorStr());
                 return NULL;
@@ -483,11 +490,11 @@ FILE *cf_popen_shsetuid(const char *command, const char *type, uid_t uid, gid_t 
 
         if (!CfSetuid(uid, gid))
         {
-            _exit(1);
+            _exit(EXIT_FAILURE);
         }
 
         execl(SHELL_PATH, "sh", "-c", command, NULL);
-        _exit(1);
+        _exit(EXIT_FAILURE);
     }
     else
     {

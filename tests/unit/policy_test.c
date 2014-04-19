@@ -1,19 +1,19 @@
-#include "test.h"
+#include <test.h>
 
-#include "policy.h"
-#include "parser.h"
-#include "rlist.h"
-#include "fncall.h"
-#include "env_context.h"
-#include "item_lib.h"
-#include "bootstrap.h"
+#include <policy.h>
+#include <parser.h>
+#include <rlist.h>
+#include <fncall.h>
+#include <eval_context.h>
+#include <item_lib.h>
+#include <bootstrap.h>
 
-static Policy *LoadPolicy(const char *filename)
+static Policy *TestParsePolicy(const char *filename)
 {
     char path[1024];
     sprintf(path, "%s/%s", TESTDATADIR, filename);
 
-    return ParserParseFile(path, PARSER_WARNING_ALL, PARSER_WARNING_ALL);
+    return ParserParseFile(AGENT_TYPE_COMMON, path, PARSER_WARNING_ALL, PARSER_WARNING_ALL);
 }
 
 static void DumpErrors(Seq *errs)
@@ -31,7 +31,7 @@ static void DumpErrors(Seq *errs)
 
 static Seq *LoadAndCheck(const char *filename)
 {
-    Policy *p = LoadPolicy(filename);
+    Policy *p = TestParsePolicy(filename);
 
     Seq *errs = SeqNew(10, PolicyErrorDestroy);
     PolicyCheckPartial(p, errs);
@@ -43,7 +43,8 @@ static Seq *LoadAndCheck(const char *filename)
 
 static Seq *LoadAndCheckString(const char *policy_code)
 {
-    const char *tmp = tempnam(NULL, "cfengine_test");
+    char tmp[] = TESTDATADIR "/cfengine_test.XXXXXX";
+    mkstemp(tmp);
 
     {
         FILE *out = fopen(tmp, "w");
@@ -53,7 +54,7 @@ static Seq *LoadAndCheckString(const char *policy_code)
         WriterClose(w);
     }
 
-    Policy *p = ParserParseFile(tmp, PARSER_WARNING_ALL, PARSER_WARNING_ALL);
+    Policy *p = ParserParseFile(AGENT_TYPE_COMMON, tmp, PARSER_WARNING_ALL, PARSER_WARNING_ALL);
     assert_true(p);
 
     Seq *errs = SeqNew(10, PolicyErrorDestroy);
@@ -65,13 +66,14 @@ static Seq *LoadAndCheckString(const char *policy_code)
 
 static void test_failsafe(void)
 {
-    char *tmp = tempnam(NULL, "cfengine_test");
+    char tmp[] = TESTDATADIR "/cfengine_test.XXXXXX";
+    mkstemp(tmp);
+
     WriteBuiltinFailsafePolicyToPath(tmp);
 
-    Policy *failsafe = ParserParseFile(tmp, PARSER_WARNING_ALL, PARSER_WARNING_ALL);
+    Policy *failsafe = ParserParseFile(AGENT_TYPE_COMMON, tmp, PARSER_WARNING_ALL, PARSER_WARNING_ALL);
 
     unlink(tmp);
-    free(tmp);
 
     assert_true(failsafe);
 
@@ -123,6 +125,14 @@ static void test_body_redefinition(void)
     SeqDestroy(errs);
 }
 
+static void test_body_control_no_arguments(void)
+{
+    Seq *errs = LoadAndCheck("body_control_no_arguments.cf");
+    assert_int_equal(1, errs->length);
+
+    SeqDestroy(errs);
+}
+
 static void test_vars_multiple_types(void)
 {
     Seq *errs = LoadAndCheck("vars_multiple_types.cf");
@@ -152,11 +162,11 @@ static void test_policy_json_to_from(void)
     EvalContext *ctx = EvalContextNew();
     Policy *policy = NULL;
     {
-        Policy *original = LoadPolicy("benchmark.cf");
+        Policy *original = TestParsePolicy("benchmark.cf");
         JsonElement *json = PolicyToJson(original);
         PolicyDestroy(original);
         policy = PolicyFromJson(json);
-        JsonElementDestroy(json);
+        JsonDestroy(json);
     }
     assert_true(policy);
 
@@ -168,7 +178,7 @@ static void test_policy_json_to_from(void)
         assert_true(main_bundle);
         {
             {
-                PromiseType *files = BundleGetPromiseType(main_bundle, "files");
+                const PromiseType *files = BundleGetPromiseType(main_bundle, "files");
                 assert_true(files);
                 assert_int_equal(1, SeqLength(files->promises));
 
@@ -183,14 +193,14 @@ static void test_policy_json_to_from(void)
                         assert_int_equal(2, SeqLength(promise->conlist));
 
                         {
-                            Constraint *create = PromiseGetConstraint(ctx, promise, "create");
+                            Constraint *create = PromiseGetConstraint(promise, "create");
                             assert_true(create);
                             assert_string_equal("create", create->lval);
                             assert_string_equal("true", RvalScalarValue(create->rval));
                         }
 
                         {
-                            Constraint *create = PromiseGetConstraint(ctx, promise, "perms");
+                            Constraint *create = PromiseGetConstraint(promise, "perms");
                             assert_true(create);
                             assert_string_equal("perms", create->lval);
                             assert_string_equal("myperms", RvalScalarValue(create->rval));
@@ -207,7 +217,7 @@ static void test_policy_json_to_from(void)
             {
                 const char* reportOutput[2] = { "Hello, CFEngine", "Hello, world" };
                 const char* reportClass[2] = { "cfengine", "any" };
-                PromiseType *reports = BundleGetPromiseType(main_bundle, "reports");
+                const PromiseType *reports = BundleGetPromiseType(main_bundle, "reports");
                 assert_true(reports);
                 assert_int_equal(2, SeqLength(reports->promises));
 
@@ -258,6 +268,69 @@ static void test_policy_json_to_from(void)
     PolicyDestroy(policy);
     EvalContextDestroy(ctx);
 }
+
+static void test_policy_json_offsets(void)
+{
+    JsonElement *json = NULL;
+    {
+        Policy *original = TestParsePolicy("benchmark.cf");
+        json = PolicyToJson(original);
+        PolicyDestroy(original);
+    }
+    assert_true(json);
+
+    JsonElement *json_bundles = JsonObjectGetAsArray(json, "bundles");
+    {
+        JsonElement *main_bundle = JsonArrayGetAsObject(json_bundles, 0);
+        int line = JsonPrimitiveGetAsInteger(JsonObjectGet(main_bundle, "line"));
+        assert_int_equal(9, line);
+
+        JsonElement *json_promise_types = JsonObjectGetAsArray(main_bundle, "promiseTypes");
+        {
+            JsonElement *json_reports_type = JsonArrayGetAsObject(json_promise_types, 0);
+            line = JsonPrimitiveGetAsInteger(JsonObjectGet(json_reports_type, "line"));
+            assert_int_equal(11, line);
+
+            JsonElement *json_contexts = JsonObjectGetAsArray(json_reports_type, "contexts");
+            JsonElement *cf_context = JsonArrayGetAsObject(json_contexts, 0);
+            JsonElement *cf_context_promises = JsonObjectGetAsArray(cf_context, "promises");
+            JsonElement *hello_cf_promise = JsonArrayGetAsObject(cf_context_promises, 0);
+
+            line = JsonPrimitiveGetAsInteger(JsonObjectGet(hello_cf_promise, "line"));
+            assert_int_equal(13, line);
+            JsonElement *hello_cf_attribs = JsonObjectGetAsArray(hello_cf_promise, "attributes");
+            {
+                JsonElement *friend_pattern_attrib = JsonArrayGetAsObject(hello_cf_attribs, 0);
+
+                line = JsonPrimitiveGetAsInteger(JsonObjectGet(friend_pattern_attrib, "line"));
+                assert_int_equal(14, line);
+            }
+        }
+    }
+
+    JsonElement *json_bodies = JsonObjectGetAsArray(json, "bodies");
+    {
+        JsonElement *control_body = JsonArrayGetAsObject(json_bodies, 0);
+        int line = JsonPrimitiveGetAsInteger(JsonObjectGet(control_body, "line"));
+        assert_int_equal(4, line);
+
+        JsonElement *myperms_body = JsonArrayGetAsObject(json_bodies, 1);
+        line = JsonPrimitiveGetAsInteger(JsonObjectGet(myperms_body, "line"));
+        assert_int_equal(28, line);
+
+        JsonElement *myperms_contexts = JsonObjectGetAsArray(myperms_body, "contexts");
+        JsonElement *any_context = JsonArrayGetAsObject(myperms_contexts, 0);
+        JsonElement *any_attribs = JsonObjectGetAsArray(any_context, "attributes");
+        {
+            JsonElement *mode_attrib = JsonArrayGetAsObject(any_attribs, 0);
+            line = JsonPrimitiveGetAsInteger(JsonObjectGet(mode_attrib, "line"));
+            assert_int_equal(30, line);
+        }
+    }
+
+    JsonDestroy(json);
+}
+
 
 static void test_util_bundle_qualified_name(void)
 {
@@ -388,11 +461,13 @@ int main()
         unit_test(test_bundle_redefinition),
         unit_test(test_bundle_reserved_name),
         unit_test(test_body_redefinition),
+        unit_test(test_body_control_no_arguments),
         unit_test(test_vars_multiple_types),
         unit_test(test_methods_invalid_arity),
         unit_test(test_promise_duplicate_handle),
 
         unit_test(test_policy_json_to_from),
+        unit_test(test_policy_json_offsets),
 
         unit_test(test_util_bundle_qualified_name),
         unit_test(test_util_qualified_name_components),

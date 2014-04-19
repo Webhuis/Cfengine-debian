@@ -17,17 +17,17 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "process_lib.h"
-#include "process_unix_priv.h"
-#include "files_lib.h"
-#include <assert.h>
+#include <process_lib.h>
+#include <process_unix_priv.h>
+#include <files_lib.h>
+
 
 typedef struct
 {
@@ -67,18 +67,20 @@ static bool GetProcessStat(pid_t pid, ProcessStat *state)
     }
 
     char stat[CF_BUFSIZE];
-    int res = FullRead(fd, stat, sizeof(stat));
+    int res = FullRead(fd, stat, sizeof(stat) - 1); /* -1 for the '\0', below */
     close(fd);
 
     if (res < 0)
     {
         return false;
     }
+    assert(res < CF_BUFSIZE);
+    stat[res] = '\0'; /* read() doesn't '\0'-terminate */
 
-    /* stat entry is of form <pid> (<task name>) <various info...>.  In order to
-       not to choke on weird task names, we search for closing parenthesis first */
-
-    char *p = strrchr(stat, ')');
+    /* stat entry is of form: <pid> (<task name>) <various info...>
+     * To avoid choking on weird task names, we search for the closing
+     * parenthesis first: */
+    char *p = memrchr(stat, ')', res);
     if (p == NULL)
     {
         /* Wrong field format! */

@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -26,11 +26,11 @@
  * Implementation using QDBM
  */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "dbm_api.h"
-#include "dbm_priv.h"
-#include "string_lib.h"
+#include <dbm_api.h>
+#include <dbm_priv.h>
+#include <string_lib.h>
 
 #ifdef QDB
 # include <depot.h>
@@ -111,7 +111,7 @@ const char *DBPrivGetFileExtension(void)
     return "qdbm";
 }
 
-DBPriv *DBPrivOpenDB(const char *filename)
+DBPriv *DBPrivOpenDB(const char *filename, ARG_UNUSED dbid id)
 {
     DBPriv *db = xcalloc(1, sizeof(DBPriv));
 
@@ -174,6 +174,10 @@ void DBPrivCloseDB(DBPriv *db)
     free(db);
 }
 
+void DBPrivCommit(ARG_UNUSED DBPriv *db)
+{
+}
+
 bool DBPrivRead(DBPriv *db, const void *key, int key_size, void *dest, int dest_size)
 {
     if (!Lock(db))
@@ -215,6 +219,11 @@ bool DBPrivWrite(DBPriv *db, const void *key, int key_size, const void *value, i
 
     Unlock(db);
     return true;
+}
+
+bool DBPrivWriteNoCommit(DBPriv *db, const void *key, int key_size, const void *value, int value_size)
+{
+    return DBPrivWrite(db, key, key_size, value, value_size);
 }
 
 bool DBPrivHasKey(DBPriv *db, const void *key, int key_size)

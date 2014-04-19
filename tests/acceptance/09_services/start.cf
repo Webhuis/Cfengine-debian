@@ -6,9 +6,9 @@
 
 body common control
 {
-  inputs => { "../default.cf.sub" };
-  bundlesequence  => { default("$(this.promise_filename)") };
-  version => "1.0";
+      inputs => { "../default.cf.sub" };
+      bundlesequence  => { default("$(this.promise_filename)") };
+      version => "1.0";
 }
 
 #######################################################
@@ -16,26 +16,30 @@ body common control
 bundle agent init
 {
   vars:
-    "dummy" string => "dummy";
+      "dummy" string => "dummy";
 }
 
 #######################################################
 
 bundle agent test
 {
+  meta:
+      "test_suppress_fail" string => "windows",
+        meta => { "redmine4772" };
+
   services:
-    "myservice"
+      "myservice"
       service_policy => "start",
       service_method => service_test;
 }
 
 body service_method service_test {
-  service_bundle => test_services("$(this.promiser)","$(this.service_policy)");
+      service_bundle => test_services("$(this.promiser)","$(this.service_policy)");
 }
 
 bundle agent test_services(service, state) {
   vars:
-    "service_state" string => "$(state)";
+      "service_state" string => "$(state)";
 }
 
 
@@ -44,7 +48,7 @@ bundle agent test_services(service, state) {
 bundle agent check
 {
   classes:
-    "ok" expression => strcmp("start", "$(test_services.service_state)");
+      "ok" expression => strcmp("start", "$(test_services.service_state)");
 
   reports:
     ok::
@@ -53,3 +57,5 @@ bundle agent check
       "$(this.promise_filename) FAIL";
 }
 
+### PROJECT_ID: core
+### CATEGORY_ID: 39

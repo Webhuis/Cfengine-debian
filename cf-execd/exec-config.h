@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,9 +25,10 @@
 #ifndef CFENGINE_EXEC_CONFIG_H
 #define CFENGINE_EXEC_CONFIG_H
 
-#include "cf3.defs.h"
-#include "set.h"
+#include <cf3.defs.h>
 
+/* This struct is supposed to be immutable: don't update it,
+   just destroy and create anew */
 typedef struct
 {
     bool scheduled_run;
@@ -37,11 +38,8 @@ typedef struct
     char *mail_server;
     char *mail_from_address;
     char *mail_to_address;
+    char *mail_subject;
     int mail_max_lines;
-
-    StringSet *schedule;
-    int splay_time;
-    char *log_facility;
 
     /*
      * Host information.
@@ -49,12 +47,11 @@ typedef struct
      */
     char *fq_name;
     char *ip_address;
+    char *ip_addresses;
 } ExecConfig;
 
-ExecConfig *ExecConfigNewDefault(bool scheduled_run, const char *fq_name, const char *ip_address);
+ExecConfig *ExecConfigNew(bool scheduled_run, const EvalContext *ctx, const Policy *policy);
 ExecConfig *ExecConfigCopy(const ExecConfig *exec_config);
 void ExecConfigDestroy(ExecConfig *exec_config);
-
-void ExecConfigUpdate(const EvalContext *ctx, const Policy *policy, ExecConfig *exec_config);
 
 #endif

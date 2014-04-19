@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,6 +25,8 @@
 #ifndef CFENGINE_VERCMP_INTERNAL_H
 #define CFENGINE_VERCMP_INTERNAL_H
 
-bool ComparePackageVersionsInternal(const char *v1, const char *v2, PackageVersionComparator cmp);
+#include <vercmp.h>
+
+VersionCmpResult ComparePackageVersionsInternal(const char *v1, const char *v2, PackageVersionComparator cmp);
 
 #endif

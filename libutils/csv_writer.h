@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -29,8 +29,8 @@
  * This writer implements CSV as in RFC 4180
  */
 
-#include "platform.h"
-#include "writer.h"
+#include <platform.h>
+#include <writer.h>
 
 typedef struct CsvWriter_ CsvWriter;
 
@@ -43,5 +43,10 @@ void CsvWriterNewRecord(CsvWriter *csvw);
 
 /* Does not close underlying Writer, but flushes all pending data */
 void CsvWriterClose(CsvWriter *csvw);
+
+/**
+ * @return The instance of the underlying writer
+ */
+Writer *CsvWriterGetWriter(CsvWriter *csvw);
 
 #endif

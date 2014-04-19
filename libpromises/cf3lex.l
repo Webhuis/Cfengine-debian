@@ -18,7 +18,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -29,10 +29,11 @@
 /*                                                                 */
 /*******************************************************************/
 
-#include "platform.h"
+#include <platform.h>
 
-#include "cf3parse.h"
-#include "parser_state.h"
+#include <cf3parse.h>
+#include <parser_state.h>
+#include <file_lib.h>
 
 /* yyinput/input are generated and unused */
 
@@ -84,7 +85,7 @@ nakedvar   [$@][(][a-zA-Z0-9_\[\]\200-\377.:]+[)]|[$@][{][a-zA-Z0-9_\[\]\200-\37
 
 id         [a-zA-Z0-9_\200-\377]+
 
-blockid    [a-zA-Z0-9_\200-\377]+[:][a-zA-Z0-9_\200-\377]+
+symbol     [a-zA-Z0-9_\200-\377]+[:][a-zA-Z0-9_\200-\377]+
 
 assign     =>
 
@@ -179,10 +180,10 @@ promise_type   [a-zA-Z_]+:
                       }
 
 
-{blockid}             {
+{symbol}              {
                           P.offsets.last_id = P.offsets.current - yyleng;
                           P.line_pos += yyleng;
-                          ParserDebug("\tL:blockid %s %d\n", yytext, P.line_pos);
+                          ParserDebug("\tL:symbol %s %d\n", yytext, P.line_pos);
                           if (yyleng > CF_MAXVARSIZE-1)
                           {
                               yyerror("qualified identifier too long");

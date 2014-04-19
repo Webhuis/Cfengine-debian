@@ -17,13 +17,13 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "ornaments.h"
-#include "rlist.h"
+#include <ornaments.h>
+#include <rlist.h>
 
 void PromiseBanner(const Promise *pp)
 {
@@ -120,12 +120,13 @@ void BannerSubPromiseType(const EvalContext *ctx, const char *bundlename, const 
         {
             Log(LOG_LEVEL_VERBOSE, "     ??? Local class context: ");
 
-            StringSetIterator it = EvalContextStackFrameIteratorSoft(ctx);
-            const char *context = NULL;
-            while ((context = StringSetIteratorNext(&it)))
+            ClassTableIterator *iter = EvalContextClassTableIteratorNewLocal(ctx);
+            Class *cls = NULL;
+            while ((cls = ClassTableIteratorNext(iter)))
             {
-                Log(LOG_LEVEL_VERBOSE, "       %s", context);
+                Log(LOG_LEVEL_VERBOSE, "       %s", cls->name);
             }
+            ClassTableIteratorDestroy(iter);
 
             Log(LOG_LEVEL_VERBOSE, "\n");
         }
@@ -138,7 +139,7 @@ void BannerSubPromiseType(const EvalContext *ctx, const char *bundlename, const 
     Log(LOG_LEVEL_VERBOSE, "\n");
 }
 
-void BannerBundle(Bundle *bp, Rlist *params)
+void BannerBundle(const Bundle *bp, const Rlist *params)
 {
     if (!LEGACY_OUTPUT)
     {

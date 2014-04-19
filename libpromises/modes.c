@@ -17,12 +17,12 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 /***************************************************************/
 
@@ -153,6 +153,13 @@ int ParseModeString(const char *modestring, mode_t *plusmask, mode_t *minusmask)
             state = which;
             affected = 07777;   /* TODO: Hard-coded; see below */
             sscanf(sp, "%o", &value);
+
+            /* stat() returns the file types in the mode, but they
+             * can't be set.  So we clear the file-type as per POSIX
+             * 2001 instead of erroring out, leaving just the
+             * permissions. */
+            value &= ~S_IFMT;
+            
             if (value > 07777)  /* TODO: Hardcoded !
                                    Is this correct for all sorts of Unix ?
                                    What about NT ?

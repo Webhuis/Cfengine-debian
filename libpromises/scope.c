@@ -17,160 +17,86 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "scope.h"
+#include <scope.h>
 
-#include "vars.h"
-#include "expand.h"
-#include "hashes.h"
-#include "unix.h"
-#include "fncall.h"
-#include "mutex.h"
-#include "misc_lib.h"
-#include "rlist.h"
-#include "conversion.h"
-#include "syntax.h"
-#include "policy.h"
-#include "env_context.h"
-#include "audit.h"
-
-#include <assert.h>
-
-Scope *SCOPE_CURRENT = NULL;
-
-Scope *SCOPE_MATCH = NULL;
+#include <vars.h>
+#include <expand.h>
+#include <hashes.h>
+#include <unix.h>
+#include <fncall.h>
+#include <mutex.h>
+#include <misc_lib.h>
+#include <rlist.h>
+#include <conversion.h>
+#include <syntax.h>
+#include <policy.h>
+#include <eval_context.h>
+#include <audit.h>
 
 /*******************************************************************/
 
-Scope *ScopeNew(const char *name)
+const char *SpecialScopeToString(SpecialScope scope)
 {
-    Scope *ptr;
-
-    if (!ThreadLock(cft_vscope))
+    switch (scope)
     {
-        Log(LOG_LEVEL_ERR, "Could not lock VSCOPE");
-        return NULL;
+    case SPECIAL_SCOPE_CONST:
+        return "const";
+    case SPECIAL_SCOPE_EDIT:
+        return "edit";
+    case SPECIAL_SCOPE_MATCH:
+        return "match";
+    case SPECIAL_SCOPE_MON:
+        return "mon";
+    case SPECIAL_SCOPE_SYS:
+        return "sys";
+    case SPECIAL_SCOPE_THIS:
+        return "this";
+    case SPECIAL_SCOPE_BODY:
+        return "body";
+    default:
+        ProgrammingError("Unhandled special scope");
     }
-
-    for (ptr = VSCOPE; ptr != NULL; ptr = ptr->next)
-    {
-        if (strcmp(ptr->scope, name) == 0)
-        {
-            ThreadUnlock(cft_vscope);
-            return NULL;
-        }
-    }
-
-    ptr = xcalloc(1, sizeof(Scope));
-
-    ptr->next = VSCOPE;
-    ptr->scope = xstrdup(name);
-    ptr->hashtable = HashInit();
-    VSCOPE = ptr;
-    ThreadUnlock(cft_vscope);
-
-    return ptr;
 }
 
-void ScopePutMatch(int index, const char *value)
+SpecialScope SpecialScopeFromString(const char *scope)
 {
-    if (!SCOPE_MATCH)
+    if (strcmp("const", scope) == 0)
     {
-        SCOPE_MATCH = ScopeNew("match");
+        return SPECIAL_SCOPE_CONST;
     }
-    Scope *ptr = SCOPE_MATCH;
-
-    char lval[4] = { 0 };
-    snprintf(lval, 3, "%d", index);
-
-    Rval rval = (Rval) { value, RVAL_TYPE_SCALAR };
-
-    CfAssoc *assoc = HashLookupElement(ptr->hashtable, lval);
-
-    if (assoc)
+    else if (strcmp("edit", scope) == 0)
     {
-        if (CompareVariableValue(rval, assoc) == 0)
-        {
-            /* Identical value, keep as is */
-        }
-        else
-        {
-            /* Different value, bark and replace */
-            if (!UnresolvedVariables(assoc, RVAL_TYPE_SCALAR))
-            {
-                Log(LOG_LEVEL_INFO, "Duplicate selection of value for variable '%s' in scope '%s'", lval, ptr->scope);
-            }
-            RvalDestroy(assoc->rval);
-            assoc->rval = RvalCopy(rval);
-            assoc->dtype = DATA_TYPE_STRING;
-            Log(LOG_LEVEL_DEBUG, "Stored '%s' in context '%s'", lval, "match");
-        }
+        return SPECIAL_SCOPE_EDIT;
+    }
+    else if (strcmp("match", scope) == 0)
+    {
+        return SPECIAL_SCOPE_MATCH;
+    }
+    else if (strcmp("mon", scope) == 0)
+    {
+        return SPECIAL_SCOPE_MON;
+    }
+    else if (strcmp("sys", scope) == 0)
+    {
+        return SPECIAL_SCOPE_SYS;
+    }
+    else if (strcmp("this", scope) == 0)
+    {
+        return SPECIAL_SCOPE_THIS;
+    }
+    else if (strcmp("body", scope) == 0)
+    {
+        return SPECIAL_SCOPE_BODY;
     }
     else
     {
-        if (!HashInsertElement(ptr->hashtable, lval, rval, DATA_TYPE_STRING))
-        {
-            ProgrammingError("Hash table is full");
-        }
+        return SPECIAL_SCOPE_NONE;
     }
-}
-
-Scope *ScopeGet(const char *scope)
-/* 
- * Not thread safe - returns pointer to global memory
- */
-{
-    if (!scope)
-    {
-        return NULL;
-    }
-
-    const char *name = scope;
-
-    if (strncmp(scope, "default:", strlen("default:")) == 0)  // CF_NS == ':'
-    {
-        name = scope + strlen("default:");
-    }
-
-    if (strcmp("match", name) == 0)
-    {
-        return SCOPE_MATCH;
-    }
-
-    for (Scope *cp = VSCOPE; cp != NULL; cp = cp->next)
-    {
-        if (strcmp(cp->scope, name) == 0)
-        {
-            return cp;
-        }
-    }
-
-    return NULL;
-}
-
-bool ScopeExists(const char *name)
-{
-    return ScopeGet(name) != NULL;
-}
-
-void ScopeSetCurrent(const char *name)
-{
-    Scope *scope = ScopeGet(name);
-    if (!scope)
-    {
-        scope = ScopeNew(name);
-    }
-
-    SCOPE_CURRENT = scope;
-}
-
-Scope *ScopeGetCurrent(void)
-{
-    return SCOPE_CURRENT;
 }
 
 void ScopeAugment(EvalContext *ctx, const Bundle *bp, const Promise *pp, const Rlist *arguments)
@@ -179,9 +105,17 @@ void ScopeAugment(EvalContext *ctx, const Bundle *bp, const Promise *pp, const R
     {
         Log(LOG_LEVEL_ERR, "While constructing scope '%s'", bp->name);
         fprintf(stderr, "Formal = ");
-        RlistShow(stderr, bp->args);
+        {
+            Writer *w = FileWriter(stderr);
+            RlistWrite(w, bp->args);
+            FileWriterDetach(w);
+        }
         fprintf(stderr, ", Actual = ");
-        RlistShow(stderr, arguments);
+        {
+            Writer *w = FileWriter(stderr);
+            RlistWrite(w, arguments);
+            FileWriterDetach(w);
+        }
         fprintf(stderr, "\n");
         FatalError(ctx, "Augment scope, formal and actual parameter mismatch is fatal");
     }
@@ -194,63 +128,90 @@ void ScopeAugment(EvalContext *ctx, const Bundle *bp, const Promise *pp, const R
 
     for (const Rlist *rpl = bp->args, *rpr = arguments; rpl != NULL; rpl = rpl->next, rpr = rpr->next)
     {
-        const char *lval = rpl->item;
+        const char *lval = RlistScalarValue(rpl);
 
-        Log(LOG_LEVEL_VERBOSE, "Augment scope '%s' with variable '%s' (type: %c)", bp->name, lval, rpr->type);
+        Log(LOG_LEVEL_VERBOSE, "Augment scope '%s' with variable '%s' (type: %c)", bp->name, lval, rpr->val.type);
 
         // CheckBundleParameters() already checked that there is no namespace collision
         // By this stage all functions should have been expanded, so we only have scalars left
 
-        if (IsNakedVar(rpr->item, '@'))
+        if (rpr->val.type == RVAL_TYPE_SCALAR && IsNakedVar(RlistScalarValue(rpr), '@'))
         {
-            DataType vtype;
+
             char naked[CF_BUFSIZE];
             
-            GetNaked(naked, rpr->item);
+            GetNaked(naked, RlistScalarValue(rpr));
 
-            Rval retval;
+            DataType value_type = CF_DATA_TYPE_NONE;
+            const void *value = NULL;
             if (pbp != NULL)
             {
-                EvalContextVariableGet(ctx, (VarRef) { pbp->ns, pbp->name, naked }, &retval, &vtype);
+                VarRef *ref = VarRefParseFromBundle(naked, pbp);
+                value = EvalContextVariableGet(ctx, ref, &value_type);
+                VarRefDestroy(ref);
             }
             else
             {
-                EvalContextVariableGet(ctx, (VarRef) { NULL, bp->name, naked }, &retval, &vtype);
+                VarRef *ref = VarRefParseFromBundle(naked, bp);
+                value = EvalContextVariableGet(ctx, ref, &value_type);
+                VarRefDestroy(ref);
             }
 
-            switch (vtype)
+            switch (value_type)
             {
-            case DATA_TYPE_STRING_LIST:
-            case DATA_TYPE_INT_LIST:
-            case DATA_TYPE_REAL_LIST:
-                EvalContextVariablePut(ctx, (VarRef) { NULL, bp->name, lval }, (Rval) { retval.item, RVAL_TYPE_LIST}, DATA_TYPE_STRING_LIST);
+            case CF_DATA_TYPE_STRING_LIST:
+            case CF_DATA_TYPE_INT_LIST:
+            case CF_DATA_TYPE_REAL_LIST:
+                {
+                    VarRef *ref = VarRefParseFromBundle(lval, bp);
+                    EvalContextVariablePut(ctx, ref, value, CF_DATA_TYPE_STRING_LIST, "source=promise");
+                    VarRefDestroy(ref);
+                }
+                break;
+            case CF_DATA_TYPE_CONTAINER:
+                {
+                    VarRef *ref = VarRefParseFromBundle(lval, bp);
+                    EvalContextVariablePut(ctx, ref, value, CF_DATA_TYPE_CONTAINER, "source=promise");
+                    VarRefDestroy(ref);
+                }
                 break;
             default:
-                Log(LOG_LEVEL_ERR, "List parameter '%s' not found while constructing scope '%s' - use @(scope.variable) in calling reference", naked, bp->name);
-                EvalContextVariablePut(ctx, (VarRef) { NULL, bp->name, lval }, (Rval) { rpr->item, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                {
+                    Log(LOG_LEVEL_ERR, "List or container parameter '%s' not found while constructing scope '%s' - use @(scope.variable) in calling reference", naked, bp->name);
+                    VarRef *ref = VarRefParseFromBundle(lval, bp);
+                    EvalContextVariablePut(ctx, ref, RlistScalarValue(rpr), CF_DATA_TYPE_STRING, "source=promise");
+                    VarRefDestroy(ref);
+                }
                 break;
             }
         }
         else
         {
-            switch(rpr->type)
+            switch(rpr->val.type)
             {
             case RVAL_TYPE_SCALAR:
-                EvalContextVariablePut(ctx, (VarRef) { NULL, bp->name, lval }, (Rval) { rpr->item, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                {
+                    VarRef *ref = VarRefParseFromBundle(lval, bp);
+                    EvalContextVariablePut(ctx, ref, RvalScalarValue(rpr->val), CF_DATA_TYPE_STRING, "source=promise");
+                    VarRefDestroy(ref);
+                }
                 break;
 
             case RVAL_TYPE_FNCALL:
                 {
-                    FnCall *subfp = rpr->item;
-                    Rval rval = FnCallEvaluate(ctx, subfp, pp).rval;
+                    FnCall *subfp = RlistFnCallValue(rpr);
+                    Rval rval = FnCallEvaluate(ctx, PromiseGetPolicy(pp), subfp, pp).rval;
                     if (rval.type == RVAL_TYPE_SCALAR)
                     {
-                        EvalContextVariablePut(ctx, (VarRef) { NULL, bp->name, lval }, (Rval) { rval.item, RVAL_TYPE_SCALAR }, DATA_TYPE_STRING);
+                        VarRef *ref = VarRefParseFromBundle(lval, bp);
+                        EvalContextVariablePut(ctx, ref, RvalScalarValue(rval), CF_DATA_TYPE_STRING, "source=promise");
+                        VarRefDestroy(ref);
                     }
                     else
                     {
                         Log(LOG_LEVEL_ERR, "Only functions returning scalars can be used as arguments");
                     }
+                    RvalDestroy(rval);
                 }
                 break;
             default:
@@ -261,505 +222,90 @@ void ScopeAugment(EvalContext *ctx, const Bundle *bp, const Promise *pp, const R
 
 /* Check that there are no danglers left to evaluate in the hash table itself */
 
-    {
-        Scope *ptr = ScopeGet(bp->name);
-        AssocHashTableIterator i = HashIteratorInit(ptr->hashtable);
-        CfAssoc *assoc = NULL;
-        while ((assoc = HashIteratorNext(&i)))
-        {
-            Rval retval = ExpandPrivateRval(ctx, bp->name, assoc->rval);
-            // Retain the assoc, just replace rval
-            RvalDestroy(assoc->rval);
-            assoc->rval = retval;
-        }
-    }
-
     return;
 }
 
-/*******************************************************************/
 
-static void ScopeDelete(Scope *scope)
+void ScopeMapBodyArgs(EvalContext *ctx, const Body *body, const Rlist *args)
 {
-    if (!ThreadLock(cft_vscope))
+    const Rlist *arg = NULL;
+    const Rlist *param = NULL;
+
+    for (arg = args, param = body->args; arg != NULL && param != NULL; arg = arg->next, param = param->next)
     {
-        Log(LOG_LEVEL_ERR, "Could not lock VSCOPE");
-        return;
-    }
-
-    Scope *prev = NULL;
-
-    for (Scope *curr = VSCOPE; curr; prev = curr, curr = curr->next)
-    {
-        if (curr != scope)
-        {
-            continue;
-        }
-
-        if (!prev)
-        {
-            VSCOPE = scope->next;
-        }
-        else
-        {
-            prev->next = curr->next;
-        }
-
-        free(scope->scope);
-        HashFree(scope->hashtable);
-        free(scope);
-        break;
-    }
-
-    ThreadUnlock(cft_vscope);
-}
-
-void ScopeDeleteAll()
-{
-    Scope *ptr, *this;
-
-    if (!ThreadLock(cft_vscope))
-    {
-        Log(LOG_LEVEL_ERR, "Could not lock VSCOPE");
-        return;
-    }
-
-    ptr = VSCOPE;
-
-    while (ptr != NULL)
-    {
-        this = ptr;
-        HashFree(this->hashtable);
-        free(this->scope);
-        ptr = this->next;
-        free((char *) this);
-    }
-
-    VSCOPE = NULL;
-    SCOPE_CURRENT = NULL;
-
-    ThreadUnlock(cft_vscope);
-}
-
-/*******************************************************************/
-
-void ScopeClear(const char *name)
-{
-    if (!ThreadLock(cft_vscope))
-    {
-        Log(LOG_LEVEL_ERR, "Could not lock VSCOPE");
-        return;
-    }
-
-    Scope *scope = ScopeGet(name);
-    if (!scope)
-    {
-        Log(LOG_LEVEL_DEBUG, "No such scope to clear");
-        ThreadUnlock(cft_vscope);
-        return;
-    }
-
-    HashFree(scope->hashtable);
-    scope->hashtable = HashInit();
-
-    ThreadUnlock(cft_vscope);
-}
-
-/*******************************************************************/
-
-void ScopeCopy(const char *new_scopename, const Scope *old_scope)
-/*
- * Thread safe
- */
-{
-    ScopeNew(new_scopename);
-
-    if (!ThreadLock(cft_vscope))
-    {
-        Log(LOG_LEVEL_ERR, "Could not lock VSCOPE");
-        return;
-    }
-
-    if (old_scope)
-    {
-        Scope *np = ScopeGet(new_scopename);
-        HashCopy(np->hashtable, old_scope->hashtable);
-    }
-
-    ThreadUnlock(cft_vscope);
-}
-
-/*******************************************************************/
-/* Stack frames                                                    */
-/*******************************************************************/
-
-void ScopePushThis()
-{
-    static const char RVAL_TYPE_STACK = 'k';
-
-    Scope *op = ScopeGet("this");
-    if (!op)
-    {
-        return;
-    }
-
-    int frame_index = RlistLen(CF_STCK);
-    char name[CF_MAXVARSIZE];
-    snprintf(name, CF_MAXVARSIZE, "this_%d", frame_index + 1);
-    free(op->scope);
-    op->scope = xstrdup(name);
-
-    Rlist *rp = xmalloc(sizeof(Rlist));
-
-    rp->next = CF_STCK;
-    rp->item = op;
-    rp->type = RVAL_TYPE_STACK;
-    CF_STCK = rp;
-
-    ScopeNew("this");
-}
-
-/*******************************************************************/
-
-void ScopePopThis()
-{
-    if (RlistLen(CF_STCK) > 0)
-    {
-        Scope *current_this = ScopeGet("this");
-        if (current_this)
-        {
-
-            ScopeDelete(current_this);
-        }
-
-        Rlist *rp = CF_STCK;
-        CF_STCK = CF_STCK->next;
-
-        Scope *new_this = rp->item;
-        free(new_this->scope);
-        new_this->scope = xstrdup("this");
-
-        free(rp);
-    }
-    else
-    {
-        ProgrammingError("Attempt to pop from empty stack");
-    }
-}
-
-void ScopeToList(Scope *sp, Rlist **list)
-{
-    if (sp == NULL)
-    {
-        return;
-    }
-
-    AssocHashTableIterator i = HashIteratorInit(sp->hashtable);
-    CfAssoc *assoc;
-
-    while ((assoc = HashIteratorNext(&i)))
-    {
-        RlistPrependScalar(list, assoc->lval);
-    }
-}
-
-bool ScopeIsReserved(const char *scope)
-{
-    return strcmp("const", scope) == 0
-            || strcmp("edit", scope) == 0
-            || strcmp("match", scope) == 0
-            || strcmp("mon", scope) == 0
-            || strcmp("sys", scope) == 0
-            || strcmp("this", scope) == 0;
-}
-
-void ScopeNewSpecial(EvalContext *ctx, const char *scope, const char *lval, const void *rval, DataType dt)
-{
-    assert(ScopeIsReserved(scope));
-
-    Rval rvald;
-    if (EvalContextVariableGet(ctx, (VarRef) { NULL, scope, lval }, &rvald, NULL))
-    {
-        ScopeDeleteSpecial(scope, lval);
-    }
-
-    EvalContextVariablePut(ctx, (VarRef) { NULL, scope, lval }, (Rval) { rval, DataTypeToRvalType(dt) }, dt);
-}
-
-/*******************************************************************/
-
-void ScopeDeleteScalar(VarRef lval)
-{
-    assert(!ScopeIsReserved(lval.scope));
-    if (ScopeIsReserved(lval.scope))
-    {
-        ScopeDeleteSpecial(lval.scope, lval.lval);
-    }
-
-    Scope *scope = ScopeGet(lval.scope);
-
-    if (scope == NULL)
-    {
-        return;
-    }
-
-    if (HashDeleteElement(scope->hashtable, lval.lval) == false)
-    {
-        Log(LOG_LEVEL_DEBUG, "Attempt to delete non-existent variable '%s' in scope '%s'", lval.lval, lval.scope);
-    }
-}
-
-void ScopeDeleteSpecial(const char *scope, const char *lval)
-{
-    assert(ScopeIsReserved(scope));
-
-    Scope *scope_ptr = ScopeGet(scope);
-
-    if (scope_ptr == NULL)
-    {
-        return;
-    }
-
-    if (HashDeleteElement(scope_ptr->hashtable, lval) == false)
-    {
-        Log(LOG_LEVEL_DEBUG, "Attempt to delete non-existent variable '%s' in scope '%s'", lval, scope);
-    }
-}
-
-/*******************************************************************/
-
-void ScopeDeleteVariable(const char *scope, const char *id)
-{
-    Scope *ptr = ScopeGet(scope);
-
-    if (ptr == NULL)
-    {
-        return;
-    }
-
-    if (HashDeleteElement(ptr->hashtable, id) == false)
-    {
-        Log(LOG_LEVEL_DEBUG, "No variable matched '%s' for removal", id);
-    }
-}
-
-/*******************************************************************/
-
-int CompareVariableValue(Rval rval, CfAssoc *ap)
-{
-    const Rlist *list, *rp;
-
-    if (ap == NULL || rval.item == NULL)
-    {
-        return 1;
-    }
-
-    switch (rval.type)
-    {
-    case RVAL_TYPE_SCALAR:
-        return strcmp(ap->rval.item, rval.item);
-
-    case RVAL_TYPE_LIST:
-        list = (const Rlist *) rval.item;
-
-        for (rp = list; rp != NULL; rp = rp->next)
-        {
-            if (!CompareVariableValue((Rval) {rp->item, rp->type}, ap))
-            {
-                return -1;
-            }
-        }
-
-        return 0;
-
-    default:
-        return 0;
-    }
-
-    return strcmp(ap->rval.item, rval.item);
-}
-
-bool UnresolvedVariables(const CfAssoc *ap, RvalType rtype)
-{
-    if (ap == NULL)
-    {
-        return false;
-    }
-
-    switch (rtype)
-    {
-    case RVAL_TYPE_SCALAR:
-        return IsCf3VarString(ap->rval.item);
-
-    case RVAL_TYPE_LIST:
-        {
-            for (const Rlist *rp = ap->rval.item; rp != NULL; rp = rp->next)
-            {
-                if (IsCf3VarString(rp->item))
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-
-    default:
-        return false;
-    }
-}
-
-
-
-/*******************************************************************/
-
-void ScopeDeRefListsInHashtable(char *scope, Rlist *namelist, Rlist *dereflist)
-// Go through scope and for each variable in name-list, replace with a
-// value from the deref "lol" (list of lists) clock
-{
-    int len;
-    Scope *ptr;
-    Rlist *rp;
-    CfAssoc *cplist;
-    AssocHashTableIterator i;
-    CfAssoc *assoc;
-
-    if ((len = RlistLen(namelist)) != RlistLen(dereflist))
-    {
-        Log(LOG_LEVEL_ERR, "Name list %d, dereflist %d", len, RlistLen(dereflist));
-        ProgrammingError("Software Error DeRefLists... correlated lists not same length");
-    }
-
-    if (len == 0)
-    {
-        return;
-    }
-
-    ptr = ScopeGet(scope);
-    i = HashIteratorInit(ptr->hashtable);
-
-    while ((assoc = HashIteratorNext(&i)))
-    {
-        for (rp = dereflist; rp != NULL; rp = rp->next)
-        {
-            cplist = (CfAssoc *) rp->item;
-
-            if (strcmp(cplist->lval, assoc->lval) == 0)
-            {
-                /* Link up temp hash to variable lol */
-
-                if (rp->state_ptr == NULL || rp->state_ptr->type == RVAL_TYPE_FNCALL)
-                {
-                    /* Unexpanded function, or blank variable must be skipped. */
-                    return;
-                }
-
-                if (rp->state_ptr)
-                {
-                    // must first free existing rval in scope, then allocate new (should always be string)
-                    RvalDestroy(assoc->rval);
-
-                    // avoids double free - borrowing value from lol (freed in DeleteScope())
-                    assoc->rval.item = xstrdup(rp->state_ptr->item);
-                }
-
-                switch (assoc->dtype)
-                {
-                case DATA_TYPE_STRING_LIST:
-                    assoc->dtype = DATA_TYPE_STRING;
-                    assoc->rval.type = RVAL_TYPE_SCALAR;
-                    break;
-                case DATA_TYPE_INT_LIST:
-                    assoc->dtype = DATA_TYPE_INT;
-                    assoc->rval.type = RVAL_TYPE_SCALAR;
-                    break;
-                case DATA_TYPE_REAL_LIST:
-                    assoc->dtype = DATA_TYPE_REAL;
-                    assoc->rval.type = RVAL_TYPE_SCALAR;
-                    break;
-                default:
-                    /* Only lists need to be converted */
-                    break;
-                }
-            }
-        }
-    }
-}
-
-int ScopeMapBodyArgs(EvalContext *ctx, const char *scopeid, Rlist *give, const Rlist *take)
-{
-    Rlist *rpg = NULL;
-    const Rlist *rpt = NULL;
-    FnCall *fp;
-    DataType dtg = DATA_TYPE_NONE, dtt = DATA_TYPE_NONE;
-    char *lval;
-    void *rval;
-    int len1, len2;
-
-    len1 = RlistLen(give);
-    len2 = RlistLen(take);
-
-    if (len1 != len2)
-    {
-        Log(LOG_LEVEL_ERR, "Argument mismatch in body template give[+args] = %d, take[-args] = %d", len1, len2);
-        return false;
-    }
-
-    for (rpg = give, rpt = take; rpg != NULL && rpt != NULL; rpg = rpg->next, rpt = rpt->next)
-    {
-        dtg = StringDataType(ctx, scopeid, (char *) rpg->item);
-        dtt = StringDataType(ctx, scopeid, (char *) rpt->item);
-
-        if (dtg != dtt)
-        {
-            Log(LOG_LEVEL_ERR, "Type mismatch between logical/formal parameters %s/%s", (char *) rpg->item,
-                  (char *) rpt->item);
-            Log(LOG_LEVEL_ERR, "%s is %s whereas %s is %s", (char *) rpg->item, DataTypeToString(dtg),
-                  (char *) rpt->item, DataTypeToString(dtt));
-        }
-
-        switch (rpg->type)
+        DataType arg_type = CF_DATA_TYPE_NONE;
+        switch (arg->val.type)
         {
         case RVAL_TYPE_SCALAR:
-            lval = (char *) rpt->item;
-            rval = rpg->item;
-            EvalContextVariablePut(ctx, (VarRef) { NULL, scopeid, lval }, (Rval) { rval, RVAL_TYPE_SCALAR }, dtg);
-            break;
-
-        case RVAL_TYPE_LIST:
-            lval = (char *) rpt->item;
-            rval = rpg->item;
-            EvalContextVariablePut(ctx, (VarRef) { NULL, scopeid, lval }, (Rval) { rval, RVAL_TYPE_LIST }, dtg);
+            arg_type = StringDataType(ctx, RlistScalarValue(arg));
             break;
 
         case RVAL_TYPE_FNCALL:
-            fp = (FnCall *) rpg->item;
-            dtg = DATA_TYPE_NONE;
             {
-                const FnCallType *fncall_type = FnCallTypeGet(fp->name);
-                if (fncall_type)
+                const FnCallType *fn = FnCallTypeGet(RlistFnCallValue(arg)->name);
+                if (!fn)
                 {
-                    dtg = fncall_type->dtype;
+                    FatalError(ctx, "Argument '%s' given to body '%s' is not a valid function",
+                               RlistFnCallValue(arg)->name, body->name);
                 }
+                arg_type = fn->dtype;
             }
+            break;
 
-            FnCallResult res = FnCallEvaluate(ctx, fp, NULL);
+        default:
+            FatalError(ctx, "Cannot derive data type from Rval type %c", arg->val.type);
+        }
 
-            if (res.status == FNCALL_FAILURE && THIS_AGENT_TYPE != AGENT_TYPE_COMMON)
+        switch (arg->val.type)
+        {
+        case RVAL_TYPE_SCALAR:
             {
-                Log(LOG_LEVEL_VERBOSE, "Embedded function argument does not resolve to a name - probably too many evaluation levels for '%s'",
-                    fp->name);
+                const char *lval = RlistScalarValue(param);
+                VarRef *ref = VarRefParseFromNamespaceAndScope(lval, NULL, "body", CF_NS, '.');
+                EvalContextVariablePut(ctx, ref, RvalScalarValue(arg->val), arg_type, "source=body");
+                VarRefDestroy(ref);
             }
-            else
+            break;
+
+        case RVAL_TYPE_LIST:
             {
-                FnCallDestroy(fp);
+                const char *lval = RlistScalarValue(param);
+                VarRef *ref = VarRefParseFromNamespaceAndScope(lval, NULL, "body", CF_NS, '.');
+                EvalContextVariablePut(ctx, ref, RvalRlistValue(arg->val), arg_type, "source=body");
+                VarRefDestroy(ref);
+            }
+            break;
 
-                rpg->item = res.rval.item;
-                rpg->type = res.rval.type;
+        case RVAL_TYPE_FNCALL:
+            {
+                FnCall *fp = RlistFnCallValue(arg);
+                arg_type = CF_DATA_TYPE_NONE;
+                {
+                    const FnCallType *fncall_type = FnCallTypeGet(fp->name);
+                    if (fncall_type)
+                    {
+                        arg_type = fncall_type->dtype;
+                    }
+                }
 
-                lval = (char *) rpt->item;
-                rval = rpg->item;
+                FnCallResult res = FnCallEvaluate(ctx, body->parent_policy, fp, NULL);
 
-                EvalContextVariablePut(ctx, (VarRef) { NULL, scopeid, lval }, (Rval) {rval, RVAL_TYPE_SCALAR }, dtg);
+                if (res.status == FNCALL_FAILURE && THIS_AGENT_TYPE != AGENT_TYPE_COMMON)
+                {
+                    Log(LOG_LEVEL_VERBOSE, "Embedded function argument does not resolve to a name - probably too many evaluation levels for '%s'",
+                        fp->name);
+                }
+                else
+                {
+                    const char *lval = RlistScalarValue(param);
+                    void *rval = res.rval.item;
+
+                    VarRef *ref = VarRefParseFromNamespaceAndScope(lval, NULL, "body", CF_NS, '.');
+                    EvalContextVariablePut(ctx, ref, rval, arg_type, "source=body");
+                    VarRefDestroy(ref);
+                }
+
+                RvalDestroy(res.rval);
             }
 
             break;
@@ -769,8 +315,6 @@ int ScopeMapBodyArgs(EvalContext *ctx, const char *scopeid, Rlist *give, const R
             ProgrammingError("Software error: something not a scalar/function in argument literal");
         }
     }
-
-    return true;
 }
 
 /*******************************************************************/
@@ -785,11 +329,11 @@ void SplitScopeName(const char *scope, char ns_out[CF_MAXVARSIZE], char bundle_o
     if (split_point)
     {
         strncpy(ns_out, scope, split_point - scope);
-        strncpy(bundle_out, split_point + 1, 100);
+        strncpy(bundle_out, split_point + 1, CF_MAXVARSIZE);
     }
     else
     {
-        strncpy(bundle_out, scope, 100);
+        strncpy(bundle_out, scope, CF_MAXVARSIZE);
     }
 }
 

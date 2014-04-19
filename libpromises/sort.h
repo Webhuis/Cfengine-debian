@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -36,5 +36,13 @@ Item *SortItemListTimes(Item *list); /* Reverse sort */
 
 Rlist *SortRlist(Rlist *list, int (*CompareItems) ());
 Rlist *AlphaSortRListNames(Rlist *list);
+Rlist *IntSortRListNames(Rlist *list);
+Rlist *RealSortRListNames(Rlist *list);
+Rlist *IPSortRListNames(Rlist *list);
+Rlist *MACSortRListNames(Rlist *list);
+
+bool GenericItemLess(const char *mode, void *lhs, void *rhs);
+
+bool GenericStringItemLess(const char *sort_type, const char *lhs, const char *rhs);
 
 #endif

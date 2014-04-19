@@ -17,54 +17,42 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "vars.h"
+#include <vars.h>
 
-#include "conversion.h"
-#include "expand.h"
-#include "scope.h"
-#include "matching.h"
-#include "hashes.h"
-#include "unix.h"
-#include "misc_lib.h"
-#include "rlist.h"
-#include "policy.h"
+#include <conversion.h>
+#include <expand.h>
+#include <scope.h>
+#include <matching.h>
+#include <hashes.h>
+#include <unix.h>
+#include <misc_lib.h>
+#include <rlist.h>
+#include <policy.h>
+#include <eval_context.h>
 
 static int IsCf3Scalar(char *str);
 
-void LoadSystemConstants(EvalContext *ctx)
-{
-    ScopeNewSpecial(ctx, "const", "dollar", "$", DATA_TYPE_STRING);
-    ScopeNewSpecial(ctx, "const", "n", "\n", DATA_TYPE_STRING);
-    ScopeNewSpecial(ctx, "const", "r", "\r", DATA_TYPE_STRING);
-    ScopeNewSpecial(ctx, "const", "t", "\t", DATA_TYPE_STRING);
-    ScopeNewSpecial(ctx, "const", "endl", "\n", DATA_TYPE_STRING);
-/* NewScalar("const","0","\0",cf_str);  - this cannot work */
-
-}
-
 /*******************************************************************/
 
-int UnresolvedArgs(Rlist *args)
+bool RlistIsUnresolved(const Rlist *list)
 {
-    Rlist *rp;
-
-    for (rp = args; rp != NULL; rp = rp->next)
+    for (const Rlist *rp = list; rp != NULL; rp = rp->next)
     {
-        if (rp->type != RVAL_TYPE_SCALAR)
+        if (rp->val.type != RVAL_TYPE_SCALAR)
         {
             return true;
         }
 
-        if (IsCf3Scalar(rp->item))
+        if (IsCf3Scalar(RlistScalarValue(rp)))
         {
-            if (strstr(rp->item, "$(this)") || strstr(rp->item, "${this}") ||
-                strstr(rp->item, "$(this.k)") || strstr(rp->item, "${this.k}") ||
-                strstr(rp->item, "$(this.v)") || strstr(rp->item, "${this.v}"))
+            if (strstr(RlistScalarValue(rp), "$(this)") || strstr(RlistScalarValue(rp), "${this}") ||
+                strstr(RlistScalarValue(rp), "$(this.k)") || strstr(RlistScalarValue(rp), "${this.k}") ||
+                strstr(RlistScalarValue(rp), "$(this.v)") || strstr(RlistScalarValue(rp), "${this.v}"))
             {
                 // We should allow this in function args for substitution in maplist() etc
                 // We should allow this.k and this.v in function args for substitution in maparray() etc
@@ -281,156 +269,170 @@ static int IsCf3Scalar(char *str)
     return vars;
 }
 
-/*******************************************************************/
-
-const char *ExtractInnerCf3VarString(const char *str, char *substr)
+size_t ExtractScalarPrefix(Buffer *out, const char *str, size_t len)
 {
-    const char *sp;
-    int bracks = 1;
-
-    if (str == NULL || strlen(str) == 0)
+    assert(str);
+    if (len == 0)
     {
-        return NULL;
+        return 0;
     }
 
-    memset(substr, 0, CF_BUFSIZE);
-
-    if (*(str + 1) != '(' && *(str + 1) != '{')
+    const char *dollar_point = NULL;
+    for (size_t i = 0; i < (len - 1); i++)
     {
-        return NULL;
-    }
-
-/* Start this from after the opening $( */
-
-    for (sp = str + 2; *sp != '\0'; sp++)       /* check for varitems */
-    {
-        switch (*sp)
+        if (str[i] == '$')
         {
-        case '(':
-        case '{':
-            bracks++;
-            break;
-        case ')':
-        case '}':
-            bracks--;
-            break;
-
-        default:
-            if (isalnum((int) *sp) || strchr("_[]$.:-# ", *sp))
+            if (str[i + 1] == '(' || str[i + 1] == '{')
             {
+                dollar_point = str + i;
+                break;
+            }
+        }
+    }
+
+    if (!dollar_point)
+    {
+        BufferAppend(out, str, len);
+        return len;
+    }
+    else if (dollar_point > str)
+    {
+        size_t prefix_len = dollar_point - str;
+        if (prefix_len > 0)
+        {
+            BufferAppend(out, str, prefix_len);
+        }
+        return prefix_len;
+    }
+    return 0;
+}
+
+static const char *ReferenceEnd(const char *str, size_t len)
+{
+    assert(len > 1);
+    assert(str[0] == '$');
+    assert(str[1] == '{' || str[1] == '(');
+
+#define MAX_VARIABLE_REFERENCE_LEVELS 10
+    char stack[MAX_VARIABLE_REFERENCE_LEVELS] = { 0, str[1], 0 };
+    int level = 1;
+
+    for (size_t i = 2; i < len; i++)
+    {
+        switch (str[i])
+        {
+        case '{':
+        case '(':
+            if (level < MAX_VARIABLE_REFERENCE_LEVELS - 1)
+            {
+                level++;
+                stack[level] = str[i];
             }
             else
             {
-                Log(LOG_LEVEL_DEBUG, "Illegal character found '%c'", *sp);
-                Log(LOG_LEVEL_DEBUG, "Illegal character somewhere in variable '%s' or nested expansion", str);
-            }
-        }
-
-        if (bracks == 0)
-        {
-            strncpy(substr, str + 2, sp - str - 2);
-
-            if (strlen(substr) == 0)
-            {
-                char output[CF_BUFSIZE];
-                snprintf(output, CF_BUFSIZE, "Empty variable name in brackets: %s", str);
-                yyerror(output);
-                return NULL;
-            }
-
-            Log(LOG_LEVEL_DEBUG, "Returning substring value '%s'", substr);
-            return substr;
-        }
-    }
-
-    if (bracks != 0)
-    {
-        char output[CF_BUFSIZE];
-
-        if (strlen(substr) > 0)
-        {
-            snprintf(output, CF_BUFSIZE, "Broken variable syntax or bracket mismatch - inner '%s/%s'", str, substr);
-            yyerror(output);
-        }
-        return NULL;
-    }
-
-    return sp - 1;
-}
-
-/*********************************************************************/
-
-const char *ExtractOuterCf3VarString(const char *str, char *substr)
-  /* Should only by applied on str[0] == '$' */
-{
-    const char *sp;
-    int dollar = false;
-    int bracks = 0, onebrack = false;
-
-    memset(substr, 0, CF_BUFSIZE);
-
-    for (sp = str; *sp != '\0'; sp++)   /* check for varitems */
-    {
-        switch (*sp)
-        {
-        case '$':
-            dollar = true;
-            switch (*(sp + 1))
-            {
-            case '(':
-            case '{':
-                break;
-            default:
-                /* Stray dollar not a variable */
+                Log(LOG_LEVEL_ERR, "Stack overflow in variable reference parsing. More than %d levels", MAX_VARIABLE_REFERENCE_LEVELS);
                 return NULL;
             }
             break;
-        case '(':
-        case '{':
-            bracks++;
-            onebrack = true;
+
+        case '}':
+            if (stack[level] != '{')
+            {
+                Writer *w = StringWriter();
+                WriterWriteLen(w, str, len);
+                Log(LOG_LEVEL_ERR, "Variable reference bracket mismatch '%s'", StringWriterData(w));
+                WriterClose(w);
+                return NULL;
+            }
+            level--;
             break;
         case ')':
-        case '}':
-            bracks--;
+            if (stack[level] != '(')
+            {
+                Writer *w = StringWriter();
+                WriterWriteLen(w, str, len);
+                Log(LOG_LEVEL_ERR, "Variable reference bracket mismatch '%s'", StringWriterData(w));
+                WriterClose(w);
+                return NULL;
+            }
+            level--;
             break;
         }
 
-        if (dollar && (bracks == 0) && onebrack)
+        if (level == 0)
         {
-            strncpy(substr, str, sp - str + 1);
-            return substr;
+            return str + i;
         }
     }
 
-    if (dollar == false)
+    return NULL;
+}
+
+bool ExtractScalarReference(Buffer *out, const char *str, size_t len, bool extract_inner)
+{
+    if (len <= 1)
     {
-        return str;             /* This is not a variable */
+        return false;
     }
 
-    if (bracks != 0)
+    const char *dollar_point = memchr(str, '$', len);
+    if (!dollar_point || (dollar_point - str) == len)
     {
-        char output[CF_BUFSIZE];
-
-        snprintf(output, CF_BUFSIZE, "Broken variable syntax or bracket mismatch in - outer (%s/%s)", str, substr);
-        yyerror(output);
-        return NULL;
+        return false;
     }
+    else
+    {
+        const char *close_point = NULL;
+        {
+            size_t remaining = len - (dollar_point - str);
+            if (*(dollar_point + 1) == '{' || *(dollar_point + 1) == '(')
+            {
+                close_point = ReferenceEnd(dollar_point, remaining);
+            }
+            else
+            {
+                return ExtractScalarReference(out, dollar_point + 1, remaining - 1, extract_inner);
+            }
+        }
 
-/* Return pointer to first position in string (shouldn't happen)
-   as long as we only call this function from the first $ position */
+        if (!close_point)
+        {
+            Writer *w = StringWriter();
+            WriterWriteLen(w, str, len);
+            Log(LOG_LEVEL_ERR, "Variable reference close mismatch '%s'", StringWriterData(w));
+            WriterClose(w);
+            return false;
+        }
 
-    return str;
+        size_t outer_len = close_point - dollar_point + 1;
+        if (outer_len <= 3)
+        {
+            Writer *w = StringWriter();
+            WriterWriteLen(w, str, len);
+            Log(LOG_LEVEL_ERR, "Empty variable reference close mismatch '%s'", StringWriterData(w));
+            WriterClose(w);
+            return false;
+        }
+
+        if (extract_inner)
+        {
+            BufferAppend(out, dollar_point + 2, outer_len - 3);
+        }
+        else
+        {
+            BufferAppend(out, dollar_point, outer_len);
+        }
+        return true;
+    }
 }
 
 /*********************************************************************/
 
-int IsQualifiedVariable(char *var)
+bool IsQualifiedVariable(const char *var)
 {
     int isarraykey = false;
-    char *sp;
 
-    for (sp = var; *sp != '\0'; sp++)
+    for (const char *sp = var; *sp != '\0'; sp++)
     {
         if (*sp == '[')
         {

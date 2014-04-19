@@ -1,0 +1,54 @@
+#######################################################
+#
+# We request a path from disallowed path, it should fail
+#
+#######################################################
+
+body common control
+{
+      inputs => { "../../default.cf.sub" };
+      bundlesequence  => { default("$(this.promise_filename)") };
+      version => "1.0";
+}
+
+bundle agent init
+{
+}
+
+#######################################################
+
+body copy_from copy_from_port(port)
+
+{
+      source      => "$(G.testdir)/source_file";
+      servers     => { "127.0.0.1" };
+      portnumber => "$(port)";
+      trustkey => "true";
+}
+
+bundle agent test
+{
+  files:
+      "$(G.testroot)/destination_file1"
+      copy_from => copy_from_port("9881"),        # localhost_deny_one_directory
+      classes => if_repaired("repaired1");
+      "$(G.testroot)/destination_file2"
+      copy_from => copy_from_port("9882"),        # localhost_deny_one_directory_with_regex
+      classes => if_repaired("repaired2");
+}
+
+#######################################################
+
+bundle agent check
+{
+  classes:
+      "dummy" expression =>
+      regextract("(.*)\.sub", $(this.promise_filename), "fn");
+
+  reports:
+      # Both copies must fail
+    !repaired1.!repaired2::
+      "$(fn[1]) Pass";
+    repaired1|repaired2::
+      "$(fn[1]) FAIL";
+}

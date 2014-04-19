@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,8 +25,8 @@
 #ifndef CFENGINE_ALLOC_H
 #define CFENGINE_ALLOC_H
 
-#include "platform.h"
-#include "compiler.h"
+#include <platform.h>
+#include <compiler.h>
 
 void *xcalloc(size_t nmemb, size_t size);
 void *xmalloc(size_t size);
@@ -42,7 +42,17 @@ int xvasprintf(char **strp, const char *fmt, va_list ap) FUNC_ATTR_PRINTF(2, 0);
  *
  * Use x* equivalents instead.
  */
-#if !defined(ALLOC_IMPL)
+
+/**
+ * Currently regular malloc() calls are allowed for mission-critical code that
+ * can somehow recover, like cf-serverd dropping connections or cf-execd
+ * postponing its scheduled actions.
+ *
+ * @note for 99% of the cases (libpromises, cf-agent etc) use xmalloc() and
+ *       friends.
+ **/
+#if 0
+
 # undef malloc
 # undef calloc
 # undef realloc
@@ -68,6 +78,7 @@ void __error_unchecked_strndup(void);
 void __error_unchecked_memdup(void);
 void __error_unchecked_asprintf(void);
 void __error_unchecked_vasprintf(void);
+
 #endif
 
 #endif

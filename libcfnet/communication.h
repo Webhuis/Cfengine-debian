@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,10 +25,19 @@
 #ifndef CFENGINE_COMMUNICATION_H
 #define CFENGINE_COMMUNICATION_H
 
-#include "cfnet.h"
+#include <cfnet.h>
 
+/**
+  @brief Creates a new connection from Agent to Server.
 
+  @param server_name Server to connect to.
+  @return A fully initialized AgentConnection or NULL in case of error.
+  */
 AgentConnection *NewAgentConn(const char *server_name);
+/**
+  @brief Destroys an AgentConnection.
+  @param ap AgentConnection structure.
+  */
 void DeleteAgentConn(AgentConnection *ap);
 int IsIPV6Address(char *name);
 int IsIPV4Address(char *name);

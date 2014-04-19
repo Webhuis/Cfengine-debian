@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,21 +25,22 @@
 #ifndef CFENGINE_LOCKS_H
 #define CFENGINE_LOCKS_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-bool AcquireLockByID(const char *lock_id, int acquire_after_minutes);
-time_t FindLockTime(char *name);
-bool InvalidateLockTime(const char *lock_id);
+time_t FindLockTime(const char *name);
 
-
-CfLock AcquireLock(EvalContext *ctx, char *operand, char *host, time_t now, TransactionContext tc, const Promise *pp, int ignoreProcesses);
-void YieldCurrentLock(CfLock this);
-void GetLockName(char *lockname, char *locktype, char *base, Rlist *params);
+CfLock AcquireLock(EvalContext *ctx, const char *operand, const char *host, time_t now, TransactionContext tc, const Promise *pp, bool ignoreProcesses);
+void YieldCurrentLock(CfLock lock);
+void GetLockName(char *lockname, const char *locktype, const char *base, const Rlist *params);
 
 void PurgeLocks(void);
+void BackupLockDatabase(void);
+void PromiseRuntimeHash(const Promise *pp, const char *salt, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type);
 
-int WriteLock(char *lock);
+int WriteLock(const char *lock);
 CF_DB *OpenLock(void);
 void CloseLock(CF_DB *dbp);
 
+void WaitForCriticalSection(const char *section_id);
+void ReleaseCriticalSection(const char *section_id);
 #endif

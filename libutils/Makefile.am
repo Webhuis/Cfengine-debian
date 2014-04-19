@@ -15,20 +15,29 @@ libutils_la_SOURCES = \
 	proc_keyvalue.c proc_keyvalue.h \
 	bool.h \
 	json.c json.h \
-	refcount.c refcount.h refcount_p.h \
-	list.c list.h list_p.h \
+	refcount.c refcount.h \
+	list.c list.h \
 	logging.c logging.h logging_priv.h\
 	buffer.c buffer.h \
-    ip_address.c ip_address.h \
+	ip_address.c ip_address.h \
 	map.c map.h map_common.h \
 	array_map.c array_map_priv.h \
 	hash_map.c hash_map_priv.h \
 	misc_lib.c misc_lib.h \
 	writer.c writer.h \
 	csv_writer.c csv_writer.h \
+	csv_parser.c csv_parser.h \
 	xml_writer.c xml_writer.h \
 	file_lib.c file_lib.h \
-	man.c man.h
+	man.c man.h \
+	rb-tree.c rb-tree.h \
+	mustache.c mustache.h \
+	cfversion.c cfversion.h \
+	unicode.c unicode.h \
+	hash.c hash.h \
+	queue.c queue.h \
+	ring_buffer.c ring_buffer.h \
+	printsize.h
 
 CLEANFILES = *.gcno *.gcda
 

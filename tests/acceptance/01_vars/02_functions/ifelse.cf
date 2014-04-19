@@ -19,19 +19,13 @@ bundle agent init
       "results" slist => { 1, "single string parameter",
                            "hardclass OK", "bundle class OK",
                            "5 parameters OK"
-     };
+      };
 
   files:
       "$(G.testfile).expected"
       create => "true",
       edit_defaults => empty,
       edit_line => init_insert;
-}
-
-body edit_defaults empty
-{
-      empty_file_before_editing => "true";
-      edit_backup => "false";
 }
 
 bundle edit_line init_insert

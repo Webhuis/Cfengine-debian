@@ -1,12 +1,12 @@
-#include "test.h"
+#include <test.h>
 
 #include <stdlib.h>
-#include <assert.h>
 
-#include "rlist.h"
+#include <rlist.h>
+#include <string_lib.h>
 
-#include "assoc.h"
-#include "env_context.h"
+#include <assoc.h>
+#include <eval_context.h>
 
 /* Stubs */
 
@@ -16,30 +16,16 @@ void FatalError(char *s, ...)
     abort();
 }
 
-/* Test cases */
-
-static void test_prepend_scalar(void)
-{
-    Rlist *list = NULL;
-
-    RlistPrependScalar(&list, "stuff");
-    RlistPrependScalar(&list, "more-stuff");
-
-    assert_string_equal(list->item, "more-stuff");
-
-    RlistDestroy(list);
-}
-
 static void test_length(void)
 {
     Rlist *list = NULL;
 
     assert_int_equal(RlistLen(list), 0);
 
-    RlistPrependScalar(&list, "stuff");
+    RlistPrepend(&list, "stuff", RVAL_TYPE_SCALAR);
     assert_int_equal(RlistLen(list), 1);
 
-    RlistPrependScalar(&list, "more-stuff");
+    RlistPrepend(&list, "more-stuff", RVAL_TYPE_SCALAR);
     assert_int_equal(RlistLen(list), 2);
 
     RlistDestroy(list);
@@ -52,7 +38,7 @@ static void test_prepend_scalar_idempotent(void)
     RlistPrependScalarIdemp(&list, "stuff");
     RlistPrependScalarIdemp(&list, "stuff");
 
-    assert_string_equal(list->item, "stuff");
+    assert_string_equal(RlistScalarValue(list), "stuff");
     assert_int_equal(RlistLen(list), 1);
 
     RlistDestroy(list);
@@ -62,13 +48,13 @@ static void test_copy(void)
 {
     Rlist *list = NULL, *copy = NULL;
 
-    RlistPrependScalar(&list, "stuff");
-    RlistPrependScalar(&list, "more-stuff");
+    RlistPrepend(&list, "stuff", RVAL_TYPE_SCALAR);
+    RlistPrepend(&list, "more-stuff", RVAL_TYPE_SCALAR);
 
     copy = RlistCopy(list);
 
-    assert_string_equal(list->item, copy->item);
-    assert_string_equal(list->next->item, copy->next->item);
+    assert_string_equal(RlistScalarValue(list), RlistScalarValue(copy));
+    assert_string_equal(RlistScalarValue(list->next), RlistScalarValue(copy->next));
 
     RlistDestroy(list);
     RlistDestroy(copy);
@@ -123,10 +109,9 @@ static void test_last(void)
 
 static bool is_even(void *item, void *data)
 {
-    int *d = data;
-
-    int *i = item;
-    return *i % 2 == *d;
+    long d = StringToLong(data);
+    long i = StringToLong(item);
+    return i % 2 == d;
 }
 
 static void test_filter(void)
@@ -134,8 +119,8 @@ static void test_filter(void)
     Rlist *list = NULL;
     for (int i = 0; i < 10; i++)
     {
-        void *item = xmemdup(&i, sizeof(int));
-        RlistAppendAlien(&list, item);
+        char *item = StringFromLong(i);
+        RlistAppend(&list, item, RVAL_TYPE_SCALAR);
     }
 
     assert_int_equal(10, RlistLen(list));
@@ -146,11 +131,8 @@ static void test_filter(void)
     int i = 0;
     for (Rlist *rp = list; rp; rp = rp->next)
     {
-        int *k = rp->item;
-        assert_int_equal(i, *k);
-
-        free(k);
-        rp->item = NULL;
+        int k = StringToLong(rp->val.item);
+        assert_int_equal(i, k);
 
         i += 2;
     }
@@ -163,8 +145,8 @@ static void test_filter_everything(void)
     Rlist *list = NULL;
     for (int i = 1; i < 10; i += 2)
     {
-        void *item = xmemdup(&i, sizeof(int));
-        RlistAppendAlien(&list, item);
+        char *item = StringFromLong(i);
+        RlistAppend(&list, item, RVAL_TYPE_SCALAR);
     }
 
     assert_int_equal(5, RlistLen(list));
@@ -180,9 +162,55 @@ static void test_reverse(void)
     Rlist *list = RlistFromSplitString("a,b,c", ',');
 
     RlistReverse(&list);
-    assert_string_equal("c", list->item);
-    assert_string_equal("b", list->next->item);
-    assert_string_equal("a", list->next->next->item);
+    assert_int_equal(3, RlistLen(list));
+    assert_string_equal("c", RlistScalarValue(list));
+    assert_string_equal("b", RlistScalarValue(list->next));
+    assert_string_equal("a", RlistScalarValue(list->next->next));
+
+    RlistDestroy(list);
+}
+
+static void test_split_escaped(void)
+{
+    Rlist *list = RlistFromSplitString("a\\,b\\c\\,d,w\\,x\\,y\\,z", ',');
+    assert_int_equal(2, RlistLen(list));
+    assert_string_equal("a,b\\c,d", RlistScalarValue(list));
+    assert_string_equal("w,x,y,z", RlistScalarValue(list->next));
+
+    RlistDestroy(list);
+}
+
+static void test_split_long(void)
+{
+    char buf[CF_MAXVARSIZE * 2], *tail = buf + CF_MAXVARSIZE;
+    memset(buf, '$', sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    buf[CF_MAXVARSIZE - 1] = ',';
+
+    Rlist *list = RlistFromSplitString(buf, ',');
+    assert_int_equal(2, RlistLen(list));
+
+    assert_string_equal(tail, RlistScalarValue(list));
+    assert_string_equal(tail, RlistScalarValue(list->next));
+
+    RlistDestroy(list);
+}
+
+static void test_split_long_escaped(void)
+{
+    char buf[CF_MAXVARSIZE * 2 + 2], *tail = buf + CF_MAXVARSIZE + 1;
+    memset(buf, '$', sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    buf[CF_MAXVARSIZE] = ',';
+    memcpy(buf + CF_MAXVARSIZE / 2, "\\,", 2);
+    memcpy(tail + CF_MAXVARSIZE / 2, "\\,", 2);
+
+    Rlist *list = RlistFromSplitString(buf, ',');
+    assert_int_equal(2, RlistLen(list));
+
+    tail[CF_MAXVARSIZE / 2] = '$'; /* blot out the back-slash */
+    assert_string_equal(tail + 1, RlistScalarValue(list));
+    assert_string_equal(tail + 1, RlistScalarValue(list->next));
 
     RlistDestroy(list);
 }
@@ -491,12 +519,151 @@ static void test_new_parser_failure()
     }
 }
 
+static void test_regex_split()
+{
+    Rlist *list = RlistFromRegexSplitNoOverflow("one-->two-->three", "-+>", 3);
+
+    assert_int_equal(3, RlistLen(list));
+
+    assert_string_equal(RlistScalarValue(list), "one");
+    assert_string_equal(RlistScalarValue(list->next), "two");
+    assert_string_equal(RlistScalarValue(list->next->next), "three");
+
+    RlistDestroy(list);
+}
+
+static void test_regex_split_too_few_chunks()
+{
+    Rlist *list = RlistFromRegexSplitNoOverflow("one:two:three", ":", 2);
+
+    assert_int_equal(2, RlistLen(list));
+
+    assert_string_equal(RlistScalarValue(list), "one");
+    assert_string_equal(RlistScalarValue(list->next), "two:three");
+
+    RlistDestroy(list);
+}
+
+static void test_regex_split_too_many_chunks()
+{
+    Rlist *list = RlistFromRegexSplitNoOverflow("one:two:three:", ":", 10);
+
+    assert_int_equal(4, RlistLen(list));
+
+    assert_string_equal(RlistScalarValue(list), "one");
+    assert_string_equal(RlistScalarValue(list->next), "two");
+    assert_string_equal(RlistScalarValue(list->next->next), "three");
+    assert_string_equal(RlistScalarValue(list->next->next->next), "");
+
+    RlistDestroy(list);
+}
+
+static void test_regex_split_empty_chunks()
+{
+    Rlist *list = RlistFromRegexSplitNoOverflow(":one:two:three:", ":", 5);
+
+    assert_int_equal(5, RlistLen(list));
+
+    assert_string_equal(RlistScalarValue(list), "");
+    assert_string_equal(RlistScalarValue(list->next), "one");
+    assert_string_equal(RlistScalarValue(list->next->next), "two");
+    assert_string_equal(RlistScalarValue(list->next->next->next), "three");
+    assert_string_equal(RlistScalarValue(list->next->next->next->next), "");
+
+    RlistDestroy(list);
+}
+
+static void test_regex_split_no_match()
+{
+    Rlist *list = RlistFromRegexSplitNoOverflow(":one:two:three:", "/", 2);
+
+    assert_int_equal(1, RlistLen(list));
+    assert_string_equal(RlistScalarValue(list), ":one:two:three:"); 
+
+    RlistDestroy(list);
+}
+
+static void test_regex_split_adjacent_separators()
+{
+    Rlist *list = RlistFromRegexSplitNoOverflow(":one::two::three:", ":", 3);
+
+    assert_int_equal(3, RlistLen(list));
+
+    assert_string_equal(RlistScalarValue(list), "");
+    assert_string_equal(RlistScalarValue(list->next), "one");
+    assert_string_equal(RlistScalarValue(list->next->next), ":two::three:");
+
+    RlistDestroy(list);
+
+
+    list = RlistFromRegexSplitNoOverflow(":one::two:::three:", ":", 4);
+
+    assert_int_equal(4, RlistLen(list));
+
+    assert_string_equal(RlistScalarValue(list), "");
+    assert_string_equal(RlistScalarValue(list->next), "one");
+    assert_string_equal(RlistScalarValue(list->next->next), "");
+    assert_string_equal(RlistScalarValue(list->next->next->next), "two:::three:");
+
+    RlistDestroy(list);
+
+
+    list = RlistFromRegexSplitNoOverflow(":one::two:::three:", ":", 7);
+
+    assert_int_equal(7, RlistLen(list));
+
+    assert_string_equal(RlistScalarValue(list), "");
+    assert_string_equal(RlistScalarValue(list->next), "one");
+    assert_string_equal(RlistScalarValue(list->next->next), "");
+    assert_string_equal(RlistScalarValue(list->next->next->next), "two");
+    assert_string_equal(RlistScalarValue(list->next->next->next->next), "");
+    assert_string_equal(RlistScalarValue(list->next->next->next->next->next), "");
+    assert_string_equal(RlistScalarValue(list->next->next->next->next->next->next), "three:");
+
+    RlistDestroy(list);
+}
+
+static void test_regex_split_real_regex()
+{
+    //whole string is matched by regex in below example
+    Rlist *list = RlistFromRegexSplitNoOverflow("one-two-three", ".+", 3);
+
+    assert_int_equal(2, RlistLen(list));
+    assert_string_equal(RlistScalarValue(list), "");
+    assert_string_equal(RlistScalarValue(list->next), "");
+
+    RlistDestroy(list);
+
+
+    list = RlistFromRegexSplitNoOverflow("one>>>two<<<three<><>four", "[<>]+", 4);
+
+    assert_int_equal(4, RlistLen(list));
+    assert_string_equal(RlistScalarValue(list), "one");
+    assert_string_equal(RlistScalarValue(list->next), "two");
+    assert_string_equal(RlistScalarValue(list->next->next), "three");
+    assert_string_equal(RlistScalarValue(list->next->next->next), "four");
+
+    RlistDestroy(list);
+}
+
+static void test_regex_split_overlapping_delimiters()
+{
+    Rlist *list = RlistFromRegexSplitNoOverflow("-one---two---three", "--", 3);
+
+    assert_int_equal(3, RlistLen(list));
+
+    assert_string_equal(RlistScalarValue(list), "-one");
+    assert_string_equal(RlistScalarValue(list->next), "-two");
+    assert_string_equal(RlistScalarValue(list->next->next), "-three");
+
+    RlistDestroy(list);
+}
+
 int main()
 {
     PRINT_TEST_BANNER();
     const UnitTest tests[] =
     {
-        unit_test(test_prepend_scalar),
         unit_test(test_prepend_scalar_idempotent),
         unit_test(test_length),
         unit_test(test_copy),
@@ -510,8 +677,19 @@ int main()
         unit_test(test_filter),
         unit_test(test_filter_everything),
         unit_test(test_reverse),
+        unit_test(test_split_escaped),
+        unit_test(test_split_long),
+        unit_test(test_split_long_escaped),
         unit_test(test_new_parser_success),
         unit_test(test_new_parser_failure),
+        unit_test(test_regex_split),
+        unit_test(test_regex_split_too_few_chunks),
+        unit_test(test_regex_split_too_many_chunks),
+        unit_test(test_regex_split_empty_chunks),
+        unit_test(test_regex_split_no_match),
+        unit_test(test_regex_split_adjacent_separators),
+        unit_test(test_regex_split_real_regex),
+        unit_test(test_regex_split_overlapping_delimiters)
     };
 
     return run_tests(tests);
@@ -531,12 +709,7 @@ int FullTextMatch(const char *regptr, const char *cmpptr)
     fail();
 }
 
-bool EvalContextVariableGet(const EvalContext *ctx, VarRef lval, Rval *rval_out, DataType *type_out)
-{
-    fail();
-}
-
-Scope *ScopeGetCurrent(void)
+const void *EvalContextVariableGet(const EvalContext *ctx, const VarRef *lval, DataType *type_out)
 {
     fail();
 }
@@ -550,11 +723,6 @@ int ThreadLock(pthread_mutex_t *name)
 int ThreadUnlock(pthread_mutex_t *name)
 {
     return true;
-}
-
-void FnCallShow(FILE *fout, const FnCall *fp)
-{
-    fail();
 }
 
 int IsNakedVar(const char *str, char vtype)

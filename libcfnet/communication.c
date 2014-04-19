@@ -17,28 +17,29 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "communication.h"
-
-#include "alloc.h"                                      /* xmalloc,... */
-#include "logging.h"                                    /* Log */
-#include "misc_lib.h"                                   /* ProgrammingError */
+#include <communication.h>
+#include <connection_info.h>
+#include <alloc.h>                                      /* xmalloc,... */
+#include <logging.h>                                    /* Log */
+#include <misc_lib.h>                                   /* ProgrammingError */
+#include <buffer.h>                                     /* Buffer */
+#include <ip_address.h>                                 /* IPAddress */
 
 AgentConnection *NewAgentConn(const char *server_name)
 {
     AgentConnection *conn = xcalloc(1, sizeof(AgentConnection));
-
-    conn->sd = SOCKET_INVALID;
-    conn->family = AF_INET;
-    conn->trust = false;
+    ConnectionInfo *info = ConnectionInfoNew();
+    conn->conn_info = info;
     conn->encryption_type = 'c';
     conn->this_server = xstrdup(server_name);
+    conn->authenticated = false;
     return conn;
-};
+}
 
 void DeleteAgentConn(AgentConnection *conn)
 {
@@ -51,64 +52,47 @@ void DeleteAgentConn(AgentConnection *conn)
         free(sps);
     }
 
-    free(conn->session_key);
-    free(conn->this_server);
+    ConnectionInfoDestroy(&conn->conn_info);
+    if (conn->session_key)
+    {
+        free(conn->session_key);
+    }
+    if (conn->this_server)
+    {
+        free(conn->this_server);
+    }
+
+    *conn = (AgentConnection) {0};
     free(conn);
 }
 
 int IsIPV6Address(char *name)
 {
-    char *sp;
-    int count, max = 0;
-
-    if (name == NULL)
+    if (!name)
     {
         return false;
     }
-
-    count = 0;
-
-    for (sp = name; *sp != '\0'; sp++)
-    {
-        if (isalnum((int) *sp))
-        {
-            count++;
-        }
-        else if ((*sp != ':') && (*sp != '.'))
-        {
-            return false;
-        }
-
-        if (*sp == 'r')
-        {
-            return false;
-        }
-
-        if (count > max)
-        {
-            max = count;
-        }
-        else
-        {
-            count = 0;
-        }
-    }
-
-    if (max <= 2)
+    Buffer *buffer = BufferNewFrom(name, strlen(name));
+    if (!buffer)
     {
         return false;
     }
-
-    if (strstr(name, ":") == NULL)
+    IPAddress *ip_address = NULL;
+    bool is_ip = false;
+    is_ip = IPAddressIsIPAddress(buffer, &ip_address);
+    if (!is_ip)
     {
+        BufferDestroy(buffer);
         return false;
     }
-
-    if (strcasestr(name, "scope"))
+    if (IPAddressType(ip_address) != IP_ADDRESS_TYPE_IPV6)
     {
+        BufferDestroy(buffer);
+        IPAddressDestroy(&ip_address);
         return false;
     }
-
+    BufferDestroy(buffer);
+    IPAddressDestroy(&ip_address);
     return true;
 }
 
@@ -116,32 +100,31 @@ int IsIPV6Address(char *name)
 
 int IsIPV4Address(char *name)
 {
-    char *sp;
-    int count = 0;
-
-    if (name == NULL)
+    if (!name)
     {
         return false;
     }
-
-    for (sp = name; *sp != '\0'; sp++)
-    {
-        if ((!isdigit((int) *sp)) && (*sp != '.'))
-        {
-            return false;
-        }
-
-        if (*sp == '.')
-        {
-            count++;
-        }
-    }
-
-    if (count != 3)
+    Buffer *buffer = BufferNewFrom(name, strlen(name));
+    if (!buffer)
     {
         return false;
     }
-
+    IPAddress *ip_address = NULL;
+    bool is_ip = false;
+    is_ip = IPAddressIsIPAddress(buffer, &ip_address);
+    if (!is_ip)
+    {
+        BufferDestroy(buffer);
+        return false;
+    }
+    if (IPAddressType(ip_address) != IP_ADDRESS_TYPE_IPV4)
+    {
+        BufferDestroy(buffer);
+        IPAddressDestroy(&ip_address);
+        return false;
+    }
+    BufferDestroy(buffer);
+    IPAddressDestroy(&ip_address);
     return true;
 }
 
@@ -163,9 +146,9 @@ int Hostname2IPString(char *dst, const char *hostname, size_t dst_size)
 
     if (dst_size < CF_MAX_IP_LEN)
     {
-        ProgrammingError("Hostname2IPString got %lu, needs at least"
+        ProgrammingError("Hostname2IPString got %llu, needs at least"
                          " %d length buffer for IPv6 portability!",
-                         dst_size, CF_MAX_IP_LEN);
+                         (unsigned long long)dst_size, CF_MAX_IP_LEN);
     }
 
     ret = getaddrinfo(hostname, NULL, &query, &response);
@@ -273,13 +256,13 @@ int GetMyHostInfo(char nameBuf[MAXHOSTNAMELEN], char ipBuf[MAXIP4CHARLEN])
 
 unsigned short SocketFamily(int sd)
 {
-   struct sockaddr sa = {0};
-   socklen_t len = sizeof(sa);
+   struct sockaddr_storage ss = {0};
+   socklen_t len = sizeof(ss);
 
-   if (getsockname(sd, &sa, &len) == -1)
+   if (getsockname(sd, (struct sockaddr *) &ss, &len) == -1)
    {
        Log(LOG_LEVEL_ERR, "Could not get socket family. (getsockname: %s)", GetErrorStr());
    }
 
-   return sa.sa_family;
+   return ss.ss_family;
 }

@@ -17,15 +17,15 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "dbm_migration.h"
+#include <dbm_migration.h>
 
-#include "lastseen.h"
-#include "logging.h"
+#include <lastseen.h>
+#include <logging.h>
 
 typedef struct
 {
@@ -84,20 +84,21 @@ static bool LastseenMigrationVersion0(DBHandle *db)
         bool incoming = key[0] == '-';
         const char *hostkey = key + 1;
 
-        /* Properly align the data */
-        const char *old_data_address = (const char *)value;
-        QPoint0 old_data_q;
-        memcpy(&old_data_q, (const char *)value + QPOINT0_OFFSET, sizeof(QPoint0));
-
         /* Only migrate sane data */
-
         if (vsize != QPOINT0_OFFSET + sizeof(QPoint0))
         {
-            Log(LOG_LEVEL_INFO, "LastseenMigrationVersion0: invalid value size for key '%s', entry is deleted",
-                  key);
+            Log(LOG_LEVEL_INFO,
+                "LastseenMigrationVersion0: invalid value size for key '%s', entry is deleted",
+                key);
             DBCursorDeleteEntry(cursor);
             continue;
         }
+
+        /* Properly align the data */
+        const char *old_data_address = (const char *) value;
+        QPoint0 old_data_q;
+        memcpy(&old_data_q, (const char *) value + QPOINT0_OFFSET,
+               sizeof(QPoint0));
 
         char hostkey_key[CF_BUFSIZE];
         snprintf(hostkey_key, CF_BUFSIZE, "k%s", hostkey);
@@ -181,7 +182,7 @@ static bool LastseenMigrationVersion0(DBHandle *db)
     return !errors;
 }
 
-DBMigrationFunction dbm_migration_plan_lastseen[] =
+const DBMigrationFunction dbm_migration_plan_lastseen[] =
 {
     LastseenMigrationVersion0,
     NULL

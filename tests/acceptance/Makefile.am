@@ -1,9 +1,20 @@
-AM_CFLAGS = $(NOVA_CFLAGS) -I$(top_srcdir)/libpromises -I$(srcdir)/../../libutils
+AM_CFLAGS = $(ENTERPRISE_CFLAGS) \
+	-I$(top_srcdir)/libpromises \
+	-I$(top_srcdir)/libutils \
+	-I$(top_srcdir)/libcfnet
 
-noinst_PROGRAMS = mock-package-manager
+noinst_PROGRAMS =
 
-mock_package_manager_SOURCES = mock-package-manager.c
-mock_package_manager_LDADD = ../../libpromises/libpromises.la
+noinst_LTLIBRARIES = libmock_package_manager.la
+libmock_package_manager_la_SOURCES = mock_package_manager.c
+libmock_package_manager_la_LIBADD = ../../libpromises/libpromises.la
+
+if !BUILTIN_EXTENSIONS
+noinst_PROGRAMS += mock_package_manager
+
+mock_package_manager_SOURCES =
+mock_package_manager_LDADD = libmock_package_manager.la
+endif # !BUILTIN_EXTENSIONS
 
 if HAVE_LIBXML2
 noinst_PROGRAMS += xml-c14nize
@@ -23,10 +34,17 @@ TESTS_ENVIRONMENT = env \
 	CF_PROMISES=`pwd`/../../cf-promises/cf-promises \
 	CF_SERVERD=`pwd`/../../cf-serverd/cf-serverd \
 	CF_KEY=`pwd`/../../cf-key/cf-key \
-	MOCK_PACKAGE_MANAGER=`pwd`/mock-package-manager
+	MOCK_PACKAGE_MANAGER=`pwd`/mock_package_manager
+if !HAVE_LIBXML2
+TESTS_ENVIRONMENT += LIBXML2_TESTS=0
+endif
 
 dist-hook:
 	cd $(srcdir); tar -c -f - [0-9]* | tar -x -C $(abspath $(distdir)) -f -
 	chmod -R go-w $(distdir)
 
 CLEANFILES = *.gcno *.gcda
+
+pluck:
+	echo '### This is an auto-generated file, see Makefile.am and `make pluck` ###' > plucked.cf.sub
+	../../contrib/cf-locate/cf-locate -f -p '( if_|edit_line set_config|set_variable_values\(|edit_field|set_line_based|location|replace_with|local_cp|empty|shell|immediate|mog| m\b|recurse|tidy| all|classes_generic| start|always|^value|edit_field line|insert_lines|(link|copy)from| file_mustache| (file|dir)_(copy|tidy|sync|make|empty|link|hardlink))' ../../../masterfiles/lib/3.6 >> plucked.cf.sub

@@ -17,21 +17,21 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "dbm_api.h"
-#include "dbm_priv.h"
-#include "dbm_migration.h"
-#include "atexit.h"
-#include "logging.h"
-#include "misc_lib.h"
+#include <mutex.h>                                            /* ThreadLock */
+#include <dbm_api.h>
+#include <dbm_priv.h>
+#include <dbm_migration.h>
+#include <atexit.h>
+#include <logging.h>
+#include <misc_lib.h>
 
-#include <assert.h>
 
 static int DBPathLock(const char *filename);
 static void DBPathUnLock(int fd);
@@ -62,15 +62,15 @@ struct DBCursor_
  * This lock protects on-demand initialization of db_handles[i].lock and
  * db_handles[i].name.
  */
-static pthread_mutex_t db_handles_lock = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+static pthread_mutex_t db_handles_lock = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP; /* GLOBAL_T */
 
-static DBHandle db_handles[dbid_max] = { { 0 } };
+static DBHandle db_handles[dbid_max] = { { 0 } }; /* GLOBAL_X */
 
-static pthread_once_t db_shutdown_once = PTHREAD_ONCE_INIT;
+static pthread_once_t db_shutdown_once = PTHREAD_ONCE_INIT; /* GLOBAL_T */
 
 /******************************************************************************/
 
-static const char *DB_PATHS[] = {
+static const char *const DB_PATHS[] = {
     [dbid_classes] = "cf_classes",
     [dbid_variables] = "state/cf_variables",
     [dbid_performance] = "performance",
@@ -85,7 +85,6 @@ static const char *DB_PATHS[] = {
     [dbid_measure] = "state/nova_measures",
     [dbid_static] = "state/nova_static",
     [dbid_scalars] = "state/nova_pscalar",
-    [dbid_promise_compliance] = "state/promise_compliance",
     [dbid_windows_registry] = "mswin",
     [dbid_cache] = "nova_cache",
     [dbid_license] = "nova_track",
@@ -117,52 +116,23 @@ static DBHandle *DBHandleGet(int id)
 {
     assert(id >= 0 && id < dbid_max);
 
-    pthread_mutex_lock(&db_handles_lock);
+    ThreadLock(&db_handles_lock);
 
     if (db_handles[id].filename == NULL)
     {
         db_handles[id].filename = DBIdToPath(CFWORKDIR, id);
-        pthread_mutex_init(&db_handles[id].lock, NULL);
+
+        /* Initialize mutexes as error-checking ones. */
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+        pthread_mutex_init(&db_handles[id].lock, &attr);
+        pthread_mutexattr_destroy(&attr);
     }
 
-    pthread_mutex_unlock(&db_handles_lock);
+    ThreadUnlock(&db_handles_lock);
 
     return &db_handles[id];
-}
-
-/* Closes all open DB handles */
-static void CloseAllDB(void)
-{
-    pthread_mutex_lock(&db_handles_lock);
-
-    for (int i = 0; i < dbid_max; ++i)
-    {
-        if (db_handles[i].refcount != 0)
-        {
-            DBPrivCloseDB(db_handles[i].priv);
-        }
-
-        /*
-         * CloseAllDB is called just before exit(3), but clean up
-         * nevertheless.
-         */
-        db_handles[i].refcount = 0;
-
-        if (db_handles[i].filename)
-        {
-            free(db_handles[i].filename);
-            db_handles[i].filename = NULL;
-
-            int ret = pthread_mutex_destroy(&db_handles[i].lock);
-            if (ret != 0)
-            {
-                errno = ret;
-                Log(LOG_LEVEL_ERR, "Unable to close database '%s'. (pthread_mutex_destroy: %s)", DB_PATHS[i], GetErrorStr());
-            }
-        }
-    }
-
-    pthread_mutex_unlock(&db_handles_lock);
 }
 
 /**
@@ -176,7 +146,7 @@ static void CloseAllDB(void)
  **/
 void CloseAllDBExit()
 {
-    pthread_mutex_lock(&db_handles_lock);
+    ThreadLock(&db_handles_lock);
 
     for (int i = 0; i < dbid_max; i++)
     {
@@ -184,10 +154,10 @@ void CloseAllDBExit()
         {
             /* Wait until all DB users are served, or a threshold is reached */
             int count = 0;
-            pthread_mutex_lock(&db_handles[i].lock);
+            ThreadLock(&db_handles[i].lock);
             while (db_handles[i].refcount > 0 && count < 1000)
             {
-                pthread_mutex_unlock(&db_handles[i].lock);
+                ThreadUnlock(&db_handles[i].lock);
 
                 struct timespec sleeptime = {
                     .tv_sec = 0,
@@ -196,7 +166,7 @@ void CloseAllDBExit()
                 nanosleep(&sleeptime, NULL);
                 count++;
 
-                pthread_mutex_lock(&db_handles[i].lock);
+                ThreadLock(&db_handles[i].lock);
             }
             /* Keep mutex locked. */
 
@@ -206,6 +176,7 @@ void CloseAllDBExit()
                 Log(LOG_LEVEL_ERR,
                     "Database %s refcount is still not zero (%d), forcing CloseDB()!",
                     db_handles[i].filename, db_handles[i].refcount);
+                DBPrivCommit(db_handles[i].priv);
                 DBPrivCloseDB(db_handles[i].priv);
             }
         }
@@ -221,7 +192,7 @@ bool OpenDB(DBHandle **dbp, dbid id)
 {
     DBHandle *handle = DBHandleGet(id);
 
-    pthread_mutex_lock(&handle->lock);
+    ThreadLock(&handle->lock);
 
     if (handle->refcount == 0)
     {
@@ -229,12 +200,12 @@ bool OpenDB(DBHandle **dbp, dbid id)
 
         if(lock_fd != -1)
         {
-            handle->priv = DBPrivOpenDB(handle->filename);
+            handle->priv = DBPrivOpenDB(handle->filename, id);
 
             if (handle->priv == DB_PRIV_DATABASE_BROKEN)
             {
                 DBPathMoveBroken(handle->filename);
-                handle->priv = DBPrivOpenDB(handle->filename);
+                handle->priv = DBPrivOpenDB(handle->filename, id);
                 if (handle->priv == DB_PRIV_DATABASE_BROKEN)
                 {
                     handle->priv = NULL;
@@ -271,14 +242,14 @@ bool OpenDB(DBHandle **dbp, dbid id)
         *dbp = NULL;
     }
 
-    pthread_mutex_unlock(&handle->lock);
+    ThreadUnlock(&handle->lock);
 
     return *dbp != NULL;
 }
 
 void CloseDB(DBHandle *handle)
 {
-    pthread_mutex_lock(&handle->lock);
+    ThreadLock(&handle->lock);
 
     if (handle->refcount < 1)
     {
@@ -289,7 +260,24 @@ void CloseDB(DBHandle *handle)
         DBPrivCloseDB(handle->priv);
     }
 
-    pthread_mutex_unlock(&handle->lock);
+    ThreadUnlock(&handle->lock);
+}
+
+void CloseDBCommit(DBHandle *handle)
+{
+    ThreadLock(&handle->lock);
+
+    DBPrivCommit(handle->priv);
+    if (handle->refcount < 1)
+    {
+        Log(LOG_LEVEL_ERR, "Trying to close database %s which is not open", handle->filename);
+    }
+    else if (--handle->refcount == 0)
+    {
+        DBPrivCloseDB(handle->priv);
+    }
+
+    ThreadUnlock(&handle->lock);
 }
 
 /*****************************************************************************/
@@ -319,6 +307,11 @@ bool ReadDB(DBHandle *handle, const char *key, void *dest, int destSz)
 bool WriteDB(DBHandle *handle, const char *key, const void *src, int srcSz)
 {
     return DBPrivWrite(handle->priv, key, strlen(key) + 1, src, srcSz);
+}
+
+bool WriteDBNoCommit(DBHandle *handle, const char *key, const void *src, int srcSz)
+{
+    return DBPrivWriteNoCommit(handle->priv, key, strlen(key) + 1, src, srcSz);
 }
 
 bool HasKeyDB(DBHandle *handle, const char *key, int key_size)

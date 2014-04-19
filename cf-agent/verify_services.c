@@ -17,49 +17,55 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "verify_services.h"
+#include <verify_services.h>
 
-#include "verify_methods.h"
-#include "promises.h"
-#include "vars.h"
-#include "attributes.h"
-#include "fncall.h"
-#include "locks.h"
-#include "rlist.h"
-#include "policy.h"
-#include "scope.h"
-#include "cf-agent-enterprise-stubs.h"
-#include "ornaments.h"
-#include "env_context.h"
+#include <actuator.h>
+#include <verify_methods.h>
+#include <promises.h>
+#include <vars.h>
+#include <attributes.h>
+#include <fncall.h>
+#include <locks.h>
+#include <rlist.h>
+#include <policy.h>
+#include <scope.h>
+#include <cf-agent-enterprise-stubs.h>
+#include <cf-agent-windows-functions.h>
+#include <ornaments.h>
+#include <eval_context.h>
 
-static int ServicesSanityChecks(Attributes a, Promise *pp);
+static int ServicesSanityChecks(Attributes a, const Promise *pp);
 static void SetServiceDefaults(Attributes *a);
-static void DoVerifyServices(EvalContext *ctx, Attributes a, Promise *pp);
+static PromiseResult DoVerifyServices(EvalContext *ctx, Attributes a, const Promise *pp);
+static PromiseResult VerifyServices(EvalContext *ctx, Attributes a, const Promise *pp);
+
 
 /*****************************************************************************/
 
-void VerifyServicesPromise(EvalContext *ctx, Promise *pp)
+PromiseResult VerifyServicesPromise(EvalContext *ctx, const Promise *pp)
 {
-    Attributes a = { {0} };
-
-    a = GetServicesAttributes(ctx, pp);
+    Attributes a = GetServicesAttributes(ctx, pp);
 
     SetServiceDefaults(&a);
 
     if (ServicesSanityChecks(a, pp))
     {
-        VerifyServices(ctx, a, pp);
+        return VerifyServices(ctx, a, pp);
+    }
+    else
+    {
+        return PROMISE_RESULT_NOOP;
     }
 }
 
 /*****************************************************************************/
 
-static int ServicesSanityChecks(Attributes a, Promise *pp)
+static int ServicesSanityChecks(Attributes a, const Promise *pp)
 {
     Rlist *dep;
 
@@ -90,7 +96,7 @@ static int ServicesSanityChecks(Attributes a, Promise *pp)
 
     for (dep = a.service.service_depend; dep != NULL; dep = dep->next)
     {
-        if (strcmp(pp->promiser, dep->item) == 0)
+        if (strcmp(pp->promiser, RlistScalarValue(dep)) == 0)
         {
             Log(LOG_LEVEL_ERR, "Service promiser '%s' has itself as dependency", pp->promiser);
             PromiseRef(LOG_LEVEL_ERR, pp);
@@ -152,115 +158,119 @@ static void SetServiceDefaults(Attributes *a)
 /* Level                                                                     */
 /*****************************************************************************/
 
-void VerifyServices(EvalContext *ctx, Attributes a, Promise *pp)
+static PromiseResult VerifyServices(EvalContext *ctx, Attributes a, const Promise *pp)
 {
     CfLock thislock;
 
     thislock = AcquireLock(ctx, pp->promiser, VUQNAME, CFSTARTTIME, a.transaction, pp, false);
-
     if (thislock.lock == NULL)
     {
-        return;
+        return PROMISE_RESULT_SKIPPED;
     }
 
-    ScopeNewSpecial(ctx, "this", "promiser", pp->promiser, DATA_TYPE_STRING);
     PromiseBanner(pp);
 
+    PromiseResult result = PROMISE_RESULT_NOOP;
     if (strcmp(a.service.service_type, "windows") == 0)
     {
-        VerifyWindowsService(ctx, a, pp);
+#ifdef __MINGW32__
+        result = PromiseResultUpdate(result, VerifyWindowsService(ctx, a, pp));
+#else
+        Log(LOG_LEVEL_INFO, "Service type windows not supported on this platform.");
+#endif
     }
     else
     {
-        DoVerifyServices(ctx, a, pp);
+        result = PromiseResultUpdate(result, DoVerifyServices(ctx, a, pp));
     }
 
-    ScopeDeleteSpecial("this", "promiser");
     YieldCurrentLock(thislock);
+
+    return result;
 }
 
 /*****************************************************************************/
 /* Level                                                                     */
 /*****************************************************************************/
 
-static void DoVerifyServices(EvalContext *ctx, Attributes a, Promise *pp)
+static FnCall *DefaultServiceBundleCall(const Promise *pp, ServicePolicy service_policy)
 {
-    FnCall *default_bundle = NULL;
     Rlist *args = NULL;
-
-// Need to set up the default service pack to eliminate syntax
-
-    if (ConstraintGetRvalValue(ctx, "service_bundle", pp, RVAL_TYPE_SCALAR) == NULL)
+    switch (service_policy)
     {
-        switch (a.service.service_policy)
-        {
-        case SERVICE_POLICY_START:
-            RlistAppendScalar(&args, pp->promiser);
-            RlistAppendScalar(&args, "start");
-            break;
+    case SERVICE_POLICY_START:
+        RlistAppend(&args, pp->promiser, RVAL_TYPE_SCALAR);
+        RlistAppend(&args, "start", RVAL_TYPE_SCALAR);
+        break;
 
-        case SERVICE_POLICY_RESTART:
-            RlistAppendScalar(&args, pp->promiser);
-            RlistAppendScalar(&args, "restart");
-            break;
+    case SERVICE_POLICY_RESTART:
+        RlistAppend(&args, pp->promiser, RVAL_TYPE_SCALAR);
+        RlistAppend(&args, "restart", RVAL_TYPE_SCALAR);
+        break;
 
-        case SERVICE_POLICY_RELOAD:
-            RlistAppendScalar(&args, pp->promiser);
-            RlistAppendScalar(&args, "reload");
-            break;
-            
-        case SERVICE_POLICY_STOP:
-        case SERVICE_POLICY_DISABLE:
-        default:
-            RlistAppendScalar(&args, pp->promiser);
-            RlistAppendScalar(&args, "stop");
-            break;
+    case SERVICE_POLICY_RELOAD:
+        RlistAppend(&args, pp->promiser, RVAL_TYPE_SCALAR);
+        RlistAppend(&args, "restart", RVAL_TYPE_SCALAR);
+        break;
 
-        }
-
-        default_bundle = FnCallNew("standard_services", args);
-
-        PromiseAppendConstraint(pp, "service_bundle", (Rval) {default_bundle, RVAL_TYPE_FNCALL }, "any", false);
-        a.havebundle = true;
+    case SERVICE_POLICY_STOP:
+    case SERVICE_POLICY_DISABLE:
+    default:
+        RlistAppend(&args, pp->promiser, RVAL_TYPE_SCALAR);
+        RlistAppend(&args, "stop", RVAL_TYPE_SCALAR);
+        break;
     }
 
-// Set $(this.service_policy) for flexible bundle adaptation
+    FnCall *call = FnCallNew("standard_services", args);
+
+    return call;
+}
+
+static PromiseResult DoVerifyServices(EvalContext *ctx, Attributes a, const Promise *pp)
+{
+    Rval call;
+    {
+        const Constraint *cp = PromiseGetConstraint(pp, "service_bundle");
+        if (cp)
+        {
+            call = RvalCopy(cp->rval);
+        }
+        else
+        {
+            call = (Rval) { DefaultServiceBundleCall(pp, a.service.service_policy), RVAL_TYPE_FNCALL };
+        }
+    }
+    a.havebundle = true;
 
     switch (a.service.service_policy)
     {
     case SERVICE_POLICY_START:
-        ScopeNewSpecial(ctx, "this", "service_policy", "start", DATA_TYPE_STRING);
+        EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "service_policy", "start", CF_DATA_TYPE_STRING, "source=promise");
         break;
 
     case SERVICE_POLICY_RESTART:
-        ScopeNewSpecial(ctx, "this", "service_policy", "restart", DATA_TYPE_STRING);
+        EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "service_policy", "restart", CF_DATA_TYPE_STRING, "source=promise");
         break;
 
     case SERVICE_POLICY_RELOAD:
-        ScopeNewSpecial(ctx, "this", "service_policy", "reload", DATA_TYPE_STRING);
+        EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "service_policy", "reload", CF_DATA_TYPE_STRING, "source=promise");
         break;
         
     case SERVICE_POLICY_STOP:
     case SERVICE_POLICY_DISABLE:
     default:
-        ScopeNewSpecial(ctx, "this", "service_policy", "stop", DATA_TYPE_STRING);
+        EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "service_policy", "stop", CF_DATA_TYPE_STRING, "source=promise");
         break;
     }
 
-    const Bundle *bp = PolicyGetBundle(PolicyFromPromise(pp), NULL, "agent", default_bundle->name);
-    if (!bp)
-    {
-        bp = PolicyGetBundle(PolicyFromPromise(pp), NULL, "common", default_bundle->name);
-    }
-
-    if (default_bundle && bp == NULL)
-    {
-        cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Service '%s' could not be invoked successfully", pp->promiser);
-    }
-
+    PromiseResult result = PROMISE_RESULT_NOOP;
     if (!DONTDO)
     {
-        VerifyMethod(ctx, "service_bundle", a, pp);  // Send list of classes to set privately?
+        result = PromiseResultUpdate(result, VerifyMethod(ctx, call, a, pp));  // Send list of classes to set privately?
     }
+
+    RvalDestroy(call);
+
+    return result;
 }
 

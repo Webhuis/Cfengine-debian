@@ -17,14 +17,14 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "mon.h"
+#include <mon.h>
 
 #if !defined(__MINGW32__)
 
@@ -34,8 +34,8 @@
 
 /* Globals */
 
-static double LAST_CPU_Q[MON_CPU_MAX + 1];
-static long LAST_CPU_T[MON_CPU_MAX + 1];
+static double LAST_CPU_Q[MON_CPU_MAX + 1] = { 0.0 };
+static long LAST_CPU_T[MON_CPU_MAX + 1] = { 0 };
 
 /* Implementation */
 

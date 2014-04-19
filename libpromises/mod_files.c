@@ -17,15 +17,15 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "mod_files.h"
+#include <mod_files.h>
 
-#include "policy.h"
-#include "syntax.h"
+#include <policy.h>
+#include <syntax.h>
 
 static const ConstraintSyntax location_constraints[] =
 {
@@ -101,7 +101,7 @@ static const BodySyntax insert_select_body = BodySyntaxNew("insert_select", inse
 static const ConstraintSyntax CF_INSERTLINES_BODIES[] =
 {
     ConstraintSyntaxNewBool("expand_scalars", "Expand any unexpanded variables. Default value: false", SYNTAX_STATUS_NORMAL),
-    ConstraintSyntaxNewOption("insert_type", "literal,string,file,file_preserve_block,preserve_block", "Type of object the promiser string refers to. Default value: literal", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewOption("insert_type", "literal,string,file,file_preserve_block,preserve_block,preserve_all_lines", "Type of object the promiser string refers to. Default value: literal", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBody("insert_select", &insert_select_body, "Insert only if lines pass filter criteria", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBody("location", &location_body, "Specify where in a file an insertion will be made", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewOptionList("whitespace_policy", "ignore_leading,ignore_trailing,ignore_embedded,exact_match", "Criteria for matching and recognizing existing lines", SYNTAX_STATUS_NORMAL),
@@ -287,7 +287,7 @@ static const ConstraintSyntax copy_from_constraints[] =
      * 'source'
      */
     ConstraintSyntaxNewString("source", CF_PATHRANGE, "Reference source file from which to copy", SYNTAX_STATUS_NORMAL),
-    ConstraintSyntaxNewStringList("servers", "[A-Za-z0-9_.:-]+", "List of servers in order of preference from which to copy", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewStringList("servers", "[A-Za-z0-9_.:\\-\\[\\]]+", "List of servers in order of preference from which to copy", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("collapse_destination_dir", "true/false Place files in subdirectories into the root destination directory during copy", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewOption("compare", "atime,mtime,ctime,digest,hash,exists,binary", "Menu option policy for comparing source and image file attributes. Default: mtime or ctime differs", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewOption("copy_backup", "true,false,timestamp", "Menu option policy for file backup/version control. Default value: true", SYNTAX_STATUS_NORMAL),
@@ -300,7 +300,7 @@ static const ConstraintSyntax copy_from_constraints[] =
     ConstraintSyntaxNewOption("link_type", CF_LINKRANGE, "Menu option for type of links to use when copying. Default value: symlink", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("force_update", "true/false force copy update always. Default value: false", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("force_ipv4", "true/false force use of ipv4 on ipv6 enabled network. Default value: false", SYNTAX_STATUS_NORMAL),
-    ConstraintSyntaxNewInt("portnumber", "1024,99999", "Port number to connect to on server host", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewString("portnumber", "", "Port number or service name to connect to on server host", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("preserve", "true/false whether to preserve file permissions on copied file. Default value: false", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("purge", "true/false purge files on client that do not match files on server when a depth_search is used. Default value: false", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("stealth", "true/false whether to preserve time stamps on copied file. Default value: false", SYNTAX_STATUS_NORMAL),
@@ -308,6 +308,7 @@ static const ConstraintSyntax copy_from_constraints[] =
     ConstraintSyntaxNewBool("trustkey", "true/false trust public keys from remote server if previously unknown. Default value: false", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("type_check", "true/false compare file types before copying and require match", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("verify", "true/false verify transferred file by hashing after copy (resource penalty). Default value: false", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewOption("protocol_version", "0,undefined,1,classic,2,latest", "CFEngine protocol version to use when connecting to the server. Default: undefined", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewNull()
 };
 
@@ -334,6 +335,9 @@ static const ConstraintSyntax CF_FILES_BODIES[] =
     ConstraintSyntaxNewString("repository", CF_ABSPATHRANGE, "Name of a repository for versioning", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("touch", "true/false whether to touch time stamps on file", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewString("transformer", CF_ABSPATHRANGE, "Command (with full path) used to transform current file (no shell wrapper used)", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewOption("template_method", "cfengine,mustache", "", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewContainer("template_data", "", SYNTAX_STATUS_NORMAL),
+
     ConstraintSyntaxNewNull()
 };
 

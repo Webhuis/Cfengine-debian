@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,12 +25,10 @@
 #ifndef CFENGINE_FILES_LIB_H
 #define CFENGINE_FILES_LIB_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
+#include <file_lib.h>
 
-bool FileCanOpen(const char *path, const char *modes);
 void PurgeItemList(Item **list, char *name);
-ssize_t FileRead(const char *filename, char *buffer, size_t bufsize);
-ssize_t FileReadMax(char **output, const char *filename, size_t size_max);
 bool FileWriteOver(char *filename, char *contents);
 
 int LoadFileAsItemList(Item **liststart, const char *file, EditDefaults edits);
@@ -45,10 +43,26 @@ void CreateEmptyFile(char *name);
  * @brief Deletes directory path recursively. Symlinks are not followed.
  *        Note that this function only deletes the contents of the directory, not the directory itself.
  * @param path
- * @return true if directory was deleted succesfully, false if one or more files were not deleted.
+ * @return true if directory was deleted successfully, false if one or more files were not deleted.
  */
 bool DeleteDirectoryTree(const char *path);
 
-#include "file_lib.h"
+
+/**
+ * @brief This is a somewhat simpler version of nftw that support user_data.
+ *        Callback function must return 0 to indicate success, -1 for failure.
+ * @param path Path to traverse
+ * @param user_data User data carry
+ * @return True if successful
+ */
+bool TraverseDirectoryTree(const char *path,
+                           int (*callback)(const char *path, const struct stat *sb, void *user_data),
+                           void *user_data);
+
+bool HashDirectoryTree(const char *path,
+                       const char **extensions_filter,
+                       EVP_MD_CTX *crypto_context);
+
+#include <file_lib.h>
 
 #endif

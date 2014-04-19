@@ -17,23 +17,23 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "mon.h"
-#include "item_lib.h"
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "files_lib.h"
-#include "pipes.h"
+#include <mon.h>
+#include <item_lib.h>
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <files_lib.h>
+#include <pipes.h>
 
 /* Globals */
 
-Item *ALL_INCOMING;
+Item *ALL_INCOMING = NULL;
 Item *MON_UDP4 = NULL, *MON_UDP6 = NULL, *MON_TCP4 = NULL, *MON_TCP6 = NULL;
 
 /*******************************************************************/
@@ -72,25 +72,27 @@ static const Sock ECGSOCKS[ATTR] =     /* extended to map old to new using enum 
     {"631", "ipp", ob_ipp_in, ob_ipp_out},
 };
 
-static const char *VNETSTAT[PLATFORM_CONTEXT_MAX] =
+static const char *const VNETSTAT[] =
 {
-    "-",
-    "/usr/bin/netstat -rn",     /* hpux */
-    "/usr/bin/netstat -rn",     /* aix */
-    "/bin/netstat -rn",         /* linux */
-    "/usr/bin/netstat -rn",     /* solaris */
-    "/usr/bin/netstat -rn",     /* freebsd */
-    "/usr/bin/netstat -rn",     /* netbsd */
-    "/usr/ucb/netstat -rn",     /* cray */
-    "/cygdrive/c/WINNT/System32/netstat",       /* NT */
-    "/usr/bin/netstat -rn",     /* Unixware */
-    "/usr/bin/netstat -rn",     /* openbsd */
-    "/usr/bin/netstat -rn",     /* sco */
-    "/usr/sbin/netstat -rn",    /* darwin */
-    "/usr/bin/netstat -rn",     /* qnx */
-    "/usr/bin/netstat -rn",     /* dragonfly */
-    "mingw-invalid",            /* mingw */
-    "/usr/bin/netstat",         /* vmware */
+    [PLATFORM_CONTEXT_UNKNOWN] = "-",
+    [PLATFORM_CONTEXT_OPENVZ] = "/bin/netstat -rn",         /* virt_host_vz_vzps */
+    [PLATFORM_CONTEXT_HP] = "/usr/bin/netstat -rn",     /* hpux */
+    [PLATFORM_CONTEXT_AIX] = "/usr/bin/netstat -rn",     /* aix */
+    [PLATFORM_CONTEXT_LINUX] = "/bin/netstat -rn",         /* linux */
+    [PLATFORM_CONTEXT_SOLARIS] = "/usr/bin/netstat -rn",     /* solaris */
+    [PLATFORM_CONTEXT_FREEBSD] = "/usr/bin/netstat -rn",     /* freebsd */
+    [PLATFORM_CONTEXT_NETBSD] = "/usr/bin/netstat -rn",     /* netbsd */
+    [PLATFORM_CONTEXT_CRAYOS] = "/usr/ucb/netstat -rn",     /* cray */
+    [PLATFORM_CONTEXT_WINDOWS_NT] = "/cygdrive/c/WINNT/System32/netstat",       /* NT */
+    [PLATFORM_CONTEXT_SYSTEMV] = "/usr/bin/netstat -rn",     /* Unixware */
+    [PLATFORM_CONTEXT_OPENBSD] = "/usr/bin/netstat -rn",     /* openbsd */
+    [PLATFORM_CONTEXT_CFSCO] = "/usr/bin/netstat -rn",     /* sco */
+    [PLATFORM_CONTEXT_DARWIN] = "/usr/sbin/netstat -rn",    /* darwin */
+    [PLATFORM_CONTEXT_QNX] = "/usr/bin/netstat -rn",     /* qnx */
+    [PLATFORM_CONTEXT_DRAGONFLY] = "/usr/bin/netstat -rn",     /* dragonfly */
+    [PLATFORM_CONTEXT_MINGW] = "mingw-invalid",            /* mingw */
+    [PLATFORM_CONTEXT_VMWARE] = "/usr/bin/netstat",         /* vmware */
+    [PLATFORM_CONTEXT_ANDROID] = "/system/xbin/netstat -rn",    /* android */
 };
 
 /* Implementation */
@@ -177,7 +179,6 @@ void MonNetworkGatherData(double *cf_this)
     Item *in[ATTR], *out[ATTR];
     char *sp;
     int i;
-    char vbuff[CF_BUFSIZE];
     enum cf_netstat_type { cfn_new, cfn_old } type = cfn_new;
     enum cf_packet_type { cfn_udp4, cfn_udp6, cfn_tcp4, cfn_tcp6} packet = cfn_tcp4;
 
@@ -199,23 +200,28 @@ void MonNetworkGatherData(double *cf_this)
         return;
     }
 
+    size_t vbuff_size = CF_BUFSIZE;
+    char *vbuff = xmalloc(vbuff_size);
+
     for (;;)
     {
         memset(local, 0, CF_BUFSIZE);
         memset(remote, 0, CF_BUFSIZE);
 
-        size_t res = CfReadLine(vbuff, CF_BUFSIZE, pp);
-
-        if (res == 0)
-        {
-            break;
-        }
-
+        size_t res = CfReadLine(&vbuff, &vbuff_size, pp);
         if (res == -1)
         {
-            /* FIXME: no logging */
-            cf_pclose(pp);
-            return;
+            if (!feof(pp))
+            {
+                /* FIXME: no logging */
+                cf_pclose(pp);
+                free(vbuff);
+                return;
+            }
+            else
+            {
+                break;
+            }
         }
 
         if (strstr(vbuff, "UNIX"))
@@ -380,7 +386,8 @@ void MonNetworkGatherData(double *cf_this)
         snprintf(vbuff, CF_MAXVARSIZE, "%s/state/cf_incoming.%s", CFWORKDIR, ECGSOCKS[i].name);
         if (stat(vbuff, &statbuf) != -1)
         {
-            if ((ByteSizeList(in[i]) < statbuf.st_size) && (now < statbuf.st_mtime + 40 * 60))
+            if (ItemListSize(in[i]) < statbuf.st_size &&
+                now < statbuf.st_mtime + 40 * 60)
             {
                 Log(LOG_LEVEL_VERBOSE, "New state '%s' is smaller, retaining old for 40 mins longer", ECGSOCKS[i].name);
                 DeleteItemList(in[i]);
@@ -389,7 +396,7 @@ void MonNetworkGatherData(double *cf_this)
         }
 
         SetNetworkEntropyClasses(CanonifyName(ECGSOCKS[i].name), "in", in[i]);
-        RawSaveItemList(in[i], vbuff);
+        RawSaveItemList(in[i], vbuff, NewLineMode_Unix);
         DeleteItemList(in[i]);
         Log(LOG_LEVEL_DEBUG, "Saved in netstat data in '%s'", vbuff);
     }
@@ -404,7 +411,8 @@ void MonNetworkGatherData(double *cf_this)
 
         if (stat(vbuff, &statbuf) != -1)
         {
-            if ((ByteSizeList(out[i]) < statbuf.st_size) && (now < statbuf.st_mtime + 40 * 60))
+            if (ItemListSize(out[i]) < statbuf.st_size &&
+                now < statbuf.st_mtime + 40 * 60)
             {
                 Log(LOG_LEVEL_VERBOSE, "New state '%s' is smaller, retaining old for 40 mins longer", ECGSOCKS[i].name);
                 DeleteItemList(out[i]);
@@ -413,8 +421,10 @@ void MonNetworkGatherData(double *cf_this)
         }
 
         SetNetworkEntropyClasses(CanonifyName(ECGSOCKS[i].name), "out", out[i]);
-        RawSaveItemList(out[i], vbuff);
+        RawSaveItemList(out[i], vbuff, NewLineMode_Unix);
         Log(LOG_LEVEL_DEBUG, "Saved out netstat data in '%s'", vbuff);
         DeleteItemList(out[i]);
     }
+
+    free(vbuff);
 }

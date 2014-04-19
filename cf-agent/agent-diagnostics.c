@@ -17,23 +17,23 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "agent-diagnostics.h"
+#include <agent-diagnostics.h>
 
-#include "alloc.h"
-#include "crypto.h"
-#include "files_interfaces.h"
-#include "string_lib.h"
-#include "bootstrap.h"
-#include "dbm_api.h"
-#include "dbm_priv.h"
-#include "tokyo_check.h"
+#include <alloc.h>
+#include <crypto.h>
+#include <files_interfaces.h>
+#include <string_lib.h>
+#include <bootstrap.h>
+#include <dbm_api.h>
+#include <dbm_priv.h>
+#include <tokyo_check.h>
+#include <lastseen.h>
 
-#include <assert.h>
 
 AgentDiagnosticsResult AgentDiagnosticsResultNew(bool success, char *message)
 {
@@ -91,45 +91,52 @@ AgentDiagnosticsResult AgentDiagnosticsCheckAmPolicyServer(const char *workdir)
 
 AgentDiagnosticsResult AgentDiagnosticsCheckPrivateKey(const char *workdir)
 {
-    const char *path = PrivateKeyFile(workdir);
-    assert(path);
+    char *path = PrivateKeyFile(workdir);
     struct stat sb;
+    AgentDiagnosticsResult res;
 
     if (stat(path, &sb) != 0)
     {
-        return AgentDiagnosticsResultNew(false, StringFormat("No private key found at '%s'", path));
+        res = AgentDiagnosticsResultNew(false, StringFormat("No private key found at '%s'", path));
     }
-
-    if (sb.st_mode != (S_IFREG | S_IWUSR | S_IRUSR))
+    else if (sb.st_mode != (S_IFREG | S_IWUSR | S_IRUSR))
     {
-        return AgentDiagnosticsResultNew(false, StringFormat("Private key found at '%s', but had incorrect permissions '%o'", path, sb.st_mode));
+        res = AgentDiagnosticsResultNew(false, StringFormat("Private key found at '%s', but had incorrect permissions '%o'", path, sb.st_mode));
+    }
+    else
+    {
+        res = AgentDiagnosticsResultNew(true, StringFormat("OK at '%s'", path));
     }
 
-    return AgentDiagnosticsResultNew(true, StringFormat("OK at '%s'", path));
+    free(path);
+    return res;
 }
 
 AgentDiagnosticsResult AgentDiagnosticsCheckPublicKey(const char *workdir)
 {
-    const char *path = PublicKeyFile(workdir);
-    assert(path);
+    char *path = PublicKeyFile(workdir);
     struct stat sb;
+    AgentDiagnosticsResult res;
 
     if (stat(path, &sb) != 0)
     {
-        return AgentDiagnosticsResultNew(false, StringFormat("No public key found at '%s'", path));
+        res = AgentDiagnosticsResultNew(false, StringFormat("No public key found at '%s'", path));
     }
-
-    if (sb.st_mode != (S_IFREG | S_IWUSR | S_IRUSR))
+    else if (sb.st_mode != (S_IFREG | S_IWUSR | S_IRUSR))
     {
-        return AgentDiagnosticsResultNew(false, StringFormat("Public key found at '%s', but had incorrect permissions '%o'", path, sb.st_mode));
+        res = AgentDiagnosticsResultNew(false, StringFormat("Public key found at '%s', but had incorrect permissions '%o'", path, sb.st_mode));
     }
-
-    if (sb.st_size != 426)
+    else if (sb.st_size != 426)
     {
-        return AgentDiagnosticsResultNew(false, StringFormat("Public key at '%s' had size %zd bytes, expected 426 bytes", path, sb.st_size));
+        res = AgentDiagnosticsResultNew(false, StringFormat("Public key at '%s' had size %lld bytes, expected 426 bytes", path, (long long)sb.st_size));
+    }
+    else
+    {
+        res = AgentDiagnosticsResultNew(true, StringFormat("OK at '%s'", path));
     }
 
-    return AgentDiagnosticsResultNew(true, StringFormat("OK at '%s'", path));
+    free(path);
+    return res;
 }
 
 static AgentDiagnosticsResult AgentDiagnosticsCheckDB(const char *workdir, dbid id)
@@ -146,13 +153,21 @@ static AgentDiagnosticsResult AgentDiagnosticsCheckDB(const char *workdir, dbid 
     {
         int ret = CheckTokyoDBCoherence(dbpath);
         free(dbpath);
-        if(ret)
+        if (ret)
         {
             return AgentDiagnosticsResultNew(false, xstrdup("Internal DB coherence problem"));
-        } 
+        }
         else
         {
+            if (id == dbid_lastseen)
+            {
+                if (IsLastSeenCoherent() == false)
+                {
+                    return AgentDiagnosticsResultNew(false, xstrdup("Lastseen DB data coherence problem"));
+                }
+            }
             return AgentDiagnosticsResultNew(true, xstrdup("OK"));
+            
         }
     }
 }
@@ -213,9 +228,16 @@ const AgentDiagnosticCheck *AgentDiagnosticsAllChecks(void)
         { "Check file stats DB", &AgentDiagnosticsCheckDBFileStats },
         { "Check locks DB", &AgentDiagnosticsCheckDBLocks },
         { "Check performance DB", &AgentDiagnosticsCheckDBPerformance },
-
+        { "Check lastseen DB", &AgentDiagnosticsCheckDBLastSeen },
         { NULL, NULL }
     };
 
     return checks;
+}
+
+ENTERPRISE_VOID_FUNC_4ARG_DEFINE_STUB(void, AgentDiagnosticsRunAllChecksNova,
+                                      ARG_UNUSED const char *, workdir, ARG_UNUSED Writer *, output,
+                                      ARG_UNUSED AgentDiagnosticsRunFunction, AgentDiagnosticsRunPtr,
+                                      ARG_UNUSED AgentDiagnosticsResultNewFunction, AgentDiagnosticsResultNewPtr)
+{
 }

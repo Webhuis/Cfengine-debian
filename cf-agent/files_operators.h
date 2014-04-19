@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,14 +25,15 @@
 #ifndef CFENGINE_FILES_OPERATORS_H
 #define CFENGINE_FILES_OPERATORS_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
+#include <file_lib.h>
 
-int MoveObstruction(EvalContext *ctx, char *from, Attributes attr, const Promise *pp);
+int MoveObstruction(EvalContext *ctx, char *from, Attributes attr, const Promise *pp, PromiseResult *result);
 
-typedef bool (*SaveCallbackFn)(const char *dest_filename, void *param);
-int SaveAsFile(SaveCallbackFn callback, void *param, const char *file, Attributes a);
-int SaveItemListAsFile(Item *liststart, const char *file, Attributes a);
+typedef bool (*SaveCallbackFn)(const char *dest_filename, void *param, NewLineMode new_line_mode);
+bool SaveAsFile(SaveCallbackFn callback, void *param, const char *file, Attributes a, NewLineMode new_line_mode);
+bool SaveItemListAsFile(Item *liststart, const char *file, Attributes a, NewLineMode new_line_mode);
 
-int CompareToFile(EvalContext *ctx, const Item *liststart, const char *file, Attributes a, const Promise *pp);
+int CompareToFile(EvalContext *ctx, const Item *liststart, const char *file, Attributes a, const Promise *pp, PromiseResult *result);
 
 #endif

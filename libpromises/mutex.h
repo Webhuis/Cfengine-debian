@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,17 +25,20 @@
 #ifndef CFENGINE_MUTEX_H
 #define CFENGINE_MUTEX_H
 
-#include "platform.h"
+#include <platform.h>
 
-extern pthread_mutex_t *cft_system;
+extern pthread_mutex_t *cft_lock;
 extern pthread_mutex_t *cft_count;
 extern pthread_mutex_t *cft_getaddr;
-extern pthread_mutex_t *cft_lock;
-extern pthread_mutex_t *cft_vscope;
 extern pthread_mutex_t *cft_server_children;
 extern pthread_mutex_t *cft_server_filter;
 
-int ThreadLock(pthread_mutex_t *name);
-int ThreadUnlock(pthread_mutex_t *name);
+#define ThreadLock(m)     __ThreadLock(m, __func__, __FILE__, __LINE__)
+#define ThreadUnlock(m) __ThreadUnlock(m, __func__, __FILE__, __LINE__)
+
+int __ThreadLock(pthread_mutex_t *name,
+                 const char *funcname, const char *filename, int lineno);
+int __ThreadUnlock(pthread_mutex_t *name,
+                   const char *funcname, const char *filename, int lineno);
 
 #endif

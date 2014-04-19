@@ -17,13 +17,13 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
-#include "acl_tools.h"
+#include <cf3.defs.h>
+#include <acl_tools.h>
 
 #ifdef HAVE_ACL_H
 # include <acl.h>
@@ -103,7 +103,7 @@ int CopyACLs(const char *src, const char *dst)
 
 #elif !defined(__MINGW32__) /* !HAVE_LIBACL */
 
-int CopyACLs(const char *src, const char *dst)
+int CopyACLs(ARG_UNUSED const char *src, ARG_UNUSED const char *dst)
 {
     return true;
 }

@@ -17,68 +17,70 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "generic_agent.h"
+#include <generic_agent.h>
 
-#include "bootstrap.h"
-#include "sysinfo.h"
-#include "env_context.h"
-#include "policy.h"
-#include "promises.h"
-#include "files_lib.h"
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "files_hashes.h"
-#include "parser.h"
-#include "dbm_api.h"
-#include "crypto.h"
-#include "vars.h"
-#include "syntax.h"
-#include "conversion.h"
-#include "expand.h"
-#include "locks.h"
-#include "scope.h"
-#include "atexit.h"
-#include "unix.h"
-#include "client_code.h"
-#include "string_lib.h"
-#include "exec_tools.h"
-#include "list.h"
-#include "misc_lib.h"
-#include "fncall.h"
-#include "rlist.h"
-#include "syslog_client.h"
-#include "audit.h"
-#include "verify_classes.h"
-#include "verify_vars.h"
+#include <bootstrap.h>
+#include <sysinfo.h>
+#include <known_dirs.h>
+#include <eval_context.h>
+#include <policy.h>
+#include <promises.h>
+#include <files_lib.h>
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <files_hashes.h>
+#include <parser.h>
+#include <dbm_api.h>
+#include <crypto.h>
+#include <vars.h>
+#include <syntax.h>
+#include <conversion.h>
+#include <expand.h>
+#include <locks.h>
+#include <scope.h>
+#include <atexit.h>
+#include <unix.h>
+#include <client_code.h>
+#include <string_lib.h>
+#include <exec_tools.h>
+#include <list.h>
+#include <misc_lib.h>
+#include <fncall.h>
+#include <rlist.h>
+#include <syslog_client.h>
+#include <audit.h>
+#include <verify_classes.h>
+#include <verify_vars.h>
+#include <timeout.h>
+#include <time_classes.h>
+#include <unix_iface.h>
+#include <constants.h>
 
-#ifdef HAVE_NOVA
-# include "cf.nova.h"
-#endif
+#include <cf-windows-functions.h>
 
-#include <assert.h>
+static pthread_once_t pid_cleanup_once = PTHREAD_ONCE_INIT; /* GLOBAL_T */
 
-static pthread_once_t pid_cleanup_once = PTHREAD_ONCE_INIT;
+static char PIDFILE[CF_BUFSIZE] = ""; /* GLOBAL_C */
 
-static char PIDFILE[CF_BUFSIZE];
-
-static void VerifyPromises(EvalContext *ctx, Policy *policy, GenericAgentConfig *config);
 static void CheckWorkingDirectories(EvalContext *ctx);
-static Policy *Cf3ParseFile(const GenericAgentConfig *config, const char *input_path);
-static Policy *Cf3ParseFiles(EvalContext *ctx, GenericAgentConfig *config, const Rlist *inputs);
+
+static void GetAutotagDir(char *dirname, size_t max_size, const char *maybe_dirname);
+static void GetPromisesValidatedFile(char *filename, size_t max_size, const GenericAgentConfig *config, const char *maybe_dirname);
+static bool WriteReleaseIdFile(const char *filename, const char *dirname);
+static bool GeneratePolicyReleaseIDFromTree(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir);
+static bool GeneratePolicyReleaseIDFromGit(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir);
+static char* ReadReleaseIdFromReleaseIdFileMasterfiles(const char *maybe_dirname);
+
 static bool MissingInputFile(const char *input_file);
-static void CheckControlPromises(EvalContext *ctx, GenericAgentConfig *config, const Body *control_body);
-static void CheckVariablePromises(EvalContext *ctx, Seq *var_promises);
-static void CheckCommonClassPromises(EvalContext *ctx, Seq *class_promises);
 
 #if !defined(__MINGW32__)
 static void OpenLog(int facility);
 #endif
-static bool VerifyBundleSequence(EvalContext *ctx, const Policy *policy, const GenericAgentConfig *config);
 
 /*****************************************************************************/
 
@@ -95,61 +97,39 @@ static void SanitizeEnvironment()
 
 /*****************************************************************************/
 
-void CheckForPolicyHub(EvalContext *ctx)
+ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, GenericAgentSetDefaultDigest, HashMethod *, digest, int *, digest_len)
 {
-    struct stat sb;
-    char name[CF_BUFSIZE];
-
-    snprintf(name, sizeof(name), "%s/state/am_policy_hub", CFWORKDIR);
-    MapName(name);
-
-    if (stat(name, &sb) != -1)
-    {
-        EvalContextHeapAddHard(ctx, "am_policy_hub");
-        Log(LOG_LEVEL_VERBOSE, "Additional class defined: am_policy_hub");
-    }
+    *digest = HASH_METHOD_MD5;
+    *digest_len = CF_MD5_LEN;
 }
-
-/*****************************************************************************/
 
 void GenericAgentDiscoverContext(EvalContext *ctx, GenericAgentConfig *config)
 {
-#ifdef HAVE_NOVA
-    CF_DEFAULT_DIGEST = HASH_METHOD_SHA256;
-    CF_DEFAULT_DIGEST_LEN = CF_SHA256_LEN;
-#else
-    CF_DEFAULT_DIGEST = HASH_METHOD_MD5;
-    CF_DEFAULT_DIGEST_LEN = CF_MD5_LEN;
-#endif
+    GenericAgentSetDefaultDigest(&CF_DEFAULT_DIGEST, &CF_DEFAULT_DIGEST_LEN);
 
-    InitializeGA(ctx, config);
+    GenericAgentInitialize(ctx, config);
 
-    SetReferenceTime(ctx, true);
-    SetStartTime();
+    time_t t = SetReferenceTime();
+    UpdateTimeClasses(ctx, t);
     SanitizeEnvironment();
 
     THIS_AGENT_TYPE = config->agent_type;
-    EvalContextHeapAddHard(ctx, CF_AGENTTYPES[config->agent_type]);
+    EvalContextClassPutHard(ctx, CF_AGENTTYPES[config->agent_type], "cfe_internal,source=agent");
 
-    GetNameInfo3(ctx, config->agent_type);
-    GetInterfacesInfo(ctx, config->agent_type);
-
-    Get3Environment(ctx, config->agent_type);
-    BuiltinClasses(ctx);
-    OSClasses(ctx);
+    DetectEnvironment(ctx);
 
     EvalContextHeapPersistentLoadAll(ctx);
     LoadSystemConstants(ctx);
 
     if (config->agent_type == AGENT_TYPE_AGENT && config->agent_specific.agent.bootstrap_policy_server)
     {
-        if (!RemoveAllExistingPolicyInInputs(GetWorkDir()))
+        if (!RemoveAllExistingPolicyInInputs(GetInputDir()))
         {
             Log(LOG_LEVEL_ERR, "Error removing existing input files prior to bootstrap");
             exit(EXIT_FAILURE);
         }
 
-        if (!WriteBuiltinFailsafePolicy(GetWorkDir()))
+        if (!WriteBuiltinFailsafePolicy(GetInputDir()))
         {
             Log(LOG_LEVEL_ERR, "Error writing builtin failsafe to inputs prior to bootstrap");
             exit(EXIT_FAILURE);
@@ -158,21 +138,21 @@ void GenericAgentDiscoverContext(EvalContext *ctx, GenericAgentConfig *config)
         bool am_policy_server = false;
         {
             const char *canonified_bootstrap_policy_server = CanonifyName(config->agent_specific.agent.bootstrap_policy_server);
-            am_policy_server = IsDefinedClass(ctx, canonified_bootstrap_policy_server, NULL);
+            am_policy_server = NULL != EvalContextClassGet(ctx, NULL, canonified_bootstrap_policy_server);
             {
                 char policy_server_ipv4_class[CF_BUFSIZE];
                 snprintf(policy_server_ipv4_class, CF_MAXVARSIZE, "ipv4_%s", canonified_bootstrap_policy_server);
-                am_policy_server |= IsDefinedClass(ctx, policy_server_ipv4_class, NULL);
+                am_policy_server |= NULL != EvalContextClassGet(ctx, NULL, policy_server_ipv4_class);
             }
 
             if (am_policy_server)
             {
-                Log(LOG_LEVEL_INFO, "Assuming role as policy server, with policy distribution point at %s/masterfiles", GetWorkDir());
-                EvalContextHeapAddHard(ctx, "am_policy_hub");
+                Log(LOG_LEVEL_INFO, "Assuming role as policy server, with policy distribution point at %s", GetMasterDir());
+                EvalContextClassPutHard(ctx, "am_policy_hub", "source=bootstrap");
 
-                if (!MasterfileExists(GetWorkDir()))
+                if (!MasterfileExists(GetMasterDir()))
                 {
-                    Log(LOG_LEVEL_ERR, "In order to bootstrap as a policy server, the file '%s/masterfiles/promises.cf' must exist.", GetWorkDir());
+                    Log(LOG_LEVEL_ERR, "In order to bootstrap as a policy server, the file '%s/promises.cf' must exist.", GetMasterDir());
                     exit(EXIT_FAILURE);
                 }
             }
@@ -186,6 +166,8 @@ void GenericAgentDiscoverContext(EvalContext *ctx, GenericAgentConfig *config)
 
         WritePolicyServerFile(GetWorkDir(), config->agent_specific.agent.bootstrap_policy_server);
         SetPolicyServer(ctx, config->agent_specific.agent.bootstrap_policy_server);
+        /* FIXME: Why it is called here? Can't we move both invocations to before if? */
+        UpdateLastPolicyUpdateTime(ctx);
         Log(LOG_LEVEL_INFO, "Bootstrapping to '%s'", POLICY_SERVER);
     }
     else
@@ -194,16 +176,27 @@ void GenericAgentDiscoverContext(EvalContext *ctx, GenericAgentConfig *config)
         if (existing_policy_server)
         {
             Log(LOG_LEVEL_VERBOSE, "This agent is bootstrapped to '%s'", existing_policy_server);
+            SetPolicyServer(ctx, existing_policy_server);
+            free(existing_policy_server);
+            UpdateLastPolicyUpdateTime(ctx);
         }
         else
         {
             Log(LOG_LEVEL_VERBOSE, "This agent is not bootstrapped");
+            return;
         }
-        SetPolicyServer(ctx, existing_policy_server);
+
+        if (GetAmPolicyHub(GetWorkDir()))
+        {
+            EvalContextClassPutHard(ctx, "am_policy_hub", "source=bootstrap,deprecated,alias=policy_server");
+            Log(LOG_LEVEL_VERBOSE, "Additional class defined: am_policy_hub");
+            EvalContextClassPutHard(ctx, "policy_server", "inventory,attribute_name=CFEngine roles,source=bootstrap");
+            Log(LOG_LEVEL_VERBOSE, "Additional class defined: policy_server");
+        }
     }
 }
 
-static bool IsPolicyPrecheckNeeded(EvalContext *ctx, GenericAgentConfig *config, bool force_validation)
+static bool IsPolicyPrecheckNeeded(GenericAgentConfig *config, bool force_validation)
 {
     bool check_policy = false;
 
@@ -212,7 +205,7 @@ static bool IsPolicyPrecheckNeeded(EvalContext *ctx, GenericAgentConfig *config,
         check_policy = true;
         Log(LOG_LEVEL_VERBOSE, "Input file is outside default repository, validating it");
     }
-    if (NewPromiseProposals(ctx, config, NULL))
+    if (GenericAgentIsPolicyReloadNeeded(config))
     {
         check_policy = true;
         Log(LOG_LEVEL_VERBOSE, "Input file is changed since last validation, validating it");
@@ -226,13 +219,30 @@ static bool IsPolicyPrecheckNeeded(EvalContext *ctx, GenericAgentConfig *config,
     return check_policy;
 }
 
-bool GenericAgentCheckPolicy(EvalContext *ctx, GenericAgentConfig *config, bool force_validation)
+bool GenericAgentCheckPolicy(GenericAgentConfig *config, bool force_validation, bool write_validated_file)
 {
     if (!MissingInputFile(config->input_file))
     {
-        if (IsPolicyPrecheckNeeded(ctx, config, force_validation))
         {
-            bool policy_check_ok = CheckPromises(config);
+            if (config->agent_type == AGENT_TYPE_SERVER ||
+                config->agent_type == AGENT_TYPE_MONITOR ||
+                config->agent_type == AGENT_TYPE_EXECUTOR)
+            {
+                time_t validated_at = ReadTimestampFromPolicyValidatedFile(config, NULL);
+                config->agent_specific.daemon.last_validated_at = validated_at;
+            }
+        }
+
+        if (IsPolicyPrecheckNeeded(config, force_validation))
+        {
+            bool policy_check_ok = GenericAgentArePromisesValid(config);
+            if (policy_check_ok && write_validated_file)
+            {
+                GenericAgentTagReleaseDirectory(config,
+                                                NULL, // use GetAutotagDir
+                                                write_validated_file, // true
+                                                GetAmPolicyHub(GetWorkDir())); // write release ID?
+            }
 
             if (config->agent_specific.agent.bootstrap_policy_server && !policy_check_ok)
             {
@@ -251,15 +261,69 @@ bool GenericAgentCheckPolicy(EvalContext *ctx, GenericAgentConfig *config, bool 
     return false;
 }
 
-/*****************************************************************************/
-/* Level                                                                     */
-/*****************************************************************************/
+static JsonElement *ReadJsonFile(const char *filename)
+{
+    struct stat sb;
+    if (stat(filename, &sb) == -1)
+    {
+        Log(LOG_LEVEL_DEBUG, "Could not open JSON file %s", filename);
+        return NULL;
+    }
+
+    JsonElement *doc = NULL;
+    JsonParseError err = JsonParseFile(filename, 4096, &doc);
+
+    if (err != JSON_PARSE_OK
+        || NULL == doc)
+    {
+        Log(LOG_LEVEL_DEBUG, "Could not parse JSON file %s", filename);
+    }
+
+    return doc;
+}
+
+static JsonElement *ReadPolicyValidatedFile(const char *filename)
+{
+    bool missing = true;
+    struct stat sb;
+    if (stat(filename, &sb) != -1)
+    {
+        missing = false;
+    }
+
+    JsonElement *validated_doc = ReadJsonFile(filename);
+    if (NULL == validated_doc)
+    {
+        Log(missing ? LOG_LEVEL_DEBUG : LOG_LEVEL_VERBOSE, "Could not parse policy_validated JSON file '%s', using dummy data", filename);
+        validated_doc = JsonObjectCreate(2);
+        if (missing)
+        {
+            JsonObjectAppendInteger(validated_doc, "timestamp", 0);
+        }
+        else
+        {
+            JsonObjectAppendInteger(validated_doc, "timestamp", sb.st_mtime);
+        }
+    }
+
+    return validated_doc;
+}
+
+static JsonElement *ReadPolicyValidatedFileFromMasterfiles(const GenericAgentConfig *config, const char *maybe_dirname)
+{
+    char filename[CF_MAXVARSIZE];
+
+    GetPromisesValidatedFile(filename, sizeof(filename), config, maybe_dirname);
+
+    return ReadPolicyValidatedFile(filename);
+}
 
 /**
  * @brief Writes a file with a contained timestamp to mark a policy file as validated
+ * @param filename the filename
  * @return True if successful.
  */
-static bool WritePolicyValidatedFile(const char *filename)
+static bool WritePolicyValidatedFile(ARG_UNUSED const GenericAgentConfig *config, const char *filename)
 {
     if (!MakeParentDirectory(filename, true))
     {
@@ -274,18 +338,135 @@ static bool WritePolicyValidatedFile(const char *filename)
         return false;
     }
 
-    FILE *fp = fdopen(fd, "w");
-    time_t now = time(NULL);
+    JsonElement *info = JsonObjectCreate(3);
+    JsonObjectAppendInteger(info, "timestamp", time(NULL));
 
-    char timebuf[26];
+    Writer *w = FileWriter(fdopen(fd, "w"));
+    JsonWrite(w, info, 0);
 
-    fprintf(fp, "%s", cf_strtimestamp_local(now, timebuf));
-    fclose(fp);
+    WriterClose(w);
+    JsonDestroy(info);
+
+    Log(LOG_LEVEL_VERBOSE, "Saved policy validated marker file '%s'", filename);
+    return true;
+}
+
+/**
+ * @brief Writes the policy validation file and release ID to a directory
+ * @return True if successful.
+ */
+bool GenericAgentTagReleaseDirectory(const GenericAgentConfig *config, const char *dirname, bool write_validated, bool write_release)
+{
+    char local_dirname[PATH_MAX + 1];
+    if (NULL == dirname)
+    {
+        GetAutotagDir(local_dirname, PATH_MAX, NULL);
+        dirname = local_dirname;
+    }
+
+    char filename[CF_MAXVARSIZE];
+    char git_checksum[GENERIC_AGENT_CHECKSUM_SIZE];
+    bool have_git_checksum = GeneratePolicyReleaseIDFromGit(git_checksum, dirname);
+
+    Log(LOG_LEVEL_DEBUG, "Tagging directory %s for release (write_validated: %s, write_release: %s)",
+        dirname,
+        write_validated ? "yes" : "no",
+        write_release ? "yes" : "no");
+
+    if (write_release)
+    {
+        // first, tag the release ID
+        GetReleaseIdFile(dirname, filename, sizeof(filename));
+        char *id = ReadReleaseIdFromReleaseIdFileMasterfiles(dirname);
+        if (NULL == id
+            || (have_git_checksum && 0 != strcmp(id, git_checksum)))
+        {
+            if (NULL == id)
+            {
+                Log(LOG_LEVEL_DEBUG, "The release_id of %s was missing", dirname);
+            }
+            else
+            {
+                Log(LOG_LEVEL_DEBUG, "The release_id of %s needs to be updated", dirname);
+            }
+
+            bool wrote_release = WriteReleaseIdFile(filename, dirname);
+            if (!wrote_release)
+            {
+                Log(LOG_LEVEL_VERBOSE, "The release_id file %s was NOT updated", filename);
+                free(id);
+                return false;
+            }
+            else
+            {
+                Log(LOG_LEVEL_DEBUG, "The release_id file %s was updated", filename);
+            }
+        }
+
+        free(id);
+    }
+
+    // now, tag the promises_validated
+    if (write_validated)
+    {
+        Log(LOG_LEVEL_DEBUG, "Tagging directory %s for validation", dirname);
+
+        GetPromisesValidatedFile(filename, sizeof(filename), config, dirname);
+
+        bool wrote_validated = WritePolicyValidatedFile(config, filename);
+
+        if (!wrote_validated)
+        {
+            Log(LOG_LEVEL_VERBOSE, "The promises_validated file %s was NOT updated", filename);
+            return false;
+        }
+
+        Log(LOG_LEVEL_DEBUG, "The promises_validated file %s was updated", filename);
+        return true;
+    }
 
     return true;
 }
 
-int CheckPromises(const GenericAgentConfig *config)
+/**
+ * @brief Writes a file with a contained release ID based on git SHA,
+ *        or file checksum if git SHA is not available.
+ * @param filename the release_id file
+ * @param dirname the directory to checksum or get the Git hash
+ * @return True if successful
+ */
+static bool WriteReleaseIdFile(const char *filename, const char *dirname)
+{
+    char release_id[GENERIC_AGENT_CHECKSUM_SIZE];
+
+    bool have_release_id = GeneratePolicyReleaseID(release_id, dirname);
+
+    if (!have_release_id)
+    {
+        return false;
+    }
+
+    int fd = creat(filename, 0600);
+    if (fd == -1)
+    {
+        Log(LOG_LEVEL_ERR, "While writing policy release ID file '%s', could not create file (creat: %s)", filename, GetErrorStr());
+        return false;
+    }
+
+    JsonElement *info = JsonObjectCreate(3);
+    JsonObjectAppendString(info, "releaseId", release_id);
+
+    Writer *w = FileWriter(fdopen(fd, "w"));
+    JsonWrite(w, info, 0);
+
+    WriterClose(w);
+    JsonDestroy(info);
+
+    Log(LOG_LEVEL_VERBOSE, "Saved policy release ID file '%s'", filename);
+    return true;
+}
+
+bool GenericAgentArePromisesValid(const GenericAgentConfig *config)
 {
     char cmd[CF_BUFSIZE];
 
@@ -322,7 +503,7 @@ int CheckPromises(const GenericAgentConfig *config)
         strlcat(cmd, " -b \"", CF_BUFSIZE);
         for (const Rlist *rp = config->bundlesequence; rp; rp = rp->next)
         {
-            const char *bundle_ref = rp->item;
+            const char *bundle_ref = RlistScalarValue(rp);
             strlcat(cmd, bundle_ref, CF_BUFSIZE);
 
             if (rp->next)
@@ -333,12 +514,6 @@ int CheckPromises(const GenericAgentConfig *config)
         strlcat(cmd, "\"", CF_BUFSIZE);
     }
 
-    if (config->agent_specific.agent.bootstrap_policy_server)
-    {
-        // avoids license complains from commercial cf-promises during bootstrap - see Nova_CheckLicensePromise
-        strlcat(cmd, " -D bootstrap_mode", CF_BUFSIZE);
-    }
-
     Log(LOG_LEVEL_VERBOSE, "Checking policy with command '%s'", cmd);
 
     if (!ShellCommandReturnsZero(cmd, true))
@@ -347,233 +522,11 @@ int CheckPromises(const GenericAgentConfig *config)
         return false;
     }
 
-    if (!IsFileOutsideDefaultRepository(config->original_input_file))
-    {
-        char validated_filename[CF_MAXVARSIZE];
-
-        if (MINUSF)
-        {
-            snprintf(validated_filename, CF_MAXVARSIZE, "%s/state/validated_%s", CFWORKDIR, CanonifyName(config->original_input_file));
-            MapName(validated_filename);
-        }
-        else
-        {
-            snprintf(validated_filename, CF_MAXVARSIZE, "%s/masterfiles/cf_promises_validated", CFWORKDIR);
-            MapName(validated_filename);
-        }
-
-        WritePolicyValidatedFile(validated_filename);
-    }
-
     return true;
 }
 
 
-static void ShowContext(EvalContext *ctx)
-{
-    {
-        Writer *w = NULL;
-        if (LEGACY_OUTPUT)
-        {
-            w = FileWriter(stdout);
-            WriterWriteF(w, "%s>  -> Hard classes = {", VPREFIX);
-        }
-        else
-        {
-            w = StringWriter();
-            WriterWrite(w, "Discovered hard classes:");
-        }
 
-        Seq *hard_contexts = SeqNew(1000, NULL);
-        SetIterator it = EvalContextHeapIteratorHard(ctx);
-        char *context = NULL;
-        while ((context = SetIteratorNext(&it)))
-        {
-            if (!EvalContextHeapContainsNegated(ctx, context))
-            {
-                SeqAppend(hard_contexts, context);
-            }
-        }
-
-        SeqSort(hard_contexts, (SeqItemComparator)strcmp, NULL);
-
-        for (size_t i = 0; i < SeqLength(hard_contexts); i++)
-        {
-            const char *context = SeqAt(hard_contexts, i);
-
-            WriterWriteF(w, " %s", context);
-        }
-
-        if (LEGACY_OUTPUT)
-        {
-            WriterWrite(w, "}\n");
-            FileWriterDetach(w);
-        }
-        else
-        {
-            Log(LOG_LEVEL_VERBOSE, "%s", StringWriterData(w));
-            WriterClose(w);
-        }
-
-
-        SeqDestroy(hard_contexts);
-    }
-
-    {
-        Writer *w = NULL;
-        if (LEGACY_OUTPUT)
-        {
-            w = FileWriter(stdout);
-            WriterWriteF(w, "%s>  -> Additional classes = {", VPREFIX);
-        }
-        else
-        {
-            w = StringWriter();
-            WriterWrite(w, "Additional classes:");
-        }
-
-        Seq *soft_contexts = SeqNew(1000, NULL);
-        SetIterator it = EvalContextHeapIteratorSoft(ctx);
-        char *context = NULL;
-        while ((context = SetIteratorNext(&it)))
-        {
-            if (!EvalContextHeapContainsNegated(ctx, context))
-            {
-                SeqAppend(soft_contexts, context);
-            }
-        }
-
-        SeqSort(soft_contexts, (SeqItemComparator)strcmp, NULL);
-
-        for (size_t i = 0; i < SeqLength(soft_contexts); i++)
-        {
-            const char *context = SeqAt(soft_contexts, i);
-            WriterWriteF(w, " %s", context);
-        }
-
-        if (LEGACY_OUTPUT)
-        {
-            WriterWrite(w, "}\n");
-            FileWriterDetach(w);
-        }
-        else
-        {
-            if (SeqLength(soft_contexts) > 0)
-            {
-                Log(LOG_LEVEL_VERBOSE, "%s", StringWriterData(w));
-            }
-            WriterClose(w);
-        }
-        SeqDestroy(soft_contexts);
-    }
-
-    {
-        bool have_negated_classes = false;
-        Writer *w = NULL;
-        if (LEGACY_OUTPUT)
-        {
-            w = FileWriter(stdout);
-            WriterWriteF(w, "%s>  -> Negated classes = {", VPREFIX);
-        }
-        else
-        {
-            w = StringWriter();
-            WriterWrite(w, "Negated classes:");
-        }
-
-        StringSetIterator it = EvalContextHeapIteratorNegated(ctx);
-        const char *context = NULL;
-        while ((context = StringSetIteratorNext(&it)))
-        {
-            WriterWriteF(w, " %s", context);
-            have_negated_classes = true;
-        }
-
-        if (LEGACY_OUTPUT)
-        {
-            WriterWrite(w, "}\n");
-            FileWriterDetach(w);
-        }
-        else
-        {
-            if (have_negated_classes)
-            {
-                Log(LOG_LEVEL_VERBOSE, "%s", StringWriterData(w));
-            }
-            WriterClose(w);
-        }
-    }
-}
-
-Policy *GenericAgentLoadPolicy(EvalContext *ctx, GenericAgentConfig *config)
-{
-    PROMISETIME = time(NULL);
-
-    Policy *main_policy = Cf3ParseFile(config, config->input_file);
-
-    if (main_policy)
-    {
-        PolicyHashVariables(ctx, main_policy);
-        HashControls(ctx, main_policy, config);
-
-        if (PolicyIsRunnable(main_policy))
-        {
-            Policy *aux_policy = Cf3ParseFiles(ctx, config, InputFiles(ctx, main_policy));
-            if (aux_policy)
-            {
-                main_policy = PolicyMerge(main_policy, aux_policy);
-            }
-            else
-            {
-                Log(LOG_LEVEL_ERR, "Syntax errors were found in policy files included from the main policy");
-                exit(EXIT_FAILURE); // TODO: do not exit
-            }
-        }
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Syntax errors were found in the main policy file");
-        exit(EXIT_FAILURE); // TODO: do not exit
-    }
-
-    {
-        Seq *errors = SeqNew(100, PolicyErrorDestroy);
-
-        if (PolicyCheckPartial(main_policy, errors))
-        {
-            if (!config->bundlesequence && (PolicyIsRunnable(main_policy) || config->check_runnable))
-            {
-                Log(LOG_LEVEL_VERBOSE, "Running full policy integrity checks");
-                PolicyCheckRunnable(ctx, main_policy, errors, config->ignore_missing_bundles);
-            }
-        }
-
-        if (SeqLength(errors) > 0)
-        {
-            Writer *writer = FileWriter(stderr);
-            for (size_t i = 0; i < errors->length; i++)
-            {
-                PolicyErrorWrite(writer, errors->data[i]);
-            }
-            WriterClose(writer);
-            exit(EXIT_FAILURE); // TODO: do not exit
-        }
-
-        SeqDestroy(errors);
-    }
-
-    if (LogGetGlobalLevel() >= LOG_LEVEL_VERBOSE)
-    {
-        ShowContext(ctx);
-    }
-
-    if (main_policy)
-    {
-        VerifyPromises(ctx, main_policy, config);
-    }
-
-    return main_policy;
-}
 
 /*****************************************************************************/
 
@@ -593,28 +546,27 @@ void CloseLog(void)
 }
 #endif
 
-/*******************************************************************/
-/* Level 1                                                         */
-/*******************************************************************/
+ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, GenericAgentAddEditionClasses, EvalContext *, ctx)
+{
+    EvalContextClassPutHard(ctx, "community_edition", "inventory,attribute_name=none,source=agent");
+}
 
-void InitializeGA(EvalContext *ctx, GenericAgentConfig *config)
+void GenericAgentInitialize(EvalContext *ctx, GenericAgentConfig *config)
 {
     int force = false;
     struct stat statbuf, sb;
     char vbuff[CF_BUFSIZE];
     char ebuff[CF_EXPANDSIZE];
 
-    SHORT_CFENGINEPORT = htons((unsigned short) 5308);
-    snprintf(STR_CFENGINEPORT, 15, "5308");
-
-    EvalContextHeapAddHard(ctx, "any");
-
-#if defined HAVE_NOVA
-    EvalContextHeapAddHard(ctx, "nova_edition");
-    EvalContextHeapAddHard(ctx, "enterprise_edition");
-#else
-    EvalContextHeapAddHard(ctx, "community_edition");
+#ifdef __MINGW32__
+    InitializeWindows();
 #endif
+
+    DetermineCfenginePort();
+
+    EvalContextClassPutHard(ctx, "any", "source=agent");
+
+    GenericAgentAddEditionClasses(ctx);
 
     strcpy(VPREFIX, GetConsolePrefix());
 
@@ -631,96 +583,113 @@ void InitializeGA(EvalContext *ctx, GenericAgentConfig *config)
         MapName(CFWORKDIR);
     }
 
-/* On windows, use 'binary mode' as default for files */
-
-#ifdef __MINGW32__
-    _fmode = _O_BINARY;
-#endif
-
     OpenLog(LOG_USER);
     SetSyslogFacility(LOG_USER);
 
-    if (!LOOKUP)                /* cf-know should not do this in lookup mode */
+    Log(LOG_LEVEL_VERBOSE, "Work directory is %s", CFWORKDIR);
+
+    snprintf(vbuff, CF_BUFSIZE, "%s%cupdate.conf", GetInputDir(), FILE_SEPARATOR);
+    MakeParentDirectory(vbuff, force);
+    snprintf(vbuff, CF_BUFSIZE, "%s%cbin%ccf-agent -D from_cfexecd", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+    MakeParentDirectory(vbuff, force);
+    snprintf(vbuff, CF_BUFSIZE, "%s%coutputs%cspooled_reports", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+    MakeParentDirectory(vbuff, force);
+    snprintf(vbuff, CF_BUFSIZE, "%s%clastseen%cintermittencies", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+    MakeParentDirectory(vbuff, force);
+    snprintf(vbuff, CF_BUFSIZE, "%s%creports%cvarious", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+    MakeParentDirectory(vbuff, force);
+
+    snprintf(vbuff, CF_BUFSIZE, "%s", GetInputDir());
+
+    if (stat(vbuff, &sb) == -1)
     {
-        Log(LOG_LEVEL_VERBOSE, "Work directory is %s", CFWORKDIR);
-
-        snprintf(vbuff, CF_BUFSIZE, "%s%cinputs%cupdate.conf", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
-        MakeParentDirectory(vbuff, force);
-        snprintf(vbuff, CF_BUFSIZE, "%s%cbin%ccf-agent -D from_cfexecd", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
-        MakeParentDirectory(vbuff, force);
-        snprintf(vbuff, CF_BUFSIZE, "%s%coutputs%cspooled_reports", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
-        MakeParentDirectory(vbuff, force);
-        snprintf(vbuff, CF_BUFSIZE, "%s%clastseen%cintermittencies", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
-        MakeParentDirectory(vbuff, force);
-        snprintf(vbuff, CF_BUFSIZE, "%s%creports%cvarious", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
-        MakeParentDirectory(vbuff, force);
-
-        snprintf(vbuff, CF_BUFSIZE, "%s%cinputs", CFWORKDIR, FILE_SEPARATOR);
-
-        if (stat(vbuff, &sb) == -1)
-        {
-            FatalError(ctx, " No access to WORKSPACE/inputs dir");
-        }
-        else
-        {
-            chmod(vbuff, sb.st_mode | 0700);
-        }
-
-        snprintf(vbuff, CF_BUFSIZE, "%s%coutputs", CFWORKDIR, FILE_SEPARATOR);
-
-        if (stat(vbuff, &sb) == -1)
-        {
-            FatalError(ctx, " No access to WORKSPACE/outputs dir");
-        }
-        else
-        {
-            chmod(vbuff, sb.st_mode | 0700);
-        }
-
-        sprintf(ebuff, "%s%cstate%ccf_procs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
-        MakeParentDirectory(ebuff, force);
-
-        if (stat(ebuff, &statbuf) == -1)
-        {
-            CreateEmptyFile(ebuff);
-        }
-
-        sprintf(ebuff, "%s%cstate%ccf_rootprocs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
-
-        if (stat(ebuff, &statbuf) == -1)
-        {
-            CreateEmptyFile(ebuff);
-        }
-
-        sprintf(ebuff, "%s%cstate%ccf_otherprocs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
-
-        if (stat(ebuff, &statbuf) == -1)
-        {
-            CreateEmptyFile(ebuff);
-        }
+        FatalError(ctx, " No access to WORKSPACE/inputs dir");
     }
+    else
+    {
+        chmod(vbuff, sb.st_mode | 0700);
+    }
+
+    snprintf(vbuff, CF_BUFSIZE, "%s%coutputs", CFWORKDIR, FILE_SEPARATOR);
+
+    if (stat(vbuff, &sb) == -1)
+    {
+        FatalError(ctx, " No access to WORKSPACE/outputs dir");
+    }
+    else
+    {
+        chmod(vbuff, sb.st_mode | 0700);
+    }
+
+    sprintf(ebuff, "%s%cstate%ccf_procs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+    MakeParentDirectory(ebuff, force);
+
+    if (stat(ebuff, &statbuf) == -1)
+    {
+        CreateEmptyFile(ebuff);
+    }
+
+    sprintf(ebuff, "%s%cstate%ccf_rootprocs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+
+    if (stat(ebuff, &statbuf) == -1)
+    {
+        CreateEmptyFile(ebuff);
+    }
+
+    sprintf(ebuff, "%s%cstate%ccf_otherprocs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+
+    if (stat(ebuff, &statbuf) == -1)
+    {
+        CreateEmptyFile(ebuff);
+    }
+
+    sprintf(ebuff, "%s%cstate%cprevious_state%c", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
+    MakeParentDirectory(ebuff, force);
+
+    sprintf(ebuff, "%s%cstate%cdiff%c", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
+    MakeParentDirectory(ebuff, force);
+
+    sprintf(ebuff, "%s%cstate%cuntracked%c", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
+    MakeParentDirectory(ebuff, force);
 
     OpenNetwork();
-
     CryptoInitialize();
 
-    if (!LOOKUP)
+    CheckWorkingDirectories(ctx);
+
+    /* Initialize keys and networking. cf-key, doesn't need keys. In fact it
+       must function properly even without them, so that it generates them! */
+    if (config->agent_type != AGENT_TYPE_KEYGEN)
     {
-        CheckWorkingDirectories(ctx);
+        LoadSecretKeys();
+        char *bootstrapped_policy_server = ReadPolicyServerFile(CFWORKDIR);
+        PolicyHubUpdateKeys(bootstrapped_policy_server);
+        free(bootstrapped_policy_server);
+        cfnet_init();
     }
 
-    const char *bootstrapped_policy_server = ReadPolicyServerFile(CFWORKDIR);
-    if (!LoadSecretKeys(bootstrapped_policy_server))
+    size_t cwd_size = PATH_MAX;
+    while (true)
     {
-        FatalError(ctx, "Could not load secret keys");
+        char cwd[cwd_size];
+        if (!getcwd(cwd, cwd_size))
+        {
+            if (errno == ERANGE)
+            {
+                cwd_size *= 2;
+                continue;
+            }
+            Log(LOG_LEVEL_WARNING, "Could not determine current directory. (getcwd: '%s')", GetErrorStr());
+            break;
+        }
+        EvalContextSetLaunchDirectory(ctx, cwd);
+        break;
     }
 
     if (!MINUSF)
     {
-        GenericAgentConfigSetInputFile(config, GetWorkDir(), "promises.cf");
+        GenericAgentConfigSetInputFile(config, GetInputDir(), "promises.cf");
     }
-
-    DetermineCfenginePort();
 
     VIFELAPSED = 1;
     VEXPIREAFTER = 1;
@@ -729,93 +698,18 @@ void InitializeGA(EvalContext *ctx, GenericAgentConfig *config)
 
     if (config->agent_specific.agent.bootstrap_policy_server)
     {
-        snprintf(vbuff, CF_BUFSIZE, "%s%cinputs%cfailsafe.cf", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+        snprintf(vbuff, CF_BUFSIZE, "%s%cfailsafe.cf", GetInputDir(), FILE_SEPARATOR);
 
-#ifndef HAVE_NOVA
         if (stat(vbuff, &statbuf) == -1)
         {
-            GenericAgentConfigSetInputFile(config, GetWorkDir(), "failsafe.cf");
-        }
-        else
-#endif
-        {
-            GenericAgentConfigSetInputFile(config, GetWorkDir(), vbuff);
-        }
-    }
-}
-
-/*******************************************************************/
-
-static Policy *Cf3ParseFiles(EvalContext *ctx, GenericAgentConfig *config, const Rlist *inputs)
-{
-    Policy *policy = PolicyNew();
-    bool contains_parse_errors = false;
-
-    for (const Rlist *rp = inputs; rp; rp = rp->next)
-    {
-        // TODO: ad-hoc validation, necessary?
-        if (rp->type != RVAL_TYPE_SCALAR)
-        {
-            Log(LOG_LEVEL_ERR, "Non-file object in inputs list");
-            continue;
+            GenericAgentConfigSetInputFile(config, GetInputDir(), "failsafe.cf");
         }
         else
         {
-            Rval returnval;
-
-            if (strcmp(rp->item, CF_NULL_VALUE) == 0)
-            {
-                continue;
-            }
-
-            returnval = EvaluateFinalRval(ctx, "sys", (Rval) {rp->item, rp->type}, true, NULL);
-
-            Policy *aux_policy = NULL;
-            switch (returnval.type)
-            {
-            case RVAL_TYPE_SCALAR:
-                aux_policy = Cf3ParseFile(config, GenericAgentResolveInputPath(config, returnval.item));
-                break;
-
-            case RVAL_TYPE_LIST:
-                aux_policy = Cf3ParseFiles(ctx, config, returnval.item);
-                break;
-
-            default:
-                ProgrammingError("Unknown type in input list for parsing: %d", returnval.type);
-                break;
-            }
-
-            if (aux_policy)
-            {
-                policy = PolicyMerge(policy, aux_policy);
-            }
-            else
-            {
-                contains_parse_errors = true;
-            }
-
-            RvalDestroy(returnval);
+            GenericAgentConfigSetInputFile(config, GetInputDir(), vbuff);
         }
-
-        PolicyHashVariables(ctx, policy);
-        HashControls(ctx, policy, config);
-    }
-
-    PolicyHashVariables(ctx, policy);
-
-    if (contains_parse_errors)
-    {
-        PolicyDestroy(policy);
-        return NULL;
-    }
-    else
-    {
-        return policy;
     }
 }
-
-/*******************************************************************/
 
 static bool MissingInputFile(const char *input_file)
 {
@@ -830,225 +724,259 @@ static bool MissingInputFile(const char *input_file)
     return false;
 }
 
-/*******************************************************************/
-
-int NewPromiseProposals(EvalContext *ctx, const GenericAgentConfig *config, const Rlist *input_files)
+// Git only.
+bool GeneratePolicyReleaseIDFromGit(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir)
 {
-    Rlist *sl;
-    struct stat sb;
-    int result = false;
-    char filename[CF_MAXVARSIZE];
-    time_t validated_at;
+    char git_filename[PATH_MAX + 1];
+    snprintf(git_filename, PATH_MAX, "%s/.git/HEAD", policy_dir);
+    MapName(git_filename);
 
-    if (MINUSF)
+    FILE *git_file = fopen(git_filename, "r");
+    if (git_file)
     {
-        snprintf(filename, CF_MAXVARSIZE, "%s/state/validated_%s", CFWORKDIR, CanonifyName(config->original_input_file));
-        MapName(filename);
-    }
-    else
-    {
-        snprintf(filename, CF_MAXVARSIZE, "%s/masterfiles/cf_promises_validated", CFWORKDIR);
-        MapName(filename);
-    }
+        char git_head[128];
+        fscanf(git_file, "ref: %127s", git_head);
+        fclose(git_file);
 
-    if (stat(filename, &sb) != -1)
-    {
-        validated_at = sb.st_mtime;
-    }
-    else
-    {
-        validated_at = 0;
-    }
-
-// sanity check
-
-    if (validated_at > time(NULL))
-    {
-        Log(LOG_LEVEL_INFO,
-              "!! Clock seems to have jumped back in time - mtime of %s is newer than current time - touching it",
-              filename);
-
-        if (utime(filename, NULL) == -1)
+        snprintf(git_filename, PATH_MAX, "%s/.git/%s", policy_dir, git_head);
+        git_file = fopen(git_filename, "r");
+        if (git_file)
         {
-            Log(LOG_LEVEL_ERR, "Could not touch '%s'. (utime: %s)", filename, GetErrorStr());
-        }
-
-        validated_at = 0;
-        return true;
-    }
-
-    if (stat(config->input_file, &sb) == -1)
-    {
-        Log(LOG_LEVEL_VERBOSE, "There is no readable input file at '%s'. (stat: %s)", config->input_file, GetErrorStr());
-        return true;
-    }
-
-    if (sb.st_mtime > validated_at || sb.st_mtime > PROMISETIME)
-    {
-        Log(LOG_LEVEL_VERBOSE, "Promises seem to change");
-        return true;
-    }
-
-// Check the directories first for speed and because non-input/data files should trigger an update
-
-    snprintf(filename, CF_MAXVARSIZE, "%s/inputs", CFWORKDIR);
-    MapName(filename);
-
-    if (IsNewerFileTree(filename, PROMISETIME))
-    {
-        Log(LOG_LEVEL_VERBOSE, "Quick search detected file changes");
-        return true;
-    }
-
-// Check files in case there are any abs paths
-
-    for (const Rlist *rp = input_files; rp != NULL; rp = rp->next)
-    {
-        if (rp->type != RVAL_TYPE_SCALAR)
-        {
-            Log(LOG_LEVEL_ERR, "Non file object %s in list", (char *) rp->item);
+            fscanf(git_file, "%40s", release_id_out);
+            fclose(git_file);
+            return true;
         }
         else
         {
-            Rval returnval = EvaluateFinalRval(ctx, "sys", (Rval) { rp->item, rp->type }, true, NULL);
-
-            switch (returnval.type)
-            {
-            case RVAL_TYPE_SCALAR:
-
-                if (stat(GenericAgentResolveInputPath(config, (char *) returnval.item), &sb) == -1)
-                {
-                    Log(LOG_LEVEL_ERR, "Unreadable promise proposals at '%s'. (stat: %s)", (char *) returnval.item, GetErrorStr());
-                    result = true;
-                    break;
-                }
-
-                if (sb.st_mtime > PROMISETIME)
-                {
-                    result = true;
-                }
-                break;
-
-            case RVAL_TYPE_LIST:
-
-                for (sl = (Rlist *) returnval.item; sl != NULL; sl = sl->next)
-                {
-                    if (strcmp((char *) sl->item, CF_NULL_VALUE) == 0)
-                    {
-                        continue;
-                    }
-
-                    if (stat(GenericAgentResolveInputPath(config, (char *) sl->item), &sb) == -1)
-                    {
-                        Log(LOG_LEVEL_ERR, "Unreadable promise proposals at '%s'. (stat: %s)", (char *) sl->item, GetErrorStr());
-                        result = true;
-                        break;
-                    }
-
-                    if (sb.st_mtime > PROMISETIME)
-                    {
-                        result = true;
-                        break;
-                    }
-                }
-                break;
-
-            default:
-                break;
-            }
-
-            RvalDestroy(returnval);
-
-            if (result)
-            {
-                break;
-            }
+            Log(LOG_LEVEL_DEBUG, "While generating policy release ID, found git head ref '%s', but unable to open (errno: %s)",
+                policy_dir, GetErrorStr());
         }
     }
-
-// did policy server change (used in $(sys.policy_hub))?
-    snprintf(filename, CF_MAXVARSIZE, "%s/policy_server.dat", CFWORKDIR);
-    MapName(filename);
-
-    if ((stat(filename, &sb) != -1) && (sb.st_mtime > PROMISETIME))
+    else
     {
-        result = true;
+        Log(LOG_LEVEL_DEBUG, "While generating policy release ID, directory is '%s' not a git repository",
+            policy_dir);
     }
 
-    return result;
+    return false;
 }
 
-/*
- * The difference between filename and input_input file is that the latter is the file specified by -f or
- * equivalently the file containing body common control. This will hopefully be squashed in later refactoring.
- */
-static Policy *Cf3ParseFile(const GenericAgentConfig *config, const char *input_path)
+bool GeneratePolicyReleaseIDFromTree(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir)
 {
-    struct stat statbuf;
-
-    if (stat(input_path, &statbuf) == -1)
+    if (access(policy_dir, R_OK) != 0)
     {
-        if (config->ignore_missing_inputs)
-        {
-            return PolicyNew();
-        }
-
-        Log(LOG_LEVEL_ERR, "Can't stat file '%s' for parsing. (stat: %s)", input_path, GetErrorStr());
-        exit(1);
+        Log(LOG_LEVEL_ERR, "Cannot access policy directory '%s' to generate release ID", policy_dir);
+        return false;
     }
 
-#ifndef _WIN32
-    if (config->check_not_writable_by_others && (statbuf.st_mode & (S_IWGRP | S_IWOTH)))
+    // fallback, produce some pseudo sha1 hash
+    EVP_MD_CTX crypto_ctx;
+    EVP_DigestInit(&crypto_ctx, EVP_get_digestbyname(HashNameFromId(GENERIC_AGENT_CHECKSUM_METHOD)));
+
+    bool success = HashDirectoryTree(policy_dir,
+                                     (const char *[]) { ".cf", ".dat", ".txt", ".conf", NULL},
+                                     &crypto_ctx);
+
+    int md_len;
+    unsigned char digest[EVP_MAX_MD_SIZE + 1] = { 0 };
+    EVP_DigestFinal(&crypto_ctx, digest, &md_len);
+
+    HashPrintSafe(GENERIC_AGENT_CHECKSUM_METHOD, false, digest, release_id_out);
+    return success;
+}
+
+bool GeneratePolicyReleaseID(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir)
+{
+    if (GeneratePolicyReleaseIDFromGit(release_id_out, policy_dir))
     {
-        Log(LOG_LEVEL_ERR, "File %s (owner %ju) is writable by others (security exception)", input_path, (uintmax_t)statbuf.st_uid);
-        exit(1);
+        return true;
     }
-#endif
 
-    Log(LOG_LEVEL_VERBOSE, "Parsing file '%s'", input_path);
+    return GeneratePolicyReleaseIDFromTree(release_id_out, policy_dir);
+}
 
-    if (!FileCanOpen(input_path, "r"))
+/**
+ * @brief Gets the promises_validated file name depending on context and options
+ */
+static void GetPromisesValidatedFile(char *filename, size_t max_size, const GenericAgentConfig *config, const char *maybe_dirname)
+{
+    char dirname[PATH_MAX + 1];
+    GetAutotagDir(dirname, max_size, maybe_dirname);
+
+    if (NULL == maybe_dirname && MINUSF)
     {
-        Log(LOG_LEVEL_ERR, "Can't open file '%s' for parsing", input_path);
-        exit(1);
-    }
-
-    Policy *policy = NULL;
-    if (StringEndsWith(input_path, ".json"))
-    {
-        char *contents = NULL;
-        if (FileReadMax(&contents, input_path, SIZE_MAX) == -1)
-        {
-            Log(LOG_LEVEL_ERR, "Error reading JSON input file '%s'", input_path);
-            return NULL;
-        }
-        JsonElement *json_policy = NULL;
-        const char *data = contents; // TODO: need to fix JSON parser signature, just silly
-        if (JsonParse(&data, &json_policy) != JSON_PARSE_OK)
-        {
-            Log(LOG_LEVEL_ERR, "Error parsing JSON input file '%s'", input_path);
-            free(contents);
-            return NULL;
-        }
-
-        policy = PolicyFromJson(json_policy);
-
-        JsonElementDestroy(json_policy);
-        free(contents);
+        snprintf(filename, max_size, "%s/validated_%s", dirname, CanonifyName(config->original_input_file));
     }
     else
     {
-        if (config->agent_type == AGENT_TYPE_COMMON)
+        snprintf(filename, max_size, "%s/cf_promises_validated", dirname);
+    }
+
+    MapName(filename);
+}
+
+ /**
+ * @brief Gets the promises_validated file name depending on context and options
+ */
+static void GetAutotagDir(char *dirname, size_t max_size, const char *maybe_dirname)
+{
+    if (NULL != maybe_dirname)
+    {
+        strlcpy(dirname, maybe_dirname, max_size);
+    }
+    else if (MINUSF)
+    {
+        snprintf(dirname, max_size, "%s/state", CFWORKDIR);
+    }
+    else
+    {
+        strlcpy(dirname, GetMasterDir(), max_size);
+    }
+
+    MapName(dirname);
+}
+
+/**
+ * @brief Gets the release_id file name in the given base_path.
+ */
+void GetReleaseIdFile(const char *base_path, char *filename, size_t max_size)
+{
+    snprintf(filename, max_size, "%s/cf_promises_release_id", base_path);
+    MapName(filename);
+}
+
+static JsonElement *ReadReleaseIdFileFromMasterfiles(const char *maybe_dirname)
+{
+    char filename[CF_MAXVARSIZE];
+
+    GetReleaseIdFile(NULL == maybe_dirname ? GetMasterDir() : maybe_dirname,
+                     filename, sizeof(filename));
+
+    JsonElement *doc = ReadJsonFile(filename);
+    if (NULL == doc)
+    {
+        Log(LOG_LEVEL_VERBOSE, "Could not parse release_id JSON file %s", filename);
+    }
+
+    return doc;
+}
+
+static char* ReadReleaseIdFromReleaseIdFileMasterfiles(const char *maybe_dirname)
+{
+    JsonElement *doc = ReadReleaseIdFileFromMasterfiles(maybe_dirname);
+    char *id = NULL;
+    if (doc)
+    {
+        JsonElement *jid = JsonObjectGet(doc, "releaseId");
+        if (jid)
         {
-            policy = ParserParseFile(input_path, config->agent_specific.common.parser_warnings, config->agent_specific.common.parser_warnings_error);
+            id = xstrdup(JsonPrimitiveGetAsString(jid));
         }
-        else
+        JsonDestroy(doc);
+    }
+
+    return id;
+}
+
+// TODO: refactor Read*FromPolicyValidatedMasterfiles
+time_t ReadTimestampFromPolicyValidatedFile(const GenericAgentConfig *config, const char *maybe_dirname)
+{
+    time_t validated_at = 0;
+    {
+        JsonElement *validated_doc = ReadPolicyValidatedFileFromMasterfiles(config, maybe_dirname);
+        if (validated_doc)
         {
-            policy = ParserParseFile(input_path, 0, 0);
+            JsonElement *timestamp = JsonObjectGet(validated_doc, "timestamp");
+            if (timestamp)
+            {
+                validated_at = JsonPrimitiveGetAsInteger(timestamp);
+            }
+            JsonDestroy(validated_doc);
         }
     }
 
-    return policy;
+    return validated_at;
+}
+
+// TODO: refactor Read*FromPolicyValidatedMasterfiles
+char* ReadChecksumFromPolicyValidatedMasterfiles(const GenericAgentConfig *config, const char *maybe_dirname)
+{
+    char *checksum_str = NULL;
+
+    {
+        JsonElement *validated_doc = ReadPolicyValidatedFileFromMasterfiles(config, maybe_dirname);
+        if (validated_doc)
+        {
+            JsonElement *checksum = JsonObjectGet(validated_doc, "checksum");
+            if (checksum )
+            {
+                checksum_str = xstrdup(JsonPrimitiveGetAsString(checksum));
+            }
+            JsonDestroy(validated_doc);
+        }
+    }
+
+    return checksum_str;
+}
+
+/**
+ * @NOTE Updates the config->agent_specific.daemon.last_validated_at timestamp
+ *       used by serverd, execd etc daemons when checking for new policies.
+ */
+bool GenericAgentIsPolicyReloadNeeded(const GenericAgentConfig *config)
+{
+    time_t validated_at = ReadTimestampFromPolicyValidatedFile(config, NULL);
+    time_t now = time(NULL);
+
+    if (validated_at > now)
+    {
+        Log(LOG_LEVEL_INFO,
+            "Clock seems to have jumped back in time, mtime of %jd is newer than current time %jd, touching it",
+            (intmax_t) validated_at, (intmax_t) now);
+
+        GenericAgentTagReleaseDirectory(config,
+                                        NULL, // use GetAutotagDir
+                                        true, // write validated
+                                        false); // write release ID
+        return true;
+    }
+
+    {
+        struct stat sb;
+        if (stat(config->input_file, &sb) == -1)
+        {
+            Log(LOG_LEVEL_VERBOSE, "There is no readable input file at '%s'. (stat: %s)", config->input_file, GetErrorStr());
+            return true;
+        }
+        else if (sb.st_mtime > validated_at)
+        {
+            Log(LOG_LEVEL_VERBOSE, "Input file '%s' has changed since the last policy read attempt", config->input_file);
+            return true;
+        }
+    }
+
+    // Check the directories first for speed and because non-input/data files should trigger an update
+    {
+        if (IsNewerFileTree( (char *)GetInputDir(), validated_at))
+        {
+            Log(LOG_LEVEL_VERBOSE, "Quick search detected file changes");
+            return true;
+        }
+    }
+
+    {
+        char filename[MAX_FILENAME];
+        snprintf(filename, MAX_FILENAME, "%s/policy_server.dat", CFWORKDIR);
+        MapName(filename);
+
+        struct stat sb;
+        if ((stat(filename, &sb) != -1) && (sb.st_mtime > validated_at))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /*******************************************************************/
@@ -1069,22 +997,6 @@ Seq *ControlBodyConstraints(const Policy *policy, AgentType agent)
     }
 
     return NULL;
-}
-
-const Rlist *InputFiles(EvalContext *ctx, Policy *policy)
-{
-    Body *body_common_control = PolicyGetBody(policy, NULL, "common", "control");
-    if (!body_common_control)
-    {
-        ProgrammingError("Attempted to get input files from policy without body common control");
-        return NULL;
-    }
-
-    Seq *potential_inputs = BodyGetConstraint(body_common_control, "inputs");
-    Constraint *cp = EffectiveConstraint(ctx, potential_inputs);
-    SeqDestroy(potential_inputs);
-
-    return cp ? cp->rval.item : NULL;
 }
 
 /*******************************************************************/
@@ -1256,7 +1168,7 @@ static void CheckWorkingDirectories(EvalContext *ctx)
 
 const char *GenericAgentResolveInputPath(const GenericAgentConfig *config, const char *input_file)
 {
-    static char input_path[CF_BUFSIZE];
+    static char input_path[CF_BUFSIZE]; /* GLOBAL_R, no initialization needed */
 
     switch (FilePathGetType(input_file))
     {
@@ -1273,219 +1185,31 @@ const char *GenericAgentResolveInputPath(const GenericAgentConfig *config, const
     return MapName(input_path);
 }
 
-static void VerifyPromises(EvalContext *ctx, Policy *policy, GenericAgentConfig *config)
+void GenericAgentWriteHelp(Writer *w, const char *component, const struct option options[], const char *const hints[], bool accepts_file_argument)
 {
+    WriterWriteF(w, "Usage: %s [OPTION]...%s\n", component, accepts_file_argument ? " [FILE]" : "");
 
-/* Now look once through ALL the bundles themselves */
-
-    for (size_t i = 0; i < SeqLength(policy->bundles); i++)
-    {
-        Bundle *bp = SeqAt(policy->bundles, i);
-        EvalContextStackPushBundleFrame(ctx, bp, false);
-
-        for (size_t j = 0; j < SeqLength(bp->promise_types); j++)
-        {
-            PromiseType *sp = SeqAt(bp->promise_types, j);
-
-            for (size_t ppi = 0; ppi < SeqLength(sp->promises); ppi++)
-            {
-                Promise *pp = SeqAt(sp->promises, ppi);
-                ExpandPromise(ctx, pp, CommonEvalPromise, NULL);
-            }
-        }
-
-        EvalContextStackPopFrame(ctx);
-    }
-
-    PolicyHashVariables(ctx, policy);
-    HashControls(ctx, policy, config);
-
-    // TODO: need to move this inside PolicyCheckRunnable eventually.
-    if (!config->bundlesequence && config->check_runnable)
-    {
-        // only verify policy-defined bundlesequence for cf-agent, cf-promises, cf-gendoc
-        if ((config->agent_type == AGENT_TYPE_AGENT) ||
-            (config->agent_type == AGENT_TYPE_COMMON) ||
-            (config->agent_type == AGENT_TYPE_GENDOC))
-        {
-            if (!VerifyBundleSequence(ctx, policy, config))
-            {
-                FatalError(ctx, "Errors in promise bundles");
-            }
-        }
-    }
-}
-
-/*******************************************************************/
-/* Level 3                                                         */
-/*******************************************************************/
-
-static void CheckVariablePromises(EvalContext *ctx, Seq *var_promises)
-{
-    int allow_redefine = false;
-
-    for (size_t i = 0; i < SeqLength(var_promises); i++)
-    {
-        Promise *pp = SeqAt(var_promises, i);
-        VerifyVarPromise(ctx, pp, allow_redefine);
-    }
-}
-
-/*******************************************************************/
-
-static void CheckCommonClassPromises(EvalContext *ctx, Seq *class_promises)
-{
-    Log(LOG_LEVEL_VERBOSE, "Checking common class promises...");
-
-    for (size_t i = 0; i < SeqLength(class_promises); i++)
-    {
-        Promise *pp = SeqAt(class_promises, i);
-
-        char *sp = NULL;
-        if (VarClassExcluded(ctx, pp, &sp))
-        {
-            if (LEGACY_OUTPUT)
-            {
-                Log(LOG_LEVEL_VERBOSE, "\n");
-                Log(LOG_LEVEL_VERBOSE, ". . . . . . . . . . . . . . . . . . . . . . . . . . . . ");
-                Log(LOG_LEVEL_VERBOSE, "Skipping whole next promise (%s), as var-context %s is not relevant", pp->promiser, sp);
-                Log(LOG_LEVEL_VERBOSE, ". . . . . . . . . . . . . . . . . . . . . . . . . . . . ");
-            }
-            else
-            {
-                Log(LOG_LEVEL_VERBOSE, "Skipping next promise '%s', as var-context '%s' is not relevant", pp->promiser, sp);
-            }
-            continue;
-        }
-
-        ExpandPromise(ctx, pp, VerifyClassPromise, NULL);
-    }
-}
-
-/*******************************************************************/
-
-static void CheckControlPromises(EvalContext *ctx, GenericAgentConfig *config, const Body *control_body)
-{
-    const ConstraintSyntax *body_syntax = NULL;
-    Rval returnval;
-
-    assert(strcmp(control_body->name, "control") == 0);
-
-    for (int i = 0; CONTROL_BODIES[i].constraints != NULL; i++)
-    {
-        body_syntax = CONTROL_BODIES[i].constraints;
-
-        if (strcmp(control_body->type, CONTROL_BODIES[i].body_type) == 0)
-        {
-            break;
-        }
-    }
-
-    if (body_syntax == NULL)
-    {
-        FatalError(ctx, "Unknown agent");
-    }
-
-    char scope[CF_BUFSIZE];
-    snprintf(scope, CF_BUFSIZE, "%s_%s", control_body->name, control_body->type);
-    Log(LOG_LEVEL_DEBUG, "Initiate control variable convergence for scope '%s'", scope);
-    ScopeClear(scope);
-    ScopeSetCurrent(scope);
-
-    for (size_t i = 0; i < SeqLength(control_body->conlist); i++)
-    {
-        Constraint *cp = SeqAt(control_body->conlist, i);
-
-        if (!IsDefinedClass(ctx, cp->classes, NULL))
-        {
-            continue;
-        }
-
-        if (strcmp(cp->lval, CFG_CONTROLBODY[COMMON_CONTROL_BUNDLESEQUENCE].lval) == 0)
-        {
-            returnval = ExpandPrivateRval(ctx, scope, cp->rval);
-        }
-        else
-        {
-            returnval = EvaluateFinalRval(ctx, scope, cp->rval, true, NULL);
-        }
-
-        ScopeDeleteVariable(scope, cp->lval);
-
-        if (!EvalContextVariablePut(ctx, (VarRef) { NULL, scope, cp->lval }, returnval, ConstraintSyntaxGetDataType(body_syntax, cp->lval)))
-        {
-            Log(LOG_LEVEL_ERR, "Rule from %s at/before line %zu", control_body->source_path, cp->offset.line);
-        }
-
-        if (strcmp(cp->lval, CFG_CONTROLBODY[COMMON_CONTROL_OUTPUT_PREFIX].lval) == 0)
-        {
-            strncpy(VPREFIX, returnval.item, CF_MAXVARSIZE);
-        }
-
-        if (strcmp(cp->lval, CFG_CONTROLBODY[COMMON_CONTROL_DOMAIN].lval) == 0)
-        {
-            strcpy(VDOMAIN, cp->rval.item);
-            Log(LOG_LEVEL_VERBOSE, "SET domain = %s", VDOMAIN);
-            ScopeDeleteSpecial("sys", "domain");
-            ScopeDeleteSpecial("sys", "fqhost");
-            snprintf(VFQNAME, CF_MAXVARSIZE, "%s.%s", VUQNAME, VDOMAIN);
-            ScopeNewSpecial(ctx, "sys", "fqhost", VFQNAME, DATA_TYPE_STRING);
-            ScopeNewSpecial(ctx, "sys", "domain", VDOMAIN, DATA_TYPE_STRING);
-            EvalContextHeapAddHard(ctx, VDOMAIN);
-        }
-
-        if (strcmp(cp->lval, CFG_CONTROLBODY[COMMON_CONTROL_IGNORE_MISSING_INPUTS].lval) == 0)
-        {
-            Log(LOG_LEVEL_VERBOSE, "SET ignore_missing_inputs %s", RvalScalarValue(cp->rval));
-            config->ignore_missing_inputs = BooleanFromString(cp->rval.item);
-        }
-
-        if (strcmp(cp->lval, CFG_CONTROLBODY[COMMON_CONTROL_IGNORE_MISSING_BUNDLES].lval) == 0)
-        {
-            Log(LOG_LEVEL_VERBOSE, "SET ignore_missing_bundles %s", RvalScalarValue(cp->rval));
-            config->ignore_missing_bundles = BooleanFromString(cp->rval.item);
-        }
-
-        if (strcmp(cp->lval, CFG_CONTROLBODY[COMMON_CONTROL_GOALPATTERNS].lval) == 0)
-        {
-            /* Ignored */
-            continue;
-        }
-        
-        RvalDestroy(returnval);
-    }
-}
-
-/*******************************************************************/
-
-void PrintHelp(const char *component, const struct option options[], const char *hints[], bool accepts_file_argument)
-{
-    printf("Usage: %s [OPTION]...%s\n", component, accepts_file_argument ? " [FILE]" : "");
-
-    printf("\nOptions:\n");
+    WriterWriteF(w, "\nOptions:\n");
 
     for (int i = 0; options[i].name != NULL; i++)
     {
         if (options[i].has_arg)
         {
-            printf("  --%-12s, -%c value - %s\n", options[i].name, (char) options[i].val, hints[i]);
+            WriterWriteF(w, "  --%-12s, -%c value - %s\n", options[i].name, (char) options[i].val, hints[i]);
         }
         else
         {
-            printf("  --%-12s, -%-7c - %s\n", options[i].name, (char) options[i].val, hints[i]);
+            WriterWriteF(w, "  --%-12s, -%-7c - %s\n", options[i].name, (char) options[i].val, hints[i]);
         }
     }
 
-    printf("\nWebsite: http://www.cfengine.com\n");
-    printf("This software is Copyright (C) 2008,2010-present CFEngine AS.\n");
+    WriterWriteF(w, "\nWebsite: http://www.cfengine.com\n");
+    WriterWriteF(w, "This software is Copyright (C) 2008,2010-present CFEngine AS.\n");
 }
 
-void PrintVersion(void)
+ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, GenericAgentWriteVersion, Writer *, w)
 {
-    printf("%s\n", NameVersion());
-#ifdef HAVE_NOVA
-    printf("%s\n", Nova_NameVersion());
-#endif
+    WriterWriteF(w, "%s\n", NameVersion());
 }
 
 /*******************************************************************/
@@ -1530,7 +1254,7 @@ void WritePID(char *filename)
 
     pthread_once(&pid_cleanup_once, RegisterPidCleanup);
 
-    snprintf(PIDFILE, CF_BUFSIZE - 1, "%s%c%s", CFWORKDIR, FILE_SEPARATOR, filename);
+    snprintf(PIDFILE, CF_BUFSIZE - 1, "%s%c%s", GetPidDir(), FILE_SEPARATOR, filename);
 
     if ((fp = fopen(PIDFILE, "w")) == NULL)
     {
@@ -1542,140 +1266,6 @@ void WritePID(char *filename)
 
     fclose(fp);
 }
-
-/*******************************************************************/
-
-void BundleHashVariables(EvalContext *ctx, Bundle *bundle)
-{
-    Log(LOG_LEVEL_VERBOSE, "Resolving variables in bundle '%s'", bundle->name);
-
-    for (size_t j = 0; j < SeqLength(bundle->promise_types); j++)
-    {
-        PromiseType *sp = SeqAt(bundle->promise_types, j);
-
-        if (strcmp(bundle->type, "common") == 0 && strcmp(sp->name, "classes") == 0)
-        {
-            CheckCommonClassPromises(ctx, sp->promises);
-        }
-    }
-
-    for (size_t j = 0; j < SeqLength(bundle->promise_types); j++)
-    {
-        PromiseType *sp = SeqAt(bundle->promise_types, j);
-
-        if (strcmp(sp->name, "vars") == 0)
-        {
-            CheckVariablePromises(ctx, sp->promises);
-        }
-    }
-
-}
-
-void PolicyHashVariables(EvalContext *ctx, Policy *policy)
-{
-    for (size_t i = 0; i < SeqLength(policy->bundles); i++)
-    {
-        Bundle *bundle = SeqAt(policy->bundles, i);
-        if (strcmp("common", bundle->type) == 0)
-        {
-            EvalContextStackPushBundleFrame(ctx, bundle, false);
-            BundleHashVariables(ctx, bundle);
-            EvalContextStackPopFrame(ctx);
-        }
-    }
-
-    for (size_t i = 0; i < SeqLength(policy->bundles); i++)
-    {
-        Bundle *bundle = SeqAt(policy->bundles, i);
-        if (strcmp("common", bundle->type) != 0)
-        {
-            EvalContextStackPushBundleFrame(ctx, bundle, false);
-            BundleHashVariables(ctx, bundle);
-            EvalContextStackPopFrame(ctx);
-        }
-    }
-}
-
-/*******************************************************************/
-
-void HashControls(EvalContext *ctx, const Policy *policy, GenericAgentConfig *config)
-{
-/* Only control bodies need to be hashed like variables */
-
-    for (size_t i = 0; i < SeqLength(policy->bodies); i++)
-    {
-        Body *bdp = SeqAt(policy->bodies, i);
-
-        if (strcmp(bdp->name, "control") == 0)
-        {
-            CheckControlPromises(ctx, config, bdp);
-        }
-    }
-}
-
-/********************************************************************/
-
-static bool VerifyBundleSequence(EvalContext *ctx, const Policy *policy, const GenericAgentConfig *config)
-{
-    Rlist *rp;
-    char *name;
-    Rval retval;
-    int ok = true;
-    FnCall *fp;
-
-    if (!EvalContextVariableControlCommonGet(ctx, COMMON_CONTROL_BUNDLESEQUENCE, &retval))
-    {
-        Log(LOG_LEVEL_ERR, " No bundlesequence in the common control body");
-        return false;
-    }
-
-    if (retval.type != RVAL_TYPE_LIST)
-    {
-        FatalError(ctx, "Promised bundlesequence was not a list");
-    }
-
-    for (rp = (Rlist *) retval.item; rp != NULL; rp = rp->next)
-    {
-        switch (rp->type)
-        {
-        case RVAL_TYPE_SCALAR:
-            name = (char *) rp->item;
-            break;
-
-        case RVAL_TYPE_FNCALL:
-            fp = (FnCall *) rp->item;
-            name = (char *) fp->name;
-            break;
-
-        default:
-            name = NULL;
-            ok = false;
-            {
-                Writer *w = StringWriter();
-                WriterWrite(w, "Illegal item found in bundlesequence '");
-                RvalWrite(w, (Rval) {rp->item, rp->type});
-                WriterWrite(w, "'");
-                Log(LOG_LEVEL_ERR, "%s", StringWriterData(w));
-                WriterClose(w);
-            }
-            break;
-        }
-
-        if (strcmp(name, CF_NULL_VALUE) == 0)
-        {
-            continue;
-        }
-
-        if (!config->ignore_missing_bundles && !PolicyGetBundle(policy, NULL, NULL, name))
-        {
-            Log(LOG_LEVEL_ERR, "Bundle '%s' listed in the bundlesequence is not a defined bundle", name);
-            ok = false;
-        }
-    }
-
-    return ok;
-}
-
 
 bool GenericAgentConfigParseArguments(GenericAgentConfig *config, int argc, char **argv)
 {
@@ -1743,6 +1333,30 @@ bool GenericAgentConfigParseWarningOptions(GenericAgentConfig *config, const cha
     return true;
 }
 
+bool GenericAgentConfigParseColor(GenericAgentConfig *config, const char *mode)
+{
+    if (!mode || strcmp("auto", mode) == 0)
+    {
+        config->color = config->tty_interactive;
+        return true;
+    }
+    else if (strcmp("always", mode) == 0)
+    {
+        config->color = true;
+        return true;
+    }
+    else if (strcmp("never", mode) == 0)
+    {
+        config->color = false;
+        return true;
+    }
+    else
+    {
+        Log(LOG_LEVEL_ERR, "Unrecognized color mode '%s'", mode);
+        return false;
+    }
+}
+
 GenericAgentConfig *GenericAgentConfigNewDefault(AgentType agent_type)
 {
     GenericAgentConfig *config = xmalloc(sizeof(GenericAgentConfig));
@@ -1751,6 +1365,9 @@ GenericAgentConfig *GenericAgentConfigNewDefault(AgentType agent_type)
 
     // TODO: system state, perhaps pull out as param
     config->tty_interactive = isatty(0) && isatty(1);
+
+    const char *color_env = getenv("CFENGINE_COLOR");
+    config->color = (color_env && 0 == strcmp(color_env, "1"));
 
     config->bundlesequence = NULL;
 
@@ -1765,13 +1382,20 @@ GenericAgentConfig *GenericAgentConfigNewDefault(AgentType agent_type)
 
     config->heap_soft = NULL;
     config->heap_negated = NULL;
+    config->ignore_locks = false;
 
     config->agent_specific.agent.bootstrap_policy_server = NULL;
 
     switch (agent_type)
     {
     case AGENT_TYPE_COMMON:
+        config->agent_specific.common.eval_functions = true;
+        config->agent_specific.common.show_classes = false;
+        config->agent_specific.common.show_variables = false;
         config->agent_specific.common.policy_output_format = GENERIC_AGENT_CONFIG_COMMON_POLICY_OUTPUT_FORMAT_NONE;
+        /* Bitfields of warnings to be recorded, or treated as errors. */
+        config->agent_specific.common.parser_warnings = PARSER_WARNING_ALL;
+        config->agent_specific.common.parser_warnings_error = 0;
         break;
 
     default:
@@ -1788,7 +1412,10 @@ void GenericAgentConfigDestroy(GenericAgentConfig *config)
         RlistDestroy(config->bundlesequence);
         StringSetDestroy(config->heap_soft);
         StringSetDestroy(config->heap_negated);
+        free(config->original_input_file);
         free(config->input_file);
+        free(config->input_dir);
+        free(config);
     }
 }
 
@@ -1800,41 +1427,27 @@ void GenericAgentConfigApply(EvalContext *ctx, const GenericAgentConfig *config)
         const char *context = NULL;
         while ((context = StringSetIteratorNext(&it)))
         {
-            if (EvalContextHeapContainsHard(ctx, context))
+            Class *cls = EvalContextClassGet(ctx, NULL, context);
+            if (cls && !cls->is_soft)
             {
-                FatalError(ctx, "cfengine: You cannot use -D to define a reserved class!");
+                FatalError(ctx, "You cannot use -D to define a reserved class");
             }
 
-            EvalContextHeapAddSoft(ctx, context, NULL);
-        }
-    }
-
-    if (config->heap_negated)
-    {
-        StringSetIterator it = StringSetIteratorInit(config->heap_negated);
-        const char *context = NULL;
-        while ((context = StringSetIteratorNext(&it)))
-        {
-            if (EvalContextHeapContainsHard(ctx, context))
-            {
-                FatalError(ctx, "Cannot negate the reserved class [%s]\n", context);
-            }
-
-            EvalContextHeapAddNegated(ctx, context);
+            EvalContextClassPutSoft(ctx, context, CONTEXT_SCOPE_NAMESPACE, "source=environment");
         }
     }
 
     switch (LogGetGlobalLevel())
     {
     case LOG_LEVEL_DEBUG:
-        EvalContextHeapAddHard(ctx, "debug_mode");
-        EvalContextHeapAddHard(ctx, "opt_debug");
+        EvalContextClassPutHard(ctx, "debug_mode", "cfe_internal,source=agent");
+        EvalContextClassPutHard(ctx, "opt_debug", "cfe_internal,source=agent");
         // intentional fall
     case LOG_LEVEL_VERBOSE:
-        EvalContextHeapAddHard(ctx, "verbose_mode");
+        EvalContextClassPutHard(ctx, "verbose_mode", "cfe_internal,source=agent");
         // intentional fall
     case LOG_LEVEL_INFO:
-        EvalContextHeapAddHard(ctx, "inform_mode");
+        EvalContextClassPutHard(ctx, "inform_mode", "cfe_internal,source=agent");
         break;
     default:
         break;
@@ -1842,11 +1455,35 @@ void GenericAgentConfigApply(EvalContext *ctx, const GenericAgentConfig *config)
 
     if (config->agent_specific.agent.bootstrap_policy_server)
     {
-        EvalContextHeapAddHard(ctx, "bootstrap_mode");
+        EvalContextClassPutHard(ctx, "bootstrap_mode", "source=environment");
+    }
+
+    if (config->color)
+    {
+        LoggingSetColor(config->color);
+    }
+
+    switch (config->agent_type)
+    {
+    case AGENT_TYPE_COMMON:
+        EvalContextSetEvalOption(ctx, EVAL_OPTION_FULL, false);
+        if (config->agent_specific.common.eval_functions)
+            EvalContextSetEvalOption(ctx, EVAL_OPTION_EVAL_FUNCTIONS, true);
+        break;
+
+    default:
+        break;
+    }
+
+    EvalContextSetIgnoreLocks(ctx, config->ignore_locks);
+
+    if (DONTDO)
+    {
+        EvalContextClassPutHard(ctx, "opt_dry_run", "cfe_internal,source=environment");
     }
 }
 
-void GenericAgentConfigSetInputFile(GenericAgentConfig *config, const char *workdir, const char *input_file)
+void GenericAgentConfigSetInputFile(GenericAgentConfig *config, const char *inputdir, const char *input_file)
 {
     free(config->original_input_file);
     free(config->input_file);
@@ -1854,9 +1491,9 @@ void GenericAgentConfigSetInputFile(GenericAgentConfig *config, const char *work
 
     config->original_input_file = xstrdup(input_file);
 
-    if (workdir && FilePathGetType(input_file) == FILE_PATH_TYPE_NON_ANCHORED)
+    if (inputdir && FilePathGetType(input_file) == FILE_PATH_TYPE_NON_ANCHORED)
     {
-        config->input_file = StringFormat("%s%cinputs%c%s", workdir, FILE_SEPARATOR, FILE_SEPARATOR, input_file);
+        config->input_file = StringFormat("%s%c%s", inputdir, FILE_SEPARATOR, input_file);
     }
     else
     {

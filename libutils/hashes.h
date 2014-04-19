@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,9 +25,7 @@
 #ifndef CFENGINE_HASHES_H
 #define CFENGINE_HASHES_H
 
-#include "platform.h"
-
-int OatHash(const char *key, unsigned int max);
+#include <platform.h>
 
 int FileChecksum(const char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1]);
 

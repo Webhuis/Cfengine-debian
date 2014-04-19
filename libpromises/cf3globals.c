@@ -17,102 +17,147 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 /*****************************************************************************/
 /* flags                                                                     */
 /*****************************************************************************/
 
-int SHOWREPORTS = false;
+int SHOWREPORTS = false; /* GLOBAL_A */
 
 /*****************************************************************************/
 /* operational state                                                         */
 /*****************************************************************************/
 
-int LOOKUP = false;
-bool FIPS_MODE = false;
+bool FIPS_MODE = false; /* GLOBAL_P */
 
-struct utsname VSYSNAME;
+struct utsname VSYSNAME; /* GLOBAL_E, initialized later */
 
-int CFA_MAXTHREADS = 10;
-int CF_PERSISTENCE = 10;
+int CFA_MAXTHREADS = 10; /* GLOBAL_P */
+int CF_PERSISTENCE = 10; /* GLOBAL_P */
 
-AgentType THIS_AGENT_TYPE;
-time_t PROMISETIME = 0;
+AgentType THIS_AGENT_TYPE; /* GLOBAL_C, initialized later */
 
-Item *PROCESSTABLE = NULL;
-Item *ROTATED = NULL;
+Item *PROCESSTABLE = NULL; /* GLOBAL_X */
 
 /*****************************************************************************/
 /* Internal data structures                                                  */
 /*****************************************************************************/
 
-Scope *VSCOPE = NULL;
+int LASTSEENEXPIREAFTER = SECONDS_PER_WEEK; /* GLOBAL_P */
 
-Rlist *CF_STCK = NULL; // TODO: consider renaming to something comprehesible
-
-int LASTSEENEXPIREAFTER = SECONDS_PER_WEEK;
-
-char POLICY_SERVER[CF_MAX_IP_LEN] = { 0 };
+char POLICY_SERVER[CF_MAX_IP_LEN] = ""; /* GLOBAL_X */
 
 /*****************************************************************************/
 /* Compatability infrastructure                                              */
 /*****************************************************************************/
 
-int IGNORELOCK = false;
-bool DONTDO = false;
+bool DONTDO = false; /* GLOBAL_A */
 
-char VFQNAME[CF_MAXVARSIZE] = { 0 };
-char VUQNAME[CF_MAXVARSIZE] = { 0 };
-char VDOMAIN[CF_MAXVARSIZE] = { 0 };
+char VFQNAME[CF_MAXVARSIZE] = ""; /* GLOBAL_E GLOBAL_P */
+char VUQNAME[CF_MAXVARSIZE] = ""; /* GLOBAL_E */
+char VDOMAIN[CF_MAXVARSIZE] = ""; /* GLOBAL_E GLOBAL_P */
 
-char VYEAR[5] = { 0 };
-char VDAY[3] = { 0 };
-char VMONTH[4] = { 0 };
-char VSHIFT[12] = { 0 };
+char CFWORKDIR[CF_BUFSIZE] = ""; /* GLOBAL_C */
 
-char CFWORKDIR[CF_BUFSIZE] = { 0 };
+/*
+  Default value for copytype attribute. Loaded by cf-agent from body control
+*/
+const char *DEFAULT_COPYTYPE = NULL; /* GLOBAL_P */
 
-char *DEFAULT_COPYTYPE = NULL;
+/*
+  Keys for the agent. Loaded by GAInitialize (and hence every time policy is
+  reloaded).
 
-RSA *PRIVKEY = NULL, *PUBKEY = NULL;
-char PUBKEY_DIGEST[CF_MAXVARSIZE] = { 0 };
+  Used in network protocol and leaked to language.
+*/
+RSA *PRIVKEY = NULL, *PUBKEY = NULL; /* GLOBAL_X */
 
+/*
+  First IP address discovered by DetectEnvironment (hence reloaded every policy
+  change).
 
-char VIPADDRESS[CF_MAX_IP_LEN] = { 0 };
+  Used somewhere in cf-execd, superficially in old-style protocol handshake and
+  sporadically in other situations.
+*/
+char VIPADDRESS[CF_MAX_IP_LEN] = ""; /* GLOBAL_E */
 
-Item *IPADDRESSES = NULL;
+/*
+  Edition-time constant (MD5 for community, something else for Enterprise)
 
-/*******************************************************************/
-/*                                                                 */
-/* Checksums                                                       */
-/*                                                                 */
-/*******************************************************************/
+  Used as a default hash everywhere (not only in network protocol)
+*/
+HashMethod CF_DEFAULT_DIGEST; /* GLOBAL_C, initialized later */
+int CF_DEFAULT_DIGEST_LEN; /* GLOBAL_C, initialized later */
 
-HashMethod CF_DEFAULT_DIGEST;
-int CF_DEFAULT_DIGEST_LEN;
+/*
+  Holds the "now" time captured at the moment of policy load (and in response to
+  cf-runagent command to cf-serverd?!).
 
-/***********************************************************/
+  Utilized everywhere "now" start time is needed
+*/
+time_t CFSTARTTIME; /* GLOBAL_E, initialized later */
 
-char CFLOCK[CF_BUFSIZE] = { 0 };
+/*
+  Set in cf-agent/cf-runagent (from control body).
 
-time_t CFSTARTTIME;
-time_t CFINITSTARTTIME;
-char STR_CFENGINEPORT[16] = { 0 };
+  Used as a timeout for socket operations in network code.
+*/
+time_t CONNTIMEOUT = 30;        /* seconds */ /* GLOBAL_A GLOBAL_P */
 
-unsigned short SHORT_CFENGINEPORT;
-time_t CONNTIMEOUT = 30;        /* seconds */
-pid_t ALARM_PID = -1;
-int EDITFILESIZE = 10000;
-int VIFELAPSED = 1;
-int VEXPIREAFTER = 120;
-char BINDINTERFACE[CF_BUFSIZE] = { 0 };
+/*
+  Internal detail of timeout operations. Due to historical reasons
+  is defined here, not in libpromises/timeout.c
+ */
+pid_t ALARM_PID = -1; /* GLOBAL_X */
 
-bool MINUSF = false;
+/*
+  Set in cf-agent (from control body).
 
-PlatformContext VSYSTEMHARDCLASS;
+  Used as a default value for maxfilesize attribute in policy
+*/
+int EDITFILESIZE = 10000; /* GLOBAL_P */
+
+/*
+  Set in cf-agent (from control body) and GenericAgentInitialize.
+
+  Used as a default value for ifelapsed attribute in policy.
+*/
+int VIFELAPSED = 1; /* GLOBAL_P */
+
+/*
+  Set in cf-agent (from control body) and GenericAgentInitialize.
+
+  Used as a default value for expireafter attribute in policy.
+*/
+int VEXPIREAFTER = 120; /* GLOBAL_P */
+
+/*
+  Set in cf-agent/cf-serverd (from control body).
+
+  Utilized in server/client code to bind sockets.
+*/
+char BINDINTERFACE[CF_MAXVARSIZE]; /* GLOBAL_P */
+
+/*
+  Set in cf-*.c:CheckOpts and GenericAgentConfigParseArguments.
+
+  Utilized in generic_agent.c for
+    - cf_promises_validated filename
+    - GenericAgentCheckPolicy
+    - GenericAgentLoadPolicy (ReadPolicyValidatedFile)
+*/
+bool MINUSF = false; /* GLOBAL_A */
+
+/* Set in libenv/sysinfo.c::DetectEnvironment (called every time environment
+   reload is performed).
+
+   Utilized all over the place, usually to look up OS-specific command/option to
+   call external utility
+*/
+PlatformContext VSYSTEMHARDCLASS; /* GLOBAL_E?, initialized_later */

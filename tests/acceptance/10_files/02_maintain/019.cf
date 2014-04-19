@@ -6,54 +6,59 @@
 
 body common control
 {
-  inputs => { "../../default.cf.sub" };
-  bundlesequence  => { default("$(this.promise_filename)") };
-  version => "1.0";
-}
-
-bundle common g
-{
-vars:
-  "testfile" string => "$(G.testdir)/testfile";
-  "command" string => 'printf "%o %d", (stat("$(G.testfile).cfdisabled"))[2]&07777, (stat(_))[3]';
+      inputs => { "../../default.cf.sub" };
+      bundlesequence  => { default("$(this.promise_filename)") };
+      version => "1.0";
 }
 
 #######################################################
 
 bundle agent init
 {
-files:
-  "$(G.testfile)"
-    create => "true";
+  files:
+      "$(G.testfile)"
+      create => "true";
 }
 
 #######################################################
 
 bundle agent test
 {
-files:
-    "$(G.testfile)"
+  meta:
+      "test_skip_unsupported" string => "windows";
+
+  files:
+      "$(G.testfile)"
       rename => disable_file;
 }
 
 body rename disable_file {
-  disable_mode => "333";
-  disable => "true";
+      disable_mode => "333";
+      disable => "true";
 }
 
 #######################################################
 
 bundle agent check
 {
-vars:
-  "result" string => execresult("/usr/bin/perl -le '$(g.command)'", "noshell");
+  vars:
+      "expect[permoct]" string => "333";
+      "expect[nlink]" string => "1";
 
-classes:
-  "ok" expression => strcmp("333 1", "$(result)");
+      "fields" slist => getindices("expect");
+      "result[$(fields)]" string => filestat("$(G.testfile).cfdisabled", "$(fields)");
 
-reports:
-  ok::
-    "$(this.promise_filename) Pass";
-  !ok::
-    "$(this.promise_filename) FAIL";
+  classes:
+      "not_ok" not => regcmp("$(expect[$(fields)])", "$(result[$(fields)])");
+
+  reports:
+    DEBUG::
+      "expected: $(fields) = '$(expect[$(fields)])'";
+      "got:      $(fields) = '$(result[$(fields)])'";
+    !not_ok::
+      "$(this.promise_filename) Pass";
+    not_ok::
+      "$(this.promise_filename) FAIL";
 }
+### PROJECT_ID: core
+### CATEGORY_ID: 27

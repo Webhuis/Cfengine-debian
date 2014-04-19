@@ -17,14 +17,14 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-const char *DAY_TEXT[] =
+const char *const DAY_TEXT[] =
 {
     "Monday",
     "Tuesday",
@@ -36,7 +36,7 @@ const char *DAY_TEXT[] =
     NULL
 };
 
-const char *MONTH_TEXT[] =
+const char *const MONTH_TEXT[] =
 {
     "January",
     "February",
@@ -53,7 +53,7 @@ const char *MONTH_TEXT[] =
     NULL
 };
 
-const char *SHIFT_TEXT[] =
+const char *const SHIFT_TEXT[] =
 {
     "Night",
     "Morning",
@@ -62,7 +62,7 @@ const char *SHIFT_TEXT[] =
     NULL
 };
 
-const char *CF_AGENTTYPES[] =   /* see enum cfagenttype */
+const char *const CF_AGENTTYPES[] =   /* see enum cfagenttype */
 {
     CF_COMMONC,
     CF_AGENTC,
@@ -72,12 +72,11 @@ const char *CF_AGENTTYPES[] =   /* see enum cfagenttype */
     CF_RUNC,
     CF_KEYGEN,
     CF_HUBC,
-    CF_GENDOC,
     "<notype>",
 };
 
 
-const char *OBS[CF_OBSERVABLES][2] =
+const char *const OBS[CF_OBSERVABLES][2] =
 {
     {"users", "Users with active processes - including system users"},
     {"rootprocs", "Sum privileged system processes"},

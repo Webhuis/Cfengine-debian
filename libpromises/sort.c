@@ -26,10 +26,11 @@
  * SOFTWARE.
  */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "rlist.h"
-#include "item_lib.h"
+#include <rlist.h>
+#include <item_lib.h>
+#include <ip_address.h>
 
 typedef bool (*LessFn)(void *lhs, void *rhs, void *ctx);
 typedef void * (*GetNextElementFn)(void *element);
@@ -196,7 +197,7 @@ Item *SortItemListTimes(Item *list)
     return Sort(list, &ItemTimeMore, &ItemGetNext, &ItemPutNext, NULL);
 }
 
-/* Rlist* callbacks */
+/* Rlist* and String* callbacks */
 
 static bool RlistCustomItemLess(void *lhs_, void *rhs_, void *ctx)
 {
@@ -204,12 +205,165 @@ static bool RlistCustomItemLess(void *lhs_, void *rhs_, void *ctx)
     Rlist *rhs = rhs_;
     int (*cmp)() = ctx;
 
-    return (*cmp)(lhs->item, rhs->item);
+    return (*cmp)(lhs->val.item, rhs->val.item);
 }
 
 static bool RlistItemLess(void *lhs, void *rhs, ARG_UNUSED void *ctx)
 {
-    return strcmp(((Rlist*)lhs)->item, ((Rlist*)rhs)->item) < 0;
+    return strcmp(((Rlist*)lhs)->val.item, ((Rlist*)rhs)->val.item) < 0;
+}
+
+static bool StringItemLess(const char *lhs, const char *rhs, ARG_UNUSED void *ctx)
+{
+    return strcmp(lhs, rhs) < 0;
+}
+
+static bool StringItemNumberLess(const char *lhs, const char *rhs, ARG_UNUSED void *ctx, bool int_mode)
+{
+    char remainder[CF_BUFSIZE];
+    double left;
+    double right;
+
+    bool matched_left = sscanf(lhs, "%lf", &left) > 0;
+    bool matched_right = sscanf(rhs, "%lf", &right) > 0;
+
+    if (!matched_left)
+    {
+        matched_left = sscanf(lhs, "%lf%s", &left, remainder) > 0;
+    }
+
+    if (!matched_right)
+    {
+        matched_right = sscanf(rhs, "%lf%s", &right, remainder) > 0;
+    }
+
+    if (matched_left && matched_right)
+    {
+        if (int_mode)
+        {
+            return ((long int)left) - ((long int)right) < 0;
+        }
+        else
+        {
+            return left - right < 0;
+        }
+    }
+
+    if (matched_left)
+    {
+        return false;
+    }
+
+    if (matched_right)
+    {
+        return true;
+    }
+
+    // neither item matched
+    return StringItemLess(lhs, rhs, ctx);
+}
+
+static bool RlistItemNumberLess(void *lhs, void *rhs, ARG_UNUSED void *ctx, bool int_mode)
+{
+    return StringItemNumberLess(RlistScalarValue((Rlist*)lhs), RlistScalarValue((Rlist*)rhs), ctx, int_mode);
+}
+
+static bool RlistItemIntLess(void *lhs, void *rhs, ARG_UNUSED void *ctx)
+{
+    return RlistItemNumberLess(lhs, rhs, ctx, true);
+}
+
+static bool RlistItemRealLess(void *lhs, void *rhs, ARG_UNUSED void *ctx)
+{
+    return RlistItemNumberLess(lhs, rhs, ctx, false);
+}
+
+static bool StringItemIPLess(const char *left_item, const char *right_item, ARG_UNUSED void *ctx)
+{
+    Buffer *left_buffer = BufferNewFrom(left_item, strlen(left_item));
+    Buffer *right_buffer = BufferNewFrom(right_item, strlen(right_item));
+
+    IPAddress *left = IPAddressNew(left_buffer);
+    IPAddress *right = IPAddressNew(right_buffer);
+
+    bool matched_left = left != NULL;
+    bool matched_right = right != NULL;
+
+    BufferDestroy(left_buffer);
+    BufferDestroy(right_buffer);
+
+    if (matched_left && matched_right)
+    {
+        int less = IPAddressCompareLess(left, right);
+        IPAddressDestroy(&left);
+        IPAddressDestroy(&right);
+        return less;
+    }
+
+    IPAddressDestroy(&left);
+    IPAddressDestroy(&right);
+
+    if (matched_left)
+    {
+        return false;
+    }
+
+    if (matched_right)
+    {
+        return true;
+    }
+
+    // neither item matched
+    return StringItemLess(left_item, right_item, ctx);
+}
+
+static bool RlistItemIPLess(void *lhs, void *rhs, ARG_UNUSED void *ctx)
+{
+    return StringItemIPLess(RlistScalarValue((Rlist*)lhs), RlistScalarValue((Rlist*)rhs), ctx);
+}
+
+static long ParseEtherAddress(const char* input, unsigned char *addr)
+{
+    if (strlen(input) > 12)
+    {
+        return sscanf(input, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", 
+                      &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]);
+    }
+
+    return sscanf(input, "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx", 
+                  &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]);
+}
+
+static bool StringItemMACLess(const char *lhs, const char *rhs, ARG_UNUSED void *ctx)
+{
+    int bytes = 6;
+    unsigned char left[bytes], right[bytes];
+    int matched_left = 6 == ParseEtherAddress(lhs, left);
+    int matched_right = 6 == ParseEtherAddress(rhs, right);
+
+    if (matched_left && matched_right)
+    {
+        int difference = memcmp(left, right, bytes);
+        if (difference != 0) return difference < 0;
+    }
+
+    if (matched_left)
+    {
+        return false;
+    }
+
+    if (matched_right)
+    {
+        return true;
+    }
+
+    // neither item matched
+    return StringItemLess(lhs, rhs, ctx);
+}
+
+static bool RlistItemMACLess(void *lhs, void *rhs, ARG_UNUSED void *ctx)
+{
+    return StringItemMACLess(RlistScalarValue((Rlist*)lhs), RlistScalarValue((Rlist*)rhs), ctx);
 }
 
 static void *RlistGetNext(void *element)
@@ -232,4 +386,70 @@ Rlist *SortRlist(Rlist *list, int (*CompareItems) ())
 Rlist *AlphaSortRListNames(Rlist *list)
 {
     return Sort(list, &RlistItemLess, &RlistGetNext, &RlistPutNext, NULL);
+}
+
+Rlist *IntSortRListNames(Rlist *list)
+{
+    return Sort(list, &RlistItemIntLess, &RlistGetNext, &RlistPutNext, NULL);
+}
+
+Rlist *RealSortRListNames(Rlist *list)
+{
+    return Sort(list, &RlistItemRealLess, &RlistGetNext, &RlistPutNext, NULL);
+}
+
+Rlist *IPSortRListNames(Rlist *list)
+{
+    return Sort(list, &RlistItemIPLess, &RlistGetNext, &RlistPutNext, NULL);
+}
+
+Rlist *MACSortRListNames(Rlist *list)
+{
+    return Sort(list, &RlistItemMACLess, &RlistGetNext, &RlistPutNext, NULL);
+}
+
+bool GenericItemLess(const char *sort_type, void *lhs, void *rhs)
+{
+    if (strcmp(sort_type, "int") == 0)
+    {
+        return RlistItemNumberLess(lhs, rhs, NULL, true);
+    }
+    else if (strcmp(sort_type, "real") == 0)
+    {
+        return RlistItemNumberLess(lhs, rhs, NULL, false);
+    }
+    else if (strcasecmp(sort_type, "IP") == 0)
+    {
+        return RlistItemIPLess(lhs, rhs, NULL);
+    }
+    else if (strcasecmp(sort_type, "MAC") == 0)
+    {
+        return RlistItemMACLess(lhs, rhs, NULL);
+    }
+
+    // "lex"
+    return RlistItemLess(lhs, rhs, NULL);
+}
+
+bool GenericStringItemLess(const char *sort_type, const char *lhs, const char *rhs)
+{
+    if (strcmp(sort_type, "int") == 0)
+    {
+        return StringItemNumberLess(lhs, rhs, NULL, true);
+    }
+    else if (strcmp(sort_type, "real") == 0)
+    {
+        return StringItemNumberLess(lhs, rhs, NULL, false);
+    }
+    else if (strcasecmp(sort_type, "IP") == 0)
+    {
+        return StringItemIPLess(lhs, rhs, NULL);
+    }
+    else if (strcasecmp(sort_type, "MAC") == 0)
+    {
+        return StringItemMACLess(lhs, rhs, NULL);
+    }
+
+    // "lex"
+    return StringItemLess(lhs, rhs, NULL);
 }

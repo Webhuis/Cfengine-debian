@@ -17,23 +17,26 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "bootstrap.h"
+#include <bootstrap.h>
 
-#include "env_context.h"
-#include "files_names.h"
-#include "scope.h"
-#include "files_interfaces.h"
-#include "exec_tools.h"
-#include "generic_agent.h" // PrintVersionBanner
-#include "audit.h"
-#include "logging.h"
-#include "string_lib.h"
-#include "files_lib.h"
+#include <eval_context.h>
+#include <files_names.h>
+#include <scope.h>
+#include <files_interfaces.h>
+#include <exec_tools.h>
+#include <generic_agent.h> // PrintVersionBanner
+#include <audit.h>
+#include <logging.h>
+#include <string_lib.h>
+#include <files_lib.h>
+#include <known_dirs.h>
+
+#include <assert.h>
 
 /*
 
@@ -108,24 +111,33 @@ bool WriteAmPolicyHubFile(const char *workdir, bool am_policy_hub)
     return true;
 }
 
+/* NULL is an acceptable value for new_policy_server. Could happen when an
+ * already bootstrapped server re-parses its policies, and the
+ * policy_server.dat file has been removed. Then this function will be called
+ * with NULL as new_policy_server, and cf-serverd will keep running even
+ * without a policy server set. */
 void SetPolicyServer(EvalContext *ctx, const char *new_policy_server)
 {
     if (new_policy_server)
     {
         snprintf(POLICY_SERVER, CF_MAX_IP_LEN, "%s", new_policy_server);
-        ScopeNewSpecial(ctx, "sys", "policy_hub", new_policy_server, DATA_TYPE_STRING);
+        EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_SYS, "policy_hub", new_policy_server, CF_DATA_TYPE_STRING, "source=bootstrap");
     }
     else
     {
-        POLICY_SERVER[0] = '\0';
-        ScopeNewSpecial(ctx, "sys", "policy_hub", "undefined", DATA_TYPE_STRING);
+        strcpy(POLICY_SERVER, "");
+        EvalContextVariableRemoveSpecial(ctx, SPECIAL_SCOPE_SYS, "policy_hub");
     }
+}
 
+/* Set "sys.last_policy_update" variable. */
+void UpdateLastPolicyUpdateTime(EvalContext *ctx)
+{
     // Get the timestamp on policy update
     struct stat sb;
     {
         char cf_promises_validated_filename[CF_MAXVARSIZE];
-        snprintf(cf_promises_validated_filename, CF_MAXVARSIZE, "%s/masterfiles/cf_promises_validated", CFWORKDIR);
+        snprintf(cf_promises_validated_filename, CF_MAXVARSIZE, "%s/cf_promises_validated", GetMasterDir());
         MapName(cf_promises_validated_filename);
 
         if ((stat(cf_promises_validated_filename, &sb)) != 0)
@@ -133,11 +145,11 @@ void SetPolicyServer(EvalContext *ctx, const char *new_policy_server)
             return;
         }
     }
-    
+
     char timebuf[26];
     cf_strtimestamp_local(sb.st_mtime, timebuf);
-    
-    ScopeNewSpecial(ctx, "sys", "last_policy_update", timebuf, DATA_TYPE_STRING);
+
+    EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_SYS, "last_policy_update", timebuf, CF_DATA_TYPE_STRING, "source=agent");
 }
 
 static char *PolicyServerFilename(const char *workdir)
@@ -212,12 +224,8 @@ bool GetAmPolicyHub(const char *workdir)
     return stat(path, &sb) == 0;
 }
 
-bool RemoveAllExistingPolicyInInputs(const char *workdir)
+bool RemoveAllExistingPolicyInInputs(const char *inputs_path)
 {
-    char inputs_path[CF_BUFSIZE] = { 0 };
-    snprintf(inputs_path, sizeof(inputs_path), "%s/inputs/", workdir);
-    MapName(inputs_path);
-
     Log(LOG_LEVEL_INFO, "Removing all files in '%s'", inputs_path);
 
     struct stat sb;
@@ -243,10 +251,10 @@ bool RemoveAllExistingPolicyInInputs(const char *workdir)
     return DeleteDirectoryTree(inputs_path);
 }
 
-bool MasterfileExists(const char *workdir)
+bool MasterfileExists(const char *masterdir)
 {
     char filename[CF_BUFSIZE] = { 0 };
-    snprintf(filename, sizeof(filename), "%s/masterfiles/promises.cf", workdir);
+    snprintf(filename, sizeof(filename), "%s/promises.cf", masterdir);
     MapName(filename);
 
     struct stat sb;
@@ -286,182 +294,9 @@ bool WriteBuiltinFailsafePolicyToPath(const char *filename)
     }
 
     fprintf(fout,
-            "################################################################################\n"
-            "# THIS FILE REPRESENTS A FALL-BACK SOLUTION FOR THE PRIMARY FAILSAFE FILE.\n"
-            "# IF THE PRIMARY FAILSAFE/UPDATE LOSES FUNCTIONALITY DUE TO MODIFICATIONS MADE\n" 
-            "# BY THE USER, CFENGINE WILL RECOVER BY USING THIS FALL-BACK BOOTSTRAPPED FILE.\n"
-            "# NEVER EDIT THIS FILE, YOU WILL HAVE TO LOG ON TO EVERY NODE MANAGED BY\n" 
-            "# CFENGINE TO RECTIFY POTENTIAL ERRORS IF SOMETHING GOES WRONG.\n"
-            "################################################################################\n"
-            "\nbody common control\n"
-            "{\n"
-            " bundlesequence => { \"cfe_internal_update\" };\n"
-            "}\n\n"
-            "################################################################################\n"
-            "\nbody agent control\n"
-            "{\n"
-            " skipidentify => \"true\";\n"
-            "}\n\n"
-            "################################################################################\n"
-            "\nbundle agent cfe_internal_update\n"
-            "{\n"
-            " classes:\n\n"
-            "  any::\n"
-            "   \"have_ppkeys\"\n"
-            "      expression => fileexists(\"$(sys.workdir)/ppkeys/localhost.pub\"),\n"
-            "          handle => \"cfe_internal_bootstrap_update_classes_have_ppkeys\";\n"
-            "   \"have_promises_cf\"\n"
-            "      expression => fileexists(\"$(sys.workdir)/inputs/promises.cf\"),\n"
-            "          handle => \"cfe_internal_bootstrap_update_classes_have_promises_cf\";\n"
-            "\n#\n\n"
-            " commands:\n\n"
-            "  !have_ppkeys::\n"
-            "   \"$(sys.cf_key)\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_commands_generate_keys\";\n"
-            "\n#\n\n"
-            " files:\n\n"
-            "  !windows::\n"
-            "   \"$(sys.workdir)/inputs\" \n"
-            "            handle => \"cfe_internal_bootstrap_update_files_sys_workdir_inputs_not_windows\",\n"
-#ifdef __MINGW32__
-            "         copy_from => u_scp(\"/var/cfengine/masterfiles\"),\n"
-#else
-            "         copy_from => u_scp(\"%s/masterfiles\"),\n"
-#endif /* !__MINGW32__ */
-            "      depth_search => u_recurse(\"inf\"),\n"
-            "           classes => repaired(\"got_policy\");\n"
-            "\n"
-            "  windows::\n"
-            "   \"$(sys.workdir)\\inputs\" \n"
-            "            handle => \"cfe_internal_bootstrap_update_files_sys_workdir_inputs_windows\",\n"
-#ifdef __MINGW32__
-            "         copy_from => u_scp(\"/var/cfengine/masterfiles\"),\n"
-#else
-            "         copy_from => u_scp(\"%s/masterfiles\"),\n"
-#endif /* !__MINGW32__ */
-            "      depth_search => u_recurse(\"inf\"),\n"
-            "           classes => repaired(\"got_policy\");\n\n"
-            "   \"$(sys.workdir)\\bin-twin\\.\"\n"
-            "            handle => \"cfe_internal_bootstrap_update_files_sys_workdir_bin_twin_windows\",\n"
-            "           comment => \"Make sure we maintain a clone of the binaries and libraries for updating\",\n"
-            "         copy_from => u_cp(\"$(sys.workdir)\\bin\\.\"),\n"
-            "      depth_search => u_recurse(\"1\");\n"
-            "\n#\n\n"
-            " processes:\n\n"
-            "  !windows.got_policy::\n"
-            "   \"cf-execd\" restart_class => \"start_exec\",\n"
-            "                     handle => \"cfe_internal_bootstrap_update_processes_start_cf_execd\";\n"
-            "  am_policy_hub.got_policy::\n"
-            "   \"cf-serverd\" restart_class => \"start_server\",\n"
-            "                       handle => \"cfe_internal_bootstrap_update_processes_start_cf_serverd\";\n"
-            "\n#\n\n"
-            " commands:\n\n"
-            "  start_exec.!windows::\n"
-            "   \"$(sys.cf_execd)\"\n"
-            "       handle => \"cfe_internal_bootstrap_update_commands_check_sys_cf_execd_start\",\n"
-            "      classes => repaired(\"executor_started\");\n"
-            "  start_server::\n"
-            "   \"$(sys.cf_serverd)\"\n"
-            "       handle => \"cfe_internal_bootstrap_update_commands_check_sys_cf_serverd_start\",\n"
-            "       action => ifwin_bg,\n"
-            "      classes => repaired(\"server_started\");\n"
-            "\n#\n\n"
-            " services:\n\n"
-            "  windows.got_policy::\n"
-            "   \"CfengineNovaExec\"\n"
-            "              handle => \"cfe_internal_bootstrap_update_services_windows_executor\",\n"
-            "      service_policy => \"start\",\n"
-            "      service_method => bootstart,\n"
-            "             classes => repaired(\"executor_started\");\n"
-            "\n#\n\n"
-            " reports:\n\n"
-            "  bootstrap_mode.am_policy_hub::\n"
-            "   \"This host assumes the role of policy server\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_assume_policy_hub\";\n"
-            "  bootstrap_mode.!am_policy_hub::\n"
-            "   \"This autonomous node assumes the role of voluntary client\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_assume_voluntary_client\";\n"
-            "  got_policy::\n"
-            "   \"Updated local policy from policy server\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_got_policy\";\n"
-            "  !got_policy.!have_promises_cf::\n"
-            "   \"Failed to copy policy from policy server at $(sys.policy_hub):/var/cfengine/masterfiles\n"
-            "       Please check\n"
-            "       * cf-serverd is running on $(sys.policy_hub)\n"
-            "       * network connectivity to $(sys.policy_hub) on port 5308\n"
-            "       * masterfiles 'body server control' - in particular allowconnects, trustkeysfrom and skipverify\n"
-            "       * masterfiles 'bundle server' -> access: -> masterfiles -> admit/deny\n"
-            "       It is often useful to restart cf-serverd in verbose mode (cf-serverd -v) on $(sys.policy_hub) to diagnose connection issues.\n"
-            "       When updating masterfiles, wait (usually 5 minutes) for files to propagate to inputs on $(sys.policy_hub) before retrying.\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_did_not_get_policy\";\n"
-            "  server_started::\n"
-            "   \"Started the server\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_started_serverd\";\n"
-            "  am_policy_hub.!server_started.!have_promises_cf::\n"
-            "   \"Failed to start the server\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_failed_to_start_serverd\";\n"
-            "  executor_started::\n"
-            "   \"Started the scheduler\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_started_execd\";\n"
-            "  !executor_started.!have_promises_cf::\n"
-            "   \"Did not start the scheduler\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_failed_to_start_execd\";\n"
-            "  !executor_started.have_promises_cf::\n"
-            "   \"You are running a hard-coded failsafe. Please use the following command instead.\n"
-            "    - 3.0.0: $(sys.cf_agent) -f $(sys.workdir)/inputs/failsafe/failsafe.cf\n"
-            "    - 3.0.1: $(sys.cf_agent) -f $(sys.workdir)/inputs/update.cf\"\n"
-            "      handle => \"cfe_internal_bootstrap_update_reports_run_another_failsafe_instead\";\n"
-            "}\n\n"
-            "############################################\n"
-            "body classes repaired(x)\n"
-            "{\n"
-            "promise_repaired => {\"$(x)\"};\n"
-            "}\n"
-            "############################################\n"
-            "body perms u_p(p)\n"
-            "{\n"
-            "mode  => \"$(p)\";\n"
-            "}\n"
-            "#############################################\n"
-            "body copy_from u_scp(from)\n"
-            "{\n"
-            "source      => \"$(from)\";\n"
-            "compare     => \"digest\";\n"
-            "trustkey    => \"true\";\n"
-            "!am_policy_hub::\n"
-            "servers => { \"$(sys.policy_hub)\" };\n"
-            "}\n"
-            "############################################\n"
-            "body action u_background\n"
-            "{\n"
-            "background => \"true\";\n"
-            "}\n"
-            "############################################\n"
-            "body depth_search u_recurse(d)\n"
-            "{\n"
-            "depth => \"$(d)\";\n"
-            "exclude_dirs => { \"\\.svn\", \"\\.git\" };"
-            "}\n"
-            "############################################\n"
-            "body service_method bootstart\n"
-            "{\n"
-            "service_autostart_policy => \"boot_time\";\n"
-            "}\n"
-            "############################################\n"
-            "body action ifwin_bg\n"
-            "{\n"
-            "windows::\n"
-            "background => \"true\";\n"
-            "}\n"
-            "############################################\n"
-            "body copy_from u_cp(from)\n"
-            "{\n"
-            "source          => \"$(from)\";\n"
-#ifdef __MINGW32__
-            "compare         => \"digest\";\n" "copy_backup     => \"false\";\n" "}\n" "\n");
-#else
-            "compare         => \"digest\";\n" "copy_backup     => \"false\";\n" "}\n" "\n", CFWORKDIR, CFWORKDIR);
-#endif /* !__MINGW32__ */
+            // The bootstrap.inc file is generated by "make bootstrap-inc"
+#include "bootstrap.inc"
+    );
     fclose(fout);
 
     if (chmod(filename, S_IRUSR | S_IWUSR) == -1)
@@ -473,10 +308,10 @@ bool WriteBuiltinFailsafePolicyToPath(const char *filename)
     return true;
 }
 
-bool WriteBuiltinFailsafePolicy(const char *workdir)
+bool WriteBuiltinFailsafePolicy(const char *inputdir)
 {
     char failsafe_path[CF_BUFSIZE];
-    snprintf(failsafe_path, CF_BUFSIZE - 1, "%s/inputs/failsafe.cf", workdir);
+    snprintf(failsafe_path, CF_BUFSIZE - 1, "%s/failsafe.cf", inputdir);
     MapName(failsafe_path);
 
     return WriteBuiltinFailsafePolicyToPath(failsafe_path);

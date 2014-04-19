@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -44,7 +44,7 @@ time_t GetProcessStartTime(pid_t pid);
  * #process_start_time may be PROCESS_START_TIME_UNKNOWN, which will disable
  * safety check for killing right process.
  *
- * @return true if process was killed succesfully, false otherwise.
+ * @return true if process was killed successfully, false otherwise.
  */
 int GracefulTerminate(pid_t pid, time_t process_start_time);
 

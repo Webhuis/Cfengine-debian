@@ -1,23 +1,29 @@
-projlib_LTLIBRARIES = libpromises.la
+if !BUILTIN_EXTENSIONS
+ projlib_LTLIBRARIES = libpromises.la
+ libpromises_la_LDFLAGS = -version-info 3:6:0 -no-undefined
+else
+ noinst_LTLIBRARIES = libpromises.la
+endif
+
+EXTRA_DIST = extensions_template.c extensions_template.h enterprise_extension.sed math.pc
 
 AM_CPPFLAGS = @CPPFLAGS@ -I$(srcdir)/../libutils -I $(srcdir)/../libcfnet \
-	$(NOVA_CPPFLAGS)
+	-I$(srcdir)/../libenv $(ENTERPRISE_CPPFLAGS)
 
 AM_CFLAGS = @CFLAGS@ \
-	$(NOVA_CFLAGS)
+	$(ENTERPRISE_CFLAGS)
 
 AM_YFLAGS = -d
 
-AM_LDFLAGS = -version-info 3:5:0 -no-undefined
-
-libpromises_la_LIBADD = ../libutils/libutils.la ../libcfnet/libcfnet.la $(NOVA_LDADD)
+libpromises_la_LIBADD = ../libutils/libutils.la ../libcfnet/libcfnet.la \
+	../libenv/libenv.la $(ENTERPRISE_LDADD)
 
 libpromises_la_SOURCES = \
         cf3parse.y cf3parse.h \
         cf3lex.l \
         acl_tools.h acl_tools_posix.c \
+        actuator.c actuator.h \
         addr_lib.c addr_lib.h \
-        args.c args.h \
         assoc.c assoc.h \
         audit.c audit.h \
         attributes.c attributes.h \
@@ -26,6 +32,7 @@ libpromises_la_SOURCES = \
         cf3.extern.h \
         cf3globals.c \
         chflags.c chflags.h \
+        class.c class.h \
         classes.c \
         constants.c \
         conversion.c conversion.h \
@@ -34,13 +41,17 @@ libpromises_la_SOURCES = \
         dbm_migration.c dbm_migration.h \
         dbm_migration_lastseen.c \
         dbm_migration_bundles.c \
+        dbm_lmdb.c \
         dbm_quick.c \
         dbm_tokyocab.c \
         dir.h dir_priv.h \
-        env_context.c env_context.h \
+        enterprise_extension.c enterprise_extension.h \
+        enterprise_stubs.c \
+        eval_context.c eval_context.h \
         evalfunction.c evalfunction.h \
         exec_tools.c exec_tools.h \
         expand.c expand.h \
+        extensions.c extensions.h \
         files_copy.c files_copy.h \
         files_hashes.c files_hashes.h \
         files_interfaces.c files_interfaces.h \
@@ -53,10 +64,13 @@ libpromises_la_SOURCES = \
         item_lib.c item_lib.h \
         iteration.c iteration.h \
         keyring.c keyring.h\
+        known_dirs.c known_dirs.h \
         lastseen.c lastseen.h \
+        loading.c loading.h \
         locks.c locks.h \
         logic_expressions.c logic_expressions.h \
         matching.c matching.h \
+        math_eval.c math_eval.h \
         mod_access.c mod_access.h \
         mod_common.c mod_common.h \
         mod_databases.c mod_databases.h \
@@ -72,6 +86,7 @@ libpromises_la_SOURCES = \
         mod_services.c mod_services.h \
         mod_storage.c mod_storage.h \
         mod_knowledge.c mod_knowledge.h \
+        mod_users.c mod_users.h \
         modes.c \
         mutex.c mutex.h \
         ornaments.c ornaments.h \
@@ -82,30 +97,27 @@ libpromises_la_SOURCES = \
         pipes.h pipes.c \
         processes_select.c processes_select.h \
         process_lib.h process_unix_priv.h \
-        promise_logging.c promise_logging.h \
         promises.c promises.h \
         prototypes3.h \
         rlist.c rlist.h \
         scope.c scope.h \
+        shared_lib.c shared_lib.h \
         signals.c signals.h \
         sort.c sort.h \
         storage_tools.c \
         string_expressions.c string_expressions.h \
         syntax.c syntax.h \
-        sysinfo.c sysinfo.h \
         syslog_client.c syslog_client.h \
-        timeout.c \
+        timeout.c timeout.h \
         unix.c unix.h \
         var_expressions.c var_expressions.h \
         vars.c vars.h \
+        variable.c variable.h \
         verify_classes.c verify_classes.h \
         verify_reports.c \
-        verify_vars.c verify_vars.h
-
-if !HAVE_NOVA
-libpromises_la_SOURCES += \
-	enterprise_stubs.c
-endif
+        verify_vars.c verify_vars.h \
+        cf-windows-functions.h \
+        bootstrap.inc
 
 if !NT
 
@@ -125,7 +137,8 @@ endif
 
 if SOLARIS
 libpromises_la_SOURCES += \
-	process_solaris.c
+	process_solaris.c \
+	solaris_ifaddrs.c solaris_ifaddrs.h
 endif
 
 if !LINUX
@@ -148,9 +161,19 @@ libpromises_la_SOURCES += \
         unix_dir.c
 endif
 
-BUILT_SOURCES = cf3parse.h
+BUILT_SOURCES = cf3lex.c cf3parse.h cf3parse.c \
+	enterprise_extension.c \
+	enterprise_extension.h
 
-CLEANFILES = *.gcno *.gcda
+ENTERPRISE_EXTENSION_GENERATE = $(SED) -f $(srcdir)/enterprise_extension.sed $< > $@
+ENTERPRISE_EXTENSION_MAKE = @if test -z "$(V)"; then echo "  SED   " $@; else echo "$(ENTERPRISE_EXTENSION_GENERATE)"; fi; $(ENTERPRISE_EXTENSION_GENERATE)
+
+enterprise_extension.c: extensions_template.c enterprise_extension.sed
+	$(ENTERPRISE_EXTENSION_MAKE)
+enterprise_extension.h: extensions_template.h enterprise_extension.sed
+	$(ENTERPRISE_EXTENSION_MAKE)
+
+CLEANFILES = *.gcno *.gcda $(BUILT_SOURCES)
 
 #
 # Some basic clean ups
@@ -160,9 +183,13 @@ MOSTLYCLEANFILES = *~ *.orig *.rej
 # libutils dependency
 
 # Automake need to be guided due to symlinking
-libpromises_la_DEPENDENCIES = ../libutils/libutils.la ../libcfnet/libcfnet.la $(NOVA_LDADD)
+libpromises_la_DEPENDENCIES = ../libutils/libutils.la ../libcfnet/libcfnet.la \
+	../libenv/libenv.la $(ENTERPRISE_LDADD)
 
 .PRECIOUS: ../libutils/libutils.la
 
 ../libutils/libutils.la:
 	$(MAKE) -C ../libutils $(AM_MAKEFLAGS) libutils.la
+
+bootstrap.inc:
+	perl ./text2cstring.pl failsafe.cf > bootstrap.inc

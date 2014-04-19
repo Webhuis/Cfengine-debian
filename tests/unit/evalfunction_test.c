@@ -1,7 +1,7 @@
-#include "test.h"
+#include <test.h>
 
-#include "env_context.h"
-#include "evalfunction.h"
+#include <eval_context.h>
+#include <evalfunction.h>
 
 static bool netgroup_more = false;
 
@@ -54,7 +54,7 @@ static void test_hostinnetgroup_found(void)
 
     RlistAppendScalar(&args, "valid_netgroup");
 
-    res = FnCallHostInNetgroup(ctx, NULL, args);
+    res = FnCallHostInNetgroup(ctx, NULL, NULL, args);
     assert_string_equal("any", (char *) res.rval.item);
 
     EvalContextDestroy(ctx);
@@ -69,7 +69,7 @@ static void test_hostinnetgroup_not_found(void)
 
     RlistAppendScalar(&args, "invalid_netgroup");
 
-    res = FnCallHostInNetgroup(ctx, NULL, args);
+    res = FnCallHostInNetgroup(ctx, NULL, NULL, args);
     assert_string_equal("!any", (char *) res.rval.item);
 
     EvalContextDestroy(ctx);
