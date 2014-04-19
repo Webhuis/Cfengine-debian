@@ -2,15 +2,15 @@
 
 body common control
 {
-    inputs => { "../../default.cf.sub" };
-    bundlesequence => { default("$(this.promise_filename)") };
-    version => "1.0";
+      inputs => { "../../default.cf.sub" };
+      bundlesequence => { default("$(this.promise_filename)") };
+      version => "1.0";
 }
 
 bundle agent init
 {
   vars:
-    "expected" string => "1,2,3";
+      "expected" string => "1,2,3";
 }
 
 bundle agent test
@@ -33,7 +33,7 @@ bundle agent sub(sublist)
 bundle agent check
 {
   methods:
-      "check results" usebundle => default_check_strcmp("$(init.expected)", "$(sub.joined)", "$(this.promise_filename)", "no");
+      "check results" usebundle => dcs_check_strcmp("$(init.expected)", "$(sub.joined)", "$(this.promise_filename)", "no");
   reports:
     DEBUG::
       "comparing '$(init.expected)' with '$(sub.joined)'";

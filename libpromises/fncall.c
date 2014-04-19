@@ -17,22 +17,90 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "fncall.h"
+#include <fncall.h>
 
-#include "env_context.h"
-#include "files_names.h"
-#include "expand.h"
-#include "vars.h"
-#include "args.h"
-#include "evalfunction.h"
-#include "policy.h"
+#include <eval_context.h>
+#include <files_names.h>
+#include <expand.h>
+#include <vars.h>
+#include <evalfunction.h>
+#include <policy.h>
+#include <string_lib.h>
+#include <promises.h>
+#include <syntax.h>
+#include <audit.h>
 
-#include <assert.h>
+/******************************************************************/
+/* Argument propagation                                           */
+/******************************************************************/
+
+/*
+
+When formal parameters are passed, they should be literal strings, i.e.
+values (check for this). But when the values are received the
+receiving body should state only variable names without literal quotes.
+That way we can feed in the received parameter name directly in as an lvalue
+
+e.g.
+       access => myaccess("$(person)"),
+
+       body files myaccess(user)
+
+leads to Hash Association (lval,rval) => (user,"$(person)")
+
+*/
+
+/******************************************************************/
+
+static Rlist *NewExpArgs(EvalContext *ctx, const Policy *policy, const FnCall *fp)
+{
+    {
+        const FnCallType *fn = FnCallTypeGet(fp->name);
+        int len = RlistLen(fp->args);
+
+        if (!(fn->options & FNCALL_OPTION_VARARG))
+        {
+            if (len != FnNumArgs(fn))
+            {
+                Log(LOG_LEVEL_ERR, "Arguments to function '%s' do not tally. Expected %d not %d",
+                      fp->name, FnNumArgs(fn), len);
+                PromiseRef(LOG_LEVEL_ERR, fp->caller);
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+    Rlist *expanded_args = NULL;
+    for (const Rlist *rp = fp->args; rp != NULL; rp = rp->next)
+    {
+        Rval rval;
+
+        switch (rp->val.type)
+        {
+        case RVAL_TYPE_FNCALL:
+            {
+                FnCall *subfp = RlistFnCallValue(rp);
+                rval = FnCallEvaluate(ctx, policy, subfp, fp->caller).rval;
+                assert(rval.item);
+            }
+            break;
+        default:
+            rval = ExpandPrivateRval(ctx, NULL, NULL, rp->val.item, rp->val.type);
+            assert(rval.item);
+            break;
+        }
+
+        RlistAppend(&expanded_args, rval.item, rval.type);
+        RvalDestroy(rval);
+    }
+
+    return expanded_args;
+}
 
 /*******************************************************************/
 
@@ -61,9 +129,7 @@ bool FnCallIsBuiltIn(Rval rval)
 
 FnCall *FnCallNew(const char *name, Rlist *args)
 {
-    FnCall *fp;
-
-    fp = xmalloc(sizeof(FnCall));
+    FnCall *fp = xmalloc(sizeof(FnCall));
 
     fp->name = xstrdup(name);
     fp->args = args;
@@ -90,90 +156,203 @@ void FnCallDestroy(FnCall *fp)
     free(fp);
 }
 
-/*********************************************************************/
-
-FnCall *ExpandFnCall(EvalContext *ctx, const char *contextid, FnCall *f)
+unsigned FnCallHash(const FnCall *fp, unsigned seed, unsigned max)
 {
-    return FnCallNew(f->name, ExpandList(ctx, contextid, f->args, false));
+    unsigned hash = StringHash(fp->name, seed, max);
+    return RlistHash(fp->args, hash, max);
 }
 
 
-/*******************************************************************/
-
-void FnCallShow(FILE *fout, const FnCall *fp)
+FnCall *ExpandFnCall(EvalContext *ctx, const char *ns, const char *scope, const FnCall *f)
 {
-    fprintf(fout, "%s(", fp->name);
-
-    for (const Rlist *rp = fp->args; rp != NULL; rp = rp->next)
+    FnCall *result = NULL;
+    if (IsCf3VarString(f->name))
     {
-        switch (rp->type)
+        // e.g. usebundle => $(m)(arg0, arg1);
+        Buffer *buf = BufferNewWithCapacity(CF_MAXVARSIZE);
+        ExpandScalar(ctx, ns, scope, f->name, buf);
+
+        result = FnCallNew(BufferData(buf), ExpandList(ctx, ns, scope, f->args, false));
+        BufferDestroy(buf);
+    }
+    else
+    {
+        result = FnCallNew(f->name, ExpandList(ctx, ns, scope, f->args, false));
+    }
+
+    return result;
+}
+
+void FnCallWrite(Writer *writer, const FnCall *call)
+{
+    WriterWrite(writer, call->name);
+    WriterWriteChar(writer, '(');
+
+    for (const Rlist *rp = call->args; rp != NULL; rp = rp->next)
+    {
+        switch (rp->val.type)
         {
         case RVAL_TYPE_SCALAR:
-            fprintf(fout, "%s,", (char *) rp->item);
+            WriterWrite(writer, RlistScalarValue(rp));
             break;
 
         case RVAL_TYPE_FNCALL:
-            FnCallShow(fout, (FnCall *) rp->item);
+            FnCallWrite(writer, RlistFnCallValue(rp));
             break;
 
         default:
-            fprintf(fout, "(** Unknown argument **)\n");
+            WriterWrite(writer, "(** Unknown argument **)\n");
             break;
+        }
+
+        if (rp->next != NULL)
+        {
+            WriterWriteChar(writer, ',');
         }
     }
 
-    fprintf(fout, ")");
+    WriterWriteChar(writer, ')');
 }
 
 /*******************************************************************/
 
-FnCallResult FnCallEvaluate(EvalContext *ctx, FnCall *fp, const Promise *caller)
+static FnCallResult CallFunction(EvalContext *ctx, const Policy *policy, const FnCall *fp, const Rlist *expargs)
 {
-    Rlist *expargs;
+    const Rlist *rp = fp->args;
+    const FnCallType *fncall_type = FnCallTypeGet(fp->name);
+
+    int argnum = 0;
+    for (argnum = 0; rp != NULL && fncall_type->args[argnum].pattern != NULL; argnum++)
+    {
+        if (rp->val.type != RVAL_TYPE_FNCALL)
+        {
+            /* Nested functions will not match to lval so don't bother checking */
+            SyntaxTypeMatch err = CheckConstraintTypeMatch(fp->name, rp->val,
+                                                           fncall_type->args[argnum].dtype,
+                                                           fncall_type->args[argnum].pattern, 1);
+            if (err != SYNTAX_TYPE_MATCH_OK && err != SYNTAX_TYPE_MATCH_ERROR_UNEXPANDED)
+            {
+                FatalError(ctx, "In function '%s', '%s'", fp->name, SyntaxTypeMatchToString(err));
+            }
+        }
+
+        rp = rp->next;
+    }
+
+    char output[CF_BUFSIZE];
+    if (argnum != RlistLen(expargs) && !(fncall_type->options & FNCALL_OPTION_VARARG))
+    {
+        snprintf(output, CF_BUFSIZE, "Argument template mismatch handling function %s(", fp->name);
+        {
+            Writer *w = FileWriter(stderr);
+            RlistWrite(w, expargs);
+            FileWriterDetach(w);
+        }
+
+        fprintf(stderr, ")\n");
+
+        rp = expargs;
+        for (int i = 0; i < argnum; i++)
+        {
+            printf("  arg[%d] range %s\t", i, fncall_type->args[i].pattern);
+            if (rp != NULL)
+            {
+                Writer *w = FileWriter(stdout);
+                RvalWrite(w, rp->val);
+                FileWriterDetach(w);
+                rp = rp->next;
+            }
+            else
+            {
+                printf(" ? ");
+            }
+            printf("\n");
+        }
+
+        FatalError(ctx, "Bad arguments");
+    }
+
+
+    return (*fncall_type->impl) (ctx, policy, fp, expargs);
+}
+
+FnCallResult FnCallEvaluate(EvalContext *ctx, const Policy *policy, FnCall *fp, const Promise *caller)
+{
+    assert(ctx);
+    assert(policy);
+    assert(fp);
+    fp->caller = caller;
+
+    if (!EvalContextGetEvalOption(ctx, EVAL_OPTION_EVAL_FUNCTIONS))
+    {
+        Log(LOG_LEVEL_VERBOSE, "Skipping function '%s', because evaluation was turned off in the evaluator",
+            fp->name);
+        return (FnCallResult) { FNCALL_FAILURE, { FnCallCopy(fp), RVAL_TYPE_FNCALL } };
+    }
+    else if (caller && !EvalContextPromiseIsActive(ctx, caller))
+    {
+        Log(LOG_LEVEL_VERBOSE, "Skipping function '%s', because it was excluded by classes", fp->name);
+        return (FnCallResult) { FNCALL_FAILURE, { FnCallCopy(fp), RVAL_TYPE_FNCALL } };
+    }
+
     const FnCallType *fp_type = FnCallTypeGet(fp->name);
 
     if (!fp_type)
     {
         if (caller)
         {
-            Log(LOG_LEVEL_ERR, "No such FnCall \"%s()\" in promise @ %s near line %zd",
-                  fp->name, PromiseGetBundle(caller)->source_path, caller->offset.line);
+            Log(LOG_LEVEL_ERR, "No such FnCall '%s' in promise '%s' near line %llu",
+                fp->name, PromiseGetBundle(caller)->source_path,
+                (unsigned long long)caller->offset.line);
         }
         else
         {
-            Log(LOG_LEVEL_ERR, "No such FnCall \"%s()\" - context info unavailable", fp->name);
+            Log(LOG_LEVEL_ERR, "No such FnCall '%s', context info unavailable", fp->name);
         }
 
         return (FnCallResult) { FNCALL_FAILURE, { FnCallCopy(fp), RVAL_TYPE_FNCALL } };
     }
 
-/* If the container classes seem not to be defined at this stage, then don't try to expand the function */
+    Rlist *expargs = NewExpArgs(ctx, policy, fp);
 
-    if ((caller != NULL) && !IsDefinedClass(ctx, caller->classes, PromiseGetNamespace(caller)))
+    if (RlistIsUnresolved(expargs))
     {
+        RlistDestroy(expargs);
         return (FnCallResult) { FNCALL_FAILURE, { FnCallCopy(fp), RVAL_TYPE_FNCALL } };
     }
 
-    expargs = NewExpArgs(ctx, fp, caller);
-
-    if (UnresolvedArgs(expargs))
+    Rval cached_rval;
+    if ((fp_type->options & FNCALL_OPTION_CACHED) && EvalContextFunctionCacheGet(ctx, fp, expargs, &cached_rval))
     {
-        DeleteExpArgs(expargs);
-        return (FnCallResult) { FNCALL_FAILURE, { FnCallCopy(fp), RVAL_TYPE_FNCALL } };
+        Writer *w = StringWriter();
+        FnCallWrite(w, fp);
+        Log(LOG_LEVEL_DEBUG, "Using previously cached result for function '%s'", StringWriterData(w));
+        WriterClose(w);
+        RlistDestroy(expargs);
+
+        return (FnCallResult) { FNCALL_SUCCESS, RvalCopy(cached_rval) };
     }
 
-    fp->caller = caller;
-
-    FnCallResult result = CallFunction(ctx, fp_type, fp, expargs);
+    FnCallResult result = CallFunction(ctx, policy, fp, expargs);
 
     if (result.status == FNCALL_FAILURE)
     {
-        /* We do not assign variables to failed function calls */
-        DeleteExpArgs(expargs);
+        RlistDestroy(expargs);
         return (FnCallResult) { FNCALL_FAILURE, { FnCallCopy(fp), RVAL_TYPE_FNCALL } };
     }
 
-    DeleteExpArgs(expargs);
+    if (fp_type->options & FNCALL_OPTION_CACHED)
+    {
+        Writer *w = StringWriter();
+        FnCallWrite(w, fp);
+        Log(LOG_LEVEL_VERBOSE, "Caching result for function '%s'", StringWriterData(w));
+        WriterClose(w);
+
+        EvalContextFunctionCachePut(ctx, fp, expargs, &result.rval);
+    }
+
+    RlistDestroy(expargs);
+
     return result;
 }
 

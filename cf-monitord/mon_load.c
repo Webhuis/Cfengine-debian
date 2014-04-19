@@ -17,14 +17,14 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "mon.h"
+#include <mon.h>
 
 #ifdef HAVE_SYS_LOADAVG_H
 # include <sys/loadavg.h>
@@ -52,8 +52,6 @@ void MonLoadGatherData(double *cf_this)
     }
 
     sum /= (double) n;
-
-/* Scale load average by 100 to make it visible */
 
     cf_this[ob_loadavg] = sum;
     Log(LOG_LEVEL_VERBOSE, "Load Average = %.2lf", cf_this[ob_loadavg]);

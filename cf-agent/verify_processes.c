@@ -17,48 +17,49 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "verify_processes.h"
+#include <verify_processes.h>
 
-#include "processes_select.h"
-#include "env_context.h"
-#include "promises.h"
-#include "vars.h"
-#include "item_lib.h"
-#include "conversion.h"
-#include "matching.h"
-#include "attributes.h"
-#include "locks.h"
-#include "exec_tools.h"
-#include "rlist.h"
-#include "policy.h"
-#include "scope.h"
-#include "ornaments.h"
+#include <actuator.h>
+#include <processes_select.h>
+#include <eval_context.h>
+#include <promises.h>
+#include <class.h>
+#include <vars.h>
+#include <class.h>
+#include <item_lib.h>
+#include <conversion.h>
+#include <matching.h>
+#include <attributes.h>
+#include <locks.h>
+#include <exec_tools.h>
+#include <rlist.h>
+#include <policy.h>
+#include <scope.h>
+#include <ornaments.h>
 
-static void VerifyProcesses(EvalContext *ctx, Attributes a, Promise *pp);
-static int ProcessSanityChecks(Attributes a, Promise *pp);
-static void VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, Promise *pp);
+static PromiseResult VerifyProcesses(EvalContext *ctx, Attributes a, const Promise *pp);
+static bool ProcessSanityChecks(Attributes a, const Promise *pp);
+static PromiseResult VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, const Promise *pp);
 static int FindPidMatches(Item *procdata, Item **killlist, Attributes a, const char *promiser);
 
-void VerifyProcessesPromise(EvalContext *ctx, Promise *pp)
+PromiseResult VerifyProcessesPromise(EvalContext *ctx, const Promise *pp)
 {
-    Attributes a = { {0} };
-
-    a = GetProcessAttributes(ctx, pp);
+    Attributes a = GetProcessAttributes(ctx, pp);
     ProcessSanityChecks(a, pp);
 
-    VerifyProcesses(ctx, a, pp);
+    return VerifyProcesses(ctx, a, pp);
 }
 
 /*****************************************************************************/
 /* Level                                                                     */
 /*****************************************************************************/
 
-static int ProcessSanityChecks(Attributes a, Promise *pp)
+static bool ProcessSanityChecks(Attributes a, const Promise *pp)
 {
     int promised_zero, ret = true;
 
@@ -66,7 +67,7 @@ static int ProcessSanityChecks(Attributes a, Promise *pp)
 
     if (a.restart_class)
     {
-        if ((RlistIsStringIn(a.signals, "term")) || (RlistIsStringIn(a.signals, "kill")))
+        if ((RlistKeyIn(a.signals, "term")) || (RlistKeyIn(a.signals, "kill")))
         {
             Log(LOG_LEVEL_WARNING, "Promise '%s' kills then restarts - never strictly converges",
                   pp->promiser);
@@ -102,7 +103,7 @@ static int ProcessSanityChecks(Attributes a, Promise *pp)
 
 /*****************************************************************************/
 
-static void VerifyProcesses(EvalContext *ctx, Attributes a, Promise *pp)
+static PromiseResult VerifyProcesses(EvalContext *ctx, Attributes a, const Promise *pp)
 {
     CfLock thislock;
     char lockname[CF_BUFSIZE];
@@ -117,41 +118,43 @@ static void VerifyProcesses(EvalContext *ctx, Attributes a, Promise *pp)
     }
 
     thislock = AcquireLock(ctx, lockname, VUQNAME, CFSTARTTIME, a.transaction, pp, false);
-
     if (thislock.lock == NULL)
     {
-        return;
+        return PROMISE_RESULT_SKIPPED;
     }
 
-    ScopeDeleteSpecial("this", "promiser");
-    ScopeNewSpecial(ctx, "this", "promiser", pp->promiser, DATA_TYPE_STRING);
     PromiseBanner(pp);
-    VerifyProcessOp(ctx, PROCESSTABLE, a, pp);
-    ScopeDeleteSpecial("this", "promiser");
+    PromiseResult result = VerifyProcessOp(ctx, PROCESSTABLE, a, pp);
 
     YieldCurrentLock(thislock);
+
+    return result;
 }
 
-static void VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, Promise *pp)
+static PromiseResult VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, const Promise *pp)
 {
-    int matches = 0, do_signals = true, out_of_range, killed = 0, need_to_restart = true;
+    bool do_signals = true;
+    int out_of_range;
+    int killed = 0;
+    bool need_to_restart = true;
     Item *killlist = NULL;
 
-    matches = FindPidMatches(procdata, &killlist, a, pp->promiser);
+    int matches = FindPidMatches(procdata, &killlist, a, pp->promiser);
 
 /* promise based on number of matches */
 
+    PromiseResult result = PROMISE_RESULT_NOOP;
     if (a.process_count.min_range != CF_NOINT)  /* if a range is specified */
     {
         if ((matches < a.process_count.min_range) || (matches > a.process_count.max_range))
         {
             cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_CHANGE, pp, a, "Process count for '%s' was out of promised range (%d found)", pp->promiser, matches);
+            result = PromiseResultUpdate(result, PROMISE_RESULT_CHANGE);
             for (const Rlist *rp = a.process_count.out_of_range_define; rp != NULL; rp = rp->next)
             {
-                if (!EvalContextHeapContainsSoft(ctx, rp->item))
-                {
-                    EvalContextHeapAddSoft(ctx, rp->item, PromiseGetNamespace(pp));
-                }
+                ClassRef ref = ClassRefParse(RlistScalarValue(rp));
+                EvalContextClassPutSoft(ctx, RlistScalarValue(rp), CONTEXT_SCOPE_NAMESPACE, "source=promise");
+                ClassRefDestroy(ref);
             }
             out_of_range = true;
         }
@@ -159,10 +162,9 @@ static void VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, Prom
         {
             for (const Rlist *rp = a.process_count.in_range_define; rp != NULL; rp = rp->next)
             {
-                if (!EvalContextHeapContainsSoft(ctx, rp->item))
-                {
-                    EvalContextHeapAddSoft(ctx, rp->item, PromiseGetNamespace(pp));
-                }
+                ClassRef ref = ClassRefParse(RlistScalarValue(rp));
+                EvalContextClassPutSoft(ctx, RlistScalarValue(rp), CONTEXT_SCOPE_NAMESPACE, "source=promise");
+                ClassRefDestroy(ref);
             }
             cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, a, "Process promise for '%s' is kept", pp->promiser);
             out_of_range = false;
@@ -175,12 +177,14 @@ static void VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, Prom
 
     if (!out_of_range)
     {
-        return;
+        DeleteItemList(killlist);
+        return result;
     }
 
     if (a.transaction.action == cfa_warn)
     {
         do_signals = false;
+        result = PromiseResultUpdate(result, PROMISE_RESULT_WARN);
     }
     else
     {
@@ -197,6 +201,7 @@ static void VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, Prom
             {
                 cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, a,
                      "Need to keep process-stop promise for '%s', but only a warning is promised", pp->promiser);
+                result = PromiseResultUpdate(result, PROMISE_RESULT_WARN);
             }
             else
             {
@@ -206,16 +211,17 @@ static void VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, Prom
                 }
                 else
                 {
-                    cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a,
+                    cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                          "Process promise to stop '%s' could not be kept because '%s' the stop operator failed",
                          pp->promiser, a.process_stop);
+                    result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
                     DeleteItemList(killlist);
-                    return;
+                    return result;
                 }
             }
         }
 
-        killed = DoAllSignals(ctx, killlist, a, pp);
+        killed = DoAllSignals(ctx, killlist, a, pp, &result);
     }
 
 /* delegated promise to restart killed or non-existent entries */
@@ -227,7 +233,7 @@ static void VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, Prom
     if (!need_to_restart)
     {
         cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, a, "No restart promised for %s", pp->promiser);
-        return;
+        return result;
     }
     else
     {
@@ -235,17 +241,21 @@ static void VerifyProcessOp(EvalContext *ctx, Item *procdata, Attributes a, Prom
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, a,
                  "Need to keep restart promise for '%s', but only a warning is promised", pp->promiser);
+            result = PromiseResultUpdate(result, PROMISE_RESULT_WARN);
         }
         else
         {
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_CHANGE, pp, a, "Making a one-time restart promise for '%s'", pp->promiser);
-            EvalContextHeapAddSoft(ctx, a.restart_class, PromiseGetNamespace(pp));
+            result = PromiseResultUpdate(result, PROMISE_RESULT_CHANGE);
+            EvalContextClassPutSoft(ctx, a.restart_class, CONTEXT_SCOPE_NAMESPACE, "source=promise");
         }
     }
+
+    return result;
 }
 
 #ifndef __MINGW32__
-int DoAllSignals(EvalContext *ctx, Item *siglist, Attributes a, Promise *pp)
+int DoAllSignals(EvalContext *ctx, Item *siglist, Attributes a, const Promise *pp, PromiseResult *result)
 {
     Item *ip;
     Rlist *rp;
@@ -269,7 +279,7 @@ int DoAllSignals(EvalContext *ctx, Item *siglist, Attributes a, Promise *pp)
 
         for (rp = a.signals; rp != NULL; rp = rp->next)
         {
-            int signal = SignalFromString(rp->item);
+            int signal = SignalFromString(RlistScalarValue(rp));
 
             if (!DONTDO)
             {
@@ -280,14 +290,16 @@ int DoAllSignals(EvalContext *ctx, Item *siglist, Attributes a, Promise *pp)
 
                 if (kill((pid_t) pid, signal) < 0)
                 {
-                    cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_FAIL, pp, a,
+                    cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                          "Couldn't send promised signal '%s' (%d) to pid %jd (might be dead). (kill: %s)", RlistScalarValue(rp),
                          signal, (intmax_t)pid, GetErrorStr());
+                    *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
                 }
                 else
                 {
                     cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_CHANGE, pp, a, "Signalled '%s' (%d) to process %jd (%s)",
                          RlistScalarValue(rp), signal, (intmax_t)pid, ip->name);
+                    *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
                 }
             }
             else
@@ -315,7 +327,7 @@ static int FindPidMatches(Item *procdata, Item **killlist, Attributes a, const c
 
         if (pid == 1)
         {
-            if ((RlistLen(a.signals) == 1) && (RlistIsStringIn(a.signals, "hup")))
+            if ((RlistLen(a.signals) == 1) && (RlistKeyIn(a.signals, "hup")))
             {
                 Log(LOG_LEVEL_VERBOSE, "Okay to send only HUP to init");
             }

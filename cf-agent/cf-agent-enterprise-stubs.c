@@ -17,29 +17,49 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf-agent-enterprise-stubs.h"
+#include <cf-agent-enterprise-stubs.h>
 
-void VerifyWindowsService(ARG_UNUSED EvalContext *ctx, ARG_UNUSED Attributes a, ARG_UNUSED Promise *pp)
-{
-    Log(LOG_LEVEL_ERR, "Windows service management is only supported in CFEngine Enterprise");
-}
-
-void LastSawBundle(ARG_UNUSED const Bundle *bundle, ARG_UNUSED double comp)
+ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, LastSawBundle, ARG_UNUSED const Bundle *, bundle, ARG_UNUSED double, comp)
 {
 }
 
-void LogFileChange(ARG_UNUSED EvalContext *ctx, ARG_UNUSED char *file,
-                   ARG_UNUSED int change, ARG_UNUSED Attributes a, ARG_UNUSED Promise *pp)
+ENTERPRISE_FUNC_8ARG_DEFINE_STUB(PromiseResult, LogFileChange,
+                                 ARG_UNUSED EvalContext *, ctx,
+                                 ARG_UNUSED const char *, file,
+                                 ARG_UNUSED int, change,
+                                 ARG_UNUSED Attributes, a,
+                                 ARG_UNUSED const Promise *, pp,
+                                 ARG_UNUSED CopyRegularFileFunction, CopyRegularFilePtr,
+                                 ARG_UNUSED const char *, destination,
+                                 ARG_UNUSED DeleteCompressedArrayFunction, DeleteCompressedArrayPtr)
 {
     Log(LOG_LEVEL_VERBOSE, "Logging file differences requires version Nova or above");
+    return PROMISE_RESULT_NOOP;
 }
 
-void Nova_CheckNtACL(ARG_UNUSED EvalContext *ctx, ARG_UNUSED char *file_path, ARG_UNUSED Acl acl, ARG_UNUSED Attributes a, ARG_UNUSED Promise *pp)
+ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, Nova_NoteVarUsageDB, ARG_UNUSED EvalContext *, ctx)
 {
-    Log(LOG_LEVEL_INFO, "NTFS ACLs are only supported in CFEngine Enterprise");
+}
+
+ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, Nova_NoteClassUsage, ARG_UNUSED EvalContext *, ctx)
+{
+}
+
+ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, Nova_TrackExecution, ARG_UNUSED const char *, input_file)
+{
+}
+
+ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, GenerateDiffReports, ARG_UNUSED const char *, input_file)
+{
+}
+
+ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, Nova_NoteAgentExecutionPerformance,
+                                      ARG_UNUSED const char *, input_file,
+                                      ARG_UNUSED struct timespec, start)
+{
 }

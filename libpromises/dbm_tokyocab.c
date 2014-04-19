@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -26,11 +26,11 @@
  * Implementation using Tokyo Cabinet hash API.
  */
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "dbm_priv.h"
-#include "logging.h"
-#include "string_lib.h"
+#include <dbm_priv.h>
+#include <logging.h>
+#include <string_lib.h>
 
 #ifdef TCDB
 
@@ -117,7 +117,39 @@ static bool OpenTokyoDatabase(const char *filename, TCHDB **hdb)
         return false;
     }
 
-    if (rand() % 100 < 1)                              /* corresponds to 1% */
+    static int threshold = -1; /* GLOBAL_X */
+
+    if (threshold == -1)
+    {
+        /** 
+           Optimize always if TCDB_OPTIMIZE_PERCENT is equal to 100
+           Never optimize if  TCDB_OPTIMIZE_PERCENT is equal to 0
+         */
+        const char *perc = getenv("TCDB_OPTIMIZE_PERCENT");
+        if (perc != NULL)
+        {
+            /* Environment variable exists */
+            char *end;
+            long result = strtol(perc, &end, 10);
+ 
+            /* Environment variable is a number and in 0..100 range */
+            if (!*end && result >-1 && result < 101)
+            {
+               threshold = 100 - (int)result;
+            }
+            else
+            {
+                /* This corresponds to 1% */
+                threshold = 99; 
+            }
+        }
+        else
+        {
+            /* This corresponds to 1% */
+            threshold = 99; 
+        }
+    }
+    if ((threshold != 100) && (threshold == 0 || (int)(rand()%threshold) == 0))
     {
         if (!tchdboptimize(*hdb, -1, -1, -1, false))
         {
@@ -129,7 +161,7 @@ static bool OpenTokyoDatabase(const char *filename, TCHDB **hdb)
     return true;
 }
 
-DBPriv *DBPrivOpenDB(const char *dbpath)
+DBPriv *DBPrivOpenDB(const char *dbpath, ARG_UNUSED dbid id)
 {
     DBPriv *db = xcalloc(1, sizeof(DBPriv));
 
@@ -179,6 +211,10 @@ void DBPrivCloseDB(DBPriv *db)
 
     tchdbdel(db->hdb);
     free(db);
+}
+
+void DBPrivCommit(ARG_UNUSED DBPriv *db)
+{
 }
 
 bool DBPrivHasKey(DBPriv *db, const void *key, int key_size)
@@ -241,6 +277,11 @@ bool DBPrivWrite(DBPriv *db, const void *key, int key_size, const void *value, i
     int ret = Write(db->hdb, key, key_size, value, value_size);
 
     return ret;
+}
+
+bool DBPrivWriteNoCommit(DBPriv *db, const void *key, int key_size, const void *value, int value_size)
+{
+    return DBPrivWrite(db, key, key_size, value, value_size);
 }
 
 /*
@@ -349,7 +390,7 @@ char *DBPrivDiagnose(const char *dbpath)
         ((num & 0xff00000000000000ULL) >> 56) \
     )
 
-    static const char *MAGIC="ToKyO CaBiNeT";
+    static const char *const MAGIC="ToKyO CaBiNeT";
 
     FILE *fp = fopen(dbpath, "r");
     if(!fp)
@@ -367,7 +408,8 @@ char *DBPrivDiagnose(const char *dbpath)
     if(size < 256)
     {
         fclose(fp);
-        return StringFormat("Seek-to-end size less than minimum required: %zd", size);
+        return StringFormat("Seek-to-end size less than minimum required: %llu",
+                            (unsigned long long)size);
     }
 
     char hbuf[256];
@@ -384,31 +426,35 @@ char *DBPrivDiagnose(const char *dbpath)
         fclose(fp);
         return StringFormat("Error reading 256 bytes: %s\n", strerror(errno));
     }
+    fclose(fp);
 
     if(strncmp(hbuf, MAGIC, strlen(MAGIC)) != 0)
     {
-        fclose(fp);
         return StringFormat("Magic string mismatch");
     }
 
     uint64_t declared_size = 0;
     memcpy(&declared_size, hbuf+56, sizeof(uint64_t));
-    if(declared_size == size)
+    if (declared_size == size)
     {
         return NULL; // all is well
     }
     else
     {
         declared_size = SWAB64(declared_size);
-        if(declared_size == size)
+        if (declared_size == size)
         {
-            fclose(fp);
-            return StringFormat("Endianness mismatch, declared size SWAB64 '%zd' equals seek-to-end size '%zd'", declared_size, size);
+            return StringFormat("Endianness mismatch, declared size SWAB64 "
+                                "'%llu' equals seek-to-end size '%llu'",
+                                (unsigned long long)declared_size,
+                                (unsigned long long)size);
         }
         else
         {
-            fclose(fp);
-            return StringFormat("Size mismatch, declared size SWAB64 '%zd', seek-to-end-size '%zd'", declared_size, size);
+            return StringFormat("Size mismatch, declared size SWAB64 '%llu', "
+                                "seek-to-end-size '%llu'",
+                                (unsigned long long)declared_size,
+                                (unsigned long long)size);
         }
     }
 }

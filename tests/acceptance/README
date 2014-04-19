@@ -25,14 +25,21 @@ Preparing for running tests
 
 * Install fakeroot(1). If this tool is not available for your operating system,
   you may any other "fake root" environment or even sudo(1). Alternative tools
-  are specified by --gainroot option of `testall' script.
+  are specified by --gainroot option of `testall' script. Note that if you use
+  the --unsafe option (can damage your system), you may have to use
+  --gainroot=sudo in order to get correct results.
+
+* If you want output in color, set CFENGINE_COLOR to 1.  If you want
+  diff output colorized, you also need to install the colordiff
+  utility.
 
 ------------------------------------------------------------------------------
 Running testsuite
 ------------------------------------------------------------------------------
 
 All tests ought only to create files and directories in /tmp, and ought not to
-modify other files.
+modify other files. The exception to this rule are so called unsafe tests, which
+reside in a special directory. More on unsafe tests below.
 
 Run
 
@@ -58,7 +65,7 @@ run will be additionally marked in output as "(UNEXPECTED FAILURE)".
 
 You might run a subset of tests by passing either filenames:
 
-  ./testall --agent=$workdir/bin/cf-agent 01_vars/01_basic/001.cf 01_vars/01_basic/002.x.cf
+  ./testall --agent=$workdir/bin/cf-agent 01_vars/01_basic/sysvars.cf
 
 or directories to 'testall':
 
@@ -76,14 +83,22 @@ Each test should be 100% standalone, and must contain at least 3 main bundles:
 Look in default.cf for some standard check bundles (for example, to compare
 files when testing file edits, or for cleaning up temporary files).
 
-Tests should be named with only digits (e.g., "001.cf") unless they are expected
-to crash (that is, if they contan syntax errors or other faults), in which case
-the filename should have an 'x' suffix (e.g., "001.x.cf").
+Tests should be named with short names describing what they test, using lower-
+case letters and underscores only. If the test is expected to generate a crash
+or error (that is, if they contan syntax errors or other faults), it should
+have an additional '.x' suffix before '.cf' (e.g. 'string_vars.x.cf').
 
 Tests which are not expected to pass yet (e.g. there is a bug in code which
 prevents tests from passing) should be placed in 'staging' subdirectory in the
 test directory where they belong. Such test cases will be only run if --staging
 argument to ./testall is passed.
+
+Tests which modify the system outside of /tmp are so called unsafe tests, and
+should be placed in the 'unsafe' subdirectory in the directory where they
+belong. Such test cases have the potential to damage the host system and will
+only be run if the --unsafe argument is given to ./testall. For the user's
+protection, this option is needed even if the test file name is specified
+directly on the command line.
 
 Tests which need network connectivity should be placed to 'network'
 subdirectories. Those tests may be disabled by passing --no-network option to
@@ -92,6 +107,64 @@ subdirectories. Those tests may be disabled by passing --no-network option to
 NOTE: Since the class 'ok' is used in most tests, never create a persistent
 class called 'ok' in any test. Persistent classes are cleaned up between test
 runs, but better safe than sorry.
+
+All tests should contain three bundles: init, test and check. In the
+"body common control" this file should be included, and bundlesequence
+should be set to default("$(this.promise_filename)").
+
+Output "$(this.promise_filename) Pass" for passing
+   and "$(this.promise_filename) FAIL" for failing.
+
+If you want to use tools like grep, diff, touch, etc, please use the
+$(G.grep) format so that the correct path to the tool is chosen by
+this template. If a tool is missing you can add it to the list below.
+
+For tests that need to be skipped on certain platforms, you can add
+special meta variables to one of the test bundles. These are the
+possible variable names:
+
+  - test_skip_unsupported
+      Skips a test because it makes no sense on that platform (e.g.
+      symbolic links on Windows).
+
+  - test_skip_needs_work
+      Skips a test because the test itself is not adapted to the
+      platform (even if the functionality exists).
+
+  - test_suppress_fail
+      Runs the test, but will accept failure. Use this when there is a
+      real failure, but it is acceptable for the time being. This
+      variable requires a meta tag on the the variable set to
+      "redmine<number>", where <number> is a Redmine issue number.
+
+In all cases, the variable is expected to be set to a class expression
+suitable for ifvarclass, where a positive match means that the test
+will be skipped. So the expression '"test_skip_needs_work" string =>
+"hpux|aix";' will skip the test on HP-UX and AIX, and nowhere else.
+
+Example:
+  bundle agent test
+  {
+    meta:
+      # Class expression giving platforms that should be skipped.
+      "test_skip_unsupported" string => "hpux";
+  }
+
+  bundle agent test
+  {
+    meta:
+      # Class expression giving platforms that should be skipped.
+      "test_skip_needs_work" string => "hpux";
+  }
+
+  bundle agent test
+  {
+    meta:
+      # Class expression giving platforms where we suppress a failure.
+      "test_suppress_fail" string => "hpux",
+        meta => { "redmine1234" };
+  }
+
 
 ------------------------------------------------------------------------------
 Glossary

@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,8 @@
 #ifndef CFENGINE_MISC_LIB_H
 #define CFENGINE_MISC_LIB_H
 
-#include "compiler.h"
+#include <compiler.h>
+#include <platform.h>
 
 /*
   In contrast to the standard C modulus operator (%), this gives
@@ -33,6 +34,8 @@
   UnsignedModulus(-1, 3) => 2.
 */
 unsigned long UnsignedModulus(long dividend, long divisor);
+
+size_t UpperPowerOfTwo(size_t v);
 
 void __ProgrammingError(const char *file, int lineno, const char *format, ...) \
     FUNC_ATTR_PRINTF(3, 4) FUNC_ATTR_NORETURN;

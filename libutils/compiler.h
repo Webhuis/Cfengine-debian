@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -50,6 +50,12 @@
     __attribute__((deprecated))
 #else
 #  define FUNC_DEPRECATED(warning_text)
+#endif
+
+#if defined(__GNUC__)
+#  define FUNC_UNUSED __attribute__((unused))
+#else
+#  define FUNC_UNUSED
 #endif
 
 #if defined(__GNUC__) && ((__GNUC__ * 100 +  __GNUC_MINOR__ * 10) >= 240)

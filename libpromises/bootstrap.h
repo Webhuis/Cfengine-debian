@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,14 +25,20 @@
 #ifndef CFENGINE_BOOTSTRAP_H
 #define CFENGINE_BOOTSTRAP_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 /**
- * @brief Sets classes and the POLICY_SERVER global.
+ * @brief Sets sys.policy_hub and the POLICY_SERVER global.
  * @param ctx EvalContext is used to set related variables
  * @param new_policy_server IP of new policy server
  */
 void SetPolicyServer(EvalContext *ctx, const char *new_policy_server);
+
+/**
+ * @brief Updates sys.last_policy_update variable from $(sys.masterdir)/cf_promises_validated
+ * @param ctx EvalContext to put variable into
+ */
+void UpdateLastPolicyUpdateTime(EvalContext *ctx);
 
 /**
  * @return The contents of policy_server.dat, or NULL if file is not found. Return value must be freed.
@@ -74,15 +80,15 @@ bool WriteBuiltinFailsafePolicy(const char *workdir);
 bool WriteBuiltinFailsafePolicyToPath(const char *filename);
 
 /**
- * @brief Removes all files in WORKDIR/inputs
- * @param workdir
+ * @brief Removes all files in $(sys.inputdir)
+ * @param inputdir
  * @return True if succesful
  */
-bool RemoveAllExistingPolicyInInputs(const char *workdir);
+bool RemoveAllExistingPolicyInInputs(const char *inputdir);
 
 /**
- * @return True if the file WORKDIR/masterfiles/promises.cf exists
+ * @return True if the file $(sys.masterdir)/promises.cf exists
  */
-bool MasterfileExists(const char *workdir);
+bool MasterfileExists(const char *masterdir);
 
 #endif

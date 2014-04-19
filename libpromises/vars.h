@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,15 +25,13 @@
 #ifndef CFENGINE_VARS_H
 #define CFENGINE_VARS_H
 
-#include "cf3.defs.h"
-#include "assoc.h"
+#include <cf3.defs.h>
+#include <buffer.h>
 
-void LoadSystemConstants(EvalContext *ctx);
-
-const char *ExtractInnerCf3VarString(const char *str, char *substr);
-const char *ExtractOuterCf3VarString(const char *str, char *substr);
-int UnresolvedArgs(Rlist *args);
-int IsQualifiedVariable(char *var);
+size_t ExtractScalarPrefix(Buffer *out, const char *str, size_t len);
+bool ExtractScalarReference(Buffer *out, const char *str, size_t len, bool extract_inner);
+bool RlistIsUnresolved(const Rlist *args);
+bool IsQualifiedVariable(const char *var);
 
 bool StringContainsVar(const char *s, const char *v);
 bool IsCf3VarString(const char *str);

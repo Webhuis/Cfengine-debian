@@ -17,40 +17,36 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "verify_classes.h"
+#include <verify_classes.h>
 
-#include "attributes.h"
-#include "matching.h"
-#include "files_names.h"
-#include "fncall.h"
-#include "rlist.h"
-#include "expand.h"
-#include "promises.h"
-#include "hashes.h"
-#include "conversion.h"
-#include "logic_expressions.h"
-
-#include <assert.h>
+#include <attributes.h>
+#include <matching.h>
+#include <files_names.h>
+#include <fncall.h>
+#include <rlist.h>
+#include <expand.h>
+#include <promises.h>
+#include <conversion.h>
+#include <logic_expressions.h>
+#include <string_lib.h>
 
 
-static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp);
+static int EvalClassExpression(EvalContext *ctx, Constraint *cp, const Promise *pp);
 static bool ValidClassName(const char *str);
 
 
-void VerifyClassPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED void *param)
+PromiseResult VerifyClassPromise(EvalContext *ctx, const Promise *pp, ARG_UNUSED void *param)
 {
     assert(param == NULL);
 
-    Attributes a;
+    Attributes a = GetClassContextAttributes(ctx, pp);
 
-    a = GetClassContextAttributes(ctx, pp);
-
-    if (!FullTextMatch("[a-zA-Z0-9_]+", pp->promiser))
+    if (!StringMatchFull("[a-zA-Z0-9_]+", pp->promiser))
     {
         Log(LOG_LEVEL_VERBOSE, "Class identifier '%s' contains illegal characters - canonifying", pp->promiser);
         snprintf(pp->promiser, strlen(pp->promiser) + 1, "%s", CanonifyName(pp->promiser));
@@ -59,39 +55,13 @@ void VerifyClassPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED void *param)
     if (a.context.nconstraints == 0)
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "No constraints for class promise '%s'", pp->promiser);
-        return;
+        return PROMISE_RESULT_FAIL;
     }
 
     if (a.context.nconstraints > 1)
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Irreconcilable constraints in classes for '%s'", pp->promiser);
-        return;
-    }
-
-    bool global_class = false;
-    if (a.context.persistent > 0) /* Persistent classes are always global */
-    {
-        global_class = true;
-    }
-    else if (a.context.scope == CONTEXT_SCOPE_NONE)
-    {
-        /* If there is no explicit scope, common bundles define global classes, other bundles define local classes */
-        if (strcmp(PromiseGetBundle(pp)->type, "common") == 0)
-        {
-            global_class = true;
-        }
-        else
-        {
-            global_class = false;
-        }
-    }
-    else if (a.context.scope == CONTEXT_SCOPE_NAMESPACE)
-    {
-        global_class = true;
-    }
-    else if (a.context.scope == CONTEXT_SCOPE_BUNDLE)
-    {
-        global_class = false;
+        return PROMISE_RESULT_FAIL;
     }
 
     if (EvalClassExpression(ctx, a.context.expression, pp))
@@ -100,57 +70,81 @@ void VerifyClassPromise(EvalContext *ctx, Promise *pp, ARG_UNUSED void *param)
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                  "Attempted to name a class '%s', which is an illegal class identifier", pp->promiser);
+            return PROMISE_RESULT_FAIL;
         }
         else
         {
-            if (global_class)
+            char *tags = NULL;
+            {
+                Buffer *tag_buffer = BufferNew();
+                BufferAppendString(tag_buffer, "source=promise");
+
+                for (const Rlist *rp = PromiseGetConstraintAsList(ctx, "meta", pp); rp; rp = rp->next)
+                {
+                    BufferAppendChar(tag_buffer, ',');
+                    BufferAppendString(tag_buffer, RlistScalarValue(rp));
+                }
+
+                tags = BufferClose(tag_buffer);
+            }
+
+            if (/* Persistent classes are always global: */
+                a.context.persistent > 0 ||
+                /* Namespace-scope is global: */
+                a.context.scope == CONTEXT_SCOPE_NAMESPACE ||
+                /* If there is no explicit scope, common bundles define global
+                 * classes, other bundles define local classes: */
+                (a.context.scope == CONTEXT_SCOPE_NONE &&
+                 0 == strcmp(PromiseGetBundle(pp)->type, "common")))
             {
                 Log(LOG_LEVEL_VERBOSE, "Adding global class '%s'", pp->promiser);
-                EvalContextHeapAddSoft(ctx, pp->promiser, PromiseGetNamespace(pp));
+                EvalContextClassPutSoft(ctx, pp->promiser, CONTEXT_SCOPE_NAMESPACE, tags);
             }
             else
             {
                 Log(LOG_LEVEL_VERBOSE, "Adding local bundle class '%s'", pp->promiser);
-                EvalContextStackFrameAddSoft(ctx, pp->promiser);
+                EvalContextClassPutSoft(ctx, pp->promiser, CONTEXT_SCOPE_BUNDLE, tags);
             }
 
             if (a.context.persistent > 0)
             {
                 Log(LOG_LEVEL_VERBOSE, "Adding persistent class '%s'. (%d minutes)", pp->promiser,
                       a.context.persistent);
-                EvalContextHeapPersistentSave(pp->promiser, PromiseGetNamespace(pp), a.context.persistent, CONTEXT_STATE_POLICY_RESET);
+                EvalContextHeapPersistentSave(ctx, pp->promiser, a.context.persistent,
+                                              CONTEXT_STATE_POLICY_RESET, tags);
             }
+
+            free(tags);
+
+            return PROMISE_RESULT_NOOP;
         }
     }
+
+    return PROMISE_RESULT_NOOP;
 }
 
-static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
+static int EvalClassExpression(EvalContext *ctx, Constraint *cp, const Promise *pp)
 {
+    assert(pp);
+
     int result_and = true;
     int result_or = false;
     int result_xor = 0;
     int result = 0, total = 0;
     char buffer[CF_MAXVARSIZE];
     Rlist *rp;
-    FnCall *fp;
-    Rval rval;
 
-    if (cp == NULL)
+    if (cp == NULL) // ProgrammingError ?  We'll crash RSN anyway ...
     {
         Log(LOG_LEVEL_ERR, "EvalClassExpression internal diagnostic discovered an ill-formed condition");
     }
 
-    if (!IsDefinedClass(ctx, pp->classes, PromiseGetNamespace(pp)))
+    if (!IsDefinedClass(ctx, pp->classes))
     {
         return false;
     }
 
-    if (EvalContextPromiseIsDone(ctx, pp))
-    {
-        return false;
-    }
-
-    if (IsDefinedClass(ctx, pp->promiser, PromiseGetNamespace(pp)))
+    if (IsDefinedClass(ctx, pp->promiser))
     {
         if (PromiseGetConstraintAsInt(ctx, "persistence", pp) == 0)
         {
@@ -162,10 +156,13 @@ static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
 
     switch (cp->rval.type)
     {
-    case RVAL_TYPE_FNCALL:
+        Rval rval;
+        FnCall *fp;
 
-        fp = (FnCall *) cp->rval.item;  /* Special expansion of functions for control, best effort only */
-        FnCallResult res = FnCallEvaluate(ctx, fp, pp);
+    case RVAL_TYPE_FNCALL:
+        fp = RvalFnCallValue(cp->rval);
+        /* Special expansion of functions for control, best effort only: */
+        FnCallResult res = FnCallEvaluate(ctx, PromiseGetPolicy(pp), fp, pp);
 
         FnCallDestroy(fp);
         cp->rval = res.rval;
@@ -174,16 +171,14 @@ static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
     case RVAL_TYPE_LIST:
         for (rp = (Rlist *) cp->rval.item; rp != NULL; rp = rp->next)
         {
-            rval = EvaluateFinalRval(ctx, "this", (Rval) {rp->item, rp->type}, true, pp);
-            RvalDestroy((Rval) {rp->item, rp->type});
-            rp->item = rval.item;
-            rp->type = rval.type;
+            rval = EvaluateFinalRval(ctx, PromiseGetPolicy(pp), NULL, "this", rp->val, true, pp);
+            RvalDestroy(rp->val);
+            rp->val = rval;
         }
         break;
 
     default:
-
-        rval = ExpandPrivateRval(ctx, "this", cp->rval);
+        rval = ExpandPrivateRval(ctx, NULL, "this", cp->rval.item, cp->rval.type);
         RvalDestroy(cp->rval);
         cp->rval = rval;
         break;
@@ -191,36 +186,14 @@ static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
 
     if (strcmp(cp->lval, "expression") == 0)
     {
-        if (cp->rval.type != RVAL_TYPE_SCALAR)
-        {
-            return false;
-        }
-
-        if (IsDefinedClass(ctx, (char *) cp->rval.item, PromiseGetNamespace(pp)))
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return (cp->rval.type == RVAL_TYPE_SCALAR &&
+                IsDefinedClass(ctx, RvalScalarValue(cp->rval)));
     }
 
     if (strcmp(cp->lval, "not") == 0)
     {
-        if (cp->rval.type != RVAL_TYPE_SCALAR)
-        {
-            return false;
-        }
-
-        if (IsDefinedClass(ctx, (char *) cp->rval.item, PromiseGetNamespace(pp)))
-        {
-            return false;
-        }
-        else
-        {
-            return true;
-        }
+        return (cp->rval.type == RVAL_TYPE_SCALAR &&
+                !IsDefinedClass(ctx, RvalScalarValue(cp->rval)));
     }
 
 // Class selection
@@ -246,14 +219,14 @@ static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
         }
 
         snprintf(splay, CF_MAXVARSIZE, "%s+%s+%ju", VFQNAME, VIPADDRESS, (uintmax_t)getuid());
-        hash = (double) OatHash(splay, CF_HASHTABLESIZE);
+        hash = (double) StringHash(splay, 0, CF_HASHTABLESIZE);
         n = (int) (total * hash / (double) CF_HASHTABLESIZE);
 
         for (rp = (Rlist *) cp->rval.item, i = 0; rp != NULL; rp = rp->next, i++)
         {
             if (i == n)
             {
-                EvalContextHeapAddSoft(ctx, rp->item, PromiseGetNamespace(pp));
+                EvalContextClassPutSoft(ctx, RlistScalarValue(rp), CONTEXT_SCOPE_NAMESPACE, "source=promise");
                 return true;
             }
         }
@@ -274,7 +247,7 @@ static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
     {
         for (rp = (Rlist *) cp->rval.item; rp != NULL; rp = rp->next)
         {
-            result = IntFromString(rp->item);
+            result = IntFromString(RlistScalarValue(rp));
 
             if (result < 0)
             {
@@ -298,7 +271,7 @@ static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
 
         for (rp = (Rlist *) cp->rval.item; rp != NULL; rp = rp->next)
         {
-            double prob = ((double) IntFromString(rp->item)) / ((double) total);
+            double prob = ((double) IntFromString(RlistScalarValue(rp))) / ((double) total);
             cum += prob;
 
             if (fluct < cum)
@@ -307,17 +280,15 @@ static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
             }
         }
 
-        snprintf(buffer, CF_MAXVARSIZE - 1, "%s_%s", pp->promiser, (char *) rp->item);
-        /* FIXME: figure why explicit mark and get rid of it */
-        EvalContextMarkPromiseDone(ctx, pp);
+        snprintf(buffer, CF_MAXVARSIZE - 1, "%s_%s", pp->promiser, RlistScalarValue(rp));
 
         if (strcmp(PromiseGetBundle(pp)->type, "common") == 0)
         {
-            EvalContextHeapAddSoft(ctx, buffer, PromiseGetNamespace(pp));
+            EvalContextClassPutSoft(ctx, buffer, CONTEXT_SCOPE_NAMESPACE, "source=promise");
         }
         else
         {
-            EvalContextStackFrameAddSoft(ctx, buffer);
+            EvalContextClassPutSoft(ctx, buffer, CONTEXT_SCOPE_BUNDLE, "source=promise");
         }
 
         return true;
@@ -327,12 +298,12 @@ static int EvalClassExpression(EvalContext *ctx, Constraint *cp, Promise *pp)
 
     for (rp = (Rlist *) cp->rval.item; rp != NULL; rp = rp->next)
     {
-        if (rp->type != RVAL_TYPE_SCALAR)
+        if (rp->val.type != RVAL_TYPE_SCALAR)
         {
             return false;
         }
 
-        result = IsDefinedClass(ctx, (char *) (rp->item), PromiseGetNamespace(pp));
+        result = IsDefinedClass(ctx, RlistScalarValue(rp));
 
         result_and = result_and && result;
         result_or = result_or || result;

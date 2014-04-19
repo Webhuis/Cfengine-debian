@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,7 @@
 #ifndef CFENGINE_PIPES_H
 #define CFENGINE_PIPES_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 FILE *cf_popen(const char *command, const char *type, bool capture_stderr);
 FILE *cf_popensetuid(const char *command, const char *type, uid_t uid, gid_t gid, char *chdirv, char *chrootv, int background);

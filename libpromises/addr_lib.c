@@ -17,15 +17,16 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "addr_lib.h"
+#include <addr_lib.h>
 
-#include "logging.h"
-#include "string_lib.h"
+#include <item_lib.h>
+#include <logging.h>
+#include <string_lib.h>
 
 #define CF_ADDRSIZE 128
 
@@ -35,6 +36,7 @@
 
    Returns 0 on match. */
 
+/* TODO rename to AddrSubnetMatch() */
 int FuzzySetMatch(const char *s1, const char *s2)
 {
     short isCIDR = false, isrange = false, isv6 = false, isv4 = false;
@@ -284,7 +286,7 @@ int FuzzySetMatch(const char *s1, const char *s2)
     return -1;
 }
 
-int FuzzyHostParse(char *arg2)
+bool FuzzyHostParse(const char *arg2)
 {
     long start = -1, end = -1;
     int n;
@@ -301,7 +303,7 @@ int FuzzyHostParse(char *arg2)
     return true;
 }
 
-int FuzzyHostMatch(char *arg0, char *arg1, char *refhost)
+int FuzzyHostMatch(const char *arg0, const char *arg1, const char *refhost)
 {
     char *sp, refbase[CF_MAXVARSIZE];
     long cmp = -1, start = -1, end = -1;
@@ -350,14 +352,13 @@ int FuzzyHostMatch(char *arg0, char *arg1, char *refhost)
     return 0;
 }
 
-int FuzzyMatchParse(char *s)
+bool FuzzyMatchParse(const char *s)
 {
-    char *sp;
     short isCIDR = false, isrange = false, isv6 = false, isv4 = false, isADDR = false;
     char address[CF_ADDRSIZE];
     int mask, count = 0;
 
-    for (sp = s; *sp != '\0'; sp++)     /* Is this an address or hostname */
+    for (const char *sp = s; *sp != '\0'; sp++)     /* Is this an address or hostname */
     {
         if (!isxdigit((int) *sp))
         {
@@ -451,9 +452,9 @@ int FuzzyMatchParse(char *s)
     if (isv4 && isrange)
     {
         long i, from = -1, to = -1;
-        char *sp1, buffer1[CF_MAX_IP_LEN];
+        char buffer1[CF_MAX_IP_LEN];
 
-        sp1 = s;
+        const char *sp1 = s;
 
         for (i = 0; i < 4; i++)
         {
@@ -536,4 +537,57 @@ bool IsLoopbackAddress(const char *address)
     }
 
     return false;
+}
+
+bool IsInterfaceAddress(const Item *ip_addresses, const char *adr)
+ /* Does this address belong to a local interface */
+{
+    for (const Item *ip = ip_addresses; ip != NULL; ip = ip->next)
+    {
+        if (strncasecmp(adr, ip->name, strlen(adr)) == 0)
+        {
+            Log(LOG_LEVEL_DEBUG, "Identifying '%s' as one of my interfaces", adr);
+            return true;
+        }
+    }
+
+    Log(LOG_LEVEL_DEBUG, "'%s' is not one of my interfaces", adr);
+    return false;
+}
+
+/**
+ * Parses "hostname:port" or "[hostname]:port", where hostname may also be
+ * IPv4 or IPv6 address string.
+ *
+ * @param hostname will point to the hostname, or NULL if no or empty hostname
+ * @param port will point to the port, or NULL if no or empty port
+ * @WARNING modifies #s to '\0' terminate hostname if followed by port.
+ */
+void ParseHostPort(char *s, char **hostname, char **port)
+{
+    char *h, *p;                              /* hostname, port temporaries */
+
+    if (s[0] == '[')                           /* IPv6 form: [address]:port */
+    {
+        h = s + 1;
+        p = strchr(h, ']');
+        if (p != NULL)
+        {
+            *p = '\0';                           /* '\0'-terminate hostname */
+            p = (p[1] == ':') ? p+2 : NULL;
+        }
+    }
+    else                                       /* normal form: address:port */
+    {
+        h = s;
+        p = strchr(h, ':');
+        if (p != NULL)
+        {
+            *p = '\0';                           /* '\0'-terminate hostname */
+            p++;
+        }
+    }
+
+    *hostname =              (h[0] != '\0') ? h : NULL;
+    *port     = (p != NULL && p[0] != '\0') ? p : NULL;
 }

@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,11 +25,24 @@
 #ifndef CFENGINE_VERIFY_PACKAGES_H
 #define CFENGINE_VERIFY_PACKAGES_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-void VerifyPackagesPromise(EvalContext *ctx, Promise *pp);
+#include <vercmp.h>
+
+PromiseResult VerifyPackagesPromise(EvalContext *ctx, const Promise *pp);
 void ExecuteScheduledPackages(EvalContext *ctx);
 void CleanScheduledPackages(void);
-int PrependPackageItem(EvalContext *ctx, PackageItem ** list, const char *name, const char *version, const char *arch, Promise *pp);
+int PrependPackageItem(EvalContext *ctx, PackageItem **list,
+                       const char *name, const char *version,
+                       const char *arch, const Promise *pp);
+
+// For testing.
+VersionCmpResult ComparePackages(EvalContext *ctx,
+                                 const char *n, const char *v, const char *arch,
+                                 PackageItem *pi, Attributes a,
+                                 const Promise *pp,
+                                 const char *mode,
+                                 PromiseResult *result);
+
 
 #endif

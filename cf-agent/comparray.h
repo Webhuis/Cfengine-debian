@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,14 +25,14 @@
 #ifndef CFENGINE_COMPARRAY_H
 #define CFENGINE_COMPARRAY_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-struct CompressedArray_
+typedef struct CompressedArray_
 {
     int key;
     char *value;
-    CompressedArray *next;
-};
+    struct CompressedArray_ *next;
+} CompressedArray;
 
 int FixCompressedArrayValue(int i, char *value, CompressedArray **start);
 void DeleteCompressedArray(CompressedArray *start);

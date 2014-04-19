@@ -17,17 +17,17 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "findhub.h"
-#include "atexit.h"
-#include "string_lib.h"
-#include "misc_lib.h"
-#include "logging.h"
-#include "alloc.h"
+#include <findhub.h>
+#include <atexit.h>
+#include <string_lib.h>
+#include <misc_lib.h>
+#include <logging.h>
+#include <alloc.h>
 
 List *hublist = NULL; 
 
@@ -36,7 +36,7 @@ static int CompareHosts(const void  *a, const void *b);
 
 void client_callback(AvahiClient *c,
                      AvahiClientState state,
-                     void *userdata)
+                     AVAHI_GCC_UNUSED void *userdata)
 {
     assert(c);
 
@@ -68,7 +68,9 @@ void browse_callback(AvahiServiceBrowser *b,
         return;
 
     case AVAHI_BROWSER_NEW:
-        if (!(avahi_service_resolver_new_ptr(c, interface, protocol, name ,type, domain, AVAHI_PROTO_UNSPEC, 0, resolve_callback, c)))
+        if ( !(avahi_service_resolver_new_ptr(c, interface, protocol, name,
+                                             type, domain, AVAHI_PROTO_UNSPEC, 0,
+                                             (AvahiServiceResolverCallback) resolve_callback, c)) )
         {
             Log(LOG_LEVEL_ERR, "Failed to resolve service '%s', error '%s'", name, avahi_strerror_ptr(avahi_client_errno_ptr(c)));
         }
@@ -96,10 +98,9 @@ void resolve_callback(AvahiServiceResolver *r,
                       const char *host_name,
                       const AvahiAddress *address,
                       uint16_t port,
-                      AvahiStringList *txt,
-                      AvahiLookupFlags flags,
-                      AVAHI_GCC_UNUSED void* userdata
-                      )
+                      AVAHI_GCC_UNUSED AvahiStringList *txt,
+                      AVAHI_GCC_UNUSED AvahiLookupFlags flags,
+                      AVAHI_GCC_UNUSED void* userdata)
 {
     HostProperties *hostprop = xcalloc(1, sizeof(HostProperties));
     assert(r);

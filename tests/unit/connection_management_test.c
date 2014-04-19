@@ -1,7 +1,12 @@
-#include "test.h"
+#include <test.h>
 
-#include "item_lib.h"
-#include "server.h"
+#include <item_lib.h>
+#include <server.h>
+#include <server_common.h>
+
+
+#include <server.c>                                  /* PurgeOldConnections */
+
 
 const int CONNECTION_MAX_AGE_SECONDS = SECONDS_PER_HOUR * 2;
 
@@ -142,22 +147,4 @@ int main()
     };
 
     return run_tests(tests);
-}
-
-
-/* stubs */
-
-int ReceiveCollectCall(struct ServerConnectionState *conn)
-{
-    return false;
-}
-
-int ReturnLiteralData(EvalContext *ctx, char *handle, char *ret)
-{
-    return 0;
-}
-
-int ReturnQueryData(ServerConnectionState *conn, char *menu)
-{
-    return false;
 }

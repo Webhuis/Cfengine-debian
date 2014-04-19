@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,10 +25,13 @@
 #ifndef CFENGINE_GENERIC_AGENT_H
 #define CFENGINE_GENERIC_AGENT_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "policy.h"
-#include "set.h"
+#include <policy.h>
+#include <set.h>
+
+#define GENERIC_AGENT_CHECKSUM_SIZE ((2*CF_SHA1_LEN) + 1)
+#define GENERIC_AGENT_CHECKSUM_METHOD HASH_METHOD_SHA1
 
 typedef struct
 {
@@ -39,16 +42,21 @@ typedef struct
     char *original_input_file;
     char *input_file;
     char *input_dir;
+    char *tag_release_dir;
 
     bool check_not_writable_by_others;
     bool check_runnable;
 
     StringSet *heap_soft;
     StringSet *heap_negated;
+    bool ignore_locks;
 
     bool tty_interactive; // agent is running interactively, via tty/terminal interface
+    bool color;
 
-    // change to evaluation behavior from the policy itself
+    ProtocolVersion protocol_version;
+
+    // agent state
     bool ignore_missing_bundles;
     bool ignore_missing_inputs;
 
@@ -64,56 +72,56 @@ typedef struct
             } policy_output_format;
             unsigned int parser_warnings;
             unsigned int parser_warnings_error;
+            bool eval_functions;
+            bool show_classes;
+            bool show_variables;
         } common;
         struct
         {
             char *bootstrap_policy_server;
         } agent;
+        struct
+        {
+            /* Time of the last validated_at timestamp seen. */
+            time_t last_validated_at;
+        } daemon;                                     /* execd, serverd etc */
     } agent_specific;
 
 } GenericAgentConfig;
 
+ENTERPRISE_VOID_FUNC_2ARG_DECLARE(void, GenericAgentSetDefaultDigest, HashMethod *, digest, int *, digest_len);
 const char *GenericAgentResolveInputPath(const GenericAgentConfig *config, const char *input_file);
 void GenericAgentDiscoverContext(EvalContext *ctx, GenericAgentConfig *config);
-bool GenericAgentCheckPolicy(EvalContext *ctx, GenericAgentConfig *config, bool force_validation);
-Policy *GenericAgentLoadPolicy(EvalContext *ctx, GenericAgentConfig *config);
+bool GenericAgentCheckPolicy(GenericAgentConfig *config, bool force_validation, bool write_validated_file);
 
-void InitializeGA(EvalContext *ctx, GenericAgentConfig *config);
-void PrintHelp(const char *comp, const struct option options[], const char *hints[], bool accepts_file_argument);
-void PrintVersion(void);
-int CheckPromises(const GenericAgentConfig *config);
-Policy *ReadPromises(AgentType agent_type, GenericAgentConfig *config);
-int NewPromiseProposals(EvalContext *ctx, const GenericAgentConfig *config, const Rlist *input_files);
+ENTERPRISE_VOID_FUNC_1ARG_DECLARE(void, GenericAgentAddEditionClasses, EvalContext *, ctx);
+void GenericAgentInitialize(EvalContext *ctx, GenericAgentConfig *config);
+ENTERPRISE_VOID_FUNC_1ARG_DECLARE(void, GenericAgentWriteVersion, Writer *, w);
+void GenericAgentWriteHelp(Writer *w, const char *comp, const struct option options[], const char *const hints[], bool accepts_file_argument);
+bool GenericAgentArePromisesValid(const GenericAgentConfig *config);
+time_t ReadTimestampFromPolicyValidatedFile(const GenericAgentConfig *config, const char *maybe_dirname);
 
-void BundleHashVariables(EvalContext *ctx, Bundle *bundle);
-void PolicyHashVariables(EvalContext *ctx, Policy *policy);
+bool GeneratePolicyReleaseID(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *dirname);
+bool GenericAgentIsPolicyReloadNeeded(const GenericAgentConfig *config);
 
-void HashControls(EvalContext *ctx, const Policy *policy, GenericAgentConfig *config);
 void CloseLog(void);
 Seq *ControlBodyConstraints(const Policy *policy, AgentType agent);
-
-/**
- * @brief Conventience function for getting the effective list of input_files from common body control.
- * @param policy Policy where inputs are specified
- * @return Pointer to the Rlist in the DOM
- */
-const Rlist *InputFiles(EvalContext *ctx, Policy *policy);
-
 
 void SetFacility(const char *retval);
 void CheckBundleParameters(char *scope, Rlist *args);
 void WritePID(char *filename);
-void CheckForPolicyHub(EvalContext *ctx);
-void ReloadPromises(AgentType ag);
 
 bool GenericAgentConfigParseArguments(GenericAgentConfig *config, int argc, char **argv);
 bool GenericAgentConfigParseWarningOptions(GenericAgentConfig *config, const char *warning_options);
+bool GenericAgentConfigParseColor(GenericAgentConfig *config, const char *mode);
 
 GenericAgentConfig *GenericAgentConfigNewDefault(AgentType agent_type);
 void GenericAgentConfigDestroy(GenericAgentConfig *config);
 void GenericAgentConfigApply(EvalContext *ctx, const GenericAgentConfig *config);
 
-void GenericAgentConfigSetInputFile(GenericAgentConfig *config, const char *workdir, const char *input_file);
+void GenericAgentConfigSetInputFile(GenericAgentConfig *config, const char *inputdir, const char *input_file);
 void GenericAgentConfigSetBundleSequence(GenericAgentConfig *config, const Rlist *bundlesequence);
+bool GenericAgentTagReleaseDirectory(const GenericAgentConfig *config, const char *dirname, bool write_validated, bool write_release);
 
+void GetReleaseIdFile(const char *base_path, char *filename, size_t max_size);
 #endif

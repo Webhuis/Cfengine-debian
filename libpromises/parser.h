@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,7 @@
 #ifndef CFENGINE_PARSER_H
 #define CFENGINE_PARSER_H
 
-#include "policy.h"
+#include <policy.h>
 
 #define PARSER_WARNING_DEPRECATED       (1 << 0)
 #define PARSER_WARNING_REMOVED          (1 << 1)
@@ -40,11 +40,12 @@ const char *ParserWarningToString(unsigned int warning);
 
 /**
  * @brief Parse a CFEngine file to create a Policy DOM
+ * @param agent_type Which agent is parsing the file. The parser will ignore elements not pertitent to its type
  * @param path Path of file to parse
  * @param warnings Bitfield of which warnings should be recorded
  * @param warnings_error Bitfield of which warnings should be counted as errors
  * @return
  */
-Policy *ParserParseFile(const char *path, unsigned int warnings, unsigned int warnings_error);
+Policy *ParserParseFile(AgentType agent_type, const char *path, unsigned int warnings, unsigned int warnings_error);
 
 #endif

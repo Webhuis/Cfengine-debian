@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,13 +25,13 @@
 #ifndef CFENGINE_VERIFY_STORAGE_H
 #define CFENGINE_VERIFY_STORAGE_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-extern Rlist *MOUNTEDFSLIST;
 extern bool CF_MOUNTALL;
 
-void *FindAndVerifyStoragePromises(EvalContext *ctx, Promise *pp);
-void VerifyStoragePromise(EvalContext *ctx, char *path, Promise *pp);
+PromiseResult FindAndVerifyStoragePromises(EvalContext *ctx, const Promise *pp);
+PromiseResult VerifyStoragePromise(EvalContext *ctx, char *path, const Promise *pp);
+Seq *GetGlobalMountedFSList(void);
 
 void DeleteStorageContext(void);
 

@@ -17,14 +17,14 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "platform.h"
-#include "array_map_priv.h"
-#include "alloc.h"
+#include <platform.h>
+#include <array_map_priv.h>
+#include <alloc.h>
 
 /* FIXME: make configurable and move to map.c */
 #define TINY_LIMIT 14
@@ -102,6 +102,21 @@ void ArrayMapClear(ArrayMap *map)
         map->destroy_value_fn(map->values[i].value);
     }
     map->size = 0;
+}
+
+void ArrayMapSoftDestroy(ArrayMap *map)
+{
+    if (map)
+    {
+        for (int i = 0; i < map->size; ++i)
+        {
+            map->destroy_key_fn(map->values[i].key);
+        }
+        map->size = 0;
+
+        free(map->values);
+        free(map);
+    }
 }
 
 void ArrayMapDestroy(ArrayMap *map)

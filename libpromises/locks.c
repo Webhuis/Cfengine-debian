@@ -17,37 +17,86 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "locks.h"
-#include "mutex.h"
-#include "string_lib.h"
-#include "files_interfaces.h"
-#include "files_lib.h"
-#include "atexit.h"
-#include "policy.h"
-#include "files_hashes.h"
-#include "item_lib.h"
-#include "files_names.h"
-#include "rlist.h"
-#include "process_lib.h"
-#include "fncall.h"
-#include "env_context.h"
+#include <locks.h>
+#include <mutex.h>
+#include <string_lib.h>
+#include <files_interfaces.h>
+#include <files_lib.h>
+#include <atexit.h>
+#include <policy.h>
+#include <files_hashes.h>
+#include <rb-tree.h>
+#include <files_names.h>
+#include <rlist.h>
+#include <process_lib.h>
+#include <fncall.h>
+#include <eval_context.h>
+#include <misc_lib.h>
+#include <known_dirs.h>
+#include <sysinfo.h>
 
 #define CFLOGSIZE 1048576       /* Size of lock-log before rotation */
+#define CF_LOCKHORIZON ((time_t)(SECONDS_PER_WEEK * 4))
 
-static Item *DONELIST = NULL;
-static char CFLAST[CF_BUFSIZE] = { 0 };
-static char CFLOG[CF_BUFSIZE] = { 0 };
+#define CF_CRITIAL_SECTION "CF_CRITICAL_SECTION"
 
-static pthread_once_t lock_cleanup_once = PTHREAD_ONCE_INIT;
+static char CFLOCK[CF_BUFSIZE] = ""; /* GLOBAL_X */
+static char CFLAST[CF_BUFSIZE] = ""; /* GLOBAL_X */
+static char CFLOG[CF_BUFSIZE] = ""; /* GLOBAL_X */
+
+static pthread_once_t lock_cleanup_once = PTHREAD_ONCE_INIT; /* GLOBAL_X */
+
+
+#ifdef LMDB
+static void GenerateMd5Hash(const char *istring, char *ohash)
+{
+    if (!strcmp(istring, "CF_CRITICAL_SECTION"))
+    { 
+        strcpy(ohash, istring);
+        return;
+    }
+
+    unsigned char digest[EVP_MAX_MD_SIZE + 1];
+    HashString(istring, strlen(istring), digest, HASH_METHOD_MD5);
+
+    const char lookup[]="0123456789abcdef";
+    for (int i=0; i<16; i++)
+    {
+        ohash[i*2]   = lookup[digest[i] >> 4];
+        ohash[i*2+1] = lookup[digest[i] & 0xf];
+    }
+    ohash[16*2] = '\0';
+
+    if (!strncmp(istring, "lock.track_license_bundle.track_license", 39))
+    {
+        ohash[0] = 'X';
+    }
+}
+#endif
 
 static bool WriteLockData(CF_DB *dbp, const char *lock_id, LockData *lock_data)
 {
+#ifdef LMDB
+    unsigned char digest2[EVP_MAX_MD_SIZE*2 + 1];
+
+    if (!strcmp(lock_id, "CF_CRITICAL_SECTION"))
+    {
+        strcpy(digest2, lock_id);
+    }
+    else
+    {
+        GenerateMd5Hash(lock_id, digest2);
+    }
+
+    if(WriteDB(dbp, digest2, lock_data, sizeof(LockData)))
+#else
     if(WriteDB(dbp, lock_id, lock_data, sizeof(LockData)))
+#endif
     {
         return true;
     }
@@ -68,52 +117,7 @@ static bool WriteLockDataCurrent(CF_DB *dbp, const char *lock_id)
     return WriteLockData(dbp, lock_id, &lock_data);
 }
 
-/*
- * Much simpler than AcquireLock. Useful when you just want to check
- * if a certain amount of time has elapsed for an action since last
- * time you checked.  No need to clean up after calling this
- * (e.g. like YieldCurrentLock()).
- *
- * WARNING: Is prone to race-conditions, both on the thread and
- *          process level.
- */
-
-bool AcquireLockByID(const char *lock_id, int acquire_after_minutes)
-{
-    CF_DB *dbp = OpenLock();
-
-    if(dbp == NULL)
-    {
-        return false;
-    }
-
-    bool result;
-    LockData lock_data = {
-        .process_start_time = PROCESS_START_TIME_UNKNOWN,
-    };
-
-    if (ReadDB(dbp, lock_id, &lock_data, sizeof(lock_data)))
-    {
-        if(lock_data.time + (acquire_after_minutes * SECONDS_PER_MINUTE) < time(NULL))
-        {
-            result = WriteLockDataCurrent(dbp, lock_id);
-        }
-        else
-        {
-            result = false;
-        }
-    }
-    else
-    {
-        result = WriteLockDataCurrent(dbp, lock_id);
-    }
-
-    CloseLock(dbp);
-
-    return result;
-}
-
-time_t FindLockTime(char *name)
+time_t FindLockTime(const char *name)
 {
     CF_DB *dbp;
     LockData entry = {
@@ -125,7 +129,14 @@ time_t FindLockTime(char *name)
         return -1;
     }
 
+#ifdef LMDB
+    unsigned char ohash[EVP_MAX_MD_SIZE*2 + 1];
+    GenerateMd5Hash(name, ohash);
+
+    if (ReadDB(dbp, ohash, &entry, sizeof(entry)))
+#else
     if (ReadDB(dbp, name, &entry, sizeof(entry)))
+#endif
     {
         CloseLock(dbp);
         return entry.time;
@@ -136,37 +147,6 @@ time_t FindLockTime(char *name)
         return -1;
     }
 }
-
-bool InvalidateLockTime(const char *lock_id)
-{
-    time_t epoch = 0;
-
-    CF_DB *dbp = OpenLock();
-
-    if (dbp == NULL)
-    {
-        return false;
-    }
-
-    LockData lock_data = {
-        .process_start_time = PROCESS_START_TIME_UNKNOWN,
-    };
-
-    if(!ReadDB(dbp, lock_id, &lock_data, sizeof(lock_data)))
-    {
-        CloseLock(dbp);
-        return true;  /* nothing to invalidate */
-    }
-
-    lock_data.time = epoch;
-
-    bool result = WriteLockData(dbp, lock_id, &lock_data);
-
-    CloseLock(dbp);
-
-    return result;
-}
-
 
 static void RemoveDates(char *s)
 {
@@ -230,7 +210,7 @@ static void RemoveDates(char *s)
     }
 }
 
-static int RemoveLock(char *name)
+static int RemoveLock(const char *name)
 {
     CF_DB *dbp;
 
@@ -240,16 +220,31 @@ static int RemoveLock(char *name)
     }
 
     ThreadLock(cft_lock);
+#ifdef LMDB
+    unsigned char digest2[EVP_MAX_MD_SIZE*2 + 1];
+
+    if (!strcmp(name, "CF_CRITICAL_SECTION"))
+    {
+        strcpy(digest2, name);
+    }
+    else
+    {
+        GenerateMd5Hash(name, digest2);
+    }
+
+    DeleteDB(dbp, digest2);
+#else
     DeleteDB(dbp, name);
+#endif
     ThreadUnlock(cft_lock);
 
     CloseLock(dbp);
     return 0;
 }
 
-static void WaitForCriticalSection()
+void WaitForCriticalSection(const char *section_id)
 {
-    time_t now = time(NULL), then = FindLockTime("CF_CRITICAL_SECTION");
+    time_t now = time(NULL), then = FindLockTime(section_id);
 
 /* Another agent has been waiting more than a minute, it means there
    is likely crash detritus to clear up... After a minute we take our
@@ -259,15 +254,15 @@ static void WaitForCriticalSection()
     {
         sleep(1);
         now = time(NULL);
-        then = FindLockTime("CF_CRITICAL_SECTION");
+        then = FindLockTime(section_id);
     }
 
-    WriteLock("CF_CRITICAL_SECTION");
+    WriteLock(section_id);
 }
 
-static void ReleaseCriticalSection()
+void ReleaseCriticalSection(const char *section_id)
 {
-    RemoveLock("CF_CRITICAL_SECTION");
+    RemoveLock(section_id);
 }
 
 static time_t FindLock(char *last)
@@ -304,7 +299,14 @@ static pid_t FindLockPid(char *name)
         return -1;
     }
 
+#ifdef LMDB
+    unsigned char ohash[EVP_MAX_MD_SIZE*2 + 1];
+    GenerateMd5Hash(name, ohash);
+
+    if (ReadDB(dbp, ohash, &entry, sizeof(entry)))
+#else
     if (ReadDB(dbp, name, &entry, sizeof(entry)))
+#endif
     {
         CloseLock(dbp);
         return entry.pid;
@@ -316,11 +318,10 @@ static pid_t FindLockPid(char *name)
     }
 }
 
-static void LogLockCompletion(char *cflog, int pid, char *str, char *operator, char *operand)
+static void LogLockCompletion(char *cflog, int pid, char *str, char *op, char *operand)
 {
     FILE *fp;
     char buffer[CF_MAXVARSIZE];
-    struct stat statbuf;
     time_t tim;
 
     if (cflog == NULL)
@@ -331,7 +332,7 @@ static void LogLockCompletion(char *cflog, int pid, char *str, char *operator, c
     if ((fp = fopen(cflog, "a")) == NULL)
     {
         Log(LOG_LEVEL_ERR, "Can't open lock-log file '%s'. (fopen: %s)", cflog, GetErrorStr());
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     if ((tim = time((time_t *) NULL)) == -1)
@@ -346,28 +347,20 @@ static void LogLockCompletion(char *cflog, int pid, char *str, char *operator, c
         Log(LOG_LEVEL_ERR, "Chop was called on a string that seemed to have no terminator");
     }
 
-    fprintf(fp, "%s:%s:pid=%d:%s:%s\n", buffer, str, pid, operator, operand);
+    fprintf(fp, "%s:%s:pid=%d:%s:%s\n", buffer, str, pid, op, operand);
 
     fclose(fp);
-
-    if (stat(cflog, &statbuf) != -1)
-    {
-        if (statbuf.st_size > CFLOGSIZE)
-        {
-            Log(LOG_LEVEL_VERBOSE, "Rotating lock-runlog file");
-            RotateFiles(cflog, 2);
-        }
-    }
 }
 
 static void LocksCleanup(void)
 {
     if (strlen(CFLOCK) > 0)
     {
-        CfLock best_guess;
-        best_guess.lock = xstrdup(CFLOCK);
-        best_guess.last = xstrdup(CFLAST);
-        best_guess.log = xstrdup(CFLOG);
+        CfLock best_guess = {
+            .lock = xstrdup(CFLOCK),
+            .last = xstrdup(CFLAST),
+            .log = xstrdup(CFLOG)
+        };
         YieldCurrentLock(best_guess);
     }
 }
@@ -439,7 +432,14 @@ static bool KillLockHolder(const char *lock)
         .process_start_time = PROCESS_START_TIME_UNKNOWN,
     };
 
+#ifdef LMDB
+    unsigned char ohash[EVP_MAX_MD_SIZE*2 + 1];
+    GenerateMd5Hash(lock, ohash);
+
+    if (!ReadDB(dbp, ohash, &lock_data, sizeof(lock_data)))
+#else
     if (!ReadDB(dbp, lock, &lock_data, sizeof(lock_data)))
+#endif
     {
         /* No lock found */
         CloseLock(dbp);
@@ -453,9 +453,9 @@ static bool KillLockHolder(const char *lock)
 
 #endif
 
-static void PromiseHash(const Promise *pp, const char *salt, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type)
+void PromiseRuntimeHash(const Promise *pp, const char *salt, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type)
 {
-    static const char *PACK_UPIFELAPSED_SALT = "packageuplist";
+    static const char PACK_UPIFELAPSED_SALT[] = "packageuplist";
 
     EVP_MD_CTX context;
     int md_len;
@@ -466,12 +466,12 @@ static void PromiseHash(const Promise *pp, const char *salt, unsigned char diges
     char *noRvalHash[] = { "mtime", "atime", "ctime", NULL };
     int doHash;
 
-    md = EVP_get_digestbyname(FileHashName(type));
+    md = EVP_get_digestbyname(HashNameFromId(type));
 
     EVP_DigestInit(&context, md);
 
 // multiple packages (promisers) may share same package_list_update_ifelapsed lock
-    if (!(salt && (strncmp(salt, PACK_UPIFELAPSED_SALT, sizeof(PACK_UPIFELAPSED_SALT) - 1) == 0)))
+    if ( (!salt) || strcmp(salt, PACK_UPIFELAPSED_SALT) )
     {
         EVP_DigestUpdate(&context, pp->promiser, strlen(pp->promiser));
     }
@@ -494,27 +494,7 @@ static void PromiseHash(const Promise *pp, const char *salt, unsigned char diges
         }
     }
 
-    char *str = NULL;
-    if (pp->offset.start)
-    {
-        xasprintf(&str, "%u", (unsigned int)pp->offset.start);
-        EVP_DigestUpdate(&context, str, strlen(str));
-        free(str);
-    }
-
-    if (pp->offset.end)
-    {
-        xasprintf(&str, "%u", (unsigned int)pp->offset.end);
-        EVP_DigestUpdate(&context, str, strlen(str));
-        free(str);
-    }
-
-    if (pp->offset.line)
-    {
-        xasprintf(&str, "%u", (unsigned int)pp->offset.line);
-        EVP_DigestUpdate(&context, str, strlen(str));
-        free(str);
-    }
+    // Unused: pp start, end, and line attributes (describing source position).
 
     if (salt)
     {
@@ -553,7 +533,7 @@ static void PromiseHash(const Promise *pp, const char *salt, unsigned char diges
         case RVAL_TYPE_LIST:
             for (rp = cp->rval.item; rp != NULL; rp = rp->next)
             {
-                EVP_DigestUpdate(&context, rp->item, strlen(rp->item));
+                EVP_DigestUpdate(&context, RlistScalarValue(rp), strlen(RlistScalarValue(rp)));
             }
             break;
 
@@ -567,7 +547,20 @@ static void PromiseHash(const Promise *pp, const char *salt, unsigned char diges
 
             for (rp = fp->args; rp != NULL; rp = rp->next)
             {
-                EVP_DigestUpdate(&context, rp->item, strlen(rp->item));
+                switch (rp->val.type)
+                {
+                case RVAL_TYPE_SCALAR:
+                    EVP_DigestUpdate(&context, RlistScalarValue(rp), strlen(RlistScalarValue(rp)));
+                    break;
+
+                case RVAL_TYPE_FNCALL:
+                    EVP_DigestUpdate(&context, RlistFnCallValue(rp)->name, strlen(RlistFnCallValue(rp)->name));
+                    break;
+
+                default:
+                    ProgrammingError("Unhandled case in switch");
+                    break;
+                }
             }
             break;
 
@@ -581,70 +574,55 @@ static void PromiseHash(const Promise *pp, const char *salt, unsigned char diges
 /* Digest length stored in md_len */
 }
 
-CfLock AcquireLock(EvalContext *ctx, char *operand, char *host, time_t now, TransactionContext tc, const Promise *pp, int ignoreProcesses)
+static CfLock CfLockNew(const char *last, const char *lock, const char *log, bool is_dummy)
 {
-    int i, sum = 0;
-    time_t lastcompleted = 0, elapsedtime;
-    char *promise, cc_operator[CF_BUFSIZE], cc_operand[CF_BUFSIZE];
-    char cflock[CF_BUFSIZE], cflast[CF_BUFSIZE], cflog[CF_BUFSIZE];
-    char str_digest[CF_BUFSIZE];
-    CfLock this;
-    unsigned char digest[EVP_MAX_MD_SIZE + 1];
+    return (CfLock) {
+        .last = last ? xstrdup(last) : NULL,
+        .lock = lock ? xstrdup(lock) : NULL,
+        .log = log ? xstrdup(log) : NULL,
+        .is_dummy = is_dummy
+    };
+}
 
-    this.last = (char *) CF_UNDEFINED;
-    this.lock = (char *) CF_UNDEFINED;
-    this.log = (char *) CF_UNDEFINED;
+static CfLock CfLockNull(void)
+{
+    return (CfLock) {
+        .last = NULL,
+        .lock = NULL,
+        .log = NULL,
+        .is_dummy = false
+    };
+}
 
+CfLock AcquireLock(EvalContext *ctx, const char *operand, const char *host, time_t now,
+                   TransactionContext tc, const Promise *pp, bool ignoreProcesses)
+{
     if (now == 0)
     {
-        return this;
+        return CfLockNull();
     }
 
-    this.last = NULL;
-    this.lock = NULL;
-    this.log = NULL;
+    unsigned char digest[EVP_MAX_MD_SIZE + 1];
+    PromiseRuntimeHash(pp, operand, digest, CF_DEFAULT_DIGEST);
+    char str_digest[CF_BUFSIZE];
+    HashPrintSafe(CF_DEFAULT_DIGEST, true, digest, str_digest);
 
-/* Indicate as done if we tried ... as we have passed all class
-   constraints now but we should only do this for level 0
-   promises. Sub routine bundles cannot be marked as done or it will
-   disallow iteration over bundles */
-
-    if (EvalContextPromiseIsDone(ctx, pp))
+    if (EvalContextPromiseLockCacheContains(ctx, str_digest))
     {
-        return this;
+        Log(LOG_LEVEL_DEBUG, "This promise has already been verified");
+        return CfLockNull();
     }
 
-    if (RlistLen(CF_STCK) == 1)
+    EvalContextPromiseLockCachePut(ctx, str_digest);
+
+    // Finally if we're supposed to ignore locks ... do the remaining stuff
+    if (EvalContextIsIgnoringLocks(ctx))
     {
-        /* Must not set promise to be done for editfiles etc */
-        EvalContextMarkPromiseDone(ctx, pp);
+        return CfLockNew(NULL, "dummy", NULL, true);
     }
 
-    PromiseHash(pp, operand, digest, CF_DEFAULT_DIGEST);
-    HashPrintSafe(CF_DEFAULT_DIGEST, digest, str_digest);
-
-/* As a backup to "done" we need something immune to re-use */
-
-    if (THIS_AGENT_TYPE == AGENT_TYPE_AGENT)
-    {
-        if (IsItemIn(DONELIST, str_digest))
-        {
-            Log(LOG_LEVEL_DEBUG, "This promise has already been verified");
-            return this;
-        }
-
-        PrependItem(&DONELIST, str_digest, NULL);
-    }
-
-/* Finally if we're supposed to ignore locks ... do the remaining stuff */
-
-    if (IGNORELOCK)
-    {
-        this.lock = xstrdup("dummy");
-        return this;
-    }
-
-    promise = BodyName(pp);
+    char *promise = BodyName(pp);
+    char cc_operator[CF_BUFSIZE], cc_operand[CF_BUFSIZE];
     snprintf(cc_operator, CF_MAXVARSIZE - 1, "%s-%s", promise, host);
     strncpy(cc_operand, operand, CF_BUFSIZE - 1);
     CanonifyNameInPlace(cc_operand);
@@ -655,54 +633,55 @@ CfLock AcquireLock(EvalContext *ctx, char *operand, char *host, time_t now, Tran
     Log(LOG_LEVEL_DEBUG, "AcquireLock(%s,%s), ExpireAfter = %d, IfElapsed = %d", cc_operator, cc_operand, tc.expireafter,
         tc.ifelapsed);
 
-    for (i = 0; cc_operator[i] != '\0'; i++)
+    int sum = 0;
+    for (int i = 0; cc_operator[i] != '\0'; i++)
     {
         sum = (CF_MACROALPHABET * sum + cc_operator[i]) % CF_HASHTABLESIZE;
     }
 
-    for (i = 0; cc_operand[i] != '\0'; i++)
+    for (int i = 0; cc_operand[i] != '\0'; i++)
     {
         sum = (CF_MACROALPHABET * sum + cc_operand[i]) % CF_HASHTABLESIZE;
     }
 
-    snprintf(cflog, CF_BUFSIZE, "%s/cf3.%.40s.runlog", CFWORKDIR, host);
+    char cflog[CF_BUFSIZE] = "";
+    snprintf(cflog, CF_BUFSIZE, "%s/cf3.%.40s.runlog", GetLogDir(), host);
+
+    char cflock[CF_BUFSIZE] = "";
     snprintf(cflock, CF_BUFSIZE, "lock.%.100s.%s.%.100s_%d_%s", PromiseGetBundle(pp)->name, cc_operator, cc_operand, sum, str_digest);
+
+    char cflast[CF_BUFSIZE] = "";
     snprintf(cflast, CF_BUFSIZE, "last.%.100s.%s.%.100s_%d_%s", PromiseGetBundle(pp)->name, cc_operator, cc_operand, sum, str_digest);
 
     Log(LOG_LEVEL_DEBUG, "Log for bundle '%s', '%s'", PromiseGetBundle(pp)->name, cflock);
 
-// Now see if we can get exclusivity to edit the locks
+    // Now see if we can get exclusivity to edit the locks
+    WaitForCriticalSection(CF_CRITIAL_SECTION);
 
-    CFINITSTARTTIME = time(NULL);
-
-    WaitForCriticalSection();
-
-/* Look for non-existent (old) processes */
-
-    lastcompleted = FindLock(cflast);
-    elapsedtime = (time_t) (now - lastcompleted) / 60;
+    // Look for non-existent (old) processes
+    time_t lastcompleted = FindLock(cflast);
+    time_t elapsedtime = (time_t) (now - lastcompleted) / 60;
 
     if (elapsedtime < 0)
     {
-        Log(LOG_LEVEL_VERBOSE, " XX Another cf-agent seems to have done this since I started (elapsed=%jd)",
+        Log(LOG_LEVEL_VERBOSE, "XX Another cf-agent seems to have done this since I started (elapsed=%jd)",
               (intmax_t) elapsedtime);
-        ReleaseCriticalSection();
-        return this;
+        ReleaseCriticalSection(CF_CRITIAL_SECTION);
+        return CfLockNull();
     }
 
     if (elapsedtime < tc.ifelapsed)
     {
-        Log(LOG_LEVEL_VERBOSE, " XX Nothing promised here [%.40s] (%jd/%u minutes elapsed)", cflast,
+        Log(LOG_LEVEL_VERBOSE, "XX Nothing promised here [%.40s] (%jd/%u minutes elapsed)", cflast,
               (intmax_t) elapsedtime, tc.ifelapsed);
-        ReleaseCriticalSection();
-        return this;
+        ReleaseCriticalSection(CF_CRITIAL_SECTION);
+        return CfLockNull();
     }
 
-/* Look for existing (current) processes */
-
+    // Look for existing (current) processes
+    lastcompleted = FindLock(cflock);
     if (!ignoreProcesses)
     {
-        lastcompleted = FindLock(cflock);
         elapsedtime = (time_t) (now - lastcompleted) / 60;
 
         if (lastcompleted != 0)
@@ -726,67 +705,65 @@ CfLock AcquireLock(EvalContext *ctx, char *operand, char *host, time_t now, Tran
             }
             else
             {
-                ReleaseCriticalSection();
+                ReleaseCriticalSection(CF_CRITIAL_SECTION);
                 Log(LOG_LEVEL_VERBOSE, "Couldn't obtain lock for %s (already running!)", cflock);
-                return this;
+                return CfLockNull();
             }
         }
 
-        WriteLock(cflock);
+        int ret = WriteLock(cflock);
+        if (ret != -1)
+        {
+            /* Register a cleanup handler *after* having opened the DB, so that
+             * CloseAllDB() atexit() handler is registered in advance, and it is
+             * called after removing this lock.
 
-        /* Register a cleanup handler *after* having opened the DB, so that
-         * CloseAllDB() atexit() handler is registered in advance, and it is
-         * called after removing this lock.
-
-         * There is a small race condition here that we'll leave a stale lock
-         * if we exit before the following line. */
-        pthread_once(&lock_cleanup_once, &RegisterLockCleanup);
+             * There is a small race condition here that we'll leave a stale lock
+             * if we exit before the following line. */
+            pthread_once(&lock_cleanup_once, &RegisterLockCleanup);
+        }
     }
 
-    ReleaseCriticalSection();
+    ReleaseCriticalSection(CF_CRITIAL_SECTION);
 
-    this.lock = xstrdup(cflock);
-    this.last = xstrdup(cflast);
-    this.log = xstrdup(cflog);
-
-/* Keep this as a global for signal handling */
+    // Keep this as a global for signal handling
     strcpy(CFLOCK, cflock);
     strcpy(CFLAST, cflast);
     strcpy(CFLOG, cflog);
 
-    return this;
+    return CfLockNew(cflast, cflock, cflog, false);
 }
 
-void YieldCurrentLock(CfLock this)
+void YieldCurrentLock(CfLock lock)
 {
-    if (IGNORELOCK)
+    if (lock.is_dummy)
     {
-        free(this.lock);        /* allocated in AquireLock as a special case */
+        free(lock.lock);        /* allocated in AquireLock as a special case */
         return;
     }
 
-    if (this.lock == (char *) CF_UNDEFINED)
+    if (lock.lock == (char *) CF_UNDEFINED)
     {
         return;
     }
 
-    Log(LOG_LEVEL_DEBUG, "Yielding lock '%s'", this.lock);
+    Log(LOG_LEVEL_DEBUG, "Yielding lock '%s'", lock.lock);
 
-    if (RemoveLock(this.lock) == -1)
+    if (RemoveLock(lock.lock) == -1)
     {
-        Log(LOG_LEVEL_VERBOSE, "Unable to remove lock %s", this.lock);
-        free(this.last);
-        free(this.lock);
-        free(this.log);
+        Log(LOG_LEVEL_VERBOSE, "Unable to remove lock %s", lock.lock);
+        free(lock.last);
+        free(lock.lock);
+        free(lock.log);
         return;
     }
 
-    if (WriteLock(this.last) == -1)
+    if (WriteLock(lock.last) == -1)
     {
-        Log(LOG_LEVEL_ERR, "Unable to create '%s'. (creat: %s)", this.last, GetErrorStr());
-        free(this.last);
-        free(this.lock);
-        free(this.log);
+        Log(LOG_LEVEL_ERR, "Unable to create '%s'. (creat: %s)", lock.last, GetErrorStr());
+        free(lock.last);
+        free(lock.lock);
+        free(lock.log);
         return;
     }
 
@@ -797,19 +774,18 @@ void YieldCurrentLock(CfLock this)
     strcpy(CFLAST, "");
     strcpy(CFLOG, "");
 
-    LogLockCompletion(this.log, getpid(), "Lock removed normally ", this.lock, "");
+    LogLockCompletion(lock.log, getpid(), "Lock removed normally ", lock.lock, "");
 
-    free(this.last);
-    free(this.lock);
-    free(this.log);
+    free(lock.last);
+    free(lock.lock);
+    free(lock.log);
 }
 
-void GetLockName(char *lockname, char *locktype, char *base, Rlist *params)
+void GetLockName(char *lockname, const char *locktype, const char *base, const Rlist *params)
 {
-    Rlist *rp;
     int max_sample, count = 0;
 
-    for (rp = params; rp != NULL; rp = rp->next)
+    for (const Rlist *rp = params; rp != NULL; rp = rp->next)
     {
         count++;
     }
@@ -828,10 +804,129 @@ void GetLockName(char *lockname, char *locktype, char *base, Rlist *params)
     strncat(lockname, base, CF_BUFSIZE / 10);
     strcat(lockname, "_");
 
-    for (rp = params; rp != NULL; rp = rp->next)
+    for (const Rlist *rp = params; rp != NULL; rp = rp->next)
     {
-        strncat(lockname, (char *) rp->item, max_sample);
+        switch (rp->val.type)
+        {
+        case RVAL_TYPE_SCALAR:
+            strncat(lockname, RlistScalarValue(rp), max_sample);
+            break;
+
+        case RVAL_TYPE_FNCALL:
+            strncat(lockname, RlistFnCallValue(rp)->name, max_sample);
+            break;
+
+        default:
+            ProgrammingError("Unhandled case in switch %d", rp->val.type);
+            break;
+        }
     }
+}
+
+static void CopyLockDatabaseAtomically(const char *from, const char *to,
+                                       const char *from_pretty_name, const char *to_pretty_name)
+{
+    char *tmp_file_name;
+    xasprintf(&tmp_file_name, "%s.tmp", to);
+
+    int from_fd = open(from, O_RDONLY | O_BINARY);
+    if (from_fd < 0)
+    {
+        Log(LOG_LEVEL_WARNING, "Could not open %s. (open: '%s')", from_pretty_name, GetErrorStr());
+        goto cleanup_1;
+    }
+
+    int to_fd = open(tmp_file_name, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0600);
+    if (to_fd < 0)
+    {
+        Log(LOG_LEVEL_WARNING, "Could not open %s temporary file. (open: '%s')", to_pretty_name, GetErrorStr());
+        goto cleanup_2;
+    }
+
+    char data[CF_BUFSIZE];
+    while (1)
+    {
+        int read_status = read(from_fd, data, sizeof(data));
+        if (read_status < 0)
+        {
+            Log(LOG_LEVEL_WARNING, "Could not read from %s. (read: '%s')", from_pretty_name, GetErrorStr());
+            goto cleanup_4;
+        }
+        else if (read_status == 0)
+        {
+            break;
+        }
+
+        int write_status = write(to_fd, data, read_status);
+        if (write_status < 0)
+        {
+            Log(LOG_LEVEL_WARNING, "Could not write to %s. (write: '%s')", to_pretty_name, GetErrorStr());
+            goto cleanup_4;
+        }
+        else if (write_status == 0)
+        {
+            Log(LOG_LEVEL_WARNING, "Could not write to %s. (write: 'Unknown error')", to_pretty_name);
+            goto cleanup_4;
+        }
+    }
+
+    // Make sure changes are persistent on disk, so database cannot get corrupted at system crash.
+    if (fsync(to_fd) != 0)
+    {
+        Log(LOG_LEVEL_WARNING, "Could not sync %s file to disk. (fsync: '%s')", to_pretty_name, GetErrorStr());
+        goto cleanup_4;
+    }
+
+    close(to_fd);
+    if (rename(tmp_file_name, to) != 0)
+    {
+        Log(LOG_LEVEL_WARNING, "Could not move %s into place. (rename: '%s')", to_pretty_name, GetErrorStr());
+        goto cleanup_3;
+    }
+
+    // Finished.
+    goto cleanup_3;
+
+cleanup_4:
+    close(to_fd);
+cleanup_3:
+    unlink(tmp_file_name);
+cleanup_2:
+    close(from_fd);
+cleanup_1:
+    free(tmp_file_name);
+}
+
+void BackupLockDatabase(void)
+{
+    WaitForCriticalSection(CF_CRITIAL_SECTION);
+
+    char *db_path = DBIdToPath(GetWorkDir(), dbid_locks);
+    char *db_path_backup;
+    xasprintf(&db_path_backup, "%s.backup", db_path);
+
+    CopyLockDatabaseAtomically(db_path, db_path_backup, "lock database", "lock database backup");
+
+    free(db_path);
+    free(db_path_backup);
+
+    ReleaseCriticalSection(CF_CRITIAL_SECTION);
+}
+
+static void RestoreLockDatabase(void)
+{
+    // We don't do any locking here (since we can't trust the database), but
+    // this should be right after bootup, so we should be the only one.
+    // Worst case someone else will just copy the same file to the same
+    // location.
+    char *db_path = DBIdToPath(GetWorkDir(), dbid_locks);
+    char *db_path_backup;
+    xasprintf(&db_path_backup, "%s.backup", db_path);
+
+    CopyLockDatabaseAtomically(db_path_backup, db_path, "lock database backup", "lock database");
+
+    free(db_path);
+    free(db_path_backup);
 }
 
 void PurgeLocks(void)
@@ -871,11 +966,18 @@ void PurgeLocks(void)
 
     while (NextDB(dbcp, &key, &ksize, (void *) &entry, &vsize))
     {
+#ifdef LMDB
+        if (key[0] == 'X')
+        {
+            continue;
+        }
+#else
         if (strncmp(key, "last.internal_bundle.track_license.handle",
                     strlen("last.internal_bundle.track_license.handle")) == 0)
         {
             continue;
         }
+#endif
 
         if (now - entry.time > (time_t) CF_LOCKHORIZON)
         {
@@ -891,7 +993,7 @@ void PurgeLocks(void)
     CloseLock(dbp);
 }
 
-int WriteLock(char *name)
+int WriteLock(const char *name)
 {
     CF_DB *dbp;
 
@@ -910,9 +1012,41 @@ int WriteLock(char *name)
     return 0;
 }
 
+static void VerifyThatDatabaseIsNotCorrupt_once(void)
+{
+    int uptime = GetUptimeSeconds(time(NULL));
+    if (uptime <= 0)
+    {
+        Log(LOG_LEVEL_VERBOSE, "Not able to determine uptime when verifying lock database. "
+            "Will assume the database is in order.");
+        return;
+    }
+
+    char *db_path = DBIdToPath(GetWorkDir(), dbid_locks);
+    struct stat statbuf;
+    if (stat(db_path, &statbuf) == 0)
+    {
+        if (statbuf.st_mtime < time(NULL) - uptime)
+        {
+            // We have rebooted since the database was last updated.
+            // Restore it from our backup.
+            RestoreLockDatabase();
+        }
+    }
+    free(db_path);
+}
+
+static void VerifyThatDatabaseIsNotCorrupt(void)
+{
+    static pthread_once_t uptime_verified = PTHREAD_ONCE_INIT;
+    pthread_once(&uptime_verified, &VerifyThatDatabaseIsNotCorrupt_once);
+}
+
 CF_DB *OpenLock()
 {
     CF_DB *dbp;
+
+    VerifyThatDatabaseIsNotCorrupt();
 
     if (!OpenDB(&dbp, dbid_locks))
     {

@@ -17,22 +17,23 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "platform.h"
+#include <platform.h>
 
-#include "files_copy.h"
+#include <files_copy.h>
 
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "instrumentation.h"
-#include "policy.h"
-#include "files_lib.h"
-#include "string_lib.h"
-#include "acl_tools.h"
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <instrumentation.h>
+#include <policy.h>
+#include <files_lib.h>
+#include <file_lib.h>
+#include <string_lib.h>
+#include <acl_tools.h>
 
 /*
  * Copy data jumping over areas filled by '\0', so files automatically become sparse if possible.
@@ -117,7 +118,7 @@ bool CopyRegularFileDisk(const char *source, const char *destination)
     char *buf = 0;
     bool result = false;
 
-    if ((sd = open(source, O_RDONLY | O_BINARY)) == -1)
+    if ((sd = safe_open(source, O_RDONLY | O_BINARY)) == -1)
     {
         Log(LOG_LEVEL_INFO, "Can't copy '%s'. (open: %s)", source, GetErrorStr());
         goto end;
@@ -135,7 +136,7 @@ bool CopyRegularFileDisk(const char *source, const char *destination)
 
     unlink(destination);                /* To avoid link attacks */
 
-    if ((dd = open(destination, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL | O_BINARY, statbuf.st_mode)) == -1)
+    if ((dd = safe_open(destination, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL | O_BINARY, statbuf.st_mode)) == -1)
     {
         Log(LOG_LEVEL_INFO, "Unable to open destination file while copying '%s' to '%s'. (open: %s)", source, destination, GetErrorStr());
         goto end;
@@ -177,13 +178,13 @@ bool CopyFilePermissionsDisk(const char *source, const char *destination)
         return false;
     }
 
-    if (chmod(destination, statbuf.st_mode) != 0)
+    if (safe_chmod(destination, statbuf.st_mode) != 0)
     {
         Log(LOG_LEVEL_INFO, "Can't copy permissions '%s'. (chmod: %s)", source, GetErrorStr());
         return false;
     }
 
-    if (chown(destination, statbuf.st_uid, statbuf.st_gid) != 0)
+    if (safe_chown(destination, statbuf.st_uid, statbuf.st_gid) != 0)
     {
         Log(LOG_LEVEL_INFO, "Can't copy permissions '%s'. (chown: %s)", source, GetErrorStr());
         return false;

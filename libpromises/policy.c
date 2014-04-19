@@ -17,52 +17,61 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "policy.h"
+#include <policy.h>
 
-#include "syntax.h"
-#include "string_lib.h"
-#include "conversion.h"
-#include "mutex.h"
-#include "misc_lib.h"
-#include "mod_files.h"
-#include "vars.h"
-#include "fncall.h"
-#include "rlist.h"
-#include "set.h"
-#include "hashes.h"
-#include "env_context.h"
-#include "promises.h"
-#include "item_lib.h"
-#include "files_hashes.h"
-#include "audit.h"
-#include "logging.h"
-#include "expand.h"
-
-#include <assert.h>
-
-//************************************************************************
-
-static const char *POLICY_ERROR_POLICY_NOT_RUNNABLE = "Policy is not runnable (does not contain a body common control)";
+#include <syntax.h>
+#include <string_lib.h>
+#include <conversion.h>
+#include <mutex.h>
+#include <misc_lib.h>
+#include <mod_files.h>
+#include <vars.h>
+#include <fncall.h>
+#include <rlist.h>
+#include <set.h>
+#include <hashes.h>
+#include <eval_context.h>
+#include <promises.h>
+#include <item_lib.h>
+#include <files_hashes.h>
+#include <audit.h>
+#include <logging.h>
+#include <expand.h>
 
 
+static const char *const POLICY_ERROR_POLICY_NOT_RUNNABLE =
+    "Policy is not runnable (does not contain a body common control)";
 
-static const char *POLICY_ERROR_BUNDLE_NAME_RESERVED = "Use of a reserved container name as a bundle name \"%s\"";
-static const char *POLICY_ERROR_BUNDLE_REDEFINITION = "Duplicate definition of bundle %s with type %s";
-static const char *POLICY_ERROR_BUNDLE_UNDEFINED = "Undefined bundle %s with type %s";
-static const char *POLICY_ERROR_BODY_REDEFINITION = "Duplicate definition of body %s with type %s";
-static const char *POLICY_ERROR_BODY_UNDEFINED = "Undefined body %s with type %s";
-static const char *POLICY_ERROR_PROMISE_UNCOMMENTED = "Promise is missing a comment attribute, and comments are required by policy";
-static const char *POLICY_ERROR_PROMISE_DUPLICATE_HANDLE = "Duplicate promise handle %s found";
-static const char *POLICY_ERROR_LVAL_INVALID = "Promise type %s has unknown attribute %s";
+static const char *const POLICY_ERROR_BUNDLE_NAME_RESERVED =
+    "Use of a reserved container name as a bundle name \"%s\"";
+static const char *const POLICY_ERROR_BUNDLE_REDEFINITION =
+    "Duplicate definition of bundle %s with type %s";
+static const char *const POLICY_ERROR_BUNDLE_UNDEFINED =
+    "Undefined bundle %s with type %s";
+static const char *const POLICY_ERROR_BODY_REDEFINITION =
+    "Duplicate definition of body %s with type %s";
+static const char *const POLICY_ERROR_BODY_UNDEFINED =
+    "Undefined body %s with type %s";
+static const char *const POLICY_ERROR_BODY_CONTROL_ARGS =
+    "Control bodies cannot take arguments, body %s control";
+static const char *const POLICY_ERROR_PROMISE_UNCOMMENTED =
+    "Promise is missing a comment attribute, and comments are required "
+    "by policy";
+static const char *const POLICY_ERROR_PROMISE_DUPLICATE_HANDLE =
+    "Duplicate promise handle %s found";
+static const char *const POLICY_ERROR_LVAL_INVALID =
+    "Promise type %s has unknown attribute %s";
 
-static const char *POLICY_ERROR_CONSTRAINT_TYPE_MISMATCH = "Type mismatch in constraint: %s";
+static const char *const POLICY_ERROR_CONSTRAINT_TYPE_MISMATCH =
+    "Type mismatch in constraint: %s";
 
-static const char *POLICY_ERROR_EMPTY_VARREF = "Empty variable reference";
+static const char *const POLICY_ERROR_EMPTY_VARREF =
+    "Empty variable reference";
 
 //************************************************************************
 
@@ -81,6 +90,7 @@ Policy *PolicyNew(void)
 {
     Policy *policy = xcalloc(1, sizeof(Policy));
 
+    policy->release_id = NULL;
     policy->bundles = SeqNew(100, BundleDestroy);
     policy->bodies = SeqNew(100, BodyDestroy);
 
@@ -98,9 +108,126 @@ void PolicyDestroy(Policy *policy)
     {
         SeqDestroy(policy->bundles);
         SeqDestroy(policy->bodies);
+        free(policy->release_id);
 
         free(policy);
     }
+}
+
+static unsigned ConstraintHash(const Constraint *cp, unsigned seed, unsigned max)
+{
+    unsigned hash = seed;
+
+    hash = StringHash(cp->lval, hash, max);
+    hash = StringHash(cp->classes, hash, max);
+    hash = RvalHash(cp->rval, hash, max);
+
+    return hash;
+}
+
+static unsigned BodyHash(const Body *body, unsigned seed, unsigned max)
+{
+    unsigned hash = seed;
+    for (size_t i = 0; i < SeqLength(body->conlist); i++)
+    {
+        const Constraint *cp = SeqAt(body->conlist, i);
+        hash = ConstraintHash(cp, hash, max);
+    }
+
+    return hash;
+}
+
+static unsigned PromiseHash(const Promise *pp, unsigned seed, unsigned max)
+{
+    unsigned hash = seed;
+
+    hash = StringHash(pp->promiser, seed, max);
+    hash = RvalHash(pp->promisee, seed, max);
+
+    for (size_t i = 0; i < SeqLength(pp->conlist); i++)
+    {
+        const Constraint *cp = SeqAt(pp->conlist, i);
+        hash = ConstraintHash(cp, hash, max);
+    }
+
+    return hash;
+}
+
+static unsigned PromiseTypeHash(const PromiseType *pt, unsigned seed, unsigned max)
+{
+    unsigned hash = seed;
+
+    hash = StringHash(pt->name, hash, max);
+    for (size_t i = 0; i < SeqLength(pt->promises); i++)
+    {
+        const Promise *pp = SeqAt(pt->promises, i);
+        hash = PromiseHash(pp, hash, max);
+    }
+
+    return hash;
+}
+
+static unsigned BundleHash(const Bundle *bundle, unsigned seed, unsigned max)
+{
+    unsigned hash = seed;
+
+    hash = StringHash(bundle->type, hash, max);
+    hash = StringHash(bundle->ns, hash, max);
+    hash = StringHash(bundle->name, hash, max);
+    hash = RlistHash(bundle->args, hash, max);
+
+    for (size_t i = 0; i < SeqLength(bundle->promise_types); i++)
+    {
+        const PromiseType *pt = SeqAt(bundle->promise_types, i);
+        hash = PromiseTypeHash(pt, hash, max);
+    }
+
+    return hash;
+}
+
+unsigned PolicyHash(const Policy *policy)
+{
+    static const unsigned max = UINT_MAX;
+    unsigned hash = 0;
+
+    for (size_t i = 0; i < SeqLength(policy->bodies); i++)
+    {
+        const Body *body = SeqAt(policy->bodies, i);
+        hash = BodyHash(body, hash, max);
+    }
+
+    for (size_t i = 0; i < SeqLength(policy->bundles); i++)
+    {
+        const Bundle *bundle = SeqAt(policy->bundles, i);
+        hash = BundleHash(bundle, hash, max);
+    }
+
+    return hash;
+}
+
+StringSet *PolicySourceFiles(const Policy *policy)
+{
+    StringSet *files = StringSetNew();
+
+    for (size_t i = 0; i < SeqLength(policy->bundles); i++)
+    {
+        const Bundle *bp = SeqAt(policy->bundles, i);
+        if (bp->source_path)
+        {
+            StringSetAdd(files, xstrdup(bp->source_path));
+        }
+    }
+
+    for (size_t i = 0; i < SeqLength(policy->bodies); i++)
+    {
+        const Bundle *bp = SeqAt(policy->bodies, i);
+        if (bp->source_path)
+        {
+            StringSetAdd(files, xstrdup(bp->source_path));
+        }
+    }
+
+    return files;
 }
 
 static char *StripNamespace(const char *full_symbol)
@@ -149,9 +276,9 @@ Bundle *PolicyGetBundle(const Policy *policy, const char *ns, const char *type, 
     {
         Bundle *bp = SeqAt(policy->bundles, i);
 
-        char *bundle_symbol = StripNamespace(bp->name);
+        char *bundle_symbol = StripNamespace(name);
 
-        if ((!type || strcmp(bp->type, type) == 0) && ((strcmp(bundle_symbol, name) == 0) || (strcmp(bp->name, name) == 0)))
+        if ((!type || strcmp(bp->type, type) == 0) && ((strcmp(bundle_symbol, bp->name) == 0) || (strcmp(bp->name, name) == 0)))
         {
             free(bundle_symbol);
 
@@ -201,6 +328,9 @@ Policy *PolicyMerge(Policy *a, Policy *b)
         bdp->parent_policy = result;
     }
 
+    /* Should result take over a release_id ? */
+    free(a->release_id);
+    free(b->release_id);
     free(a);
     free(b);
 
@@ -224,7 +354,7 @@ const char *ConstraintGetNamespace(const Constraint *cp)
 
 /*************************************************************************/
 
-Policy *PolicyFromPromise(const Promise *promise)
+const Policy *PolicyFromPromise(const Promise *promise)
 {
     assert(promise);
 
@@ -263,26 +393,29 @@ static bool RvalTypeCheckDataType(RvalType rval_type, DataType expected_datatype
 
     switch (expected_datatype)
     {
-    case DATA_TYPE_BODY:
-    case DATA_TYPE_BUNDLE:
+    case CF_DATA_TYPE_BODY:
+    case CF_DATA_TYPE_BUNDLE:
         return rval_type == RVAL_TYPE_SCALAR;
 
-    case DATA_TYPE_CONTEXT:
-    case DATA_TYPE_COUNTER:
-    case DATA_TYPE_INT:
-    case DATA_TYPE_INT_RANGE:
-    case DATA_TYPE_OPTION:
-    case DATA_TYPE_REAL:
-    case DATA_TYPE_REAL_RANGE:
-    case DATA_TYPE_STRING:
+    case CF_DATA_TYPE_CONTEXT:
+    case CF_DATA_TYPE_COUNTER:
+    case CF_DATA_TYPE_INT:
+    case CF_DATA_TYPE_INT_RANGE:
+    case CF_DATA_TYPE_OPTION:
+    case CF_DATA_TYPE_REAL:
+    case CF_DATA_TYPE_REAL_RANGE:
+    case CF_DATA_TYPE_STRING:
         return rval_type == RVAL_TYPE_SCALAR;
 
-    case DATA_TYPE_CONTEXT_LIST:
-    case DATA_TYPE_INT_LIST:
-    case DATA_TYPE_OPTION_LIST:
-    case DATA_TYPE_REAL_LIST:
-    case DATA_TYPE_STRING_LIST:
+    case CF_DATA_TYPE_CONTEXT_LIST:
+    case CF_DATA_TYPE_INT_LIST:
+    case CF_DATA_TYPE_OPTION_LIST:
+    case CF_DATA_TYPE_REAL_LIST:
+    case CF_DATA_TYPE_STRING_LIST:
         return (rval_type == RVAL_TYPE_SCALAR) || (rval_type == RVAL_TYPE_LIST);
+
+    case CF_DATA_TYPE_CONTAINER:
+        return (rval_type == RVAL_TYPE_CONTAINER);
 
     default:
         ProgrammingError("Unhandled expected datatype in switch: %d", expected_datatype);
@@ -405,7 +538,8 @@ static bool PolicyCheckBundle(const Bundle *bundle, Seq *errors)
 
     // ensure no reserved bundle names are used
     {
-        static const char *reserved_names[] = { "sys", "const", "mon", "edit", "match", "mon", "this", NULL };
+        static const char *const reserved_names[] =
+            { "sys", "const", "mon", "edit", "match", "mon", "this", NULL };
         if (IsStrIn(bundle->name, reserved_names))
         {
             SeqAppend(errors, PolicyErrorNew(POLICY_ELEMENT_TYPE_BUNDLE, bundle,
@@ -426,6 +560,17 @@ static bool PolicyCheckBundle(const Bundle *bundle, Seq *errors)
 static bool PolicyCheckBody(const Body *body, Seq *errors)
 {
     bool success = true;
+
+    if (strcmp("control", body->name) == 0)
+    {
+        if (RlistLen(body->args) > 0)
+        {
+            SeqAppend(errors, PolicyErrorNew(POLICY_ELEMENT_TYPE_BODY, body,
+                                             POLICY_ERROR_BODY_CONTROL_ARGS,
+                                             body->type));
+            success = false;
+        }
+    }
 
     for (size_t i = 0; i < SeqLength(body->conlist); i++)
     {
@@ -584,7 +729,7 @@ static bool PolicyCheckUndefinedBodies(const Policy *policy, Seq *errors)
                     Constraint *constraint = SeqAt(promise->conlist, cpi);
 
                     const ConstraintSyntax *syntax = ConstraintGetSyntax(constraint);
-                    if (syntax->dtype == DATA_TYPE_BODY)
+                    if (syntax->dtype == CF_DATA_TYPE_BODY)
                     {
                         char *ns = QualifiedNameNamespaceComponent(RvalFullSymbol(&constraint->rval));
                         char *symbol = QualifiedNameScopeComponent(RvalFullSymbol(&constraint->rval));
@@ -629,14 +774,14 @@ static bool PolicyCheckUndefinedBundles(const Policy *policy, Seq *errors)
                     Constraint *constraint = SeqAt(promise->conlist, cpi);
 
                     const ConstraintSyntax *syntax = ConstraintGetSyntax(constraint);
-                    if (syntax->dtype == DATA_TYPE_BUNDLE &&
+                    if (syntax->dtype == CF_DATA_TYPE_BUNDLE &&
                         !IsCf3VarString(RvalFullSymbol(&constraint->rval)))
                     {
                         char *ns = QualifiedNameNamespaceComponent(RvalFullSymbol(&constraint->rval));
                         char *symbol = QualifiedNameScopeComponent(RvalFullSymbol(&constraint->rval));
 
                         const Bundle *referenced_bundle = NULL;
-                        if (strcmp(constraint->lval, "usebundle") == 0)
+                        if (strcmp(constraint->lval, "usebundle") == 0 || strcmp(constraint->lval, "home_bundle") == 0)
                         {
                             referenced_bundle = PolicyGetBundle(policy, ns, "agent", symbol);
                             if (!referenced_bundle)
@@ -726,7 +871,7 @@ bool PolicyCheckDuplicateHandles(const Policy *policy, Seq *errors)
 {
     bool success = true;
 
-    Set *used_handles = SetNew((unsigned int (*)(const void*, unsigned int))OatHash, (bool (*)(const void *, const void *))StringSafeEqual, NULL);
+    Map *recorded = MapNew((MapHashFn)StringHash, (MapKeyEqualFn)StringSafeEqual, NULL, NULL);
 
     for (size_t bpi = 0; bpi < SeqLength(policy->bundles); bpi++)
     {
@@ -739,27 +884,37 @@ bool PolicyCheckDuplicateHandles(const Policy *policy, Seq *errors)
             for (size_t ppi = 0; ppi < SeqLength(promise_type->promises); ppi++)
             {
                 Promise *promise = SeqAt(promise_type->promises, ppi);
-
                 const char *handle = PromiseGetHandle(promise);
 
                 if (handle)
                 {
-                    if (SetContains(used_handles, handle))
+                    if (IsCf3VarString(handle))
                     {
-                        SeqAppend(errors, PolicyErrorNew(POLICY_ELEMENT_TYPE_PROMISE, promise,
-                                                         POLICY_ERROR_PROMISE_DUPLICATE_HANDLE, handle));
-                        success = false;
+                        // can't check dynamic handles
+                        continue;
+                    }
+
+                    const Promise *other_promise = MapGet(recorded, handle);
+                    if (other_promise)
+                    {
+                        // Need to make this smarter by comparing parsed expressions for equivalency.
+                        if (strcmp(promise->classes, other_promise->classes) == 0)
+                        {
+                            SeqAppend(errors, PolicyErrorNew(POLICY_ELEMENT_TYPE_PROMISE, promise,
+                                                             POLICY_ERROR_PROMISE_DUPLICATE_HANDLE, handle));
+                            success = false;
+                        }
                     }
                     else
                     {
-                        SetAdd(used_handles, (void *)handle); /* This Set does not free values */
+                        MapInsert(recorded, (void *)handle, (void *)promise);
                     }
                 }
             }
         }
     }
 
-    SetDestroy(used_handles);
+    MapDestroy(recorded);
 
     return success;
 }
@@ -805,13 +960,14 @@ bool PolicyCheckPartial(const Policy *policy, Seq *errors)
         {
             Bundle *bp2 = SeqAt(policy->bundles, j);
 
-            if (bp != bp2 &&
-                StringSafeEqual(bp->name, bp2->name) &&
-                StringSafeEqual(bp->type, bp2->type))
+            if (bp != bp2
+                && strcmp(bp->type, bp2->type) == 0
+                && strcmp(bp->ns, bp2->ns) == 0
+                && strcmp(bp->name, bp2->name) == 0)
             {
                 SeqAppend(errors, PolicyErrorNew(POLICY_ELEMENT_TYPE_BUNDLE, bp,
-                                                      POLICY_ERROR_BUNDLE_REDEFINITION,
-                                                      bp->name, bp->type));
+                                                 POLICY_ERROR_BUNDLE_REDEFINITION,
+                                                 bp->name, bp->type));
                 success = false;
             }
         }
@@ -833,9 +989,10 @@ bool PolicyCheckPartial(const Policy *policy, Seq *errors)
         {
             const Body *bp2 = SeqAt(policy->bodies, j);
 
-            if (bp != bp2 &&
-                StringSafeEqual(bp->name, bp2->name) &&
-                StringSafeEqual(bp->type, bp2->type))
+            if (bp != bp2
+                && strcmp(bp->type, bp2->type) == 0
+                && strcmp(bp->ns, bp2->ns) == 0
+                && strcmp(bp->name, bp2->name) == 0)
             {
                 if (strcmp(bp->type,"file") != 0)
                 {
@@ -999,12 +1156,10 @@ void PolicyErrorWrite(Writer *writer, const PolicyError *error)
     SourceOffset offset = PolicyElementSourceOffset(error->type, error->subject);
     const char *path = PolicyElementSourceFile(error->type, error->subject);
 
-#ifdef HAVE_SNPRINTF
     // FIX: need to track columns in SourceOffset
-    WriterWriteF(writer, "%s:%zu:%zu: error: %s\n", path, offset.line, (size_t)0, error->message);
-#else
-   WriterWriteF(writer, "%s:%ul:%ul: error: %s\n", path, (unsigned long)offset.line, (unsigned long)0, error->message);
-#endif
+    WriterWriteF(writer, "%s:%llu:%llu: error: %s\n",
+                 path, (unsigned long long)offset.line,
+                 (unsigned long long)0, error->message);
 }
 
 static char *PolicyErrorToString(const PolicyError *error)
@@ -1012,7 +1167,27 @@ static char *PolicyErrorToString(const PolicyError *error)
     SourceOffset offset = PolicyElementSourceOffset(error->type, error->subject);
     const char *path = PolicyElementSourceFile(error->type, error->subject);
 
-    return StringFormat("%s:%zu:%zu: error: %s\n", path, offset.line, (size_t)0, error->message);
+    Writer *msg = StringWriter();
+    WriterWriteF(msg, "%s:%llu:%llu: %s.",
+                 path, (unsigned long long)offset.line,
+                 (unsigned long long)0, error->message);
+
+    switch (error->type)
+    {
+    case POLICY_ELEMENT_TYPE_CONSTRAINT:
+        {
+            const Constraint *cp = error->subject;
+            WriterWrite(msg, " Given attribute value '");
+            RvalWrite(msg, cp->rval);
+            WriterWriteChar(msg, '\'');
+        }
+        break;
+
+    default:
+        break;
+    }
+
+    return StringWriterClose(msg);
 }
 
 /*************************************************************************/
@@ -1028,8 +1203,9 @@ void PromiseTypeDestroy(PromiseType *promise_type)
     }
 }
 
-Bundle *PolicyAppendBundle(Policy *policy, const char *ns, const char *name, const char *type, Rlist *args,
-                     const char *source_path)
+Bundle *PolicyAppendBundle(Policy *policy,
+                           const char *ns, const char *name, const char *type,
+                           const Rlist *args, const char *source_path)
 {
     Bundle *bundle = xcalloc(1, sizeof(Bundle));
 
@@ -1037,17 +1213,7 @@ Bundle *PolicyAppendBundle(Policy *policy, const char *ns, const char *name, con
 
     SeqAppend(policy->bundles, bundle);
 
-    if (strcmp(ns, "default") == 0)
-    {
-        bundle->name = xstrdup(name);
-    }
-    else
-    {
-        char fqname[CF_BUFSIZE];
-        snprintf(fqname,CF_BUFSIZE-1, "%s:%s", ns, name);
-        bundle->name = xstrdup(fqname);
-    }
-
+    bundle->name = xstrdup(name);
     bundle->type = xstrdup(type);
     bundle->ns = xstrdup(ns);
     bundle->args = RlistCopy(args);
@@ -1066,22 +1232,23 @@ Body *PolicyAppendBody(Policy *policy, const char *ns, const char *name, const c
 
     SeqAppend(policy->bodies, body);
 
-    if (strcmp(ns, "default") == 0)
-    {
-        body->name = xstrdup(name);
-    }
-    else
-    {
-        char fqname[CF_BUFSIZE];
-        snprintf(fqname, CF_BUFSIZE-1, "%s:%s", ns, name);
-        body->name = xstrdup(fqname);
-    }
-
+    body->name = xstrdup(name);
     body->type = xstrdup(type);
     body->ns = xstrdup(ns);
     body->args = RlistCopy(args);
     body->source_path = SafeStringDuplicate(source_path);
     body->conlist = SeqNew(10, ConstraintDestroy);
+
+    // TODO: move to standard callback
+    if (strcmp("service_method", body->name) == 0)
+    {
+        Rlist *args = NULL;
+        RlistAppendRval(&args, RvalNew("$(this.promiser)", RVAL_TYPE_SCALAR));
+        RlistAppendRval(&args, RvalNew("$(this.service_policy)", RVAL_TYPE_SCALAR));
+
+        FnCall *service_bundle = FnCallNew("standard_services", args);
+        BodyAppendConstraint(body, "service_bundle", (Rval) { service_bundle, RVAL_TYPE_FNCALL }, "any", false);
+    }
 
     return body;
 }
@@ -1118,36 +1285,36 @@ PromiseType *BundleAppendPromiseType(Bundle *bundle, const char *name)
 
 Promise *PromiseTypeAppendPromise(PromiseType *type, const char *promiser, Rval promisee, const char *classes)
 {
-    char *sp = NULL, *spe = NULL;
-
-    if (!type)
-    {
-        ProgrammingError("Attempt to add a promise without a type");
-    }
+    assert(promiser && "Missing promiser");
+    assert(type && "Missing promise type");
 
     Promise *pp = xcalloc(1, sizeof(Promise));
 
-    sp = xstrdup(promiser);
+    pp->promiser = xstrdup(promiser);
 
     if (classes && strlen(classes) > 0)
     {
-        spe = xstrdup(classes);
+        pp->classes = xstrdup(classes);
     }
     else
     {
-        spe = xstrdup("any");
+        pp->classes = xstrdup("any");
     }
 
     SeqAppend(type->promises, pp);
 
     pp->parent_promise_type = type;
 
-    pp->promiser = sp;
     pp->promisee = promisee;
-    pp->classes = spe;
     pp->has_subbundles = false;
     pp->conlist = SeqNew(10, ConstraintDestroy);
     pp->org_pp = pp;
+
+    // TODO: move into promise type syntax callbacks for default values
+    if (strcmp("packages", type->name) == 0)
+    {
+        PromiseAppendConstraint(pp, "package_method", RvalNew("generic", RVAL_TYPE_SCALAR), true);
+    }
 
     return pp;
 }
@@ -1218,15 +1385,23 @@ static Constraint *ConstraintNew(const char *lval, Rval rval, const char *classe
     return cp;
 }
 
-Constraint *PromiseAppendConstraint(Promise *promise, const char *lval, Rval rval, const char *classes,
-                                    bool references_body)
+Constraint *PromiseAppendConstraint(Promise *pp, const char *lval, Rval rval, bool references_body)
 {
-    Constraint *cp = ConstraintNew(lval, rval, classes, references_body);
+    Constraint *cp = ConstraintNew(lval, rval, "any", references_body);
     cp->type = POLICY_ELEMENT_TYPE_PROMISE;
-    cp->parent.promise = promise;
+    cp->parent.promise = pp;
 
-    SeqAppend(promise->conlist, cp);
+    for (size_t i = 0; i < SeqLength(pp->conlist); i++)
+    {
+        Constraint *old_cp = SeqAt(pp->conlist, i);
+        if (strcmp(old_cp->lval, lval) == 0)
+        {
+            SeqSet(pp->conlist, i, cp);
+            return cp;
+        }
+    }
 
+    SeqAppend(pp->conlist, cp);
     return cp;
 }
 
@@ -1237,6 +1412,16 @@ Constraint *BodyAppendConstraint(Body *body, const char *lval, Rval rval, const 
     cp->type = POLICY_ELEMENT_TYPE_BODY;
     cp->parent.body = body;
 
+    for (size_t i = 0; i < SeqLength(body->conlist); i++)
+    {
+        Constraint *old_cp = SeqAt(body->conlist, i);
+        if (strcmp(old_cp->lval, lval) == 0 && strcmp(old_cp->classes, classes) == 0)
+        {
+            SeqSet(body->conlist, i, cp);
+            return cp;
+        }
+    }
+
     SeqAppend(body->conlist, cp);
 
     return cp;
@@ -1244,7 +1429,7 @@ Constraint *BodyAppendConstraint(Body *body, const char *lval, Rval rval, const 
 
 /*******************************************************************/
 
-PromiseType *BundleGetPromiseType(Bundle *bp, const char *name)
+const PromiseType *BundleGetPromiseType(const Bundle *bp, const char *name)
 {
     // TODO: hiding error, remove and see what will crash
     if (bp == NULL)
@@ -1331,7 +1516,7 @@ static JsonElement *AttributeValueToJson(Rval rval, bool symbolic_reference)
 
             for (rp = (Rlist *) rval.item; rp != NULL; rp = rp->next)
             {
-                JsonArrayAppendObject(list, AttributeValueToJson((Rval) {rp->item, rp->type}, false));
+                JsonArrayAppendObject(list, AttributeValueToJson(rp->val, false));
             }
 
             JsonObjectAppendArray(json_attribute, "value", list);
@@ -1351,7 +1536,7 @@ static JsonElement *AttributeValueToJson(Rval rval, bool symbolic_reference)
 
                 for (argp = call->args; argp != NULL; argp = argp->next)
                 {
-                    JsonArrayAppendObject(arguments, AttributeValueToJson((Rval) {argp->item, argp->type}, false));
+                    JsonArrayAppendObject(arguments, AttributeValueToJson(argp->val, false));
                 }
 
                 JsonObjectAppendArray(json_attribute, "arguments", arguments);
@@ -1360,20 +1545,21 @@ static JsonElement *AttributeValueToJson(Rval rval, bool symbolic_reference)
             return json_attribute;
         }
 
-    default:
+    case RVAL_TYPE_CONTAINER:
+    case RVAL_TYPE_NOPROMISEE:
         ProgrammingError("Attempted to export attribute of type: %c", rval.type);
         return NULL;
     }
+
+    assert(false);
+    return NULL;
 }
 
-static JsonElement *CreateContextAsJson(const char *name, size_t offset,
-                                        size_t offset_end, const char *children_name, JsonElement *children)
+static JsonElement *CreateContextAsJson(const char *name, const char *children_name, JsonElement *children)
 {
     JsonElement *json = JsonObjectCreate(10);
 
     JsonObjectAppendString(json, "name", name);
-    JsonObjectAppendInteger(json, "offset", offset);
-    JsonObjectAppendInteger(json, "offsetEnd", offset_end);
     JsonObjectAppendArray(json, children_name, children);
 
     return json;
@@ -1384,8 +1570,6 @@ static JsonElement *BodyContextsToJson(const Seq *constraints)
     JsonElement *json_contexts = JsonArrayCreate(10);
     JsonElement *json_attributes = JsonArrayCreate(10);
     char *current_context = "any";
-    size_t context_offset_start = -1;
-    size_t context_offset_end = -1;
 
     for (size_t i = 0; i < SeqLength(constraints); i++)
     {
@@ -1397,17 +1581,12 @@ static JsonElement *BodyContextsToJson(const Seq *constraints)
         {
             JsonArrayAppendObject(json_contexts,
                                   CreateContextAsJson(current_context,
-                                                      context_offset_start,
-                                                      context_offset_end, "attributes", json_attributes));
+                                                      "attributes", json_attributes));
             json_attributes = JsonArrayCreate(10);
             current_context = cp->classes;
         }
 
-        JsonObjectAppendInteger(json_attribute, "offset", cp->offset.start);
-        JsonObjectAppendInteger(json_attribute, "offsetEnd", cp->offset.end);
-
-        context_offset_start = cp->offset.context;
-        context_offset_end = cp->offset.end;
+        JsonObjectAppendInteger(json_attribute, "line", cp->offset.line);
 
         JsonObjectAppendString(json_attribute, "lval", cp->lval);
         JsonObjectAppendObject(json_attribute, "rval", AttributeValueToJson(cp->rval, false));
@@ -1416,8 +1595,7 @@ static JsonElement *BodyContextsToJson(const Seq *constraints)
 
     JsonArrayAppendObject(json_contexts,
                           CreateContextAsJson(current_context,
-                                              context_offset_start,
-                                              context_offset_end, "attributes", json_attributes));
+                                              "attributes", json_attributes));
 
     return json_contexts;
 }
@@ -1427,8 +1605,6 @@ static JsonElement *BundleContextsToJson(const Seq *promises)
     JsonElement *json_contexts = JsonArrayCreate(10);
     JsonElement *json_promises = JsonArrayCreate(10);
     char *current_context = NULL;
-    size_t context_offset_start = -1;
-    size_t context_offset_end = -1;
 
     for (size_t ppi = 0; ppi < SeqLength(promises); ppi++)
     {
@@ -1445,13 +1621,12 @@ static JsonElement *BundleContextsToJson(const Seq *promises)
         {
             JsonArrayAppendObject(json_contexts,
                                   CreateContextAsJson(current_context,
-                                                      context_offset_start,
-                                                      context_offset_end, "promises", json_promises));
+                                                      "promises", json_promises));
             json_promises = JsonArrayCreate(10);
             current_context = pp->classes;
         }
 
-        JsonObjectAppendInteger(json_promise, "offset", pp->offset.start);
+        JsonObjectAppendInteger(json_promise, "line", pp->offset.line);
 
         {
             JsonElement *json_promise_attributes = JsonArrayCreate(10);
@@ -1462,17 +1637,12 @@ static JsonElement *BundleContextsToJson(const Seq *promises)
 
                 JsonElement *json_attribute = JsonObjectCreate(10);
 
-                JsonObjectAppendInteger(json_attribute, "offset", cp->offset.start);
-                JsonObjectAppendInteger(json_attribute, "offsetEnd", cp->offset.end);
-
-                context_offset_end = cp->offset.end;
+                JsonObjectAppendInteger(json_attribute, "line", cp->offset.line);
 
                 JsonObjectAppendString(json_attribute, "lval", cp->lval);
                 JsonObjectAppendObject(json_attribute, "rval", AttributeValueToJson(cp->rval, cp->references_body));
                 JsonArrayAppendObject(json_promise_attributes, json_attribute);
             }
-
-            JsonObjectAppendInteger(json_promise, "offsetEnd", context_offset_end);
 
             JsonObjectAppendString(json_promise, "promiser", pp->promiser);
 
@@ -1502,10 +1672,12 @@ static JsonElement *BundleContextsToJson(const Seq *promises)
         JsonArrayAppendObject(json_promises, json_promise);
     }
 
-    JsonArrayAppendObject(json_contexts,
-                          CreateContextAsJson(current_context,
-                                              context_offset_start,
-                                              context_offset_end, "promises", json_promises));
+    if (JsonLength(json_promises) > 0)
+    {
+        JsonArrayAppendObject(json_contexts,
+                              CreateContextAsJson(current_context,
+                                                  "promises", json_promises));
+    }
 
     return json_contexts;
 }
@@ -1518,8 +1690,7 @@ static JsonElement *BundleToJson(const Bundle *bundle)
     {
         JsonObjectAppendString(json_bundle, "sourcePath", bundle->source_path);
     }
-    JsonObjectAppendInteger(json_bundle, "offset", bundle->offset.start);
-    JsonObjectAppendInteger(json_bundle, "offsetEnd", bundle->offset.end);
+    JsonObjectAppendInteger(json_bundle, "line", bundle->offset.line);
 
     JsonObjectAppendString(json_bundle, "namespace", bundle->ns);
     JsonObjectAppendString(json_bundle, "name", bundle->name);
@@ -1531,7 +1702,7 @@ static JsonElement *BundleToJson(const Bundle *bundle)
 
         for (argp = bundle->args; argp != NULL; argp = argp->next)
         {
-            JsonArrayAppendString(json_args, argp->item);
+            JsonArrayAppendString(json_args, RlistScalarValue(argp));
         }
 
         JsonObjectAppendArray(json_bundle, "arguments", json_args);
@@ -1546,8 +1717,7 @@ static JsonElement *BundleToJson(const Bundle *bundle)
 
             JsonElement *json_promise_type = JsonObjectCreate(10);
 
-            JsonObjectAppendInteger(json_promise_type, "offset", sp->offset.start);
-            JsonObjectAppendInteger(json_promise_type, "offsetEnd", sp->offset.end);
+            JsonObjectAppendInteger(json_promise_type, "line", sp->offset.line);
             JsonObjectAppendString(json_promise_type, "name", sp->name);
             JsonObjectAppendArray(json_promise_type, "contexts", BundleContextsToJson(sp->promises));
 
@@ -1565,8 +1735,11 @@ static JsonElement *BodyToJson(const Body *body)
 {
     JsonElement *json_body = JsonObjectCreate(10);
 
-    JsonObjectAppendInteger(json_body, "offset", body->offset.start);
-    JsonObjectAppendInteger(json_body, "offsetEnd", body->offset.end);
+    if (body->source_path)
+    {
+        JsonObjectAppendString(json_body, "sourcePath", body->source_path);
+    }
+    JsonObjectAppendInteger(json_body, "line", body->offset.line);
 
     JsonObjectAppendString(json_body, "namespace", body->ns);
     JsonObjectAppendString(json_body, "name", body->name);
@@ -1578,7 +1751,7 @@ static JsonElement *BodyToJson(const Body *body)
 
         for (argp = body->args; argp != NULL; argp = argp->next)
         {
-            JsonArrayAppendString(json_args, argp->item);
+            JsonArrayAppendString(json_args, RlistScalarValue(argp));
         }
 
         JsonObjectAppendArray(json_body, "arguments", json_args);
@@ -1636,26 +1809,19 @@ static void IndentPrint(Writer *writer, int indent_level)
     }
 }
 
-
-static void RvalToString(Writer *writer, Rval rval, bool symbolic_reference)
+static void AttributeToString(Writer *writer, Constraint *attribute, bool symbolic_reference)
 {
-    if (rval.type == RVAL_TYPE_SCALAR && !symbolic_reference)
+    WriterWriteF(writer, "%s => ", attribute->lval);
+    if (attribute->rval.type == RVAL_TYPE_SCALAR && !symbolic_reference)
     {
         WriterWriteChar(writer, '"');
-        RvalWrite(writer, rval);
+        RvalWrite(writer, attribute->rval);
         WriterWriteChar(writer, '"');
     }
     else
     {
-        RvalWrite(writer, rval);
+        RvalWrite(writer, attribute->rval);
     }
-}
-
-
-static void AttributeToString(Writer *writer, Constraint *attribute, bool symbolic_reference)
-{
-    WriterWriteF(writer, "%s => ", attribute->lval);
-    RvalToString(writer, attribute->rval, symbolic_reference);
 }
 
 
@@ -1666,7 +1832,7 @@ static void ArgumentsToString(Writer *writer, Rlist *args)
     WriterWriteChar(writer, '(');
     for (argp = args; argp != NULL; argp = argp->next)
     {
-        WriterWriteF(writer, "%s", (char *) argp->item);
+        WriterWriteF(writer, "%s", RlistScalarValue(argp));
 
         if (argp->next != NULL)
         {
@@ -1804,7 +1970,7 @@ static Rval RvalFromJson(JsonElement *json_rval)
         JsonElement *json_list = JsonObjectGetAsArray(json_rval, "value");
         Rlist *rlist = NULL;
 
-        for (size_t i = 0; i < JsonElementLength(json_list); i++)
+        for (size_t i = 0; i < JsonLength(json_list); i++)
         {
             Rval list_value = RvalFromJson(JsonArrayGetAsObject(json_list, i));
             RlistAppend(&rlist, list_value.item, list_value.type);
@@ -1818,7 +1984,7 @@ static Rval RvalFromJson(JsonElement *json_rval)
         JsonElement *json_args = JsonObjectGetAsArray(json_rval, "arguments");
         Rlist *args = NULL;
 
-        for (size_t i = 0; i < JsonElementLength(json_args); i++)
+        for (size_t i = 0; i < JsonLength(json_args); i++)
         {
             JsonElement *json_arg = JsonArrayGetAsObject(json_args, i);
             Rval arg = RvalFromJson(json_arg);
@@ -1836,7 +2002,7 @@ static Rval RvalFromJson(JsonElement *json_rval)
     }
 }
 
-static Constraint *PromiseAppendConstraintJson(Promise *promise, JsonElement *json_constraint, const char *context)
+static Constraint *PromiseAppendConstraintJson(Promise *promise, JsonElement *json_constraint)
 {
     const char *lval = JsonObjectGetAsString(json_constraint, "lval");
 
@@ -1845,7 +2011,7 @@ static Constraint *PromiseAppendConstraintJson(Promise *promise, JsonElement *js
 
     Rval rval = RvalFromJson(json_rval);
 
-    Constraint *cp = PromiseAppendConstraint(promise, lval, rval, context, (strcmp("symbol", type) == 0));
+    Constraint *cp = PromiseAppendConstraint(promise, lval, rval, (strcmp("symbol", type) == 0));
 
     return cp;
 }
@@ -1857,10 +2023,10 @@ static Promise *PromiseTypeAppendPromiseJson(PromiseType *promise_type, JsonElem
     Promise *promise = PromiseTypeAppendPromise(promise_type, promiser, (Rval) { NULL, RVAL_TYPE_NOPROMISEE }, context);
 
     JsonElement *json_attributes = JsonObjectGetAsArray(json_promise, "attributes");
-    for (size_t i = 0; i < JsonElementLength(json_attributes); i++)
+    for (size_t i = 0; i < JsonLength(json_attributes); i++)
     {
         JsonElement *json_attribute = JsonArrayGetAsObject(json_attributes, i);
-        PromiseAppendConstraintJson(promise, json_attribute, context);
+        PromiseAppendConstraintJson(promise, json_attribute);
     }
 
     return promise;
@@ -1873,14 +2039,14 @@ static PromiseType *BundleAppendPromiseTypeJson(Bundle *bundle, JsonElement *jso
     PromiseType *promise_type = BundleAppendPromiseType(bundle, name);
 
     JsonElement *json_contexts = JsonObjectGetAsArray(json_promise_type, "contexts");
-    for (size_t i = 0; i < JsonElementLength(json_contexts); i++)
+    for (size_t i = 0; i < JsonLength(json_contexts); i++)
     {
         JsonElement *json_context = JsonArrayGetAsObject(json_contexts, i);
 
         const char *context = JsonObjectGetAsString(json_context, "name");
 
         JsonElement *json_context_promises = JsonObjectGetAsArray(json_context, "promises");
-        for (size_t j = 0; j < JsonElementLength(json_context_promises); j++)
+        for (size_t j = 0; j < JsonLength(json_context_promises); j++)
         {
             JsonElement *json_promise = JsonArrayGetAsObject(json_context_promises, j);
             PromiseTypeAppendPromiseJson(promise_type, json_promise, context);
@@ -1900,7 +2066,7 @@ static Bundle *PolicyAppendBundleJson(Policy *policy, JsonElement *json_bundle)
     Rlist *args = NULL;
     {
         JsonElement *json_args = JsonObjectGetAsArray(json_bundle, "arguments");
-        for (size_t i = 0; i < JsonElementLength(json_args); i++)
+        for (size_t i = 0; i < JsonLength(json_args); i++)
         {
             RlistAppendScalar(&args, JsonArrayGetAsString(json_args, i));
         }
@@ -1910,7 +2076,7 @@ static Bundle *PolicyAppendBundleJson(Policy *policy, JsonElement *json_bundle)
 
     {
         JsonElement *json_promise_types = JsonObjectGetAsArray(json_bundle, "promiseTypes");
-        for (size_t i = 0; i < JsonElementLength(json_promise_types); i++)
+        for (size_t i = 0; i < JsonLength(json_promise_types); i++)
         {
             JsonElement *json_promise_type = JsonArrayGetAsObject(json_promise_types, i);
             BundleAppendPromiseTypeJson(bundle, json_promise_type);
@@ -1944,7 +2110,7 @@ static Body *PolicyAppendBodyJson(Policy *policy, JsonElement *json_body)
     Rlist *args = NULL;
     {
         JsonElement *json_args = JsonObjectGetAsArray(json_body, "arguments");
-        for (size_t i = 0; i < JsonElementLength(json_args); i++)
+        for (size_t i = 0; i < JsonLength(json_args); i++)
         {
             RlistAppendScalar(&args, JsonArrayGetAsString(json_args, i));
         }
@@ -1954,14 +2120,14 @@ static Body *PolicyAppendBodyJson(Policy *policy, JsonElement *json_body)
 
     {
         JsonElement *json_contexts = JsonObjectGetAsArray(json_body, "contexts");
-        for (size_t i = 0; i < JsonElementLength(json_contexts); i++)
+        for (size_t i = 0; i < JsonLength(json_contexts); i++)
         {
             JsonElement *json_context = JsonArrayGetAsObject(json_contexts, i);
             const char *context = JsonObjectGetAsString(json_context, "name");
 
             {
                 JsonElement *json_attributes = JsonObjectGetAsArray(json_context, "attributes");
-                for (size_t j = 0; j < JsonElementLength(json_attributes); j++)
+                for (size_t j = 0; j < JsonLength(json_attributes); j++)
                 {
                     JsonElement *json_attribute = JsonArrayGetAsObject(json_attributes, j);
                     BodyAppendConstraintJson(body, json_attribute, context);
@@ -1980,7 +2146,7 @@ Policy *PolicyFromJson(JsonElement *json_policy)
 
     {
         JsonElement *json_bundles = JsonObjectGetAsArray(json_policy, "bundles");
-        for (size_t i = 0; i < JsonElementLength(json_bundles); i++)
+        for (size_t i = 0; i < JsonLength(json_bundles); i++)
         {
             JsonElement *json_bundle = JsonArrayGetAsObject(json_bundles, i);
             PolicyAppendBundleJson(policy, json_bundle);
@@ -1989,7 +2155,7 @@ Policy *PolicyFromJson(JsonElement *json_policy)
 
     {
         JsonElement *json_bodies = JsonObjectGetAsArray(json_policy, "bodies");
-        for (size_t i = 0; i < JsonElementLength(json_bodies); i++)
+        for (size_t i = 0; i < JsonLength(json_bodies); i++)
         {
             JsonElement *json_body = JsonArrayGetAsObject(json_bodies, i);
             PolicyAppendBodyJson(policy, json_body);
@@ -2053,9 +2219,7 @@ Constraint *EffectiveConstraint(const EvalContext *ctx, Seq *constraints)
         Constraint *cp = SeqAt(constraints, i);
 
         const char *context = ConstraintContext(cp);
-        const char *ns = ConstraintGetNamespace(cp);
-
-        if (IsDefinedClass(ctx, context, ns))
+        if (IsDefinedClass(ctx, context))
         {
             return cp;
         }
@@ -2088,7 +2252,7 @@ int PromiseGetConstraintAsBoolean(const EvalContext *ctx, const char *lval, cons
 
         if (strcmp(cp->lval, lval) == 0)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
+            if (IsDefinedClass(ctx, cp->classes))
             {
                 if (retval != CF_UNDEFINED)
                 {
@@ -2142,7 +2306,7 @@ int ConstraintsGetAsBoolean(const EvalContext *ctx, const char *lval, const Seq 
 
         if (strcmp(cp->lval, lval) == 0)
         {
-            if (IsDefinedClass(ctx, cp->classes, NULL))
+            if (IsDefinedClass(ctx, cp->classes))
             {
                 if (retval != CF_UNDEFINED)
                 {
@@ -2194,7 +2358,7 @@ bool PromiseBundleConstraintExists(const EvalContext *ctx, const char *lval, con
 
         if (strcmp(cp->lval, lval) == 0)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
+            if (IsDefinedClass(ctx, cp->classes))
             {
                 if (retval != CF_UNDEFINED)
                 {
@@ -2267,6 +2431,35 @@ const Bundle *PromiseGetBundle(const Promise *pp)
     return pp->parent_promise_type->parent_bundle;
 }
 
+const Policy *PromiseGetPolicy(const Promise *pp)
+{
+    return PromiseGetBundle(pp)->parent_policy;
+}
+
+static void BundlePath(Writer *w, const Bundle *bp)
+{
+    WriterWriteChar(w, '/');
+    WriterWrite(w, bp->ns);
+    WriterWriteChar(w, '/');
+    WriterWrite(w, bp->name);
+}
+
+static void PromiseTypePath(Writer *w, const PromiseType *pt)
+{
+    BundlePath(w, pt->parent_bundle);
+    WriterWriteChar(w, '/');
+    WriterWrite(w, pt->name);
+}
+
+void PromisePath(Writer *w, const Promise *pp)
+{
+    PromiseTypePath(w, pp->parent_promise_type);
+    WriterWriteChar(w, '/');
+    WriterWriteChar(w, '\'');
+    WriterWrite(w, pp->promiser);
+    WriterWriteChar(w, '\'');
+}
+
 const char *PromiseGetHandle(const Promise *pp)
 {
     return (const char *)PromiseGetImmediateRvalValue("handle", pp, RVAL_TYPE_SCALAR);
@@ -2275,36 +2468,18 @@ const char *PromiseGetHandle(const Promise *pp)
 int PromiseGetConstraintAsInt(const EvalContext *ctx, const char *lval, const Promise *pp)
 {
     int retval = CF_NOINT;
-
-    for (size_t i = 0; i < SeqLength(pp->conlist); i++)
+    const Constraint *cp = PromiseGetConstraint(pp, lval);
+    if (cp)
     {
-        Constraint *cp = SeqAt(pp->conlist, i);
-
-        if (strcmp(cp->lval, lval) == 0)
+        if (cp->rval.type != RVAL_TYPE_SCALAR)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
-            {
-                if (retval != CF_NOINT)
-                {
-                    Log(LOG_LEVEL_ERR, "Multiple '%s' (int) constraints break this promise", lval);
-                    PromiseRef(LOG_LEVEL_ERR, pp);
-                }
-            }
-            else
-            {
-                continue;
-            }
-
-            if (cp->rval.type != RVAL_TYPE_SCALAR)
-            {
-                Log(LOG_LEVEL_ERR,
-                      "Anomalous type mismatch - expected type for int constraint %s did not match internals", lval);
-                PromiseRef(LOG_LEVEL_ERR, pp);
-                FatalError(ctx, "Aborted");
-            }
-
-            retval = (int) IntFromString((char *) cp->rval.item);
+            Log(LOG_LEVEL_ERR,
+                  "Anomalous type mismatch - expected type for int constraint %s did not match internals", lval);
+            PromiseRef(LOG_LEVEL_ERR, pp);
+            FatalError(ctx, "Aborted");
         }
+
+        retval = (int) IntFromString((char *) cp->rval.item);
     }
 
     return retval;
@@ -2314,39 +2489,21 @@ int PromiseGetConstraintAsInt(const EvalContext *ctx, const char *lval, const Pr
 
 bool PromiseGetConstraintAsReal(const EvalContext *ctx, const char *lval, const Promise *pp, double *value_out)
 {
-    bool found_constraint = false;
-
-    for (size_t i = 0; i < SeqLength(pp->conlist); i++)
+    const Constraint *cp = PromiseGetConstraint(pp, lval);
+    if (cp)
     {
-        Constraint *cp = SeqAt(pp->conlist, i);
-
-        if (strcmp(cp->lval, lval) == 0)
+        if (cp->rval.type != RVAL_TYPE_SCALAR)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
-            {
-                if (found_constraint)
-                {
-                    Log(LOG_LEVEL_ERR, "Multiple '%s' (real) constraints break this promise", lval);
-                }
-            }
-            else
-            {
-                continue;
-            }
-
-            if (cp->rval.type != RVAL_TYPE_SCALAR)
-            {
-                Log(LOG_LEVEL_ERR,
-                    "Anomalous type mismatch - expected type for int constraint '%s' did not match internals", lval);
-                FatalError(ctx, "Aborted");
-            }
-
-            *value_out = DoubleFromString((char *) cp->rval.item, value_out);
-            found_constraint = true;
+            Log(LOG_LEVEL_ERR,
+                "Anomalous type mismatch - expected type for int constraint '%s' did not match internals", lval);
+            FatalError(ctx, "Aborted");
         }
+
+        *value_out = DoubleFromString((char *) cp->rval.item, value_out);
+        return true;
     }
 
-    return found_constraint;
+    return false;
 }
 
 /*****************************************************************************/
@@ -2381,38 +2538,21 @@ mode_t PromiseGetConstraintAsOctal(const EvalContext *ctx, const char *lval, con
 
 // We could handle units here, like kb,b,mb
 
-    for (size_t i = 0; i < SeqLength(pp->conlist); i++)
+    const Constraint *cp = PromiseGetConstraint(pp, lval);
+    if (cp)
     {
-        Constraint *cp = SeqAt(pp->conlist, i);
-
-        if (strcmp(cp->lval, lval) == 0)
+        if (cp->rval.type != RVAL_TYPE_SCALAR)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
-            {
-                if (retval != 077)
-                {
-                    Log(LOG_LEVEL_ERR, "Multiple '%s' (int,octal) constraints break this promise", lval);
-                    PromiseRef(LOG_LEVEL_ERR, pp);
-                }
-            }
-            else
-            {
-                continue;
-            }
+            Log(LOG_LEVEL_ERR,
+                  "Anomalous type mismatch - expected type for int constraint %s did not match internals", lval);
+            PromiseRef(LOG_LEVEL_ERR, pp);
+            FatalError(ctx, "Aborted");
+        }
 
-            if (cp->rval.type != RVAL_TYPE_SCALAR)
-            {
-                Log(LOG_LEVEL_ERR,
-                      "Anomalous type mismatch - expected type for int constraint %s did not match internals", lval);
-                PromiseRef(LOG_LEVEL_ERR, pp);
-                FatalError(ctx, "Aborted");
-            }
-
-            if (!Str2Mode(cp->rval.item, &retval))
-            {
-                PromiseRef(LOG_LEVEL_ERR, pp);
-                FatalError(ctx, "Error reading assumed octal value '%s'", (const char *)cp->rval.item);
-            }
+        if (!Str2Mode(cp->rval.item, &retval))
+        {
+            Log(LOG_LEVEL_ERR, "Error reading assumed octal value '%s'", (const char *)cp->rval.item);
+            PromiseRef(LOG_LEVEL_ERR, pp);
         }
     }
 
@@ -2435,36 +2575,19 @@ uid_t PromiseGetConstraintAsUid(const EvalContext *ctx, const char *lval, const 
     int retval = CF_SAME_OWNER;
     char buffer[CF_MAXVARSIZE];
 
-    for (size_t i = 0; i < SeqLength(pp->conlist); i++)
+    const Constraint *cp = PromiseGetConstraint(pp, lval);
+    if (cp)
     {
-        Constraint *cp = SeqAt(pp->conlist, i);
-
-        if (strcmp(cp->lval, lval) == 0)
+        if (cp->rval.type != RVAL_TYPE_SCALAR)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
-            {
-                if (retval != CF_UNDEFINED)
-                {
-                    Log(LOG_LEVEL_ERR, "Multiple '%s' (owner/uid) constraints break this promise", lval);
-                    PromiseRef(LOG_LEVEL_ERR, pp);
-                }
-            }
-            else
-            {
-                continue;
-            }
-
-            if (cp->rval.type != RVAL_TYPE_SCALAR)
-            {
-                Log(LOG_LEVEL_ERR,
-                      "Anomalous type mismatch - expected type for owner constraint %s did not match internals",
-                      lval);
-                PromiseRef(LOG_LEVEL_ERR, pp);
-                FatalError(ctx, "Aborted");
-            }
-
-            retval = Str2Uid((char *) cp->rval.item, buffer, pp);
+            Log(LOG_LEVEL_ERR,
+                  "Anomalous type mismatch - expected type for owner constraint %s did not match internals",
+                  lval);
+            PromiseRef(LOG_LEVEL_ERR, pp);
+            FatalError(ctx, "Aborted");
         }
+
+        retval = Str2Uid((char *) cp->rval.item, buffer, pp);
     }
 
     return retval;
@@ -2488,36 +2611,19 @@ gid_t PromiseGetConstraintAsGid(const EvalContext *ctx, char *lval, const Promis
     int retval = CF_SAME_GROUP;
     char buffer[CF_MAXVARSIZE];
 
-    for (size_t i = 0; i < SeqLength(pp->conlist); i++)
+    const Constraint *cp = PromiseGetConstraint(pp, lval);
+    if (cp)
     {
-        Constraint *cp = SeqAt(pp->conlist, i);
-
-        if (strcmp(cp->lval, lval) == 0)
+        if (cp->rval.type != RVAL_TYPE_SCALAR)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
-            {
-                if (retval != CF_UNDEFINED)
-                {
-                    Log(LOG_LEVEL_ERR, "Multiple '%s'  (group/gid) constraints break this promise", lval);
-                    PromiseRef(LOG_LEVEL_ERR, pp);
-                }
-            }
-            else
-            {
-                continue;
-            }
-
-            if (cp->rval.type != RVAL_TYPE_SCALAR)
-            {
-                Log(LOG_LEVEL_ERR,
-                    "Anomalous type mismatch - expected type for group constraint '%s' did not match internals",
-                     lval);
-                PromiseRef(LOG_LEVEL_ERR, pp);
-                FatalError(ctx, "Aborted");
-            }
-
-            retval = Str2Gid((char *) cp->rval.item, buffer, pp);
+            Log(LOG_LEVEL_ERR,
+                "Anomalous type mismatch - expected type for group constraint '%s' did not match internals",
+                 lval);
+            PromiseRef(LOG_LEVEL_ERR, pp);
+            FatalError(ctx, "Aborted");
         }
+
+        retval = Str2Gid((char *) cp->rval.item, buffer, pp);
     }
 
     return retval;
@@ -2526,49 +2632,29 @@ gid_t PromiseGetConstraintAsGid(const EvalContext *ctx, char *lval, const Promis
 
 /*****************************************************************************/
 
+// FIX: promise constrained classed?
 Rlist *PromiseGetConstraintAsList(const EvalContext *ctx, const char *lval, const Promise *pp)
 {
-    Rlist *retval = NULL;
-
-    for (size_t i = 0; i < SeqLength(pp->conlist); i++)
+    const Constraint *cp = PromiseGetConstraint(pp, lval);
+    if (cp)
     {
-        Constraint *cp = SeqAt(pp->conlist, i);
-
-        if (strcmp(cp->lval, lval) == 0)
+        if (cp->rval.type != RVAL_TYPE_LIST)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
-            {
-                if (retval != NULL)
-                {
-                    Log(LOG_LEVEL_ERR, "Multiple '%s' int constraints break this promise", lval);
-                    PromiseRef(LOG_LEVEL_ERR, pp);
-                }
-            }
-            else
-            {
-                continue;
-            }
-
-            if (cp->rval.type != RVAL_TYPE_LIST)
-            {
-                Log(LOG_LEVEL_ERR, "Type mismatch on rhs - expected type for list constraint '%s'", lval);
-                PromiseRef(LOG_LEVEL_ERR, pp);
-                FatalError(ctx, "Aborted");
-            }
-
-            retval = (Rlist *) cp->rval.item;
-            break;
+            Log(LOG_LEVEL_ERR, "Type mismatch on rhs - expected type for list constraint '%s'", lval);
+            PromiseRef(LOG_LEVEL_ERR, pp);
+            FatalError(ctx, "Aborted");
         }
+
+        return RvalRlistValue(cp->rval);
     }
 
-    return retval;
+    return NULL;
 }
 
-Constraint *PromiseGetConstraint(const EvalContext *ctx, const Promise *pp, const char *lval)
+Constraint *PromiseGetConstraint(const Promise *pp, const char *lval)
 {
     Constraint *retval = NULL;
-
-    if (pp == NULL)
+    if (!pp)
     {
         return NULL;
     }
@@ -2579,17 +2665,7 @@ Constraint *PromiseGetConstraint(const EvalContext *ctx, const Promise *pp, cons
 
         if (strcmp(cp->lval, lval) == 0)
         {
-            if (IsDefinedClass(ctx, cp->classes, PromiseGetNamespace(pp)))
-            {
-                if (retval != NULL)
-                {
-                    Log(LOG_LEVEL_ERR, "Inconsistent '%s' constraints break this promise", lval);
-                    PromiseRef(LOG_LEVEL_ERR, pp);
-                }
-
-                retval = cp;
-                break;
-            }
+            return cp;
         }
     }
 
@@ -2640,9 +2716,9 @@ void *PromiseGetImmediateRvalValue(const char *lval, const Promise *pp, RvalType
 
 /*****************************************************************************/
 
-void *ConstraintGetRvalValue(const EvalContext *ctx, const char *lval, const Promise *pp, RvalType rtype)
+void *PromiseGetConstraintAsRval(const Promise *pp, const char *lval, RvalType rtype)
 {
-    const Constraint *constraint = PromiseGetConstraint(ctx, pp, lval);
+    const Constraint *constraint = PromiseGetConstraint(pp, lval);
 
     if (constraint && constraint->rval.type == rtype)
     {
@@ -2656,20 +2732,9 @@ void *ConstraintGetRvalValue(const EvalContext *ctx, const char *lval, const Pro
 
 /*****************************************************************************/
 
-void PromiseRecheckAllConstraints(EvalContext *ctx, Promise *pp)
+void PromiseRecheckAllConstraints(const EvalContext *ctx, const Promise *pp)
 {
-    static Item *EDIT_ANCHORS = NULL;
-
-    if (!IsDefinedClass(ctx, pp->classes, PromiseGetNamespace(pp)))
-    {
-        return;
-    }
-
-    char *sp = NULL;
-    if (VarClassExcluded(ctx, pp, &sp))
-    {
-        return;
-    }
+    static Item *EDIT_ANCHORS = NULL; /* GLOBAL_X */
 
     for (size_t i = 0; i < SeqLength(pp->conlist); i++)
     {
@@ -2692,7 +2757,8 @@ void PromiseRecheckAllConstraints(EvalContext *ctx, Promise *pp)
     {
         /* Multiple additions with same criterion will not be convergent -- but ignore for empty file baseline */
 
-        if ((sp = ConstraintGetRvalValue(ctx, "select_line_matching", pp, RVAL_TYPE_SCALAR)))
+        const char *sp = PromiseGetConstraintAsRval(pp, "select_line_matching", RVAL_TYPE_SCALAR);
+        if (sp)
         {
             if (!IsExpandable(sp))
             {
@@ -2733,7 +2799,7 @@ static SyntaxTypeMatch ConstraintCheckType(const Constraint *cp)
         }
     }
 
-    if (THIS_AGENT_TYPE != AGENT_TYPE_COMMON && cp->type == POLICY_ELEMENT_TYPE_PROMISE)
+    if (cp->type == POLICY_ELEMENT_TYPE_PROMISE)
     {
         PromiseType *promise_type = cp->parent.promise->parent_promise_type;
 
@@ -2757,10 +2823,10 @@ static SyntaxTypeMatch ConstraintCheckType(const Constraint *cp)
 
                         for (size_t l = 0; bs[l].lval != NULL; l++)
                         {
-                            if (bs[l].dtype == DATA_TYPE_BUNDLE)
+                            if (bs[l].dtype == CF_DATA_TYPE_BUNDLE)
                             {
                             }
-                            else if (bs[l].dtype == DATA_TYPE_BODY)
+                            else if (bs[l].dtype == CF_DATA_TYPE_BODY)
                             {
                                 const ConstraintSyntax *bs2 = bs[l].range.body_type_syntax->constraints;
 
@@ -2788,7 +2854,7 @@ static SyntaxTypeMatch ConstraintCheckType(const Constraint *cp)
 
     for (size_t i = 0; CF_COMMON_BODIES[i].lval != NULL; i++)
     {
-        if (CF_COMMON_BODIES[i].dtype == DATA_TYPE_BODY)
+        if (CF_COMMON_BODIES[i].dtype == CF_DATA_TYPE_BODY)
         {
             continue;
         }

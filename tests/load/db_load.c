@@ -1,8 +1,7 @@
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "dbm_api.h"
+#include <dbm_api.h>
 
-#include <assert.h>
 
 #define MAX_THREADS 10000
 #define DB_ID dbid_classes
@@ -25,14 +24,13 @@
 
 char CFWORKDIR[CF_BUFSIZE];
 
-static bool CoinFlip(void);
 static void WriteReadWriteData(CF_DB *db);
 static bool ReadWriteDataIsValid(char *data);
 static void DBWriteTestData(CF_DB *db);
 static void TestReadWriteData(CF_DB *db);
 static void TestCursorIteration(CF_DB *db);
 
-void *contend(void *param)
+static void *contend(ARG_UNUSED void *param)
 {
     CF_DB *db;
 
@@ -51,7 +49,6 @@ void *contend(void *param)
     return (void *)STATUS_SUCCESS;
 }
 
-
 static void TestReadWriteData(CF_DB *db)
 {
     WriteReadWriteData(db);
@@ -64,9 +61,6 @@ static void TestReadWriteData(CF_DB *db)
     }
 
     static const int key = READWRITEKEY;
-
-    //char key[64];
-    //snprintf(key, sizeof(key), "%050d", READWRITEKEY);
 
     char readData[sizeof(READWRITEDATA1)];
 
@@ -81,23 +75,14 @@ static void TestReadWriteData(CF_DB *db)
     }
 }
 
+static bool CoinFlip(void)
+{
+    return rand() % 2 == 0;
+}
+
 static void WriteReadWriteData(CF_DB *db)
 {
-    bool flip = CoinFlip();
-
-    char *data;
-    if(flip)
-    {
-        data = READWRITEDATA1;
-    }
-    else
-    {
-        data = READWRITEDATA2;
-    }
-
-    //char key[64];
-    //snprintf(key, sizeof(key), "%050d", READWRITEKEY);
-
+    const char *const data = CoinFlip() ? READWRITEDATA1 : READWRITEDATA2;
     static const int key = READWRITEKEY;
 
     if(!WriteComplexKeyDB(db, (const char *)&key, sizeof(key), data, sizeof(READWRITEDATA1)))
@@ -107,20 +92,10 @@ static void WriteReadWriteData(CF_DB *db)
     }
 }
 
-static bool CoinFlip(void)
-{
-    bool flip = (rand() % 2 == 0) ? true : false;
-    return flip;
-}
-
 static bool ReadWriteDataIsValid(char *data)
 {
-    if(strcmp(data, READWRITEDATA1) == 0 || strcmp(data, READWRITEDATA2) == 0)
-    {
-        return true;
-    }
-
-    return false;
+    return (strcmp(data, READWRITEDATA1) == 0 ||
+            strcmp(data, READWRITEDATA2) == 0);
 }
 
 static void TestCursorIteration(CF_DB *db)
@@ -131,7 +106,7 @@ static void TestCursorIteration(CF_DB *db)
     {
         fprintf(stderr, "Test: could not create cursor");
         pthread_exit((void*)STATUS_ERROR);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     char *key;
@@ -143,9 +118,6 @@ static void TestCursorIteration(CF_DB *db)
     {
         int key_num = *(int *)key;
         int value_num = *(int *)value;
-
-        //int key_num = atoi(key);
-        //int value_num = atoi(value);
 
         if(key_num >= 0 && key_num < RECORD_COUNT_JUNK)
         {
@@ -177,7 +149,7 @@ static void TestCursorIteration(CF_DB *db)
     if(!DeleteDBCursor(dbc))
     {
         fprintf(stderr, "Test: could not delete cursor");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
 }
@@ -214,7 +186,7 @@ int main(int argc, char **argv)
     if (argc != 2)
     {
         fprintf(stderr, "Usage: db_load <num_threads>\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     /* To clean up after databases are closed */
@@ -258,25 +230,10 @@ int main(int argc, char **argv)
 
 static void DBWriteTestData(CF_DB *db)
 {
-    //char key[64];
-    //char value[128];
-
     for(int i = 0; i < RECORD_COUNT_JUNK; i++)
     {
         bool flip = CoinFlip();
-        int value_num;
-
-        if(flip)
-        {
-            value_num = i + VALUE_OFFSET1;
-        }
-        else
-        {
-            value_num = i + VALUE_OFFSET2;
-        }
-
-        //snprintf(key, sizeof(key), "%050d", i);
-        //snprintf(value, sizeof(value), "%0100d", value_num);
+        int value_num = i + (flip ? VALUE_OFFSET1 : VALUE_OFFSET2);
 
         if (!WriteComplexKeyDB(db, (const char *)&i, sizeof(i), &value_num, sizeof(value_num)))
         {
@@ -289,26 +246,11 @@ static void DBWriteTestData(CF_DB *db)
 }
 
 /* Stub out */
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 void __ProgrammingError(const char *file, int lineno, const char *format, ...)
 {
     exit(42);
-}
-
-void Log(LogLevel level, const char *fmt, ...)
-{
-    va_list ap;
-    char buf[CF_BUFSIZE] = "";
-
-    va_start(ap, fmt);
-    vsnprintf(buf, CF_BUFSIZE - 1, fmt, ap);
-    va_end(ap);
-    printf("Log: %s\n", buf);
-}
-
-const char *GetErrorStr(void)
-{
-    return strerror(errno);
 }
 
 void FatalError(const EvalContext *ctx, char *fmt, ...)
@@ -328,37 +270,13 @@ void FatalError(const EvalContext *ctx, char *fmt, ...)
         Log(LOG_LEVEL_ERR, "Fatal CFEngine error (no description)");
     }
 
-    exit(1);
+    exit(EXIT_FAILURE);
 }
 
 
 pthread_mutex_t test_lock = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
-int ThreadLock(pthread_mutex_t *t)
-{
-    int result = pthread_mutex_lock(&test_lock);
-
-    if (result != 0)
-    {
-        fprintf(stderr, "Could not lock mutex");
-    }
-
-    return true;
-}
-
-int ThreadUnlock(pthread_mutex_t *t)
-{
-    int result = pthread_mutex_unlock(&test_lock);
-
-    if (result != 0)
-    {
-        fprintf(stderr, "Could not unlock mutex");
-    }
-
-    return true;
-}
-
 pthread_mutex_t *cft_dbhandle;
 
-const char *DAY_TEXT[] = {};
-const char *MONTH_TEXT[] = {};
+const char *const DAY_TEXT[] = {};
+const char *const MONTH_TEXT[] = {};

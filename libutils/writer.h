@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -35,8 +35,8 @@
 
 typedef struct Writer_ Writer;
 
-#include "platform.h"
-#include "compiler.h"
+#include <platform.h>
+#include <compiler.h>
 
 Writer *FileWriter(FILE *);
 Writer *StringWriter(void);
@@ -54,9 +54,11 @@ const char *StringWriterData(const Writer *writer);
 void WriterClose(Writer *writer);
 
 /* Returns modifiable string and destroys itself */
-char *StringWriterClose(Writer *writer);
+char *StringWriterClose(Writer *writer) FUNC_WARN_UNUSED_RESULT;
 
 /* Returns the open file and destroys itself */
 FILE *FileWriterDetach(Writer *writer);
+/* Commonly used on a FileWriter(stdout), ignoring return; so don't
+ * try to warn on unused result ! */
 
 #endif

@@ -8,81 +8,76 @@
 
 body common control
 {
-  inputs => { "../../default.cf.sub" };
-  bundlesequence  => { default("$(this.promise_filename)") };
-  version => "1.0";
-}
-
-bundle common g
-{
-vars:
-        # This extracts the octal mode, and decimal nlink, uid, gid, size
-        "command" string => 'printf "%o" . " %d" x 4, (stat("$(G.testfile)"))[2]&07777, (stat(_))[3..5,7]';
-
-        "source" string => "/etc/group";
-        "source_command" string => 'printf "%d", (stat("$(g.source)"))[7]';
-        "source_size" string => execresult(
-            "/usr/bin/perl -le '$(g.source_command)'",
-            "noshell");
+      inputs => { "../../default.cf.sub" };
+      bundlesequence  => { default("$(this.promise_filename)") };
+      version => "1.0";
+      cache_system_functions => "false";
 }
 
 #######################################################
 
 bundle agent init
 {
-vars:
+  vars:
+    freebsd|solaris::
+      "mode" int => "04751";
+    !freebsd.!solaris::
+      "mode" int => "01751";
     any::
-        "mode" int => "01751";
-        "owner" string => "786756";
-        "group" string => "786756";
+      "owner" string => "786756";
+      "group" string => "786756";
 
-    pass2::
-        "result" string => execresult(
-            "/usr/bin/perl -le '$(g.command)'",
-            "noshell");
+    pass2.!windows::
+      "expect[modeoct]" string => "\d+$(init.mode)";
+      "expect[uid]" string => "$(init.owner)";
+      "expect[gid]" string => "$(init.group)";
 
-files:
-        "$(G.testfile)"
-            copy_from => init_copy("/etc/group"),
-            perms => init_perms("$(mode)", "$(owner)", "$(group)"),
-            classes => init_set_class("pass2");
+    pass2.any::
+      "expect[nlink]" string => "1";
+      "expect[size]" string => filestat("$(G.etc_group)", "size");
+      "fields" slist => getindices("expect");
+
+  files:
+      "$(G.testfile)"
+      copy_from => init_copy("$(G.etc_group)"),
+      perms => init_perms("$(mode)", "$(owner)", "$(group)"),
+      classes => init_set_class("pass2");
 }
 
 body copy_from init_copy(file)
 {
-        source => "$(file)";
-        compare => "mtime";
+      source => "$(file)";
+      compare => "mtime";
 }
 
 body perms init_perms(m, o, g)
 {
-mode => "$(m)";
-owners => { "$(o)" };
-groups => { "$(g)" };
+      mode => "$(m)";
+      owners => { "$(o)" };
+      groups => { "$(g)" };
 }
 
 body classes init_set_class(class)
 {
-promise_kept => { "$(class)" };
-promise_repaired => { "$(class)" };
+      promise_kept => { "$(class)" };
+      promise_repaired => { "$(class)" };
 }
 
 #######################################################
 
 bundle agent test
 {
-
-files:
-        "$(G.testfile)"
-            create => "true",
-            perms => test_perms;
+  files:
+      "$(G.testfile)"
+      create => "true",
+      perms => test_perms;
 }
 
 body perms test_perms
 {
-# Mode is unspecified - should not change anything
-owners => { "12349", "none" };        # Should change to 12349
-# Group is unspecified - should not change anything
+      # Mode is unspecified - should not change anything
+      owners => { "12349", "none" };        # Should change to 12349
+      # Group is unspecified - should not change anything
 }
 
 
@@ -90,24 +85,30 @@ owners => { "12349", "none" };        # Should change to 12349
 
 bundle agent check
 {
-vars:
-        "result" string => execresult(
-            "/usr/bin/perl -le '$(g.command)'",
-            "noshell");
+  vars:
+    !windows::
+      "expect[modeoct]" string => "\d+$(init.mode)";
+      "expect[uid]" string => "12349";
+      "expect[gid]" string => "$(init.group)";
+    any::
+      "expect[nlink]" string => "1";
+      "expect[size]" string => filestat("$(G.etc_group)", "size");
 
-        "expected" string => "$(init.mode) 1 12349 $(init.group) $(g.source_size)";
+      "fields" slist => getindices("expect");
+      "result[$(fields)]" string => filestat("$(G.testfile)", "$(fields)");
 
-classes:
-        "ok" expression => strcmp("$(expected)", "$(result)");
+  classes:
+      "not_ok" not => regcmp("$(expect[$(fields)])", "$(result[$(fields)])");
 
-reports:
+  reports:
     DEBUG::
-        "init.result  is '$(init.result)'";
-        "expected     is '$(expected)'";
-        "check.result is '$(result)'";
-    ok::
-        "$(this.promise_filename) Pass";
-    !ok::
-        "$(this.promise_filename) FAIL";
+      "expected:    $(fields) = '$(expect[$(fields)])'";
+      "result:      $(fields) = '$(result[$(fields)])'";
+    !not_ok::
+      "$(this.promise_filename) Pass";
+    not_ok::
+      "$(this.promise_filename) FAIL";
 }
 
+### PROJECT_ID: core
+### CATEGORY_ID: 27

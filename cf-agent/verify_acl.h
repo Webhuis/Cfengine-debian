@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,7 @@
 #ifndef VERIFY_ACL_H
 #define VERIFY_ACL_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 // Valid generic permissions
 #define CF_VALID_GPERMS "rwx"
@@ -37,6 +37,6 @@
 #define CF_VALID_NPERMS_POSIX "rwx"
 #define CF_VALID_NPERMS_NTFS "drtxTwabBpcoD"
 
-void VerifyACL(EvalContext *ctx, char *file, Attributes a, Promise *pp);
+PromiseResult VerifyACL(EvalContext *ctx, const char *file, Attributes a, const Promise *pp);
 
 #endif

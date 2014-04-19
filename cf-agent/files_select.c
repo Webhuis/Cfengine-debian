@@ -17,46 +17,45 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "files_select.h"
+#include <files_select.h>
 
-#include "env_context.h"
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "promises.h"
-#include "matching.h"
-#include "string_lib.h"
-#include "pipes.h"
-#include "promises.h"
-#include "exec_tools.h"
-#include "chflags.h"
+#include <eval_context.h>
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <promises.h>
+#include <match_scope.h>
+#include <string_lib.h>
+#include <pipes.h>
+#include <promises.h>
+#include <exec_tools.h>
+#include <chflags.h>
 
 static int SelectTypeMatch(struct stat *lstatptr, Rlist *crit);
-static int SelectOwnerMatch(char *path, struct stat *lstatptr, Rlist *crit);
+static int SelectOwnerMatch(EvalContext *ctx, char *path, struct stat *lstatptr, Rlist *crit);
 static int SelectModeMatch(struct stat *lstatptr, Rlist *ls);
 static int SelectTimeMatch(time_t stattime, time_t fromtime, time_t totime);
-static int SelectNameRegexMatch(const char *filename, char *crit);
-static int SelectPathRegexMatch(char *filename, char *crit);
-static bool SelectExecRegexMatch(char *filename, char *crit, char *prog);
-static int SelectIsSymLinkTo(char *filename, Rlist *crit);
+static int SelectNameRegexMatch(EvalContext *ctx, const char *filename, char *crit);
+static int SelectPathRegexMatch(EvalContext *ctx, char *filename, char *crit);
+static bool SelectExecRegexMatch(EvalContext *ctx, char *filename, char *crit, char *prog);
+static int SelectIsSymLinkTo(EvalContext *ctx, char *filename, Rlist *crit);
 static int SelectExecProgram(char *filename, char *command);
 static int SelectSizeMatch(size_t size, size_t min, size_t max);
 
 #if !defined(__MINGW32__)
-static int SelectGroupMatch(struct stat *lstatptr, Rlist *crit);
+static int SelectGroupMatch(EvalContext *ctx, struct stat *lstatptr, Rlist *crit);
 #endif
 
 #if defined HAVE_CHFLAGS
 static int SelectBSDMatch(struct stat *lstatptr, Rlist *bsdflags);
 #endif
 
-int SelectLeaf(char *path, struct stat *sb, FileSelect fs)
+int SelectLeaf(EvalContext *ctx, char *path, struct stat *sb, FileSelect fs)
 {
-    int result = true;
     Rlist *rp;
 
     StringSet *leaf_attr = StringSetNew();
@@ -87,7 +86,7 @@ int SelectLeaf(char *path, struct stat *sb, FileSelect fs)
 
     for (rp = fs.name; rp != NULL; rp = rp->next)
     {
-        if (SelectNameRegexMatch(path, rp->item))
+        if (SelectNameRegexMatch(ctx, path, RlistScalarValue(rp)))
         {
             StringSetAdd(leaf_attr, xstrdup("leaf_name"));
             break;
@@ -101,7 +100,7 @@ int SelectLeaf(char *path, struct stat *sb, FileSelect fs)
 
     for (rp = fs.path; rp != NULL; rp = rp->next)
     {
-        if (SelectPathRegexMatch(path, rp->item))
+        if (SelectPathRegexMatch(ctx, path, RlistScalarValue(rp)))
         {
             StringSetAdd(leaf_attr, xstrdup("path_name"));
             break;
@@ -113,7 +112,7 @@ int SelectLeaf(char *path, struct stat *sb, FileSelect fs)
         StringSetAdd(leaf_attr, xstrdup("file_types"));
     }
 
-    if ((fs.owners) && (SelectOwnerMatch(path, sb, fs.owners)))
+    if ((fs.owners) && (SelectOwnerMatch(ctx, path, sb, fs.owners)))
     {
         StringSetAdd(leaf_attr, xstrdup("owner"));
     }
@@ -127,7 +126,7 @@ int SelectLeaf(char *path, struct stat *sb, FileSelect fs)
     StringSetAdd(leaf_attr, xstrdup("group"));
 
 #else /* !__MINGW32__ */
-    if ((fs.groups) && (SelectGroupMatch(sb, fs.groups)))
+    if ((fs.groups) && (SelectGroupMatch(ctx, sb, fs.groups)))
     {
         StringSetAdd(leaf_attr, xstrdup("group"));
     }
@@ -170,12 +169,12 @@ int SelectLeaf(char *path, struct stat *sb, FileSelect fs)
         StringSetAdd(leaf_attr, xstrdup("mtime"));
     }
 
-    if ((fs.issymlinkto) && (SelectIsSymLinkTo(path, fs.issymlinkto)))
+    if ((fs.issymlinkto) && (SelectIsSymLinkTo(ctx, path, fs.issymlinkto)))
     {
         StringSetAdd(leaf_attr, xstrdup("issymlinkto"));
     }
 
-    if ((fs.exec_regex) && (SelectExecRegexMatch(path, fs.exec_regex, fs.exec_program)))
+    if ((fs.exec_regex) && (SelectExecRegexMatch(ctx, path, fs.exec_regex, fs.exec_program)))
     {
         StringSetAdd(leaf_attr, xstrdup("exec_regex"));
     }
@@ -185,9 +184,11 @@ int SelectLeaf(char *path, struct stat *sb, FileSelect fs)
         StringSetAdd(leaf_attr, xstrdup("exec_program"));
     }
 
-    result = EvalFileResult(fs.result, leaf_attr);
+    bool result = EvalFileResult(fs.result, leaf_attr);
 
-    Log(LOG_LEVEL_DEBUG, "Select result '%s' on '%s' was %d", fs.result, path, result);
+    Log(LOG_LEVEL_VERBOSE, "file_select result '%s' on '%s' was '%s'",
+        fs.result, path,
+        result ? "true" : "false");
 
     StringSetDestroy(leaf_attr);
 
@@ -263,7 +264,7 @@ static int SelectTypeMatch(struct stat *lstatptr, Rlist *crit)
 
     for (rp = crit; rp != NULL; rp = rp->next)
     {
-        if (EvalFileResult((char *) rp->item, leafattrib))
+        if (EvalFileResult(RlistScalarValue(rp), leafattrib))
         {
             StringSetDestroy(leafattrib);
             return true;
@@ -274,7 +275,7 @@ static int SelectTypeMatch(struct stat *lstatptr, Rlist *crit)
     return false;
 }
 
-static int SelectOwnerMatch(char *path, struct stat *lstatptr, Rlist *crit)
+static int SelectOwnerMatch(EvalContext *ctx, char *path, struct stat *lstatptr, Rlist *crit)
 {
     Rlist *rp;
     char ownerName[CF_BUFSIZE];
@@ -301,14 +302,14 @@ static int SelectOwnerMatch(char *path, struct stat *lstatptr, Rlist *crit)
 
     for (rp = crit; rp != NULL; rp = rp->next)
     {
-        if (EvalFileResult((char *) rp->item, leafattrib))
+        if (EvalFileResult(RlistScalarValue(rp), leafattrib))
         {
             Log(LOG_LEVEL_DEBUG, "Select owner match");
             StringSetDestroy(leafattrib);
             return true;
         }
 
-        if (gotOwner && (FullTextMatch((char *) rp->item, ownerName)))
+        if (gotOwner && (FullTextMatch(ctx, RlistScalarValue(rp), ownerName)))
         {
             Log(LOG_LEVEL_DEBUG, "Select owner match");
             StringSetDestroy(leafattrib);
@@ -316,7 +317,7 @@ static int SelectOwnerMatch(char *path, struct stat *lstatptr, Rlist *crit)
         }
 
 #ifndef __MINGW32__
-        if (FullTextMatch((char *) rp->item, buffer))
+        if (FullTextMatch(ctx, RlistScalarValue(rp), buffer))
         {
             Log(LOG_LEVEL_DEBUG, "Select owner match");
             StringSetDestroy(leafattrib);
@@ -341,7 +342,7 @@ static int SelectModeMatch(struct stat *lstatptr, Rlist *list)
         plus = 0;
         minus = 0;
 
-        if (!ParseModeString(rp->item, &plus, &minus))
+        if (!ParseModeString(RlistScalarValue(rp), &plus, &minus))
         {
             Log(LOG_LEVEL_ERR, "Problem validating a mode string '%s' in search filter", RlistScalarValue(rp));
             continue;
@@ -393,9 +394,9 @@ static int SelectTimeMatch(time_t stattime, time_t fromtime, time_t totime)
 
 /*******************************************************************/
 
-static int SelectNameRegexMatch(const char *filename, char *crit)
+static int SelectNameRegexMatch(EvalContext *ctx, const char *filename, char *crit)
 {
-    if (FullTextMatch(crit, ReadLastNode(filename)))
+    if (FullTextMatch(ctx, crit, ReadLastNode(filename)))
     {
         return true;
     }
@@ -405,9 +406,9 @@ static int SelectNameRegexMatch(const char *filename, char *crit)
 
 /*******************************************************************/
 
-static int SelectPathRegexMatch(char *filename, char *crit)
+static int SelectPathRegexMatch(EvalContext *ctx, char *filename, char *crit)
 {
-    if (FullTextMatch(crit, filename))
+    if (FullTextMatch(ctx, crit, filename))
     {
         return true;
     }
@@ -417,9 +418,8 @@ static int SelectPathRegexMatch(char *filename, char *crit)
 
 /*******************************************************************/
 
-static bool SelectExecRegexMatch(char *filename, char *crit, char *prog)
+static bool SelectExecRegexMatch(EvalContext *ctx, char *filename, char *crit, char *prog)
 {
-    char line[CF_BUFSIZE];
     FILE *pp;
     char buf[CF_MAXVARSIZE];
 
@@ -434,36 +434,39 @@ static bool SelectExecRegexMatch(char *filename, char *crit, char *prog)
         return false;
     }
 
+    size_t line_size = CF_BUFSIZE;
+    char *line = xmalloc(line_size);
+
     for (;;)
     {
-        ssize_t res = CfReadLine(line, CF_BUFSIZE, pp);
+        ssize_t res = CfReadLine(&line, &line_size, pp);
         if (res == -1)
         {
-            Log(LOG_LEVEL_ERR, "Error reading output from command '%s'. (fgets: %s)", buf, GetErrorStr());
+            if (!feof(pp))
+            {
+                Log(LOG_LEVEL_ERR, "Error reading output from command '%s'. (fgets: %s)", buf, GetErrorStr());
+            }
             cf_pclose(pp);
+            free(line);
             return false;
         }
 
-        if (res == 0)
+        if (FullTextMatch(ctx, crit, line))
         {
             cf_pclose(pp);
-            return false;
-        }
-
-        if (FullTextMatch(crit, line))
-        {
-            cf_pclose(pp);
+            free(line);
             return true;
         }
     }
 
     cf_pclose(pp);
+    free(line);
     return false;
 }
 
 /*******************************************************************/
 
-static int SelectIsSymLinkTo(char *filename, Rlist *crit)
+static int SelectIsSymLinkTo(EvalContext *ctx, char *filename, Rlist *crit)
 {
 #ifndef __MINGW32__
     char buffer[CF_BUFSIZE];
@@ -496,7 +499,7 @@ static int SelectIsSymLinkTo(char *filename, Rlist *crit)
             return false;
         }
 
-        if (FullTextMatch(rp->item, buffer))
+        if (FullTextMatch(ctx, RlistScalarValue(rp), buffer))
         {
             return true;
         }
@@ -555,7 +558,7 @@ int GetOwnerName(ARG_UNUSED char *path, struct stat *lstatptr, char *owner, int 
 
 /*******************************************************************/
 
-static int SelectGroupMatch(struct stat *lstatptr, Rlist *crit)
+static int SelectGroupMatch(EvalContext *ctx, struct stat *lstatptr, Rlist *crit)
 {
     char buffer[CF_SMALLBUF];
     struct group *gr;
@@ -577,21 +580,21 @@ static int SelectGroupMatch(struct stat *lstatptr, Rlist *crit)
 
     for (rp = crit; rp != NULL; rp = rp->next)
     {
-        if (EvalFileResult((char *) rp->item, leafattrib))
+        if (EvalFileResult(RlistScalarValue(rp), leafattrib))
         {
             Log(LOG_LEVEL_DEBUG, "Select group match");
             StringSetDestroy(leafattrib);
             return true;
         }
 
-        if (gr && (FullTextMatch((char *) rp->item, gr->gr_name)))
+        if (gr && (FullTextMatch(ctx, RlistScalarValue(rp), gr->gr_name)))
         {
             Log(LOG_LEVEL_DEBUG, "Select group match");
             StringSetDestroy(leafattrib);
             return true;
         }
 
-        if (FullTextMatch((char *) rp->item, buffer))
+        if (FullTextMatch(ctx, RlistScalarValue(rp), buffer))
         {
             Log(LOG_LEVEL_DEBUG, "Select group match");
             StringSetDestroy(leafattrib);

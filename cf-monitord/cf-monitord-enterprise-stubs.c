@@ -17,34 +17,30 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "cf-monitord-enterprise-stubs.h"
+#include <cf-monitord-enterprise-stubs.h>
 
-void GetObservable(ARG_UNUSED int i, ARG_UNUSED char *name, ARG_UNUSED char *desc)
-{
-    strcpy(name, OBS[i][0]);
-}
-
-void SetMeasurementPromises(ARG_UNUSED Item **classlist)
+ENTERPRISE_VOID_FUNC_0ARG_DEFINE_STUB(void, MonOtherInit)
 {
 }
 
-void MonOtherInit(void)
+ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, MonOtherGatherData, ARG_UNUSED double *, cf_this)
 {
 }
 
-void MonOtherGatherData(ARG_UNUSED double *cf_this)
+ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, HistoryUpdate, ARG_UNUSED EvalContext *, ctx, ARG_UNUSED Averages, newvals)
 {
 }
 
-void HistoryUpdate(ARG_UNUSED EvalContext *ctx, ARG_UNUSED Averages newvals)
+ENTERPRISE_FUNC_4ARG_DEFINE_STUB(PromiseResult, VerifyMeasurement,
+                                 ARG_UNUSED EvalContext *, ctx,
+                                 ARG_UNUSED double *, this,
+                                 ARG_UNUSED Attributes, a,
+                                 ARG_UNUSED const Promise *, pp)
 {
-}
-
-void VerifyMeasurement(ARG_UNUSED EvalContext *ctx, ARG_UNUSED double *this, ARG_UNUSED Attributes a, ARG_UNUSED Promise *pp)
-{
+    return PROMISE_RESULT_NOOP;
 }

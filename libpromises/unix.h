@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 
@@ -26,12 +26,9 @@
 #ifndef CFENGINE_UNIX_H
 #define CFENGINE_UNIX_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "assoc.h"
-
-void GetInterfacesInfo(EvalContext *ctx, AgentType ag);
-void GetInterfaceFlags(EvalContext *ctx, AgentType ag, struct ifreq *ifr, Rlist **hw_flags);
 void ProcessSignalTerminate(pid_t pid);
+int GetCurrentUserName(char *userName, int userNameLen);
 
 #endif

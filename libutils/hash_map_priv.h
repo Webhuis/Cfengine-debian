@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,7 @@
 #ifndef CFENGINE_HASH_MAP_PRIV_H
 #define CFENGINE_HASH_MAP_PRIV_H
 
-#include "map_common.h"
+#include <map_common.h>
 
 typedef struct BucketListItem_
 {
@@ -33,7 +33,7 @@ typedef struct BucketListItem_
     struct BucketListItem_ *next;
 } BucketListItem;
 
-typedef unsigned int (*MapHashFn) (const void *p, unsigned int max);
+typedef unsigned int (*MapHashFn) (const void *p, unsigned int seed, unsigned int max);
 
 typedef struct
 {
@@ -59,6 +59,7 @@ bool HashMapInsert(HashMap *map, void *key, void *value);
 bool HashMapRemove(HashMap *map, const void *key);
 MapKeyValue *HashMapGet(const HashMap *map, const void *key);
 void HashMapClear(HashMap *map);
+void HashMapSoftDestroy(HashMap *map);
 void HashMapDestroy(HashMap *map);
 
 /******************************************************************************/

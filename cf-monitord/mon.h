@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -57,7 +57,7 @@ void MonNetworkGatherData(double *cf_this);
 void MonNetworkSnifferInit(void);
 void MonNetworkSnifferOpen(void);
 void MonNetworkSnifferEnable(bool enable);
-void MonNetworkSnifferSniff(long iteration, double *cf_this);
+void MonNetworkSnifferSniff(Item *ip_addresses, long iteration, double *cf_this);
 void MonNetworkSnifferGatherData(void);
 
 /* mon_processes.c */

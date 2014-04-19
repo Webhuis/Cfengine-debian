@@ -1,22 +1,24 @@
-#include "test.h"
+#include <test.h>
 
-#include "cf3.defs.h"
-#include "logging.h"
+#include <cf3.defs.h>
+#include <logging.h>
 
 static void test_timestamp_regex(void)
 {
+    fflush(stderr);
     fflush(stdout);
     int pipe_fd[2];
     assert_int_equal(pipe(pipe_fd), 0);
-    // Duplicate stdout.
-    int stored_stdout = dup(1);
-    assert_true(stored_stdout >= 0);
-    // Make stdout point to the pipe.
-    assert_int_equal(dup2(pipe_fd[1], 1), 1);
+    // Duplicate stderr.
+    int duplicate_stderr = dup(2);
+    assert_true(duplicate_stderr >= 0);
+    // Make stderr point to the pipe.
+    assert_int_equal(dup2(pipe_fd[1], 2), 2);
     Log(LOG_LEVEL_ERR, "Test string");
+    fflush(stderr);
     fflush(stdout);
     // Restore stdout.
-    assert_int_equal(dup2(stored_stdout, 1), 1);
+    assert_int_equal(dup2(duplicate_stderr, 2), 2);
 
     char buf[CF_BUFSIZE];
     FILE *pipe_read_end = fdopen(pipe_fd[0], "r");
@@ -32,8 +34,8 @@ static void test_timestamp_regex(void)
     fclose(pipe_read_end);
     close(pipe_fd[0]);
     close(pipe_fd[1]);
-    close(stored_stdout);
-    free(regex);
+    close(duplicate_stderr);
+    pcre_free(regex);
 }
 
 int main()

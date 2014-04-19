@@ -17,42 +17,27 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "files_lib.h"
+#include <files_lib.h>
 
-#include "files_interfaces.h"
-#include "files_names.h"
-#include "files_copy.h"
-#include "item_lib.h"
-#include "promises.h"
-#include "matching.h"
-#include "misc_lib.h"
-#include "dir.h"
-#include "policy.h"
-
-#include <assert.h>
-
-static Item *ROTATED = NULL;
+#include <files_interfaces.h>
+#include <files_names.h>
+#include <files_copy.h>
+#include <item_lib.h>
+#include <promises.h>
+#include <matching.h>
+#include <misc_lib.h>
+#include <dir.h>
+#include <policy.h>
+#include <string_lib.h>
 
 
-bool FileCanOpen(const char *path, const char *modes)
-{
-    FILE *test = NULL;
+static Item *ROTATED = NULL; /* GLOBAL_X */
 
-    if ((test = fopen(path, modes)) != NULL)
-    {
-        fclose(test);
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
 
 /*********************************************************************/
 
@@ -75,74 +60,9 @@ void PurgeItemList(Item **list, char *name)
     DeleteItemList(copy);
 }
 
-/*********************************************************************/
-
-int RawSaveItemList(const Item *liststart, const char *file)
-{
-    char new[CF_BUFSIZE], backup[CF_BUFSIZE];
-    FILE *fp;
-
-    strcpy(new, file);
-    strcat(new, CF_EDITED);
-
-    strcpy(backup, file);
-    strcat(backup, CF_SAVED);
-
-    unlink(new);                /* Just in case of races */
-
-    if ((fp = fopen(new, "w")) == NULL)
-    {
-        Log(LOG_LEVEL_ERR, "Couldn't write file '%s'. (fopen: %s)", new, GetErrorStr());
-        return false;
-    }
-
-    for (const Item *ip = liststart; ip != NULL; ip = ip->next)
-    {
-        fprintf(fp, "%s\n", ip->name);
-    }
-
-    if (fclose(fp) == -1)
-    {
-        Log(LOG_LEVEL_ERR, "Unable to close file '%s' while writing. (fclose: %s)", new, GetErrorStr());
-        return false;
-    }
-
-    if (rename(new, file) == -1)
-    {
-        Log(LOG_LEVEL_INFO, "Error while renaming file '%s' to '%s'. (rename: %s)", new, file, GetErrorStr());
-        return false;
-    }
-
-    return true;
-}
-
-
-/*********************************************************************/
-
-ssize_t FileRead(const char *filename, char *buffer, size_t bufsize)
-{
-    FILE *f = fopen(filename, "rb");
-
-    if (f == NULL)
-    {
-        return -1;
-    }
-    ssize_t ret = fread(buffer, bufsize, 1, f);
-
-    if (ferror(f))
-    {
-        fclose(f);
-        return -1;
-    }
-    fclose(f);
-    return ret;
-}
-
-/*********************************************************************/
-
 bool FileWriteOver(char *filename, char *contents)
 {
-    FILE *fp = fopen(filename, "w");
+    FILE *fp = safe_fopen(filename, "w");
 
     if(fp == NULL)
     {
@@ -170,46 +90,6 @@ bool FileWriteOver(char *filename, char *contents)
 
 
 /*********************************************************************/
-
-ssize_t FileReadMax(char **output, const char *filename, size_t size_max)
-// TODO: there is CfReadFile and FileRead with slightly different semantics, merge
-// free(output) should be called on positive return value
-{
-    assert(size_max > 0);
-
-    struct stat sb;
-    if (stat(filename, &sb) == -1)
-    {
-        return -1;
-    }
-
-    FILE *fin;
-
-    if ((fin = fopen(filename, "r")) == NULL)
-    {
-        return -1;
-    }
-
-    ssize_t bytes_to_read = MIN(sb.st_size, size_max);
-    *output = xcalloc(bytes_to_read + 1, 1);
-    ssize_t bytes_read = fread(*output, 1, bytes_to_read, fin);
-
-    if (ferror(fin))
-    {
-        Log(LOG_LEVEL_ERR, "FileContentsRead: Error while reading file '%s'. (ferror: %s)", filename, GetErrorStr());
-        fclose(fin);
-        free(*output);
-        *output = NULL;
-        return -1;
-    }
-
-    if (fclose(fin) != 0)
-    {
-        Log(LOG_LEVEL_ERR, "FileContentsRead: Could not close file '%s'. (fclose: %s)", filename, GetErrorStr());
-    }
-
-    return bytes_read;
-}
 
 /**
  * Like MakeParentDirectory, but honours warn-only and dry-run mode.
@@ -364,7 +244,7 @@ bool MakeParentDirectory(const char *parentandchild, bool force)
     rootlen = RootDirLength(parentandchild);
     strncpy(currentpath, parentandchild, rootlen);
 
-    for (sp = parentandchild + rootlen, spc = currentpath + rootlen; *sp != '\0'; sp++)
+    for (sp = (char*) parentandchild + rootlen, spc = currentpath + rootlen; *sp != '\0'; sp++)
     {
         if (!IsFileSep(*sp) && *sp != '\0')
         {
@@ -436,95 +316,78 @@ bool MakeParentDirectory(const char *parentandchild, bool force)
 
 int LoadFileAsItemList(Item **liststart, const char *file, EditDefaults edits)
 {
-    FILE *fp;
-    struct stat statbuf;
-    char line[CF_BUFSIZE], concat[CF_BUFSIZE];
-    int join = false;
-
-    if (stat(file, &statbuf) == -1)
     {
-        Log(LOG_LEVEL_VERBOSE, "The proposed file '%s' could not be loaded. (stat: %s)", file, GetErrorStr());
-        return false;
+        struct stat statbuf;
+        if (stat(file, &statbuf) == -1)
+        {
+            Log(LOG_LEVEL_VERBOSE, "The proposed file '%s' could not be loaded. (stat: %s)", file, GetErrorStr());
+            return false;
+        }
+
+        if (edits.maxfilesize != 0 && statbuf.st_size > edits.maxfilesize)
+        {
+            Log(LOG_LEVEL_INFO, "File '%s' is bigger than the limit edit.max_file_size = %jd > %d bytes", file,
+                  (intmax_t) statbuf.st_size, edits.maxfilesize);
+            return (false);
+        }
+
+        if (!S_ISREG(statbuf.st_mode))
+        {
+            Log(LOG_LEVEL_INFO, "%s is not a plain file", file);
+            return false;
+        }
     }
 
-    if (edits.maxfilesize != 0 && statbuf.st_size > edits.maxfilesize)
-    {
-        Log(LOG_LEVEL_INFO, "File '%s' is bigger than the limit edit.max_file_size = %jd > %d bytes", file,
-              (intmax_t) statbuf.st_size, edits.maxfilesize);
-        return (false);
-    }
-
-    if (!S_ISREG(statbuf.st_mode))
-    {
-        Log(LOG_LEVEL_INFO, "%s is not a plain file", file);
-        return false;
-    }
-
-    if ((fp = fopen(file, "r")) == NULL)
+    FILE *fp = safe_fopen(file, "rt");
+    if (!fp)
     {
         Log(LOG_LEVEL_INFO, "Couldn't read file '%s' for editing. (fopen: %s)", file, GetErrorStr());
         return false;
     }
 
-    memset(line, 0, CF_BUFSIZE);
-    memset(concat, 0, CF_BUFSIZE);
+    Buffer *concat = BufferNew();
+
+    size_t line_size = CF_BUFSIZE;
+    char *line = xmalloc(line_size);
+    bool result = true;
 
     for (;;)
     {
-        ssize_t res = CfReadLine(line, CF_BUFSIZE, fp);
-        if (res == 0)
+        ssize_t num_read = CfReadLine(&line, &line_size, fp);
+        if (num_read == -1)
         {
+            if (!feof(fp))
+            {
+                Log(LOG_LEVEL_ERR,
+                    "Unable to read contents of '%s'. (fread: %s)",
+                    file, GetErrorStr());
+                result = false;
+            }
             break;
-        }
-
-        if (res == -1)
-        {
-            Log(LOG_LEVEL_ERR, "Unable to read contents of '%s'. (fread: %s)", file, GetErrorStr());
-            fclose(fp);
-            return false;
         }
 
         if (edits.joinlines && *(line + strlen(line) - 1) == '\\')
         {
-            join = true;
-        }
-        else
-        {
-            join = false;
-        }
-
-        if (join)
-        {
             *(line + strlen(line) - 1) = '\0';
 
-            if (strlcat(concat, line, CF_BUFSIZE) >= CF_BUFSIZE)
-            {
-                Log(LOG_LEVEL_ERR, "Internal limit 3: Buffer ran out of space constructing string. Tried to add '%s' to '%s'",
-                    concat, line);
-            }
+            BufferAppend(concat, line, num_read);
         }
         else
         {
-            if (strlcat(concat, line, CF_BUFSIZE) >= CF_BUFSIZE)
+            BufferAppend(concat, line, num_read);
+            if (!feof(fp) || (BufferSize(concat) > 0))
             {
-                Log(LOG_LEVEL_ERR, "Internal limit 3: Buffer ran out of space constructing string. Tried to add '%s' to '%s'",
-                    concat, line);
+                AppendItem(liststart, BufferData(concat), NULL);
             }
-
-            if (!feof(fp) || (strlen(concat) != 0))
-            {
-                AppendItem(liststart, concat, NULL);
-            }
-
-            concat[0] = '\0';
-            join = false;
         }
 
-        line[0] = '\0';
+        BufferClear(concat);
     }
 
+    free(line);
+    BufferDestroy(concat);
     fclose(fp);
-    return true;
+    return result;
 }
 
 static bool DeleteDirectoryTreeInternal(const char *basepath, const char *path)
@@ -576,6 +439,11 @@ static bool DeleteDirectoryTreeInternal(const char *basepath, const char *path)
                 {
                     failed = true;
                 }
+
+                if (rmdir(subpath) == -1)
+                {
+                    failed = true;
+                }
             }
             else
             {
@@ -602,6 +470,134 @@ static bool DeleteDirectoryTreeInternal(const char *basepath, const char *path)
 bool DeleteDirectoryTree(const char *path)
 {
     return DeleteDirectoryTreeInternal(path, path);
+}
+
+bool TraverseDirectoryTreeInternal(const char *base_path,
+                                   const char *current_path,
+                                   int (*callback)(const char *, const struct stat *, void *),
+                                   void *user_data)
+{
+    Dir *dirh = DirOpen(base_path);
+    if (!dirh)
+    {
+        if (errno == ENOENT)
+        {
+            return true;
+        }
+
+        Log(LOG_LEVEL_INFO, "Unable to open directory '%s' during traversal of directory tree '%s' (opendir: %s)",
+            current_path, base_path, GetErrorStr());
+        return false;
+    }
+
+    bool failed = false;
+    for (const struct dirent *dirp = DirRead(dirh); dirp != NULL; dirp = DirRead(dirh))
+    {
+        if (!strcmp(dirp->d_name, ".") || !strcmp(dirp->d_name, ".."))
+        {
+            continue;
+        }
+
+        char sub_path[CF_BUFSIZE];
+        snprintf(sub_path, CF_BUFSIZE, "%s" FILE_SEPARATOR_STR "%s", current_path, dirp->d_name);
+
+        struct stat lsb;
+        if (lstat(sub_path, &lsb) == -1)
+        {
+            if (errno == ENOENT)
+            {
+                /* File disappeared on its own */
+                continue;
+            }
+
+            Log(LOG_LEVEL_VERBOSE, "Unable to stat file '%s' during traversal of directory tree '%s' (lstat: %s)",
+                current_path, base_path, GetErrorStr());
+            failed = true;
+        }
+        else
+        {
+            if (S_ISDIR(lsb.st_mode))
+            {
+                if (!TraverseDirectoryTreeInternal(base_path, sub_path, callback, user_data))
+                {
+                    failed = true;
+                }
+            }
+            else
+            {
+                if (callback(sub_path, &lsb, user_data) == -1)
+                {
+                    failed = true;
+                }
+            }
+        }
+    }
+
+    DirClose(dirh);
+    return !failed;
+}
+
+bool TraverseDirectoryTree(const char *path,
+                           int (*callback)(const char *, const struct stat *, void *),
+                           void *user_data)
+{
+    return TraverseDirectoryTreeInternal(path, path, callback, user_data);
+}
+
+typedef struct
+{
+    unsigned char buffer[1024];
+    const char **extensions_filter;
+    EVP_MD_CTX *crypto_context;
+    unsigned char **digest;
+} HashDirectoryTreeState;
+
+int HashDirectoryTreeCallback(const char *filename, ARG_UNUSED const struct stat *sb, void *user_data)
+{
+    HashDirectoryTreeState *state = user_data;
+    bool ignore = true;
+    for (size_t i = 0; state->extensions_filter[i]; i++)
+    {
+        if (StringEndsWith(filename, state->extensions_filter[i]))
+        {
+            ignore = false;
+            break;
+        }
+    }
+
+    if (ignore)
+    {
+        return 0;
+    }
+
+    FILE *file = fopen(filename, "rb");
+    if (!file)
+    {
+        Log(LOG_LEVEL_INFO, "Cannot open file for hashing '%s'. (fopen: %s)", filename, GetErrorStr());
+        return -1;
+    }
+
+    size_t len = 0;
+    char buffer[1024];
+    while ((len = fread(buffer, 1, 1024, file)))
+    {
+        EVP_DigestUpdate(state->crypto_context, state->buffer, len);
+    }
+
+    fclose(file);
+    return 0;
+}
+
+bool HashDirectoryTree(const char *path,
+                       const char **extensions_filter,
+                       EVP_MD_CTX *crypto_context)
+{
+    HashDirectoryTreeState state;
+    memset(state.buffer, 0, 1024);
+    state.extensions_filter = extensions_filter;
+    state.crypto_context = crypto_context;
+
+    return TraverseDirectoryTree(path, HashDirectoryTreeCallback, &state);
 }
 
 void RotateFiles(char *name, int number)
@@ -674,21 +670,21 @@ void RotateFiles(char *name, int number)
         return;
     }
 
-    chmod(to, statbuf.st_mode);
-    if (chown(to, statbuf.st_uid, statbuf.st_gid))
+    safe_chmod(to, statbuf.st_mode);
+    if (safe_chown(to, statbuf.st_uid, statbuf.st_gid))
     {
         UnexpectedError("Failed to chown %s", to);
     }
-    chmod(name, 0600);       /* File must be writable to empty .. */
+    safe_chmod(name, 0600);       /* File must be writable to empty .. */
 
-    if ((fd = creat(name, statbuf.st_mode)) == -1)
+    if ((fd = safe_creat(name, statbuf.st_mode)) == -1)
     {
         Log(LOG_LEVEL_ERR, "Failed to create new '%s' in disable(rotate). (creat: %s)",
             name, GetErrorStr());
     }
     else
     {
-        if (chown(name, statbuf.st_uid, statbuf.st_gid))  /* NT doesn't have fchown */
+        if (safe_chown(name, statbuf.st_uid, statbuf.st_gid))  /* NT doesn't have fchown */
         {
             UnexpectedError("Failed to chown '%s'", name);
         }
@@ -711,7 +707,7 @@ void CreateEmptyFile(char *name)
         }
     }
 
-    if ((tempfd = open(name, O_CREAT | O_EXCL | O_WRONLY, 0600)) < 0)
+    if ((tempfd = safe_open(name, O_CREAT | O_EXCL | O_WRONLY, 0600)) < 0)
     {
         Log(LOG_LEVEL_ERR, "Couldn't open a file '%s'. (open: %s)", name, GetErrorStr());
     }

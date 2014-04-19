@@ -1,21 +1,20 @@
 body common control
 {
-  bundlesequence => { 'test' };
+  inputs => { "../../default.cf.sub" };
+  bundlesequence  => { "test" };
+  version => "1.0";
 }
 
 bundle agent test
 {
-vars:
-  "cwd" string => execresult("/bin/pwd", "noshell");
-
 reports:
   cfengine_3::
-    "doesnotmatterr"
+    "doesnotmatter"
       printfile => p;
 }
 
 body printfile p
 {
-file_to_print => "$(test.cwd)/$(this.promise_filename).in";
+file_to_print => "$(this.promise_filename).in";
 number_of_lines => "1";
 }

@@ -1,14 +1,15 @@
-#include "platform.h"
+#include <platform.h>
 
-#include "test.h"
-#include "array_map_priv.h"
-#include "hash_map_priv.h"
-#include "map.h"
-#include "string_lib.h"
+#include <test.h>
+#include <array_map_priv.h>
+#include <hash_map_priv.h>
+#include <map.h>
+#include <string_lib.h>
 
-#include "alloc.h"
+#include <alloc.h>
 
-static unsigned int ConstHash(const void *key, unsigned int max)
+static unsigned int ConstHash(const void *key, unsigned int seed,
+                              unsigned int max)
 {
     return 0;
 }
@@ -127,6 +128,23 @@ static void test_clear(void)
     StringMapDestroy(map);
 }
 
+static void test_soft_destroy(void)
+{
+    StringMap *map = StringMapNew();
+
+    char *key = xstrdup("one");
+    char *value = xstrdup("first");
+
+    StringMapInsert(map, key, value);
+    assert_true(StringMapHasKey(map, "one"));
+    assert_string_equal(StringMapGet(map, "one"),"first");
+
+    StringMapSoftDestroy(map);
+
+    assert_string_equal("first", value);
+    free(value);
+}
+
 static void test_iterate(void)
 {
     StringMap *map = StringMapNew();
@@ -198,6 +216,7 @@ int main()
         unit_test(test_get),
         unit_test(test_has_key),
         unit_test(test_clear),
+        unit_test(test_soft_destroy),
         unit_test(test_iterate),
         unit_test(test_hashmap_new_destroy),
         unit_test(test_hashmap_degenerate_hash_fn),

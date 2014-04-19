@@ -17,39 +17,55 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "generic_agent.h"
+#include <generic_agent.h>
 
-#include "env_context.h"
-#include "conversion.h"
-#include "syntax.h"
-#include "rlist.h"
-#include "parser.h"
-#include "sysinfo.h"
-#include "man.h"
+#include <eval_context.h>
+#include <conversion.h>
+#include <syntax.h>
+#include <rlist.h>
+#include <parser.h>
+#include <known_dirs.h>
+#include <man.h>
+#include <bootstrap.h>
+#include <string_lib.h>
+#include <loading.h>
 
 #include <time.h>
 
-static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv);
+static GenericAgentConfig *CheckOpts(int argc, char **argv);
+static void ShowContextsFormatted(EvalContext *ctx);
+static void ShowVariablesFormatted(EvalContext *ctx);
 
 /*******************************************************************/
 /* Command line options                                            */
 /*******************************************************************/
 
-static const char *CF_PROMISES_SHORT_DESCRIPTION = "validate and analyze CFEngine policy code";
+static const char *const CF_PROMISES_SHORT_DESCRIPTION =
+    "validate and analyze CFEngine policy code";
 
-static const char *CF_PROMISES_MANPAGE_LONG_DESCRIPTION = "cf-promises is a tool for checking CFEngine policy code. "
+static const char *const CF_PROMISES_MANPAGE_LONG_DESCRIPTION = "cf-promises is a tool for checking CFEngine policy code. "
         "It operates by first parsing policy code checing for syntax errors. Second, it validates the integrity of "
         "policy consisting of multiple files. Third, it checks for semantic errors, e.g. specific attribute set rules. "
         "Finally, cf-promises attempts to expose errors by partially evaluating the policy, resolving as many variable and "
         "classes promise statements as possible. At no point does cf-promises make any changes to the system.";
 
+typedef enum
+{
+    PROMISES_OPTION_EVAL_FUNCTIONS,
+    PROMISES_OPTION_SHOW_CLASSES,
+    PROMISES_OPTION_SHOW_VARIABLES
+} PromisesOptions;
+
 static const struct option OPTIONS[] =
 {
+    [PROMISES_OPTION_EVAL_FUNCTIONS] = {"eval-functions", optional_argument, 0, 0 },
+    [PROMISES_OPTION_SHOW_CLASSES] = {"show-classes", no_argument, 0, 0 },
+    [PROMISES_OPTION_SHOW_VARIABLES] = {"show-vars", no_argument, 0, 0 },
     {"help", no_argument, 0, 'h'},
     {"bundlesequence", required_argument, 0, 'b'},
     {"debug", no_argument, 0, 'd'},
@@ -67,11 +83,16 @@ static const struct option OPTIONS[] =
     {"full-check", no_argument, 0, 'c'},
     {"warn", optional_argument, 0, 'W'},
     {"legacy-output", no_argument, 0, 'l'},
+    {"color", optional_argument, 0, 'C'},
+    {"tag-release", required_argument, 0, 'T'},
     {NULL, 0, 0, '\0'}
 };
 
-static const char *HINTS[] =
+static const char *const HINTS[] =
 {
+    [PROMISES_OPTION_EVAL_FUNCTIONS] = "Evaluate functions during syntax checking (may catch more run-time errors). Possible values: 'yes', 'no'. Default is 'yes'",
+    [PROMISES_OPTION_SHOW_CLASSES] = "Show discovered classes, including those defined in common bundles in policy",
+    [PROMISES_OPTION_SHOW_VARIABLES] = "Show discovered variables, including those defined anywhere in policy",
     "Print the help message",
     "Use the specified bundlesequence for verification",
     "Enable debugging output",
@@ -89,6 +110,8 @@ static const char *HINTS[] =
     "Ensure full policy integrity checks",
     "Pass comma-separated <warnings>|all to enable non-default warnings, or error=<warnings>|all",
     "Use legacy output format",
+    "Enable colorized output. Possible values: 'always', 'auto', 'never'. If option is used, the default value is 'auto'",
+    "Tag a directory with promises.cf with cf_promises_validated and cf_promises_release_id",
     NULL
 };
 
@@ -98,16 +121,31 @@ static const char *HINTS[] =
 
 int main(int argc, char *argv[])
 {
+    GenericAgentConfig *config = CheckOpts(argc, argv);
     EvalContext *ctx = EvalContextNew();
-    GenericAgentConfig *config = CheckOpts(ctx, argc, argv);
     GenericAgentConfigApply(ctx, config);
 
     GenericAgentDiscoverContext(ctx, config);
-    Policy *policy = GenericAgentLoadPolicy(ctx, config);
+    Policy *policy = LoadPolicy(ctx, config);
     if (!policy)
     {
         Log(LOG_LEVEL_ERR, "Input files contain errors.");
         exit(EXIT_FAILURE);
+    }
+
+    if (NULL != config->tag_release_dir)
+    {
+        // write the validated file and the release ID
+        bool tagged = GenericAgentTagReleaseDirectory(config, config->tag_release_dir, true, true);
+        if (tagged)
+        {
+            Log(LOG_LEVEL_VERBOSE, "Release tagging done!");
+        }
+        else
+        {
+            Log(LOG_LEVEL_ERR, "The given directory could not be tagged, sorry.");
+            exit(EXIT_FAILURE);
+        }
     }
 
     if (SHOWREPORTS)
@@ -115,13 +153,12 @@ int main(int argc, char *argv[])
         ShowPromises(policy->bundles, policy->bodies);
     }
 
-    CheckForPolicyHub(ctx);
-
     switch (config->agent_specific.common.policy_output_format)
     {
     case GENERIC_AGENT_CONFIG_COMMON_POLICY_OUTPUT_FORMAT_CF:
         {
-            Policy *output_policy = ParserParseFile(config->input_file, config->agent_specific.common.parser_warnings,
+            Policy *output_policy = ParserParseFile(AGENT_TYPE_COMMON, config->input_file,
+                                                    config->agent_specific.common.parser_warnings,
                                                     config->agent_specific.common.parser_warnings_error);
             Writer *writer = FileWriter(stdout);
             PolicyToString(policy, writer);
@@ -132,13 +169,14 @@ int main(int argc, char *argv[])
 
     case GENERIC_AGENT_CONFIG_COMMON_POLICY_OUTPUT_FORMAT_JSON:
         {
-            Policy *output_policy = ParserParseFile(config->input_file, config->agent_specific.common.parser_warnings,
+            Policy *output_policy = ParserParseFile(AGENT_TYPE_COMMON, config->input_file,
+                                                    config->agent_specific.common.parser_warnings,
                                                     config->agent_specific.common.parser_warnings_error);
             JsonElement *json_policy = PolicyToJson(output_policy);
             Writer *writer = FileWriter(stdout);
-            JsonElementPrint(writer, json_policy, 2);
+            JsonWrite(writer, json_policy, 2);
             WriterClose(writer);
-            JsonElementDestroy(json_policy);
+            JsonDestroy(json_policy);
             PolicyDestroy(output_policy);
         }
         break;
@@ -147,6 +185,17 @@ int main(int argc, char *argv[])
         break;
     }
 
+    if(config->agent_specific.common.show_classes)
+    {
+        ShowContextsFormatted(ctx);
+    }
+
+    if(config->agent_specific.common.show_variables)
+    {
+        ShowVariablesFormatted(ctx);
+    }
+
+    PolicyDestroy(policy);
     GenericAgentConfigDestroy(config);
     EvalContextDestroy(ctx);
 }
@@ -155,17 +204,49 @@ int main(int argc, char *argv[])
 /* Level 1                                                         */
 /*******************************************************************/
 
-GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
+GenericAgentConfig *CheckOpts(int argc, char **argv)
 {
     extern char *optarg;
     int optindex = 0;
     int c;
     GenericAgentConfig *config = GenericAgentConfigNewDefault(AGENT_TYPE_COMMON);
+    config->tag_release_dir = NULL;
 
-    while ((c = getopt_long(argc, argv, "dvnIf:D:N:VSrxMb:i:p:s:cg:hW:l", OPTIONS, &optindex)) != EOF)
+    while ((c = getopt_long(argc, argv, "dvnIf:D:N:VSrxMb:i:p:s:cg:hW:lC::T:", OPTIONS, &optindex)) != EOF)
     {
         switch ((char) c)
         {
+        case 0:
+            switch (optindex)
+            {
+            case PROMISES_OPTION_EVAL_FUNCTIONS:
+                if (!optarg)
+                {
+                    optarg = "yes";
+                }
+                config->agent_specific.common.eval_functions = strcmp("yes", optarg) == 0;
+                break;
+
+            case PROMISES_OPTION_SHOW_CLASSES:
+                if (!optarg)
+                {
+                    optarg = "yes";
+                }
+                config->agent_specific.common.show_classes = strcmp("yes", optarg) == 0;
+                break;
+
+            case PROMISES_OPTION_SHOW_VARIABLES:
+                if (!optarg)
+                {
+                    optarg = "yes";
+                }
+                config->agent_specific.common.show_variables = strcmp("yes", optarg) == 0;
+                break;
+
+            default:
+                break;
+            }
+
         case 'l':
             LEGACY_OUTPUT = true;
             break;
@@ -175,14 +256,7 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             break;
 
         case 'f':
-
-            if (optarg && (strlen(optarg) < 5))
-            {
-                Log(LOG_LEVEL_ERR, " -f used but argument '%s' incorrect", optarg);
-                exit(EXIT_FAILURE);
-            }
-
-            GenericAgentConfigSetInputFile(config, GetWorkDir(), optarg);
+            GenericAgentConfigSetInputFile(config, GetInputDir(), optarg);
             MINUSF = true;
             break;
 
@@ -228,9 +302,9 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             {
                 JsonElement *json_syntax = SyntaxToJson();
                 Writer *out = FileWriter(stdout);
-                JsonElementPrint(out, json_syntax, 0);
+                JsonWrite(out, json_syntax, 0);
                 FileWriterDetach(out);
-                JsonElementDestroy(json_syntax);
+                JsonDestroy(json_syntax);
                 exit(EXIT_SUCCESS);
             }
             else
@@ -241,7 +315,7 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             break;
 
         case 'K':
-            IGNORELOCK = true;
+            config->ignore_locks = true;
             break;
 
         case 'D':
@@ -262,18 +336,24 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
 
         case 'n':
             DONTDO = true;
-            IGNORELOCK = true;
-            LOOKUP = true;
-            EvalContextHeapAddHard(ctx, "opt_dry_run");
+            config->ignore_locks = true;
             break;
 
         case 'V':
-            PrintVersion();
-            exit(0);
+            {
+                Writer *w = FileWriter(stdout);
+                GenericAgentWriteVersion(w);
+                FileWriterDetach(w);
+            }
+            exit(EXIT_SUCCESS);
 
         case 'h':
-            PrintHelp("cf-promises", OPTIONS, HINTS, true);
-            exit(0);
+            {
+                Writer *w = FileWriter(stdout);
+                GenericAgentWriteHelp(w, "cf-promises", OPTIONS, HINTS, true);
+                FileWriterDetach(w);
+            }
+            exit(EXIT_SUCCESS);
 
         case 'M':
             {
@@ -301,11 +381,28 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
 
         case 'x':
             Log(LOG_LEVEL_ERR, "Self-diagnostic functionality is retired.");
-            exit(0);
+            exit(EXIT_SUCCESS);
+
+        case 'C':
+            if (!GenericAgentConfigParseColor(config, optarg))
+            {
+                exit(EXIT_FAILURE);
+            }
+            break;
+
+        case 'T':
+            GenericAgentConfigSetInputFile(config, optarg, "promises.cf");
+            MINUSF = true;
+            config->tag_release_dir = xstrdup(optarg);
+            break;
 
         default:
-            PrintHelp("cf-promises", OPTIONS, HINTS, true);
-            exit(1);
+            {
+                Writer *w = FileWriter(stdout);
+                GenericAgentWriteHelp(w, "cf-promises", OPTIONS, HINTS, true);
+                FileWriterDetach(w);
+            }
+            exit(EXIT_FAILURE);
 
         }
     }
@@ -317,4 +414,92 @@ GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
     }
 
     return config;
+}
+
+static void ShowContextsFormatted(EvalContext *ctx)
+{
+    ClassTableIterator *iter = EvalContextClassTableIteratorNewGlobal(ctx, NULL, true, true);
+    Class *cls = NULL;
+
+    Seq *seq = SeqNew(1000, free);
+
+    while ((cls = ClassTableIteratorNext(iter)))
+    {
+        char *class_name = ClassRefToString(cls->ns, cls->name);
+        StringSet *tagset = EvalContextClassTags(ctx, cls->ns, cls->name);
+        Buffer *tagbuf = StringSetToBuffer(tagset, ',');
+
+        char *line;
+        xasprintf(&line, "%-60s %-40s", class_name, BufferData(tagbuf));
+        SeqAppend(seq, line);
+
+        BufferDestroy(tagbuf);
+        free(class_name);
+    }
+
+    SeqSort(seq, (SeqItemComparator)strcmp, NULL);
+
+    printf("%-60s %-40s\n", "Class name", "Meta tags");
+
+    for (size_t i = 0; i < SeqLength(seq); i++)
+    {
+        const char *context = SeqAt(seq, i);
+        printf("%s\n", context);
+    }
+
+    SeqDestroy(seq);
+
+    ClassTableIteratorDestroy(iter);
+}
+
+static void ShowVariablesFormatted(EvalContext *ctx)
+{
+    VariableTableIterator *iter = EvalContextVariableTableIteratorNew(ctx, NULL, NULL, NULL);
+    Variable *v = NULL;
+
+    Seq *seq = SeqNew(2000, free);
+
+    while ((v = VariableTableIteratorNext(iter)))
+    {
+        char *varname = VarRefToString(v->ref, true);
+
+        Writer *w = StringWriter();
+        RvalWrite(w, v->rval);
+
+        StringSet *tagset = EvalContextVariableTags(ctx, v->ref);
+        Buffer *tagbuf = StringSetToBuffer(tagset, ',');
+
+        char *line;
+        const char *var_value;
+
+        if(StringIsPrintable(StringWriterData(w)))
+        {
+            var_value = StringWriterData(w);
+        }
+        else
+        {
+            var_value = "<non-printable>";
+        }
+
+        xasprintf(&line, "%-40s %-60s %-40s", varname, var_value, BufferData(tagbuf));
+
+        SeqAppend(seq, line);
+
+        BufferDestroy(tagbuf);
+        WriterClose(w);
+        free(varname);
+    }
+
+    SeqSort(seq, (SeqItemComparator)strcmp, NULL);
+
+    printf("%-40s %-60s %-40s\n", "Variable name", "Variable value", "Meta tags");
+
+    for (size_t i = 0; i < SeqLength(seq); i++)
+    {
+        const char *variable = SeqAt(seq, i);
+        printf("%s\n", variable);
+    }
+
+    SeqDestroy(seq);
+    VariableTableIteratorDestroy(iter);
 }

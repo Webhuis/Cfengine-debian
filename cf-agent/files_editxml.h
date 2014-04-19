@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,7 @@
 #ifndef CFENGINE_FILES_EDITXML_H
 #define CFENGINE_FILES_EDITXML_H
 
-int ScheduleEditXmlOperations(EvalContext *ctx, Bundle *bp, Attributes a, const Promise *parentp, EditContext *edcontext);
+int ScheduleEditXmlOperations(EvalContext *ctx, const Bundle *bp, Attributes a, const Promise *parentp, EditContext *edcontext);
 #ifdef HAVE_LIBXML2
 int XmlCompareToFile(xmlDocPtr doc, char *file, EditDefaults edits);
 #endif

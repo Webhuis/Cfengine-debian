@@ -17,25 +17,25 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "files_properties.h"
+#include <files_properties.h>
 
-#include "files_names.h"
-#include "files_interfaces.h"
-#include "item_lib.h"
+#include <files_names.h>
+#include <files_interfaces.h>
+#include <item_lib.h>
 
-static Item *SUSPICIOUSLIST = NULL;
+static Item *SUSPICIOUSLIST = NULL; /* GLOBAL_P */
 
 void AddFilenameToListOfSuspicious(const char *pattern)
 {
     PrependItem(&SUSPICIOUSLIST, pattern, NULL);
 }
 
-static const char *SKIPFILES[] =
+static const char *const SKIPFILES[] =
 {
     ".",
     "..",
@@ -55,13 +55,11 @@ static bool ConsiderFile(const char *nodename, const char *path, struct stat *st
         return true;
     }
 
-    if (IsItemIn(SUSPICIOUSLIST, nodename))
+    if (stat != NULL && (S_ISREG(stat->st_mode) || S_ISLNK(stat->st_mode)) &&
+        IsItemIn(SUSPICIOUSLIST, nodename))
     {
-        if (stat && (S_ISREG(stat->st_mode) || S_ISLNK(stat->st_mode)))
-        {
-            Log(LOG_LEVEL_ERR, "Suspicious file '%s' found in '%s'", nodename, path);
-                return false;
-        }
+        Log(LOG_LEVEL_ERR, "Suspicious file '%s' found in '%s'", nodename, path);
+        return false;
     }
 
     if (strcmp(nodename, "...") == 0)
@@ -104,7 +102,8 @@ static bool ConsiderFile(const char *nodename, const char *path, struct stat *st
 
     if (stat == NULL)
     {
-        Log(LOG_LEVEL_VERBOSE, "Couldn't stat '%s/%s'. (cf_lstat: %s)", path, nodename, GetErrorStr());
+        /* stat is NULL so we can't make more checks, call this function again
+         * but pass the stat info as well. */
         return true;
     }
 
@@ -144,17 +143,33 @@ bool ConsiderLocalFile(const char *filename, const char *directory)
 
 bool ConsiderAbstractFile(const char *filename, const char *directory, FileCopy fc, AgentConnection *conn)
 {
-    struct stat stat;
-    char buf[CF_BUFSIZE];
-    snprintf(buf, sizeof(buf), "%s/%s", directory, filename);
-    MapName(buf);
+    /* First check if the file should be avoided, e.g. ".." - before sending
+     * anything over the network*/
+    if (!ConsiderFile(filename, directory, NULL))
+    {
+        return false;
+    }
 
+    /* TODO this function should accept the joined path in the first place
+     * since it's joined elsewhere as well, if split needed do it here. */
+    char buf[CF_BUFSIZE];
+    int ret = snprintf(buf, sizeof(buf), "%s/%s", directory, filename);
+    if (ret < 0 || ret >= sizeof(buf))
+    {
+        Log(LOG_LEVEL_ERR,
+            "Filename too long! Directory '%s' filename '%s'",
+            directory, filename);
+        return false;
+    }
+
+    struct stat stat;
     if (cf_lstat(buf, &stat, fc, conn) == -1)
     {
-        return ConsiderFile(filename, directory, NULL);
+        return false;                                      /* stat() failed */
     }
     else
     {
+        /* Reconsider, but using stat info this time. */
         return ConsiderFile(filename, directory, &stat);
     }
 }

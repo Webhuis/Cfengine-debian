@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -41,7 +41,6 @@ typedef enum
     dbid_measure,
     dbid_static,
     dbid_scalars,
-    dbid_promise_compliance,
     dbid_windows_registry,
     dbid_cache,
     dbid_license,
@@ -60,6 +59,7 @@ typedef DBCursor CF_DBC;
 
 bool OpenDB(CF_DB **dbp, dbid db);
 void CloseDB(CF_DB *dbp);
+void CloseDBCommit(CF_DB *dbp);
 
 bool HasKeyDB(CF_DB *dbp, const char *key, int key_size);
 int ValueSizeDB(CF_DB *dbp, const char *key, int key_size);
@@ -68,6 +68,7 @@ bool WriteComplexKeyDB(CF_DB *dbp, const char *key, int keySz, const void *src, 
 bool DeleteComplexKeyDB(CF_DB *dbp, const char *key, int size);
 bool ReadDB(CF_DB *dbp, const char *key, void *dest, int destSz);
 bool WriteDB(CF_DB *dbp, const char *key, const void *src, int srcSz);
+bool WriteDBNoCommit(CF_DB *dbp, const char *key, const void *src, int srcSz);
 bool DeleteDB(CF_DB *dbp, const char *key);
 
 /*
@@ -86,4 +87,5 @@ bool DeleteDBCursor(CF_DBC *dbcp);
 
 char *DBIdToPath(const char *workdir, dbid id);
 
+int UpdateLastSeenMaxReaders(int maxreaders);
 #endif  /* NOT CFENGINE_DBM_API_H */

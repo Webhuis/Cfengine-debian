@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,9 +25,9 @@
 #ifndef CFENGINE_VERIFY_VARS_H
 #define CFENGINE_VERIFY_VARS_H
 
-#include "env_context.h"
-#include "policy.h"
+#include <eval_context.h>
+#include <policy.h>
 
-void VerifyVarPromise(EvalContext *ctx, const Promise *pp, bool allow_duplicates);
+PromiseResult VerifyVarPromise(EvalContext *ctx, const Promise *pp, bool allow_duplicates);
 
 #endif

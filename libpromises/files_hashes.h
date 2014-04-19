@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,17 +25,14 @@
 #ifndef CFENGINE_FILES_HASHES_H
 #define CFENGINE_FILES_HASHES_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-void HashFile(char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type);
+void HashFile(const char *filename, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type);
 void HashString(const char *buffer, int len, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type);
 int HashesMatch(unsigned char digest1[EVP_MAX_MD_SIZE + 1], unsigned char digest2[EVP_MAX_MD_SIZE + 1],
                 HashMethod type);
-char *HashPrintSafe(HashMethod type, unsigned char digest[EVP_MAX_MD_SIZE + 1], char buffer[EVP_MAX_MD_SIZE * 4]);
+char *HashPrintSafe(HashMethod type, bool use_prefix, const unsigned char digest[EVP_MAX_MD_SIZE + 1], char buffer[EVP_MAX_MD_SIZE * 4]);
 char *SkipHashType(char *hash);
-int FileHashSize(HashMethod id);
-const char *FileHashName(HashMethod id);
 void HashPubKey(RSA *key, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type);
-HashMethod HashMethodFromString(char *typestr);
 
 #endif

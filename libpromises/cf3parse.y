@@ -20,7 +20,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -58,6 +58,8 @@ static void ParseWarning(unsigned int warning, const char *s, ...) FUNC_ATTR_PRI
 static void ValidateClassLiteral(const char *class_literal);
 
 static bool INSTALL_SKIP = false;
+static size_t CURRENT_BLOCKID_LINE = 0;
+static size_t CURRENT_PROMISER_LINE = 0;
 
 #define YYMALLOC xmalloc
 
@@ -83,6 +85,11 @@ blocks:                block
 
 block:                 bundle
                      | body
+                     | error
+                       {
+                           ParseError("Expected 'bundle' or 'body' keyword, wrong input '%s'", yytext);
+                           YYABORT;
+                       }
 
 bundle:                BUNDLE bundletype bundleid arglist bundlebody
 
@@ -95,7 +102,7 @@ bundletype:            bundletype_values
                            ParserDebug("P:bundle:%s\n", P.blocktype);
                            P.block = "bundle";
                            RvalDestroy(P.rval);
-                           P.rval = (Rval) { NULL, '\0' };
+                           P.rval = RvalNew(NULL, RVAL_TYPE_NOPROMISEE);
                            RlistDestroy(P.currentRlist);
                            P.currentRlist = NULL;
                            if (P.currentstring)
@@ -129,9 +136,10 @@ bundletype_values:     typeid
 bundleid:              bundleid_values
                        {
                           ParserDebug("\tP:bundle:%s:%s\n", P.blocktype, P.blockid);
+                          CURRENT_BLOCKID_LINE = P.line_no;
                        }
 
-bundleid_values:       blockid
+bundleid_values:       symbol
                      | error 
                        {
                            yyclearin;
@@ -171,9 +179,10 @@ bodytype_values:       typeid
 bodyid:                bodyid_values
                        {
                           ParserDebug("\tP:body:%s:%s\n", P.blocktype, P.blockid);
+                          CURRENT_BLOCKID_LINE = P.line_no;
                        }
 
-bodyid_values:         blockid
+bodyid_values:         symbol
                      | error
                        {
                            yyclearin;
@@ -193,7 +202,7 @@ typeid:                IDSYNTAX
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-blockid:               IDSYNTAX
+symbol:                IDSYNTAX
                        {
                            strncpy(P.blockid,P.currentid,CF_MAXVARSIZE);
                            P.offsets.last_block_id = P.offsets.last_id;
@@ -242,11 +251,11 @@ aitem:                 IDSYNTAX  /* recipient of argument is never a literal */
 
 bundlebody:            body_begin
                        {
-                           if (RelevantBundle(CF_AGENTTYPES[THIS_AGENT_TYPE], P.blocktype))
+                           if (RelevantBundle(CF_AGENTTYPES[P.agent_type], P.blocktype))
                            {
                                INSTALL_SKIP = false;
                            }
-                           else if (strcmp(CF_AGENTTYPES[THIS_AGENT_TYPE], P.blocktype) != 0)
+                           else if (strcmp(CF_AGENTTYPES[P.agent_type], P.blocktype) != 0)
                            {
                                INSTALL_SKIP = true;
                            }
@@ -254,7 +263,7 @@ bundlebody:            body_begin
                            if (!INSTALL_SKIP)
                            {
                                P.currentbundle = PolicyAppendBundle(P.policy, P.current_namespace, P.blockid, P.blocktype, P.useargs, P.filename);
-                               P.currentbundle->offset.line = P.line_no;
+                               P.currentbundle->offset.line = CURRENT_BLOCKID_LINE;
                                P.currentbundle->offset.start = P.offsets.last_block_id;
                            }
                            else
@@ -387,9 +396,13 @@ promise_decl:          promise_line ';'
                            {
                               ParseError("Expected '->', got '%s'", yytext);
                            }
-                           else if (yychar == IDSYNTAX || yychar == ',')
+                           else if (yychar == IDSYNTAX)
                            {
                               ParseError("Expected attribute, got '%s'", yytext);
+                           }
+                           else if (yychar == ',')
+                           {
+                              ParseError("Expected attribute, got '%s' (comma after promiser is not allowed since 3.5.0)", yytext);
                            }
                            else
                            {
@@ -420,7 +433,7 @@ promisee_statement:    promiser
                                P.currentpromise = PromiseTypeAppendPromise(P.currentstype, P.promiser,
                                                                            RvalCopy(P.rval),
                                                                            P.currentclasses ? P.currentclasses : "any");
-                               P.currentpromise->offset.line = P.line_no;
+                               P.currentpromise->offset.line = CURRENT_PROMISER_LINE;
                                P.currentpromise->offset.start = P.offsets.last_string;
                                P.currentpromise->offset.context = P.offsets.last_class_id;
                            }
@@ -447,7 +460,7 @@ promiser_statement:    promiser
                                P.currentpromise = PromiseTypeAppendPromise(P.currentstype, P.promiser,
                                                                 (Rval) { NULL, RVAL_TYPE_NOPROMISEE },
                                                                 P.currentclasses ? P.currentclasses : "any");
-                               P.currentpromise->offset.line = P.line_no;
+                               P.currentpromise->offset.line = CURRENT_PROMISER_LINE;
                                P.currentpromise->offset.start = P.offsets.last_string;
                                P.currentpromise->offset.context = P.offsets.last_class_id;
                            }
@@ -469,6 +482,7 @@ promiser:              QSTRING
                            }
                            P.promiser = P.currentstring;
                            P.currentstring = NULL;
+                           CURRENT_PROMISER_LINE = P.line_no;
                            ParserDebug("\tP:%s:%s:%s:%s:%s promiser = %s\n", P.block, P.blocktype, P.blockid, P.currenttype, P.currentclasses ? P.currentclasses : "any", P.promiser);
                        }
                      | error
@@ -573,7 +587,7 @@ constraint:            constraint_id                        /* BUNDLE ONLY */
                                                ValidateClassLiteral(P.rval.item);
                                            }
 
-                                           Constraint *cp = PromiseAppendConstraint(P.currentpromise, P.lval, RvalCopy(P.rval), "any", P.references_body);
+                                           Constraint *cp = PromiseAppendConstraint(P.currentpromise, P.lval, RvalCopy(P.rval), P.references_body);
                                            cp->offset.line = P.line_no;
                                            cp->offset.start = P.offsets.last_id;
                                            cp->offset.end = P.offsets.current;
@@ -583,7 +597,7 @@ constraint:            constraint_id                        /* BUNDLE ONLY */
                                            // Cache whether there are subbundles for later $(this.promiser) logic
 
                                            if (strcmp(P.lval,"usebundle") == 0 || strcmp(P.lval,"edit_line") == 0
-                                               || strcmp(P.lval,"edit_xml") == 0)
+                                               || strcmp(P.lval,"edit_xml") == 0 || strcmp(P.lval,"home_bundle") == 0)
                                            {
                                                P.currentpromise->has_subbundles = true;
                                            }
@@ -600,7 +614,7 @@ constraint:            constraint_id                        /* BUNDLE ONLY */
                                }
 
                                RvalDestroy(P.rval);
-                               P.rval = (Rval) { NULL, '\0' };
+                               P.rval = RvalNew(NULL, RVAL_TYPE_NOPROMISEE);
                                strcpy(P.lval,"no lval");
                                RlistDestroy(P.currentRlist);
                                P.currentRlist = NULL;
@@ -608,7 +622,7 @@ constraint:            constraint_id                        /* BUNDLE ONLY */
                            else
                            {
                                RvalDestroy(P.rval);
-                               P.rval = (Rval) { NULL, '\0' };
+                               P.rval = RvalNew(NULL, RVAL_TYPE_NOPROMISEE);
                            }
                        }
 
@@ -656,7 +670,7 @@ bodybody:              body_begin
                                    // intentional fall
                                case SYNTAX_STATUS_NORMAL:
                                    P.currentbody = PolicyAppendBody(P.policy, P.current_namespace, P.blockid, P.blocktype, P.useargs, P.filename);
-                                   P.currentbody->offset.line = P.line_no;
+                                   P.currentbody->offset.line = CURRENT_BLOCKID_LINE;
                                    P.currentbody->offset.start = P.offsets.last_block_id;
                                    break;
 
@@ -766,7 +780,7 @@ selection:             selection_id                         /* BODY ONLY */
                            else
                            {
                                RvalDestroy(P.rval);
-                               P.rval = (Rval) { NULL, '\0' };
+                               P.rval = RvalNew(NULL, RVAL_TYPE_NOPROMISEE);
                            }
 
                            if (strcmp(P.blockid,"control") == 0 && strcmp(P.blocktype,"file") == 0)
@@ -786,7 +800,7 @@ selection:             selection_id                         /* BODY ONLY */
                            }
                            
                            RvalDestroy(P.rval);
-                           P.rval = (Rval) { NULL, '\0' };
+                           P.rval = RvalNew(NULL, RVAL_TYPE_NOPROMISEE);
                        }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -934,6 +948,7 @@ rval:                  IDSYNTAX
                        {
                            RvalDestroy(P.rval);
                            P.rval = (Rval) { P.currentfncall[P.arg_nesting+1], RVAL_TYPE_FNCALL };
+                           P.currentfncall[P.arg_nesting+1] = NULL;
                            P.references_body = false;
                        }
 
@@ -996,8 +1011,9 @@ litem:                 IDSYNTAX
 
                      | usefunction
                        {
-                           RlistAppendFnCall((Rlist **)&P.currentRlist,(void *)P.currentfncall[P.arg_nesting+1]);
+                           RlistAppend(&P.currentRlist, P.currentfncall[P.arg_nesting+1], RVAL_TYPE_FNCALL);
                            FnCallDestroy(P.currentfncall[P.arg_nesting+1]);
+                           P.currentfncall[P.arg_nesting+1] = NULL;
                        }
 
                      | error
@@ -1051,7 +1067,7 @@ givearglist:           OP
                        CP 
                        {
                            ParserDebug("\tP:%s:%s:%s end givearglist for function %s, level %d\n", P.block,P.blocktype,P.blockid, P.currentfnid[P.arg_nesting], P.arg_nesting );
-                           P.currentfncall[P.arg_nesting] = FnCallNew(P.currentfnid[P.arg_nesting],P.giveargs[P.arg_nesting]);
+                           P.currentfncall[P.arg_nesting] = FnCallNew(P.currentfnid[P.arg_nesting], P.giveargs[P.arg_nesting]);
                            P.giveargs[P.arg_nesting] = NULL;
                            strcpy(P.currentid,"");
                            free(P.currentfnid[P.arg_nesting]);
@@ -1102,8 +1118,9 @@ gaitem:                IDSYNTAX
                        {
                            /* Careful about recursion */
                            ParserDebug("\tP:%s:%s:%s:%s function %s, nakedvar arg = %s\n", P.block, P.blocktype, P.blockid, P.currentclasses ? P.currentclasses : "any", P.currentfnid[P.arg_nesting], P.currentstring);
-                           RlistAppendFnCall(&P.giveargs[P.arg_nesting],(void *)P.currentfncall[P.arg_nesting+1]);
+                           RlistAppend(&P.giveargs[P.arg_nesting], P.currentfncall[P.arg_nesting+1], RVAL_TYPE_FNCALL);
                            RvalDestroy((Rval) { P.currentfncall[P.arg_nesting+1], RVAL_TYPE_FNCALL });
+                           P.currentfncall[P.arg_nesting+1] = NULL;
                        }
 
                      | error
@@ -1144,8 +1161,8 @@ static void ParseErrorVColumnOffset(int column_offset, const char *s, va_list ap
 
         if (P.error_count > 12)
         {
-            fprintf(stderr, "Too many errors");
-            exit(1);
+            fprintf(stderr, "Too many errors\n");
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -1197,8 +1214,8 @@ static void ParseWarningV(unsigned int warning, const char *s, va_list ap)
 
     if (P.error_count > 12)
     {
-        fprintf(stderr, "Too many errors");
-        exit(1);
+        fprintf(stderr, "Too many errors\n");
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -1225,7 +1242,7 @@ static void fatal_yyerror(const char *s)
     }
 
     fprintf(stderr, "%s: %d,%d: Fatal error during parsing: %s, near token \'%.20s\'\n", P.filename, P.line_no, P.line_pos, s, sp ? sp : "NULL");
-    exit(1);
+    exit(EXIT_FAILURE);
 }
 
 static int RelevantBundle(const char *agent, const char *blocktype)
@@ -1279,7 +1296,7 @@ static bool LvalWantsBody(char *stype, char *lval)
             {
                 if (strcmp(bs[l].lval, lval) == 0)
                 {
-                    if (bs[l].dtype == DATA_TYPE_BODY)
+                    if (bs[l].dtype == CF_DATA_TYPE_BODY)
                     {
                         return true;
                     }
@@ -1310,11 +1327,11 @@ static SyntaxTypeMatch CheckSelection(const char *type, const char *name, const 
                 {
                     if (strcmp(lval, bs[l].lval) == 0)
                     {
-                        if (bs[l].dtype == DATA_TYPE_BODY)
+                        if (bs[l].dtype == CF_DATA_TYPE_BODY)
                         {
                             return SYNTAX_TYPE_MATCH_OK;
                         }
-                        else if (bs[l].dtype == DATA_TYPE_BUNDLE)
+                        else if (bs[l].dtype == CF_DATA_TYPE_BUNDLE)
                         {
                             return SYNTAX_TYPE_MATCH_OK;
                         }
@@ -1349,7 +1366,7 @@ static SyntaxTypeMatch CheckSelection(const char *type, const char *name, const 
 
             for (int l = 0; bs[l].lval != NULL; l++)
             {
-                if (bs[l].dtype == DATA_TYPE_BODY)
+                if (bs[l].dtype == CF_DATA_TYPE_BODY)
                 {
                     const ConstraintSyntax *bs2 = bs[l].range.body_type_syntax->constraints;
 
@@ -1358,14 +1375,14 @@ static SyntaxTypeMatch CheckSelection(const char *type, const char *name, const 
                         continue;
                     }
 
-                    for (int k = 0; bs2[k].dtype != DATA_TYPE_NONE; k++)
+                    for (int k = 0; bs2[k].dtype != CF_DATA_TYPE_NONE; k++)
                     {
                         /* Either module defined or common */
 
                         if (strcmp(promise_type_syntax[j].promise_type, type) == 0 && strcmp(promise_type_syntax[j].promise_type, "*") != 0)
                         {
                             char output[CF_BUFSIZE];
-                            snprintf(output, CF_BUFSIZE, "lval %s belongs to promise type \'%s:\' but this is '\%s\'\n",
+                            snprintf(output, CF_BUFSIZE, "lval %s belongs to promise type '%s': but this is '%s'\n",
                                      lval, promise_type_syntax[j].promise_type, type);
                             yyerror(output);
                             return SYNTAX_TYPE_MATCH_OK;
@@ -1408,8 +1425,8 @@ static SyntaxTypeMatch CheckConstraint(const char *type, const char *lval, Rval 
 
                     /* For bodies and bundles definitions can be elsewhere, so
                        they are checked in PolicyCheckRunnable(). */
-                    if (bs[l].dtype != DATA_TYPE_BODY &&
-                        bs[l].dtype != DATA_TYPE_BUNDLE)
+                    if (bs[l].dtype != CF_DATA_TYPE_BODY &&
+                        bs[l].dtype != CF_DATA_TYPE_BUNDLE)
                     {
                         return CheckConstraintTypeMatch(lval, rval, bs[l].dtype, bs[l].range.validation_string, 0);
                     }

@@ -1,6 +1,7 @@
-#include "test.h"
+#include <test.h>
 
-#include "syntax.h"
+#include <syntax.h>
+#include <string_lib.h>
 
 static void test_lookup_promise_type_agent_vars(void)
 {
@@ -88,6 +89,26 @@ static void test_lookup_body_delete_select(void)
     assert_string_equal("delete_if_startwith_from_list", y->lval);
 }
 
+static void test_copy_from_servers(void)
+{
+    const BodySyntax *x = BodySyntaxGet("copy_from");
+    assert_true(x);
+
+    const ConstraintSyntax *y = BodySyntaxGetConstraintSyntax(x->constraints, "servers");
+    assert_true(y);
+
+    assert_true(StringMatchFull(y->range.validation_string, "127.0.0.1"));
+    assert_true(StringMatchFull(y->range.validation_string, "www-dashed.stuff.com"));
+    assert_true(StringMatchFull(y->range.validation_string, "2604:2000:8441:e300:224:d7ff:fec5:338"));
+}
+
+static void test_typecheck_null_rval(void)
+{
+    SyntaxTypeMatch err = CheckConstraintTypeMatch("whatever", (Rval) { NULL, RVAL_TYPE_NOPROMISEE },
+                                                   CF_DATA_TYPE_STRING, "abc", 0);
+    assert_int_equal(SYNTAX_TYPE_MATCH_ERROR_GOT_NULL, err);
+}
+
 int main()
 {
     PRINT_TEST_BANNER();
@@ -105,7 +126,10 @@ int main()
         unit_test(test_lookup_body_process_count),
         unit_test(test_lookup_body_delete_select),
 
-        unit_test(test_lookup_constraint_edit_xml_set_attribute_attribute_value)
+        unit_test(test_lookup_constraint_edit_xml_set_attribute_attribute_value),
+
+        unit_test(test_copy_from_servers),
+        unit_test(test_typecheck_null_rval),
     };
 
     return run_tests(tests);

@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,25 +25,35 @@
 #ifndef CFENGINE_EXPAND_H
 #define CFENGINE_EXPAND_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
+#include <generic_agent.h>
+#include <actuator.h>
 
-typedef void PromiseActuator(EvalContext *ctx, Promise *pp, void *param);
+PromiseResult CommonEvalPromise(EvalContext *ctx, const Promise *pp, void *param);
 
-void CommonEvalPromise(EvalContext *ctx, Promise *pp, void *param);
+PromiseResult ExpandPromise(EvalContext *ctx, const Promise *pp, PromiseActuator *ActOnPromise, void *param);
 
-void ExpandPromise(EvalContext *ctx, Promise *pp, PromiseActuator *ActOnPromise, void *param);
+Rval ExpandDanglers(EvalContext *ctx, const char *ns, const char *scope, Rval rval, const Promise *pp);
+void MapIteratorsFromRval(EvalContext *ctx, const Bundle *bundle, Rval rval, Rlist **scalars, Rlist **lists, Rlist **containers);
 
-Rval ExpandDanglers(EvalContext *ctx, const char *scope, Rval rval, const Promise *pp);
-void MapIteratorsFromRval(EvalContext *ctx, const char *scope, Rlist **lol, Rlist **los, Rval rval);
+bool IsExpandable(const char *str);
 
-int IsExpandable(const char *str);
+bool ExpandScalar(const EvalContext *ctx, const char *ns, const char *scope, const char *string, Buffer *out);
+Rval ExpandBundleReference(EvalContext *ctx, const char *ns, const char *scope, Rval rval);
+Rval ExpandPrivateRval(EvalContext *ctx, const char *ns, const char *scope, const void *rval_item, RvalType rval_type);
+Rlist *ExpandList(EvalContext *ctx, const char *ns, const char *scope, const Rlist *list, int expandnaked);
+Rval EvaluateFinalRval(EvalContext *ctx, const Policy *policy, const char *ns, const char *scope, Rval rval, bool forcelist, const Promise *pp);
 
-bool ExpandScalar(const EvalContext *ctx, const char *scope, const char *string, char buffer[CF_EXPANDSIZE]);
-Rval ExpandBundleReference(EvalContext *ctx, const char *scopeid, Rval rval);
-Rval ExpandPrivateRval(EvalContext *ctx, const char *contextid, Rval rval);
-Rlist *ExpandList(EvalContext *ctx, const char *scopeid, const Rlist *list, int expandnaked);
-Rval EvaluateFinalRval(EvalContext *ctx, const char *scopeid, Rval rval, int forcelist, const Promise *pp);
-int IsNakedVar(const char *str, char vtype);
+/**
+ * @brief BundleResolve
+ * @param ctx
+ * @param bundle
+ */
+void BundleResolve(EvalContext *ctx, const Bundle *bundle);
+void PolicyResolve(EvalContext *ctx, const Policy *policy, GenericAgentConfig *config);
+
+
+bool IsNakedVar(const char *str, char vtype);
 /**
   @brief Takes a variable and removes decorations.
 
@@ -60,5 +70,7 @@ void GetNaked(char *s1, const char *s2);
   @return True if the variable is a list, False otherwise.
   */
 bool IsVarList(const char *var);
+
+ProtocolVersion ProtocolVersionParse(const char *s);
 
 #endif

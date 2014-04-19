@@ -17,55 +17,46 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "generic_agent.h"
-#include "cf-execd-runner.h"
+#include <cf-execd.h>
 
-#include "bootstrap.h"
-#include "sysinfo.h"
-#include "env_context.h"
-#include "promises.h"
-#include "vars.h"
-#include "item_lib.h"
-#include "conversion.h"
-#include "ornaments.h"
-#include "scope.h"
-#include "hashes.h"
-#include "unix.h"
-#include "string_lib.h"
-#include "signals.h"
-#include "locks.h"
-#include "exec_tools.h"
-#include "rlist.h"
-#include "processes_select.h"
-#include "man.h"
+#include <cf-execd-runner.h>
+#include <item_lib.h>
+#include <known_dirs.h>
+#include <man.h>
+#include <ornaments.h>
+#include <exec_tools.h>
+#include <signals.h>
+#include <processes_select.h>
+#include <bootstrap.h>
+#include <sysinfo.h>
+#include <timeout.h>
+#include <time_classes.h>
+#include <loading.h>
+#include <printsize.h>
 
-#include <assert.h>
-
-#ifdef HAVE_NOVA
-# include "cf.nova.h"
-#endif
-
-#include "cf-execd.h"
+#include <cf-windows-functions.h>
 
 #define CF_EXEC_IFELAPSED 0
 #define CF_EXEC_EXPIREAFTER 1
 
-static int NO_FORK;
-static int ONCE;
-static int WINSERVICE = true;
+static int NO_FORK = false; /* GLOBAL_A */
+static int ONCE = false; /* GLOBAL_A */
+static int WINSERVICE = true; /* GLOBAL_A */
 
-static pthread_attr_t threads_attrs;
+static pthread_attr_t threads_attrs; /* GLOBAL_T, initialized by pthread_attr_init */
 
 /*******************************************************************/
 
-static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv);
+static GenericAgentConfig *CheckOpts(int argc, char **argv);
+
 void ThisAgentInit(void);
-static bool ScheduleRun(EvalContext *ctx, Policy **policy, GenericAgentConfig *config, ExecConfig *exec_config);
+static bool ScheduleRun(EvalContext *ctx, Policy **policy, GenericAgentConfig *config,
+                        ExecdConfig **execd_config, ExecConfig **exec_config);
 #ifndef __MINGW32__
 static void Apoptosis(void);
 #endif
@@ -76,9 +67,10 @@ static bool LocalExecInThread(const ExecConfig *config);
 /* Command line options                                            */
 /*******************************************************************/
 
-static const char *CF_EXECD_SHORT_DESCRIPTION = "scheduling daemon for cf-agent";
+static const char *const CF_EXECD_SHORT_DESCRIPTION =
+    "scheduling daemon for cf-agent";
 
-static const char *CF_EXECD_MANPAGE_LONG_DESCRIPTION =
+static const char *const CF_EXECD_MANPAGE_LONG_DESCRIPTION =
         "cf-execd is the scheduling daemon for cf-agent. It runs cf-agent locally according to a schedule specified in "
         "policy code (executor control body). After a cf-agent run is completed, cf-execd gathers output from cf-agent, "
         "and may be configured to email the output to a specified address. It may also be configured to splay (randomize) the "
@@ -102,10 +94,11 @@ static const struct option OPTIONS[] =
     {"no-winsrv", no_argument, 0, 'W'},
     {"ld-library-path", required_argument, 0, 'L'},
     {"legacy-output", no_argument, 0, 'l'},
+    {"color", optional_argument, 0, 'C'},
     {NULL, 0, 0, '\0'}
 };
 
-static const char *HINTS[sizeof(OPTIONS)/sizeof(OPTIONS[0])] =
+static const char *const HINTS[] =
 {
     "Print the help message",
     "Enable debugging output",
@@ -123,6 +116,7 @@ static const char *HINTS[sizeof(OPTIONS)/sizeof(OPTIONS[0])] =
     "Do not run as a service on windows - use this when running from a command shell (CFEngine Nova only)",
     "Set the internal value of LD_LIBRARY_PATH for child processes",
     "Use legacy output format",
+    "Enable colorized output. Possible values: 'always', 'auto', 'never'. If option is used, the default value is 'auto'",
     NULL
 };
 
@@ -130,17 +124,16 @@ static const char *HINTS[sizeof(OPTIONS)/sizeof(OPTIONS[0])] =
 
 int main(int argc, char *argv[])
 {
+    GenericAgentConfig *config = CheckOpts(argc, argv);
     EvalContext *ctx = EvalContextNew();
-
-    GenericAgentConfig *config = CheckOpts(ctx, argc, argv);
     GenericAgentConfigApply(ctx, config);
 
     GenericAgentDiscoverContext(ctx, config);
 
     Policy *policy = NULL;
-    if (GenericAgentCheckPolicy(ctx, config, false))
+    if (GenericAgentCheckPolicy(config, false, false))
     {
-        policy = GenericAgentLoadPolicy(ctx, config);
+        policy = LoadPolicy(ctx, config);
     }
     else if (config->tty_interactive)
     {
@@ -149,18 +142,16 @@ int main(int argc, char *argv[])
     else
     {
         Log(LOG_LEVEL_ERR, "CFEngine was not able to get confirmation of promises from cf-promises, so going to failsafe");
-        EvalContextHeapAddHard(ctx, "failsafe_fallback");
-        GenericAgentConfigSetInputFile(config, GetWorkDir(), "failsafe.cf");
-        policy = GenericAgentLoadPolicy(ctx, config);
+        EvalContextClassPutHard(ctx, "failsafe_fallback", "attribute_name=Errors,source=agent");
+        GenericAgentConfigSetInputFile(config, GetInputDir(), "failsafe.cf");
+        policy = LoadPolicy(ctx, config);
     }
-
-    CheckForPolicyHub(ctx);
 
     ThisAgentInit();
 
-    ExecConfig *exec_config = ExecConfigNewDefault(!ONCE, VFQNAME, VIPADDRESS);
-    ExecConfigUpdate(ctx, policy, exec_config);
-    SetFacility(exec_config->log_facility);
+    ExecConfig *exec_config = ExecConfigNew(!ONCE, ctx, policy);
+    ExecdConfig *execd_config = ExecdConfigNew(ctx, policy);
+    SetFacility(execd_config->log_facility);
 
 #ifdef __MINGW32__
     if (WINSERVICE)
@@ -170,10 +161,12 @@ int main(int argc, char *argv[])
     else
 #endif /* __MINGW32__ */
     {
-        StartServer(ctx, policy, config, exec_config);
+        StartServer(ctx, policy, config, &execd_config, &exec_config);
     }
 
+    EvalContextDestroy(ctx);
     ExecConfigDestroy(exec_config);
+    ExecdConfigDestroy(execd_config);
     GenericAgentConfigDestroy(config);
 
     return 0;
@@ -183,7 +176,7 @@ int main(int argc, char *argv[])
 /* Level 1                                                                   */
 /*****************************************************************************/
 
-static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
+static GenericAgentConfig *CheckOpts(int argc, char **argv)
 {
     extern char *optarg;
     int optindex = 0;
@@ -191,7 +184,7 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
     char ld_library_path[CF_BUFSIZE];
     GenericAgentConfig *config = GenericAgentConfigNewDefault(AGENT_TYPE_EXECUTOR);
 
-    while ((c = getopt_long(argc, argv, "dvnKIf:D:N:VxL:hFOV1gMWl", OPTIONS, &optindex)) != EOF)
+    while ((c = getopt_long(argc, argv, "dvnKIf:D:N:VxL:hFOV1gMWlC::", OPTIONS, &optindex)) != EOF)
     {
         switch ((char) c)
         {
@@ -200,14 +193,7 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             break;
 
         case 'f':
-
-            if (optarg && strlen(optarg) < 5)
-            {
-                Log(LOG_LEVEL_ERR, " -f used but argument '%s' incorrect", optarg);
-                exit(EXIT_FAILURE);
-            }
-
-            GenericAgentConfigSetInputFile(config, GetWorkDir(), optarg);
+            GenericAgentConfigSetInputFile(config, GetInputDir(), optarg);
             MINUSF = true;
             break;
 
@@ -216,7 +202,7 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             break;
 
         case 'K':
-            IGNORELOCK = true;
+            config->ignore_locks = true;
             break;
 
         case 'D':
@@ -238,15 +224,12 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
 
         case 'n':
             DONTDO = true;
-            IGNORELOCK = true;
-            EvalContextHeapAddHard(ctx, "opt_dry_run");
+            config->ignore_locks = true;
             break;
 
         case 'L':
             snprintf(ld_library_path, CF_BUFSIZE - 1, "LD_LIBRARY_PATH=%s", optarg);
-            if (putenv(xstrdup(ld_library_path)) != 0)
-            {
-            }
+            putenv(xstrdup(ld_library_path));
             break;
 
         case 'W':
@@ -263,12 +246,20 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
             break;
 
         case 'V':
-            PrintVersion();
-            exit(0);
+            {
+                Writer *w = FileWriter(stdout);
+                GenericAgentWriteVersion(w);
+                FileWriterDetach(w);
+            }
+            exit(EXIT_SUCCESS);
 
         case 'h':
-            PrintHelp("cf-execd", OPTIONS, HINTS, true);
-            exit(0);
+            {
+                Writer *w = FileWriter(stdout);
+                GenericAgentWriteHelp(w, "cf-execd", OPTIONS, HINTS, true);
+                FileWriterDetach(w);
+            }
+            exit(EXIT_SUCCESS);
 
         case 'M':
             {
@@ -284,11 +275,22 @@ static GenericAgentConfig *CheckOpts(EvalContext *ctx, int argc, char **argv)
 
         case 'x':
             Log(LOG_LEVEL_ERR, "Self-diagnostic functionality is retired.");
-            exit(0);
+            exit(EXIT_SUCCESS);
+
+        case 'C':
+            if (!GenericAgentConfigParseColor(config, optarg))
+            {
+                exit(EXIT_FAILURE);
+            }
+            break;
 
         default:
-            PrintHelp("cf-execd", OPTIONS, HINTS, true);
-            exit(1);
+            {
+                Writer *w = FileWriter(stdout);
+                GenericAgentWriteHelp(w, "cf-execd", OPTIONS, HINTS, true);
+                FileWriterDetach(w);
+            }
+            exit(EXIT_FAILURE);
 
         }
     }
@@ -312,12 +314,8 @@ void ThisAgentInit(void)
 /*****************************************************************************/
 
 /* Might be called back from NovaWin_StartExecService */
-void StartServer(EvalContext *ctx, Policy *policy, GenericAgentConfig *config, ExecConfig *exec_config)
+void StartServer(EvalContext *ctx, Policy *policy, GenericAgentConfig *config, ExecdConfig **execd_config, ExecConfig **exec_config)
 {
-#if !defined(__MINGW32__)
-    time_t now = time(NULL);
-#endif
-
     pthread_attr_init(&threads_attrs);
     pthread_attr_setdetachstate(&threads_attrs, PTHREAD_CREATE_DETACHED);
     pthread_attr_setstacksize(&threads_attrs, (size_t)2048*1024);
@@ -330,29 +328,27 @@ void StartServer(EvalContext *ctx, Policy *policy, GenericAgentConfig *config, E
         /* Kill previous instances of cf-execd if those are still running */
         Apoptosis();
     }
-#endif
 
-#ifdef __MINGW32__
+    time_t now = time(NULL);
+    if ((!NO_FORK) && (fork() != 0))
+    {
+        Log(LOG_LEVEL_INFO, "cf-execd starting %.24s", ctime(&now));
+        _exit(EXIT_SUCCESS);
+    }
+
+    if (!NO_FORK)
+    {
+        ActAsDaemon();
+    }
+
+#else  /* __MINGW32__ */
 
     if (!NO_FORK)
     {
         Log(LOG_LEVEL_VERBOSE, "Windows does not support starting processes in the background - starting in foreground");
     }
 
-#else /* !__MINGW32__ */
-
-    if ((!NO_FORK) && (fork() != 0))
-    {
-        Log(LOG_LEVEL_INFO, "cf-execd starting %.24s", ctime(&now));
-        _exit(0);
-    }
-
-    if (!NO_FORK)
-    {
-        ActAsDaemon(0);
-    }
-
-#endif /* !__MINGW32__ */
+#endif
 
     WritePID("cf-execd.pid");
     signal(SIGINT, HandleSignalsForDaemon);
@@ -366,38 +362,33 @@ void StartServer(EvalContext *ctx, Policy *policy, GenericAgentConfig *config, E
 
     if (ONCE)
     {
-        LocalExec(exec_config);
+        LocalExec(*exec_config);
         CloseLog();
     }
     else
     {
         while (!IsPendingTermination())
         {
-            if (ScheduleRun(ctx, &policy, config, exec_config))
+            if (ScheduleRun(ctx, &policy, config, execd_config, exec_config))
             {
-                Log(LOG_LEVEL_VERBOSE, "Sleeping for splaytime %d seconds", exec_config->splay_time);
-                sleep(exec_config->splay_time);
+                Log(LOG_LEVEL_VERBOSE, "Sleeping for splaytime %d seconds", (*execd_config)->splay_time);
+                sleep((*execd_config)->splay_time);
 
-                if (!LocalExecInThread(exec_config))
+                if (!LocalExecInThread(*exec_config))
                 {
                     Log(LOG_LEVEL_INFO, "Unable to run agent in thread, falling back to blocking execution");
-                    LocalExec(exec_config);
+                    LocalExec(*exec_config);
                 }
             }
         }
     }
+    PolicyDestroy(policy);
 }
 
 /*****************************************************************************/
 
 static void *LocalExecThread(void *param)
 {
-#if !defined(__MINGW32__)
-    sigset_t sigmask;
-    sigemptyset(&sigmask);
-    pthread_sigmask(SIG_BLOCK, &sigmask, NULL);
-#endif
-
     ExecConfig *config = (ExecConfig *)param;
     LocalExec(config);
     ExecConfigDestroy(config);
@@ -427,16 +418,16 @@ static bool LocalExecInThread(const ExecConfig *config)
 
 static void Apoptosis(void)
 {
-    static char promiser_buf[CF_SMALLBUF];
+    char promiser_buf[CF_SMALLBUF];
     snprintf(promiser_buf, sizeof(promiser_buf), "%s/bin/cf-execd", CFWORKDIR);
 
     if (LoadProcessTable(&PROCESSTABLE))
     {
-        char myuid[32];
-        snprintf(myuid, 32, "%d", (int)getuid());
+        char myuid[PRINTSIZE(unsigned)];
+        sprintf(myuid, "%u", (unsigned)getuid());
 
         Rlist *owners = NULL;
-        RlistPrependScalar(&owners, myuid);
+        RlistPrepend(&owners, myuid, RVAL_TYPE_SCALAR);
 
         ProcessSelect process_select = {
             .owner = owners,
@@ -444,6 +435,7 @@ static void Apoptosis(void)
         };
 
         Item *killlist = SelectProcesses(PROCESSTABLE, promiser_buf, process_select, true);
+        RlistDestroy(owners);
 
         for (Item *ip = killlist; ip != NULL; ip = ip->next)
         {
@@ -477,20 +469,26 @@ typedef enum
     RELOAD_FULL
 } Reload;
 
-static Reload CheckNewPromises(EvalContext *ctx, const GenericAgentConfig *config, const Rlist *input_files)
+static Reload CheckNewPromises(GenericAgentConfig *config)
 {
-    if (NewPromiseProposals(ctx, config, input_files))
+    Log(LOG_LEVEL_DEBUG, "Checking file updates for input file '%s'", config->input_file);
+
+    time_t validated_at = ReadTimestampFromPolicyValidatedFile(config, NULL);
+
+    if (config->agent_specific.daemon.last_validated_at < validated_at)
     {
+        /* Rereading policies now, so update timestamp. */
+        config->agent_specific.daemon.last_validated_at = validated_at;
+
         Log(LOG_LEVEL_VERBOSE, "New promises detected...");
 
-        if (CheckPromises(config))
+        if (GenericAgentArePromisesValid(config))
         {
             return RELOAD_FULL;
         }
         else
         {
             Log(LOG_LEVEL_INFO, "New promises file contains syntax errors -- ignoring");
-            PROMISETIME = time(NULL);
         }
     }
     else
@@ -501,7 +499,8 @@ static Reload CheckNewPromises(EvalContext *ctx, const GenericAgentConfig *confi
     return RELOAD_ENVIRONMENT;
 }
 
-static bool ScheduleRun(EvalContext *ctx, Policy **policy, GenericAgentConfig *config, ExecConfig *exec_config)
+static bool ScheduleRun(EvalContext *ctx, Policy **policy, GenericAgentConfig *config,
+                        ExecdConfig **execd_config, ExecConfig **exec_config)
 {
     Log(LOG_LEVEL_VERBOSE, "Sleeping for pulse time %d seconds...", CFPULSETIME);
     sleep(CFPULSETIME);         /* 1 Minute resolution is enough */
@@ -510,18 +509,13 @@ static bool ScheduleRun(EvalContext *ctx, Policy **policy, GenericAgentConfig *c
      * FIXME: this logic duplicates the one from cf-serverd.c. Unify ASAP.
      */
 
-    if (CheckNewPromises(ctx, config, InputFiles(ctx, *policy)) == RELOAD_FULL)
+    if (CheckNewPromises(config) == RELOAD_FULL)
     {
         /* Full reload */
 
         Log(LOG_LEVEL_INFO, "Re-reading promise file '%s'", config->input_file);
 
-        EvalContextHeapClear(ctx);
-
-        DeleteItemList(IPADDRESSES);
-        IPADDRESSES = NULL;
-
-        ScopeDeleteAll();
+        EvalContextClear(ctx);
 
         strcpy(VDOMAIN, "undefined.domain");
 
@@ -533,52 +527,44 @@ static bool ScheduleRun(EvalContext *ctx, Policy **policy, GenericAgentConfig *c
             SetPolicyServer(ctx, existing_policy_server);
             free(existing_policy_server);
         }
+        UpdateLastPolicyUpdateTime(ctx);
 
-        ScopeNewSpecial(ctx, "sys", "policy_hub", POLICY_SERVER, DATA_TYPE_STRING);
+        DetectEnvironment(ctx);
 
-        GetNameInfo3(ctx, AGENT_TYPE_EXECUTOR);
-        GetInterfacesInfo(ctx, AGENT_TYPE_EXECUTOR);
-        Get3Environment(ctx, AGENT_TYPE_EXECUTOR);
-        BuiltinClasses(ctx);
-        OSClasses(ctx);
+        EvalContextClassPutHard(ctx, CF_AGENTTYPES[AGENT_TYPE_EXECUTOR], "cfe_internal,source=agent");
 
-        EvalContextHeapAddHard(ctx, CF_AGENTTYPES[AGENT_TYPE_EXECUTOR]);
-
-        SetReferenceTime(ctx, true);
+        time_t t = SetReferenceTime();
+        UpdateTimeClasses(ctx, t);
 
         GenericAgentConfigSetBundleSequence(config, NULL);
 
-        *policy = GenericAgentLoadPolicy(ctx, config);
-        ExecConfigUpdate(ctx, *policy, exec_config);
+        *policy = LoadPolicy(ctx, config);
+        ExecConfigDestroy(*exec_config);
+        ExecdConfigDestroy(*execd_config);
 
-        SetFacility(exec_config->log_facility);
+        *exec_config = ExecConfigNew(!ONCE, ctx, *policy);
+        *execd_config = ExecdConfigNew(ctx, *policy);
+
+        SetFacility((*execd_config)->log_facility);
     }
     else
     {
         /* Environment reload */
 
-        EvalContextHeapClear(ctx);
+        EvalContextClear(ctx);
 
-        DeleteItemList(IPADDRESSES);
-        IPADDRESSES = NULL;
+        DetectEnvironment(ctx);
 
-        ScopeClear("this");
-        ScopeClear("mon");
-        ScopeClear("sys");
-
-        GetInterfacesInfo(ctx, AGENT_TYPE_EXECUTOR);
-        Get3Environment(ctx, AGENT_TYPE_EXECUTOR);
-        BuiltinClasses(ctx);
-        OSClasses(ctx);
-        SetReferenceTime(ctx, true);
+        time_t t = SetReferenceTime();
+        UpdateTimeClasses(ctx, t);
     }
 
     {
-        StringSetIterator it = StringSetIteratorInit(exec_config->schedule);
+        StringSetIterator it = StringSetIteratorInit((*execd_config)->schedule);
         const char *time_context = NULL;
         while ((time_context = StringSetIteratorNext(&it)))
         {
-            if (IsDefinedClass(ctx, time_context, NULL))
+            if (IsDefinedClass(ctx, time_context))
             {
                 Log(LOG_LEVEL_VERBOSE, "Waking up the agent at %s ~ %s", ctime(&CFSTARTTIME), time_context);
                 return true;

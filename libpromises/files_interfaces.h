@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,17 +25,15 @@
 #ifndef CFENGINE_FILES_INTERFACES_H
 #define CFENGINE_FILES_INTERFACES_H
 
-#include "cf3.defs.h"
-#include "cfnet.h"                                       /* AgentConnection */
+#include <cf3.defs.h>
+#include <cfnet.h>                                       /* AgentConnection */
 
-int cf_lstat(char *file, struct stat *buf, FileCopy fc, AgentConnection *conn);
+int cf_lstat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn);
 
 /**
- * Reads one line from #fp and places it in #buff. Newline at the end of line is
- * removed. Line is truncated to #size - 1 characters.
- *
- * @return Length of line read (not truncated), 0 on EOF, -1 on error.
+ * @brief Works exactly like posix 'getline', EXCEPT it does not include carriage return at the end.
+ * @return -1 on error OR EOF, so check. Or bytes read without null terminator. Never returns zero.
  */
-ssize_t CfReadLine(char *buff, size_t size, FILE *fp) FUNC_WARN_UNUSED_RESULT;
+ssize_t CfReadLine(char **buff, size_t *size, FILE *fp);
 
 #endif

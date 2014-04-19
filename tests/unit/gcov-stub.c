@@ -1,15 +1,15 @@
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 /*
  * Stubs which allow CFEngine compiled with gcov support to link against unit
  * test code which has gcov disabled.
  */
 
-void __gcov_init(void *p)
+void __gcov_init(ARG_UNUSED void *p)
 {
 }
 
-void __gcov_merge_add(void *p, unsigned n_counters)
+void __gcov_merge_add(ARG_UNUSED void *p, ARG_UNUSED unsigned n_counters)
 {
 }
 

@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,16 +25,14 @@
 #ifndef CFENGINE_INSTRUMENTATION_H
 #define CFENGINE_INSTRUMENTATION_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-#include "set.h"
+#include <set.h>
+#include <class.h>
 
 struct timespec BeginMeasure(void);
 void EndMeasure(char *eventname, struct timespec start);
 int EndMeasureValueMs(struct timespec start);
-void EndMeasurePromise(EvalContext *ctx, struct timespec start, Promise *pp);
-
-// TODO: temporary measure until all heaps are under EvalContext
-void NoteClassUsage(StringSetIterator context_iterator, int purge);
+void EndMeasurePromise(struct timespec start, const Promise *pp);
 
 #endif

@@ -17,32 +17,34 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "verify_databases.h"
+#include <verify_databases.h>
 
-#include "promises.h"
-#include "files_names.h"
-#include "conversion.h"
-#include "attributes.h"
-#include "string_lib.h"
-#include "locks.h"
-#include "cf_sql.h"
-#include "rlist.h"
-#include "policy.h"
-#include "cf-agent-enterprise-stubs.h"
-#include "env_context.h"
-#include "ornaments.h"
+#include <actuator.h>
+#include <promises.h>
+#include <files_names.h>
+#include <conversion.h>
+#include <attributes.h>
+#include <string_lib.h>
+#include <locks.h>
+#include <cf_sql.h>
+#include <rlist.h>
+#include <policy.h>
+#include <cf-agent-enterprise-stubs.h>
+#include <eval_context.h>
+#include <ornaments.h>
+#include <misc_lib.h>
 
-static int CheckDatabaseSanity(Attributes a, Promise *pp);
-static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp);
+static int CheckDatabaseSanity(Attributes a, const Promise *pp);
+static PromiseResult VerifySQLPromise(EvalContext *ctx, Attributes a, const Promise *pp);
 static int VerifyDatabasePromise(CfdbConn *cfdb, char *database, Attributes a);
 
 static int ValidateSQLTableName(char *table_path, char *db, char *table);
-static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path, Rlist *columns, Attributes a, Promise *pp);
+static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path, Rlist *columns, Attributes a, const Promise *pp, PromiseResult *result);
 static int ValidateSQLTableName(char *table_path, char *db, char *table);
 static void QueryTableColumns(char *s, char *db, char *table);
 static int NewSQLColumns(char *table, Rlist *columns, char ***name_table, char ***type_table, int **size_table,
@@ -50,45 +52,40 @@ static int NewSQLColumns(char *table, Rlist *columns, char ***name_table, char *
 static void DeleteSQLColumns(char **name_table, char **type_table, int *size_table, int *done, int len);
 static void CreateDBQuery(DatabaseType type, char *query);
 static int CreateTableColumns(CfdbConn *cfdb, char *table, Rlist *columns);
-static int CheckSQLDataType(char *type, char *ref_type, Promise *pp);
+static int CheckSQLDataType(char *type, char *ref_type, const Promise *pp);
 static int TableExists(CfdbConn *cfdb, char *name);
 static Rlist *GetSQLTables(CfdbConn *cfdb);
 static void ListTables(int type, char *query);
-static int ValidateRegistryPromiser(char *s, Promise *pp);
-static int CheckRegistrySanity(Attributes a, Promise *pp);
+static int ValidateRegistryPromiser(char *s, const Promise *pp);
+static int CheckRegistrySanity(Attributes a, const Promise *pp);
 
 /*****************************************************************************/
 
-void VerifyDatabasePromises(EvalContext *ctx, Promise *pp)
+PromiseResult VerifyDatabasePromises(EvalContext *ctx, const Promise *pp)
 {
-    Attributes a = { {0} };
-
-    if (EvalContextPromiseIsDone(ctx, pp))
-    {
-        return;
-    }
-
     PromiseBanner(pp);
 
-    a = GetDatabaseAttributes(ctx, pp);
+    Attributes a = GetDatabaseAttributes(ctx, pp);
 
     if (!CheckDatabaseSanity(a, pp))
     {
-        return;
+        return PROMISE_RESULT_FAIL;
     }
 
     if (strcmp(a.database.type, "sql") == 0)
     {
-        VerifySQLPromise(ctx, a, pp);
-        return;
+        return VerifySQLPromise(ctx, a, pp);
     }
-
-    if (strcmp(a.database.type, "ms_registry") == 0)
+    else if (strcmp(a.database.type, "ms_registry") == 0)
     {
 #if defined(__MINGW32__)
-        VerifyRegistryPromise(ctx, a, pp);
+        return VerifyRegistryPromise(ctx, a, pp);
 #endif
-        return;
+        return PROMISE_RESULT_NOOP;
+    }
+    else
+    {
+        ProgrammingError("Unknown database type '%s'", a.database.type);
     }
 }
 
@@ -96,7 +93,7 @@ void VerifyDatabasePromises(EvalContext *ctx, Promise *pp)
 /* Level                                                                     */
 /*****************************************************************************/
 
-static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
+static PromiseResult VerifySQLPromise(EvalContext *ctx, Attributes a, const Promise *pp)
 {
     char database[CF_MAXVARSIZE], table[CF_MAXVARSIZE], query[CF_BUFSIZE];
     char *sp;
@@ -108,10 +105,9 @@ static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
     snprintf(lockname, CF_BUFSIZE - 1, "db-%s", pp->promiser);
 
     thislock = AcquireLock(ctx, lockname, VUQNAME, CFSTARTTIME, a.transaction, pp, false);
-
     if (thislock.lock == NULL)
     {
-        return;
+        return PROMISE_RESULT_SKIPPED;
     }
 
     database[0] = '\0';
@@ -131,15 +127,17 @@ static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
                      "SQL database promiser syntax should be of the form \"database.table\"");
                 PromiseRef(LOG_LEVEL_ERR, pp);
                 YieldCurrentLock(thislock);
-                return;
+                return PROMISE_RESULT_FAIL;
             }
         }
     }
 
+    PromiseResult result = PROMISE_RESULT_NOOP;
     if (count > 1)
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "SQL database promiser syntax should be of the form \"database.table\"");
         PromiseRef(LOG_LEVEL_ERR, pp);
+        result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
     }
 
     if (strlen(database) == 0)
@@ -153,7 +151,7 @@ static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
              "Missing database_operation in database promise");
         PromiseRef(LOG_LEVEL_ERR, pp);
         YieldCurrentLock(thislock);
-        return;
+        return PROMISE_RESULT_FAIL;
     }
 
     if (strcmp(a.database.operation, "delete") == 0)
@@ -177,7 +175,7 @@ static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
             PromiseRef(LOG_LEVEL_ERR, pp);
             CfCloseDB(&cfdb);
             YieldCurrentLock(thislock);
-            return;
+            return PROMISE_RESULT_FAIL;
         }
     }
 
@@ -191,7 +189,7 @@ static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
         if (!cfdb.connected)
         {
             Log(LOG_LEVEL_ERR, "Could not connect to the sql_db server for '%s'", database);
-            return;
+            return PROMISE_RESULT_FAIL;
         }
 
         /* Don't drop the db if we really want to drop a table */
@@ -211,7 +209,7 @@ static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
     if (strlen(table) == 0)
     {
         YieldCurrentLock(thislock);
-        return;
+        return result;
     }
 
     CfConnectDB(&cfdb, a.database.db_server_type, a.database.db_server_host, a.database.db_server_owner,
@@ -225,13 +223,14 @@ static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
     {
         snprintf(query, CF_MAXVARSIZE - 1, "%s.%s", database, table);
 
-        if (VerifyTablePromise(ctx, &cfdb, query, a.database.columns, a, pp))
+        if (VerifyTablePromise(ctx, &cfdb, query, a.database.columns, a, pp, &result))
         {
             cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_NOOP, pp, a, "Table '%s' is as promised", query);
         }
         else
         {
-            cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, a, "Table '%s' is not as promised", query);
+            cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Table '%s' is not as promised", query);
+            result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
         }
 
 /* Finally check any row constraints on this table */
@@ -246,6 +245,8 @@ static void VerifySQLPromise(EvalContext *ctx, Attributes a, Promise *pp)
     }
 
     YieldCurrentLock(thislock);
+
+    return result;
 }
 
 static int VerifyDatabasePromise(CfdbConn *cfdb, char *database, Attributes a)
@@ -331,7 +332,7 @@ static int VerifyDatabasePromise(CfdbConn *cfdb, char *database, Attributes a)
 
 /*****************************************************************************/
 
-static int CheckDatabaseSanity(Attributes a, Promise *pp)
+static int CheckDatabaseSanity(Attributes a, const Promise *pp)
 {
     Rlist *rp;
     int retval = true, commas = 0;
@@ -378,9 +379,9 @@ static int CheckDatabaseSanity(Attributes a, Promise *pp)
 
         for (rp = a.database.columns; rp != NULL; rp = rp->next)
         {
-            commas = CountChar(rp->item, ',');
+            commas = CountChar(RlistScalarValue(rp), ',');
 
-            if ((commas > 2) && (commas < 1))
+            if ((commas > 2) || (commas < 1))
             {
                 Log(LOG_LEVEL_ERR, "SQL Column format should be NAME,TYPE[,SIZE]");
                 retval = false;
@@ -407,7 +408,7 @@ static int CheckDatabaseSanity(Attributes a, Promise *pp)
     return retval;
 }
 
-static int CheckRegistrySanity(Attributes a, Promise *pp)
+static int CheckRegistrySanity(Attributes a, const Promise *pp)
 {
     bool retval = true;
 
@@ -453,7 +454,7 @@ static int CheckRegistrySanity(Attributes a, Promise *pp)
 
     for (Rlist *rp = a.database.columns; rp != NULL; rp = rp->next)
     {
-        if (CountChar(rp->item, ',') > 0)
+        if (CountChar(RlistScalarValue(rp), ',') > 0)
         {
             Log(LOG_LEVEL_ERR, "MS registry column format should be NAME only in deletion");
             retval = false;
@@ -463,9 +464,9 @@ static int CheckRegistrySanity(Attributes a, Promise *pp)
     return retval;
 }
 
-static int ValidateRegistryPromiser(char *key, Promise *pp)
+static int ValidateRegistryPromiser(char *key, const Promise *pp)
 {
-    static char *valid[] = { "HKEY_CLASSES_ROOT", "HKEY_CURRENT_CONFIG",
+    static char *const valid[] = { "HKEY_CLASSES_ROOT", "HKEY_CURRENT_CONFIG",
         "HKEY_CURRENT_USER", "HKEY_LOCAL_MACHINE", "HKEY_USERS", NULL
     };
     char root_key[CF_MAXVARSIZE];
@@ -474,7 +475,7 @@ static int ValidateRegistryPromiser(char *key, Promise *pp)
 
     /* First remove the root key */
 
-    strncpy(root_key, key, CF_MAXVARSIZE - 1);
+    strlcpy(root_key, key, CF_MAXVARSIZE );
     sp = strchr(root_key, '\\');
     *sp = '\0';
 
@@ -495,7 +496,8 @@ static int ValidateRegistryPromiser(char *key, Promise *pp)
 /* Linker troubles require this code to be here in the main body             */
 /*****************************************************************************/
 
-static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path, Rlist *columns, Attributes a, Promise *pp)
+static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path, Rlist *columns, Attributes a,
+                              const Promise *pp, PromiseResult *result)
 {
     char name[CF_MAXVARSIZE], type[CF_MAXVARSIZE], query[CF_MAXVARSIZE], table[CF_MAXVARSIZE], db[CF_MAXVARSIZE];
     int i, count, size, no_of_cols, *size_table, *done, identified, retval = true;
@@ -526,6 +528,7 @@ static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path
             {
                 cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_CHANGE, pp, a, "Database.table '%s' doesn't seem to exist, creating",
                      table_path);
+                *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
                 return CreateTableColumns(cfdb, table, columns);
             }
             else
@@ -546,6 +549,7 @@ static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path
     if (cfdb->maxcolumns != 3)
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Could not make sense of the columns");
+        *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
         CfDeleteQuery(cfdb);
         return false;
     }
@@ -558,6 +562,7 @@ static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path
     if (!NewSQLColumns(table, columns, &name_table, &type_table, &size_table, &done))
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a, "Could not make sense of the columns");
+        *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
         return false;
     }
 
@@ -610,6 +615,7 @@ static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                          "Promised column '%s' in database.table '%s' has a non-matching array size (%d != %d)",
                          name, table_path, size, size_table[i]);
+                    *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
                 }
                 else
                 {
@@ -628,12 +634,14 @@ static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                  "Column '%s' found in database.table '%s' is not part of its promise.", name, table_path);
+            *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
 
             if ((a.database.operation) && (strcmp(a.database.operation, "drop") == 0))
             {
                 cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, a,
                      "CFEngine will not promise to repair this, as the operation is potentially too destructive.");
                 // Future allow deletion?
+                *result = PromiseResultUpdate(*result, PROMISE_RESULT_FAIL);
             }
 
             retval = false;
@@ -674,6 +682,7 @@ static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path
                     CfVoidQueryDB(cfdb, query);
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_CHANGE, pp, a, "Adding promised column '%s' to database table '%s'",
                          name_table[i], table);
+                    *result = PromiseResultUpdate(*result, PROMISE_RESULT_CHANGE);
                     retval = true;
                 }
                 else
@@ -681,6 +690,7 @@ static int VerifyTablePromise(EvalContext *ctx, CfdbConn *cfdb, char *table_path
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, a,
                          "Promised column '%s' missing from database table '%s' but only a warning was promised",
                          name_table[i], table);
+                    *result = PromiseResultUpdate(*result, PROMISE_RESULT_WARN);
                     retval = false;
                 }
             }
@@ -703,7 +713,7 @@ static int TableExists(CfdbConn *cfdb, char *name)
 
     for (rp = list; rp != NULL; rp = rp->next)
     {
-        if (strcmp(name, rp->item) == 0)
+        if (strcmp(name, RlistScalarValue(rp)) == 0)
         {
             match = true;
         }
@@ -786,7 +796,7 @@ static Rlist *GetSQLTables(CfdbConn *cfdb)
 
     while (CfFetchRow(cfdb))
     {
-        RlistPrependScalar(&list, CfFetchColumn(cfdb, 0));
+        RlistPrepend(&list, CfFetchColumn(cfdb, 0), RVAL_TYPE_SCALAR);
     }
 
     CfDeleteQuery(cfdb);
@@ -845,7 +855,7 @@ static int ValidateSQLTableName(char *table_path, char *db, char *table)
 
 /* Should contain a single separator */
 
-    if (dot + back + fwd > true)
+    if (dot + back + fwd != 1)
     {
         return false;
     }
@@ -882,7 +892,7 @@ static int NewSQLColumns(char *table, Rlist *columns, char ***name_table, char *
     {
         (*done)[i] = 0;
 
-        cols = RlistFromSplitString((char *) rp->item, ',');
+        cols = RlistFromSplitString(RlistScalarValue(rp), ',');
 
         if (!cols)
         {
@@ -890,7 +900,7 @@ static int NewSQLColumns(char *table, Rlist *columns, char ***name_table, char *
             return false;
         }
 
-        if (cols->item == NULL)
+        if (cols->val.item == NULL)
         {
             Log(LOG_LEVEL_ERR, "Malformed column promise for table '%s' - found not even a name", table);
             free(*name_table);
@@ -900,7 +910,7 @@ static int NewSQLColumns(char *table, Rlist *columns, char ***name_table, char *
             return false;
         }
 
-        (*name_table)[i] = xstrdup((char *) cols->item);
+        (*name_table)[i] = xstrdup(RlistScalarValue(cols));
 
         if (cols->next == NULL)
         {
@@ -913,7 +923,7 @@ static int NewSQLColumns(char *table, Rlist *columns, char ***name_table, char *
             return false;
         }
 
-        (*type_table)[i] = xstrdup(cols->next->item);
+        (*type_table)[i] = xstrdup(RlistScalarValue(cols->next));
 
         if (cols->next->next == NULL)
         {
@@ -921,9 +931,9 @@ static int NewSQLColumns(char *table, Rlist *columns, char ***name_table, char *
         }
         else
         {
-            if (cols->next->next->item)
+            if (cols->next->next->val.item)
             {
-                (*size_table)[i] = IntFromString(cols->next->next->item);
+                (*size_table)[i] = IntFromString(RlistScalarValue(cols->next->next));
             }
             else
             {
@@ -969,9 +979,9 @@ static void DeleteSQLColumns(char **name_table, char **type_table, int *size_tab
 
 /*****************************************************************************/
 
-static int CheckSQLDataType(char *type, char *ref_type, Promise *pp)
+static int CheckSQLDataType(char *type, char *ref_type, const Promise *pp)
 {
-    static char *aliases[3][2] =
+    static char *const aliases[3][2] =
         {
             {"varchar", "character@varying"},
             {"varchar", "character varying"},

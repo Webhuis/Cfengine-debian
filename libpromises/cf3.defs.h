@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,16 +25,20 @@
 #ifndef CFENGINE_CF3_DEFS_H
 #define CFENGINE_CF3_DEFS_H
 
-#include "platform.h"
-#include "compiler.h"
+#include <platform.h>
+#include <compiler.h>
 
 #ifdef HAVE_LIBXML2
 #include <libxml/parser.h>
 #include <libxml/xpathInternals.h>
 #endif
 
-#include "sequence.h"
-#include "logging.h"
+#include <hash.h> /* Required for HashMethod */
+#include <sequence.h>
+#include <logging.h>
+
+#include <cfnet.h>                       /* ProtocolVersion, CF_BUFSIZE etc */
+
 
 /*******************************************************************/
 /* Preprocessor tricks                                             */
@@ -48,20 +52,14 @@
 /* Various defines                                                 */
 /*******************************************************************/
 
-#define CF_BUFSIZE 4096
-/* max size of plaintext in one transaction, see
-   net.c:SendTransaction(), leave space for encryption padding
-   (assuming max 64*8 = 512-bit cipher block size)*/
 #define CF_BILLION 1000000000L
 #define CF_EXPANDSIZE (2*CF_BUFSIZE)
 #define CF_BUFFERMARGIN 128
 #define CF_BLOWFISHSIZE 16
-#define CF_SMALLBUF 128
 #define CF_MAXVARSIZE 1024
 #define CF_MAXSIDSIZE 2048      /* Windows only: Max size (bytes) of security identifiers */
 #define CF_NONCELEN (CF_BUFSIZE/16)
 #define CF_MAXLINKSIZE 256
-#define CF_MAX_IP_LEN 64        /* TODO INET6_ADDRSTRLEN */
 #define CF_PROCCOLS 16
 #define CF_HASHTABLESIZE 8192
 #define CF_MACROALPHABET 61     /* a-z, A-Z plus a bit */
@@ -120,19 +118,6 @@
 #define CF_ANYCLASS "any"
 #define CF_SMALL_OFFSET 2
 
-/* digest sizes */
-#define CF_MD5_LEN 16
-#define CF_SHA_LEN 20
-#define CF_SHA1_LEN 20
-#define CF_BEST_LEN 0
-#define CF_CRYPT_LEN 64
-#define CF_SHA224_LEN 28
-#define CF_SHA256_LEN 32
-#define CF_SHA384_LEN 48
-#define CF_SHA512_LEN 64
-
-#define CF_DONE 't'
-#define CF_MORE 'm'
 #define CF_NS ':'   // namespace character separator
 
 /*****************************************************************************/
@@ -141,13 +126,14 @@
 
 typedef enum
 {
+    PROMISE_RESULT_SKIPPED,
     PROMISE_RESULT_NOOP = 'n',
     PROMISE_RESULT_CHANGE = 'c',
     PROMISE_RESULT_WARN = 'w', // something wrong but nothing done
     PROMISE_RESULT_FAIL = 'f',
     PROMISE_RESULT_DENIED = 'd',
     PROMISE_RESULT_TIMEOUT = 't',
-    PROMISE_RESULT_INTERRUPTED = 'i',
+    PROMISE_RESULT_INTERRUPTED = 'i'
 } PromiseResult;
 
 /*****************************************************************************/
@@ -165,92 +151,6 @@ typedef enum
 #define CF_SHIFT_INTERVAL (6*3600)
 
 #define CF_OBSERVABLES 100
-
-
-#include "statistics.h"
-
-typedef struct
-{
-    time_t t;
-    QPoint Q;
-} Event;
-
-typedef struct
-{
-    time_t last_seen;
-    QPoint Q[CF_OBSERVABLES];
-} Averages;
-
-/******************************************************************/
-
-typedef struct
-{
-    pid_t pid;
-    time_t time;
-    time_t process_start_time;
-} LockData;
-
-/*****************************************************************************/
-
-#ifdef __MINGW32__
-# define NULLFILE "nul"
-# define EXEC_SUFFIX ".exe"
-#else
-# define NULLFILE "/dev/null"
-# define EXEC_SUFFIX ""
-#endif /* !__MINGW32__ */
-
-#define CF_WORDSIZE 8           /* Number of bytes in a word */
-
-/*******************************************************************/
-
-typedef struct Item_ Item;
-
-// Indexed itemlist
-typedef struct
-{
-    Item *list[CF_ALPHABETSIZE];
-} AlphaList;
-
-/*******************************************************************/
-
-enum cfsizes
-{
-    cfabs,
-    cfpercent
-};
-
-/*******************************************************************/
-
-typedef enum
-{
-    CONTEXT_STATE_POLICY_RESET,                    /* Policy when trying to add already defined persistent states */
-    CONTEXT_STATE_POLICY_PRESERVE
-} ContextStatePolicy;
-
-/*******************************************************************/
-
-typedef enum
-{
-    PLATFORM_CONTEXT_UNKNOWN,
-    PLATFORM_CONTEXT_HP,
-    PLATFORM_CONTEXT_AIX,
-    PLATFORM_CONTEXT_LINUX,
-    PLATFORM_CONTEXT_SOLARIS,
-    PLATFORM_CONTEXT_FREEBSD,
-    PLATFORM_CONTEXT_NETBSD,
-    PLATFORM_CONTEXT_CRAYOS,
-    PLATFORM_CONTEXT_WINDOWS_NT,
-    PLATFORM_CONTEXT_SYSTEMV,
-    PLATFORM_CONTEXT_OPENBSD,
-    PLATFORM_CONTEXT_CFSCO,
-    PLATFORM_CONTEXT_DARWIN,
-    PLATFORM_CONTEXT_QNX,
-    PLATFORM_CONTEXT_DRAGONFLY,
-    PLATFORM_CONTEXT_MINGW,
-    PLATFORM_CONTEXT_VMWARE,
-    PLATFORM_CONTEXT_MAX
-} PlatformContext;
 
 enum observables
 {
@@ -329,14 +229,96 @@ enum observables
     ob_spare
 };
 
+#include <statistics.h>
+
+typedef struct
+{
+    time_t t;
+    QPoint Q;
+} Event;
+
+typedef struct
+{
+    time_t last_seen;
+    QPoint Q[CF_OBSERVABLES];
+} Averages;
+
+/******************************************************************/
+
+typedef struct
+{
+    pid_t pid;
+    time_t time;
+    time_t process_start_time;
+} LockData;
+
+/*****************************************************************************/
+
+#ifdef __MINGW32__
+# define NULLFILE "nul"
+# define EXEC_SUFFIX ".exe"
+# define FILE_SEPARATOR '\\'
+# define FILE_SEPARATOR_STR "\\"
+#else
+# define NULLFILE "/dev/null"
+# define EXEC_SUFFIX ""
+# define FILE_SEPARATOR '/'
+# define FILE_SEPARATOR_STR "/"
+#endif /* !__MINGW32__ */
+
+#define CF_WORDSIZE 8           /* Number of bytes in a word */
+
 /*******************************************************************/
 
-typedef struct CompressedArray_ CompressedArray;
+typedef struct Item_ Item;
+
+/*******************************************************************/
+
+typedef enum
+{
+    CF_SIZE_ABS,
+    CF_SIZE_PERCENT
+} CfSize;
+
+/*******************************************************************/
+
+typedef enum
+{
+    CONTEXT_STATE_POLICY_RESET,                    /* Policy when trying to add already defined persistent states */
+    CONTEXT_STATE_POLICY_PRESERVE
+} PersistentClassPolicy;
+
+/*******************************************************************/
+
+typedef enum
+{
+    PLATFORM_CONTEXT_UNKNOWN,
+    PLATFORM_CONTEXT_OPENVZ,
+    PLATFORM_CONTEXT_HP,
+    PLATFORM_CONTEXT_AIX,
+    PLATFORM_CONTEXT_LINUX,
+    PLATFORM_CONTEXT_SOLARIS,
+    PLATFORM_CONTEXT_FREEBSD,
+    PLATFORM_CONTEXT_NETBSD,
+    PLATFORM_CONTEXT_CRAYOS,
+    PLATFORM_CONTEXT_WINDOWS_NT,
+    PLATFORM_CONTEXT_SYSTEMV,
+    PLATFORM_CONTEXT_OPENBSD,
+    PLATFORM_CONTEXT_CFSCO,
+    PLATFORM_CONTEXT_DARWIN,
+    PLATFORM_CONTEXT_QNX,
+    PLATFORM_CONTEXT_DRAGONFLY,
+    PLATFORM_CONTEXT_MINGW,
+    PLATFORM_CONTEXT_VMWARE,
+    PLATFORM_CONTEXT_ANDROID,
+    PLATFORM_CONTEXT_MAX
+} PlatformContext;
 
 /*******************************************************************/
 
 typedef struct UidList_ UidList;
 
+// TODO: why do UIDs have their own list type? Clean up.
 struct UidList_
 {
 #ifdef __MINGW32__  // TODO: remove uid for NT ?
@@ -351,23 +333,13 @@ struct UidList_
 
 typedef struct GidList_ GidList;
 
+// TODO: why do UIDs have their own list type? Clean up.
 struct GidList_
 {
     gid_t gid;
     char *gidname;              /* when gid is -2 */
     GidList *next;
 };
-
-
-/*******************************************************************/
-/* Checksum database structures                                    */
-/*******************************************************************/
-
-typedef struct
-{
-    unsigned char mess_digest[EVP_MAX_MD_SIZE + 1];     /* Content digest */
-    unsigned char attr_digest[EVP_MAX_MD_SIZE + 1];     /* Attribute digest */
-} ChecksumValue;
 
 /*******************************************************************/
 /* File path manipulation primitives                               */
@@ -388,18 +360,12 @@ typedef struct
 /* Fundamental (meta) types                                              */
 /*************************************************************************/
 
-#define CF_MAPPEDLIST '#'
-
 #define CF_UNDEFINED -1
 #define CF_NOINT    -678L
 #define CF_UNDEFINED_ITEM (void *)0x1234
-#define CF_VARARGS 99
-#define CF_UNKNOWN_IP "location unknown"
 
 #define DEFAULTMODE ((mode_t)0755)
 
-#define CF_MAX_NESTING 10
-#define CF_MAX_REPLACE 20
 #define CF_DONEPASSES  4
 
 #define CFPULSETIME 60
@@ -407,9 +373,6 @@ typedef struct
 /*************************************************************************/
 /* Parsing and syntax tree structures                                    */
 /*************************************************************************/
-
-#define CF_DEFINECLASSES "classes"
-#define CF_TRANSACTION   "action"
 
 extern const int CF3_MODULES;
 
@@ -428,22 +391,23 @@ typedef struct FnCall_ FnCall;
 
 typedef enum
 {
-    DATA_TYPE_STRING,
-    DATA_TYPE_INT,
-    DATA_TYPE_REAL,
-    DATA_TYPE_STRING_LIST,
-    DATA_TYPE_INT_LIST,
-    DATA_TYPE_REAL_LIST,
-    DATA_TYPE_OPTION,
-    DATA_TYPE_OPTION_LIST,
-    DATA_TYPE_BODY,
-    DATA_TYPE_BUNDLE,
-    DATA_TYPE_CONTEXT,
-    DATA_TYPE_CONTEXT_LIST,
-    DATA_TYPE_INT_RANGE,
-    DATA_TYPE_REAL_RANGE,
-    DATA_TYPE_COUNTER,
-    DATA_TYPE_NONE
+    CF_DATA_TYPE_STRING,
+    CF_DATA_TYPE_INT,
+    CF_DATA_TYPE_REAL,
+    CF_DATA_TYPE_STRING_LIST,
+    CF_DATA_TYPE_INT_LIST,
+    CF_DATA_TYPE_REAL_LIST,
+    CF_DATA_TYPE_OPTION,
+    CF_DATA_TYPE_OPTION_LIST,
+    CF_DATA_TYPE_BODY,
+    CF_DATA_TYPE_BUNDLE,
+    CF_DATA_TYPE_CONTEXT,
+    CF_DATA_TYPE_CONTEXT_LIST,
+    CF_DATA_TYPE_INT_RANGE,
+    CF_DATA_TYPE_REAL_RANGE,
+    CF_DATA_TYPE_COUNTER,
+    CF_DATA_TYPE_CONTAINER,
+    CF_DATA_TYPE_NONE
 } DataType;
 
 /*************************************************************************/
@@ -456,7 +420,6 @@ typedef enum
 #define CF_RUNC     "runagent"
 #define CF_KEYGEN   "keygenerator"
 #define CF_HUBC     "hub"
-#define CF_GENDOC   "gendoc"
 
 typedef enum
 {
@@ -468,7 +431,6 @@ typedef enum
     AGENT_TYPE_RUNAGENT,
     AGENT_TYPE_KEYGEN,
     AGENT_TYPE_HUB,
-    AGENT_TYPE_GENDOC,
     AGENT_TYPE_NOAGENT
 } AgentType;
 
@@ -491,7 +453,9 @@ typedef enum
     COMMON_CONTROL_SYSLOG_HOST,
     COMMON_CONTROL_SYSLOG_PORT,
     COMMON_CONTROL_FIPS_MODE,
-    COMMON_CONTROL_NONE
+    COMMON_CONTROL_CACHE_SYSTEM_FUNCTIONS,
+    COMMON_CONTROL_PROTOCOL_VERSION,
+    COMMON_CONTROL_MAX
 } CommonControl;
 
 /*************************************************************************/
@@ -551,6 +515,7 @@ typedef enum
     EXEC_CONTROL_SPLAYTIME,
     EXEC_CONTROL_MAILFROM,
     EXEC_CONTROL_MAILTO,
+    EXEC_CONTROL_MAILSUBJECT,
     EXEC_CONTROL_SMTPSERVER,
     EXEC_CONTROL_MAILMAXLINES,
     EXEC_CONTROL_SCHEDULE,
@@ -596,23 +561,26 @@ typedef enum
 #define CF_NAKEDLRANGE "@[(][a-zA-Z0-9]+[)]"
 #define CF_ANYSTRING   ".*"
 
+#define CF_KEYSTRING   "^(SHA|MD5)=[0123456789abcdef]*$"
+
+
 #ifndef __MINGW32__
-# define CF_ABSPATHRANGE   "\042?(/.*)"
+# define CF_ABSPATHRANGE   "\"?(/.*)"
 #else
 // can start with e.g. c:\... or "c:\...  |  unix (for Cygwin-style paths)
-# define CF_ABSPATHRANGE   "\042?(([a-zA-Z]:\\\\.*)|(/.*))"
+# define CF_ABSPATHRANGE   "\"?(([a-zA-Z]:\\\\.*)|(/.*))"
 #endif
 
 /* Any non-empty string can be an absolute path under Unix */
 #define CF_PATHRANGE ".+"
 
-#define CF_LOGRANGE    "stdout|udp_syslog|(\042?[a-zA-Z]:\\\\.*)|(/.*)"
-
-#define CF_FACILITY "LOG_USER,LOG_DAEMON,LOG_LOCAL0,LOG_LOCAL1,LOG_LOCAL2,LOG_LOCAL3,LOG_LOCAL4,LOG_LOCAL5,LOG_LOCAL6,LOG_LOCAL7"
-
 // Put this here now for caching efficiency
 
 #define SOFTWARE_PACKAGES_CACHE "software_packages.csv"
+#define SOFTWARE_PATCHES_CACHE "software_patches_avail.csv"
+
+#define PACKAGES_CONTEXT "cf_pack_context"
+#define PACKAGES_CONTEXT_ANYVER "cf_pack_context_anyver"
 
 /*************************************************************************/
 
@@ -623,6 +591,7 @@ typedef enum
     RVAL_TYPE_SCALAR = 's',
     RVAL_TYPE_LIST = 'l',
     RVAL_TYPE_FNCALL = 'f',
+    RVAL_TYPE_CONTAINER = 'c',
     RVAL_TYPE_NOPROMISEE = 'X' // TODO: must be another hack
 } RvalType;
 
@@ -696,67 +665,9 @@ typedef struct
     SyntaxStatus status;
 } PromiseTypeSyntax;
 
-typedef enum FnCallStatus
-{
-    FNCALL_SUCCESS,
-    FNCALL_FAILURE
-} FnCallStatus;
-
-typedef struct
-{
-    FnCallStatus status;
-    Rval rval;
-} FnCallResult;
-
-typedef struct
-{
-    const char *pattern;
-    DataType dtype;
-    const char *description;
-} FnCallArg;
-
-typedef struct
-{
-    const char *name;
-    DataType dtype;
-    const FnCallArg *args;
-    FnCallResult (*impl)(EvalContext *ctx, FnCall *, Rlist *);
-    const char *description;
-    bool varargs;
-    FnCallCategory category;
-    SyntaxStatus status;
-} FnCallType;
-
-#define UNKNOWN_FUNCTION -1
-
 /*************************************************************************/
 
 typedef struct Constraint_ Constraint;
-
-typedef struct
-{
-    char *filename;
-    Item *file_start;
-    int num_edits;
-#ifdef HAVE_LIBXML2
-    xmlDocPtr xmldoc;
-#endif
-
-} EditContext;
-
-/*******************************************************************/
-/* Variable processing                                             */
-/*******************************************************************/
-
-typedef struct AssocHashTable_ AssocHashTable;
-
-/* $(bundlevar) $(scope.name) */
-typedef struct Scope_
-{
-    char *scope;                /* Name of scope */
-    AssocHashTable *hashtable;
-    struct Scope_ *next;
-} Scope;
 
 typedef enum
 {
@@ -800,26 +711,6 @@ typedef enum
     BACKUP_OPTION_ROTATE,
     BACKUP_OPTION_REPOSITORY_STORE             /* for internal use only */
 } BackupOption;
-
-enum cftidylinks
-{
-    cfa_linkdelete,
-    cfa_linkkeep
-};
-
-typedef enum
-{
-    HASH_METHOD_MD5,
-    HASH_METHOD_SHA224,
-    HASH_METHOD_SHA256,
-    HASH_METHOD_SHA384,
-    HASH_METHOD_SHA512,
-    HASH_METHOD_SHA1,
-    HASH_METHOD_SHA,
-    HASH_METHOD_BEST,
-    HASH_METHOD_CRYPT,
-    HASH_METHOD_NONE
-} HashMethod;
 
 enum cfnofile
 {
@@ -1000,6 +891,7 @@ typedef struct
     char *last;
     char *lock;
     char *log;
+    bool is_dummy;
 } CfLock;
 
 /*************************************************************************/
@@ -1024,7 +916,7 @@ typedef struct
     int include_basedir;
     Rlist *include_dirs;
     Rlist *exclude_dirs;
-} Recursion;
+} DirectoryRecursion;
 
 /*************************************************************************/
 
@@ -1040,9 +932,6 @@ typedef struct
     char *log_failed;
     int log_priority;
     char *measure_id;
-    double value_kept;
-    double value_notkept;
-    double value_repaired;
     int audit;
     LogLevel report_level;
     LogLevel log_level;
@@ -1067,7 +956,7 @@ typedef struct
     Rlist *kept;
     Rlist *interrupt;
     int persist;
-    ContextStatePolicy timer;
+    PersistentClassPolicy timer;
     Rlist *del_change;
     Rlist *del_kept;
     Rlist *del_notkept;
@@ -1086,18 +975,6 @@ typedef enum
     DATABASE_TYPE_POSTGRES,
     DATABASE_TYPE_NONE
 } DatabaseType;
-
-/*************************************************************************/
-/* Threading container                                                   */
-/*************************************************************************/
-
-typedef struct
-{
-    AgentType agent;
-    char *scopeid;
-    Promise *pp;
-    void *fnptr;
-} PromiseThread;
 
 /*************************************************************************/
 /* Package promises                                                      */
@@ -1128,44 +1005,13 @@ struct PackageItem_
     PackageItem *next;
 };
 
-/*************************************************************************/
-/* Files                                                                 */
-/*************************************************************************/
-
-typedef struct
-{
-    char *source;
-    char *destination;
-    FileComparator compare;
-    FileLinkType link_type;
-    Rlist *servers;
-    Rlist *link_instead;
-    Rlist *copy_links;
-    BackupOption backup;
-    int stealth;
-    int preserve;
-    int collapse;
-    int check_root;
-    int type_check;
-    int force_update;
-    int force_ipv4;
-    size_t min_size;            /* Safety margin not search criterion */
-    size_t max_size;
-    int trustkey;
-    int encrypt;
-    int verify;
-    int purge;
-    short portnumber;
-    short timeout;
-} FileCopy;
-
-/*************************************************************************/
 
 typedef struct
 {
     unsigned int expires;
-    ContextStatePolicy policy;
-} CfState;
+    PersistentClassPolicy policy;
+    char tags[]; // variable length, must be zero terminated
+} PersistentClassInfo;
 
 /*************************************************************************/
 
@@ -1210,7 +1056,11 @@ typedef struct
 
 typedef struct
 {
-    enum cftidylinks dirlinks;
+    enum
+    {
+        TIDY_LINK_DELETE,
+        TIDY_LINK_KEEP
+    } dirlinks;
     int rmdirs;
 } FileDelete;
 
@@ -1514,6 +1364,35 @@ typedef struct
 } Database;
 
 /*************************************************************************/
+typedef enum
+{
+    USER_STATE_PRESENT,
+    USER_STATE_ABSENT,
+    USER_STATE_LOCKED,
+    USER_STATE_NONE
+} UserState;
+
+typedef enum
+{
+    PASSWORD_FORMAT_PLAINTEXT,
+    PASSWORD_FORMAT_HASH,
+    PASSWORD_FORMAT_NONE
+} PasswordFormat;
+
+typedef struct
+{
+    UserState policy;
+    char *uid;
+    PasswordFormat password_format;
+    char *password;
+    char *description;
+    char *group_primary;
+    Rlist *groups_secondary;
+    char *home_dir;
+    char *shell;
+} User;
+
+/*************************************************************************/
 
 typedef enum
 {
@@ -1535,14 +1414,6 @@ typedef struct
     char *service_depend_chain;
     FnCall *service_method;
 } Services;
-
-/*************************************************************************/
-
-typedef struct
-{
-    char *level;
-    char *promiser_type;
-} Outputs;
 
 /*************************************************************************/
 
@@ -1573,9 +1444,38 @@ typedef struct
 /* This is huge, but the simplification of logic is huge too
     so we leave it to the compiler to optimize */
 
+#include <json.h>
+
 typedef struct
 {
-    Outputs output;
+    const char *source;
+    const char *port;                               /* port or service name */
+    char *destination;
+    FileComparator compare;
+    FileLinkType link_type;
+    Rlist *servers;
+    Rlist *link_instead;
+    Rlist *copy_links;
+    BackupOption backup;
+    int stealth;
+    int preserve;
+    int collapse;
+    int check_root;
+    int type_check;
+    int force_update;
+    int force_ipv4;
+    size_t min_size;            /* Safety margin not search criterion */
+    size_t max_size;
+    int trustkey;
+    int encrypt;
+    int verify;
+    int purge;
+    short timeout;
+    ProtocolVersion protocol_version;
+} FileCopy;
+
+typedef struct
+{
     FileSelect select;
     FilePerms perms;
     FileCopy copy;
@@ -1590,17 +1490,20 @@ typedef struct
     Acl acl;
     Database database;
     Services service;
+    User users;
     Environments env;
     char *transformer;
     char *pathtype;
     char *repository;
-    char *template;
+    char *edit_template;
+    char *template_method;
+    JsonElement *template_data;
     int touch;
     int create;
     int move_obstructions;
     int inherit;
 
-    Recursion recursion;
+    DirectoryRecursion recursion;
     TransactionContext transaction;
     DefineClasses classes;
 
@@ -1665,23 +1568,24 @@ typedef struct
 #define NULL_OR_EMPTY(str) ((str == NULL) || (str[0] == '\0'))
 #define BEGINSWITH(str,start) (strncmp(str,start,strlen(start)) == 0)
 
-#include "dbm_api.h"
-#include "sequence.h"
-#include "prototypes3.h"
-#include "alloc.h"
-#include "cf3.extern.h"
+#include <dbm_api.h>
+#include <sequence.h>
+#include <prototypes3.h>
+#include <alloc.h>
+#include <cf3.extern.h>
 
 extern const ConstraintSyntax CF_COMMON_BODIES[];
 extern const ConstraintSyntax CF_VARBODY[];
-extern const PromiseTypeSyntax *CF_ALL_PROMISE_TYPES[];
+extern const PromiseTypeSyntax *const CF_ALL_PROMISE_TYPES[];
 extern const ConstraintSyntax CFG_CONTROLBODY[];
-extern const FnCallType CF_FNCALL_TYPES[];
 extern const BodySyntax CONTROL_BODIES[];
 extern const ConstraintSyntax CFH_CONTROLBODY[];
 extern const PromiseTypeSyntax CF_COMMON_PROMISE_TYPES[];
 extern const ConstraintSyntax CF_CLASSBODY[];
 extern const ConstraintSyntax CFA_CONTROLBODY[];
 extern const ConstraintSyntax CFEX_CONTROLBODY[];
+
+typedef struct ServerConnectionState_ ServerConnectionState;
 
 #endif
 

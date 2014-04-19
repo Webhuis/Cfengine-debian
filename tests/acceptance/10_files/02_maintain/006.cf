@@ -7,88 +7,80 @@
 
 body common control
 {
-  inputs => { "../../default.cf.sub" };
-  bundlesequence  => { default("$(this.promise_filename)") };
-  version => "1.0";
-}
-
-bundle common g
-{
-vars:
-        # This extracts the octal mode, and decimal nlink, uid, gid, size
-        "command" string => 'printf "%o" . " %d" x 4, (stat("$(G.testfile)"))[2]&07777, (stat(_))[3..5,7]';
-
-        "source" string => "/etc/group";
-        "source_command" string => 'printf "%d", (stat("$(g.source)"))[7]';
-        "source_size" string => execresult(
-            "/usr/bin/perl -le '$(g.source_command)'",
-            "noshell");
+      inputs => { "../../default.cf.sub" };
+      bundlesequence  => { default("$(this.promise_filename)") };
+      version => "1.0";
 }
 
 #######################################################
 
 bundle agent init
 {
-files:
-        "$(G.testfile)"
-            delete => init_delete;
+  files:
+      "$(G.testfile)"
+      delete => init_delete;
 }
 
 body delete init_delete
 {
-        dirlinks => "delete";
-        rmdirs   => "true";
+      dirlinks => "delete";
+      rmdirs   => "true";
 }
 
 #######################################################
 
 bundle agent test
 {
-vars:
-    "mode" string => execresult(
-	"/usr/bin/perl -le 'printf \"%o\", (stat(\"$(g.source)\"))[2]&07777'",
-    "noshell");
+  vars:
+      "mode" string => filestat("$(G.etc_group)", "modeoct");
 
-files:
-        "$(G.testfile)"
-            create => "true",
-            perms => test_og,
-            copy_from => test_copy;
+  files:
+      "$(G.testfile)"
+      create => "true",
+      perms => test_og,
+      copy_from => test_copy;
 }
 
 body perms test_og
 {
-    owners => { "3" };
-    groups => { "3" };
+      owners => { "3" };
+      groups => { "3" };
 }
 
 body copy_from test_copy
 {
-        source => "/etc/group";
-        compare => "digest";
+      source => "$(G.etc_group)";
+      compare => "digest";
 }
 
 #######################################################
 
 bundle agent check
 {
-vars:
-        "expect" string => "$(test.mode) 1 3 3 $(g.source_size)";
+  vars:
+    !windows::
+      "expect[modeoct]" string => "$(test.mode)";
+      "expect[uid]" string => "3";
+      "expect[gid]" string => "3";
+    any::
+      "expect[nlink]" string => "1";
+      "expect[size]" string => filestat("$(G.etc_group)", "size");
 
-        "result" string => execresult(
-            "/usr/bin/perl -le '$(g.command)'",
-            "noshell");
+      "fields" slist => getindices("expect");
+      "result[$(fields)]" string => filestat("$(G.testfile)", "$(fields)");
 
-classes:
-        "ok" expression => strcmp("$(expect)", "$(result)");
+  classes:
+      "not_ok" not => regcmp("$(expect[$(fields)])", "$(result[$(fields)])");
 
-reports:
+  reports:
     DEBUG::
-        "expected: '$(expect)'";
-        "got:      '$(result)'";
-    ok::
-        "$(this.promise_filename) Pass";
-    !ok::
-        "$(this.promise_filename) FAIL";
+      "expected: $(fields) = '$(expect[$(fields)])'";
+      "got:      $(fields) = '$(result[$(fields)])'";
+    !not_ok::
+      "$(this.promise_filename) Pass";
+    not_ok::
+      "$(this.promise_filename) FAIL";
 }
 
+### PROJECT_ID: core
+### CATEGORY_ID: 27

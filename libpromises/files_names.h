@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,7 @@
 #ifndef CFENGINE_FILES_NAMES_H
 #define CFENGINE_FILES_NAMES_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
 typedef enum
 {
@@ -36,12 +36,12 @@ typedef enum
 
 FilePathType FilePathGetType(const char *file_path);
 
-int IsNewerFileTree(char *dir, time_t reftime);
+int IsNewerFileTree(const char *dir, time_t reftime);
 int CompareCSVName(const char *s1, const char *s2);
-int IsDir(char *path);
+int IsDir(const char *path);
 char *JoinPath(char *path, const char *leaf);
-char *JoinSuffix(char *path, char *leaf);
-int IsAbsPath(char *path);
+char *JoinSuffix(char *path, const char *leaf);
+int IsAbsPath(const char *path);
 void AddSlash(char *str);
 char *GetParentDirectoryCopy(const char *path);
 void DeleteSlash(char *str);
@@ -58,4 +58,12 @@ int IsAbsoluteFileName(const char *f);
 bool IsFileOutsideDefaultRepository(const char *f);
 int RootDirLength(const char *f);
 const char *GetSoftwareCacheFilename(char *buffer);
+const char *GetSoftwarePatchesFilename(char *buffer);
+
+/**
+ * Detect whether package manager starts with an env command instead of package manager,
+ * and if so, return the real package manager.
+ */
+const char *RealPackageManager(const char *manager);
+
 #endif

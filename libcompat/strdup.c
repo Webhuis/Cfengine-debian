@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -35,12 +35,13 @@ char *strdup(const char *str);
 
 char *strdup(const char *str)
 {
-    char *sp = malloc(strlen(str) + 1);
+    const long len = strlen(str) + 1;
+    char *sp = malloc( len );
 
     if (sp == NULL)
     {
         return NULL;
     }
-    strcpy(sp, str);
+    memcpy(sp, str, len);
     return sp;
 }

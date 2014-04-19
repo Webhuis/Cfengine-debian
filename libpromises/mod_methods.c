@@ -17,20 +17,22 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "mod_methods.h"
+#include <mod_methods.h>
 
-#include "syntax.h"
-#include "policy.h"
-#include "string_lib.h"
-#include "fncall.h"
-#include "rlist.h"
+#include <syntax.h>
+#include <policy.h>
+#include <string_lib.h>
+#include <fncall.h>
+#include <rlist.h>
+#include <class.h>
 
-static const char *POLICY_ERROR_METHODS_BUNDLE_ARITY = "Conflicting arity in calling bundle %s, expected %d arguments, %d given";
+static const char *const POLICY_ERROR_METHODS_BUNDLE_ARITY =
+    "Conflicting arity in calling bundle %s, expected %d arguments, %d given";
 
 static const ConstraintSyntax CF_METHOD_BODIES[] =
 {
@@ -53,12 +55,21 @@ static bool MethodsParseTreeCheck(const Promise *pp, Seq *errors)
         {
             if (cp->rval.type == RVAL_TYPE_FNCALL)
             {
-                const FnCall *call = (const FnCall *)cp->rval.item;
-                const Bundle *callee = PolicyGetBundle(PolicyFromPromise(pp), NULL, "agent", call->name);
+                // HACK: exploiting the fact that class-references and call-references are similar
+                FnCall *call = RvalFnCallValue(cp->rval);
+                ClassRef ref = ClassRefParse(call->name);
+                if (!ClassRefIsQualified(ref))
+                {
+                    ClassRefQualify(&ref, PromiseGetNamespace(pp));
+                }
+
+                const Bundle *callee = PolicyGetBundle(PolicyFromPromise(pp), ref.ns, "agent", ref.name);
                 if (!callee)
                 {
-                    callee = PolicyGetBundle(PolicyFromPromise(pp), NULL, "common", call->name);
+                    callee = PolicyGetBundle(PolicyFromPromise(pp), ref.ns, "common", ref.name);
                 }
+
+                ClassRefDestroy(ref);
 
                 if (callee)
                 {

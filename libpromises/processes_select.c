@@ -17,34 +17,31 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "processes_select.h"
+#include <processes_select.h>
 
-#include "env_context.h"
-#include "files_names.h"
-#include "conversion.h"
-#include "matching.h"
-#include "string_lib.h"
-#include "item_lib.h"
-#include "pipes.h"
-#include "files_interfaces.h"
-#include "rlist.h"
-#include "policy.h"
-
-#ifdef HAVE_ZONE_H
-# include <zone.h>
-#endif
+#include <eval_context.h>
+#include <files_names.h>
+#include <conversion.h>
+#include <matching.h>
+#include <string_lib.h>
+#include <item_lib.h>
+#include <pipes.h>
+#include <files_interfaces.h>
+#include <rlist.h>
+#include <policy.h>
+#include <zones.h>
 
 static int SelectProcRangeMatch(char *name1, char *name2, int min, int max, char **names, char **line);
-static int SelectProcRegexMatch(char *name1, char *name2, char *regex, char **colNames, char **line);
+static bool SelectProcRegexMatch(const char *name1, const char *name2, const char *regex, char **colNames, char **line);
 static int SplitProcLine(char *proc, char **names, int *start, int *end, char **line);
 static int SelectProcTimeCounterRangeMatch(char *name1, char *name2, time_t min, time_t max, char **names, char **line);
 static int SelectProcTimeAbsRangeMatch(char *name1, char *name2, time_t min, time_t max, char **names, char **line);
-static int GetProcColumnIndex(char *name1, char *name2, char **names);
+static int GetProcColumnIndex(const char *name1, const char *name2, char **names);
 static void GetProcessColumnNames(char *proc, char **names, int *start, int *end);
 static int ExtractPid(char *psentry, char **names, int *end);
 
@@ -70,7 +67,7 @@ static int SelectProcess(char *procentry, char **names, int *start, int *end, Pr
 
     for (rp = a.owner; rp != NULL; rp = rp->next)
     {
-        if (SelectProcRegexMatch("USER", "UID", (char *) rp->item, names, column))
+        if (SelectProcRegexMatch("USER", "UID", RlistScalarValue(rp), names, column))
         {
             StringSetAdd(process_select_attributes, xstrdup("process_owner"));
             break;
@@ -191,33 +188,39 @@ Item *SelectProcesses(const Item *processes, const char *process_name, ProcessSe
 
     GetProcessColumnNames(processes->name, &names[0], start, end);
 
-    for (Item *ip = processes->next; ip != NULL; ip = ip->next)
+    pcre *rx = CompileRegex(process_name);
+    if (rx)
     {
-        int s, e;
-
-        if (BlockTextMatch(process_name, ip->name, &s, &e))
+        for (Item *ip = processes->next; ip != NULL; ip = ip->next)
         {
-            if (NULL_OR_EMPTY(ip->name))
+            int s, e;
+
+            if (StringMatchWithPrecompiledRegex(rx, ip->name, &s, &e))
             {
-                continue;
+                if (NULL_OR_EMPTY(ip->name))
+                {
+                    continue;
+                }
+
+                if (attrselect && !SelectProcess(ip->name, names, start, end, a))
+                {
+                    continue;
+                }
+
+                pid_t pid = ExtractPid(ip->name, names, end);
+
+                if (pid == -1)
+                {
+                    Log(LOG_LEVEL_VERBOSE, "Unable to extract pid while looking for %s", process_name);
+                    continue;
+                }
+
+                PrependItem(&result, ip->name, "");
+                result->counter = (int)pid;
             }
-
-            if (attrselect && !SelectProcess(ip->name, names, start, end, a))
-            {
-                continue;
-            }
-
-            pid_t pid = ExtractPid(ip->name, names, end);
-
-            if (pid == -1)
-            {
-                Log(LOG_LEVEL_VERBOSE, "Unable to extract pid while looking for %s", process_name);
-                continue;
-            }
-
-            PrependItem(&result, ip->name, "");
-            result->counter = (int)pid;
         }
+
+        pcre_free(rx);
     }
 
     for (int i = 0; i < CF_PROCCOLS; i++)
@@ -332,7 +335,44 @@ static int SelectProcTimeCounterRangeMatch(char *name1, char *name2, time_t min,
     return false;
 }
 
-/***************************************************************************/
+static time_t TimeAbs2Int(const char *s)
+{
+    if (s == NULL)
+    {
+        return CF_NOINT;
+    }
+
+    struct tm tm;
+    localtime_r(&CFSTARTTIME, &tm);
+    tm.tm_sec = 0;
+    tm.tm_isdst = -1;
+
+    if (strstr(s, ":"))         /* Hr:Min */
+    {
+        char h[3], m[3];
+        sscanf(s, "%2[^:]:%2[^:]:", h, m);
+        tm.tm_hour = IntFromString(h);
+        tm.tm_min = IntFromString(m);
+    }
+    else                        /* Month day */
+    {
+        char mon[4];
+        long day;
+        sscanf(s, "%3[a-zA-Z] %ld", mon, &day);
+        int month = Month2Int(mon);
+        if (tm.tm_mon < month - 1)
+        {
+            /* Wrapped around */
+            tm.tm_year--;
+        }
+        tm.tm_mon = month - 1;
+        tm.tm_mday = day;
+        tm.tm_hour = 0;
+        tm.tm_min = 0;
+    }
+
+    return mktime(&tm);
+}
 
 static int SelectProcTimeAbsRangeMatch(char *name1, char *name2, time_t min, time_t max, char **names, char **line)
 {
@@ -346,7 +386,7 @@ static int SelectProcTimeAbsRangeMatch(char *name1, char *name2, time_t min, tim
 
     if ((i = GetProcColumnIndex(name1, name2, names)) != -1)
     {
-        value = (time_t) TimeAbs2Int(line[i]);
+        value = TimeAbs2Int(line[i]);
 
         if (value == CF_NOINT)
         {
@@ -357,7 +397,7 @@ static int SelectProcTimeAbsRangeMatch(char *name1, char *name2, time_t min, tim
 
         if ((min <= value) && (value <= max))
         {
-            Log(LOG_LEVEL_VERBOSE, "Selection filter matched absolute '%s/%s' = '%s' in [%jd,%jd]", name1, name2, line[i],
+            Log(LOG_LEVEL_VERBOSE, "Selection filter matched absolute '%s/%s' = '%s(%jd)' in [%jd,%jd]", name1, name2, line[i], (intmax_t)value,
                   (intmax_t)min, (intmax_t)max);
             return true;
         }
@@ -372,7 +412,8 @@ static int SelectProcTimeAbsRangeMatch(char *name1, char *name2, time_t min, tim
 
 /***************************************************************************/
 
-static int SelectProcRegexMatch(char *name1, char *name2, char *regex, char **colNames, char **line)
+static bool SelectProcRegexMatch(const char *name1, const char *name2,
+                                 const char *regex, char **colNames, char **line)
 {
     int i;
 
@@ -384,7 +425,7 @@ static int SelectProcRegexMatch(char *name1, char *name2, char *regex, char **co
     if ((i = GetProcColumnIndex(name1, name2, colNames)) != -1)
     {
 
-        if (FullTextMatch(regex, line[i]))
+        if (StringMatchFull(regex, line[i]))
         {
             return true;
         }
@@ -518,7 +559,7 @@ static int SplitProcLine(char *proc, char **names, int *start, int *end, char **
 
 /*******************************************************************/
 
-static int GetProcColumnIndex(char *name1, char *name2, char **names)
+static int GetProcColumnIndex(const char *name1, const char *name2, char **names)
 {
     int i;
 
@@ -645,20 +686,13 @@ static void GetProcessColumnNames(char *proc, char **names, int *start, int *end
 #ifndef __MINGW32__
 static const char *GetProcessOptions(void)
 {
-# ifdef HAVE_GETZONEID
-    zoneid_t zid;
-    char zone[ZONENAME_MAX];
-    static char psopts[CF_BUFSIZE];
+    static char psopts[CF_BUFSIZE]; /* GLOBAL_R, no initialization needed */
 
-    zid = getzoneid();
-    getzonenamebyid(zid, zone, ZONENAME_MAX);
-
-    if (strcmp(zone, "global") == 0)
+    if (IsGlobalZone())
     {
         snprintf(psopts, CF_BUFSIZE, "%s,zone", VPSOPTS[VSYSTEMHARDCLASS]);
         return psopts;
     }
-# endif
 
 # ifdef __linux__
     if (strncmp(VSYSNAME.release, "2.4", 3) == 0)
@@ -719,56 +753,16 @@ static int ExtractPid(char *psentry, char **names, int *end)
 }
 
 #ifndef __MINGW32__
-static int ForeignZone(char *s)
-{
-// We want to keep the banner
-
-    if (strstr(s, "%CPU"))
-    {
-        return false;
-    }
-
-# ifdef HAVE_GETZONEID
-    zoneid_t zid;
-    char *sp, zone[ZONENAME_MAX];
-
-    zid = getzoneid();
-    getzonenamebyid(zid, zone, ZONENAME_MAX);
-
-    if (strcmp(zone, "global") == 0)
-    {
-        if (strcmp(s + strlen(s) - 6, "global") == 0)
-        {
-            *(s + strlen(s) - 6) = '\0';
-
-            for (sp = s + strlen(s) - 1; isspace(*sp); sp--)
-            {
-                *sp = '\0';
-            }
-
-            return false;
-        }
-        else
-        {
-            return true;
-        }
-    }
-# endif
-    return false;
-}
-#endif
-
-#ifndef __MINGW32__
 int LoadProcessTable(Item **procdata)
 {
     FILE *prp;
-    char pscomm[CF_MAXLINKSIZE], vbuff[CF_BUFSIZE], *sp;
+    char pscomm[CF_MAXLINKSIZE], *sp = NULL;
     Item *rootprocs = NULL;
     Item *otherprocs = NULL;
 
     if (PROCESSTABLE)
     {
-        Log(LOG_LEVEL_VERBOSE, "Reusing cached process state");
+        Log(LOG_LEVEL_VERBOSE, "Reusing cached process table");
         return true;
     }
 
@@ -784,19 +778,25 @@ int LoadProcessTable(Item **procdata)
         return false;
     }
 
+    size_t vbuff_size = CF_BUFSIZE;
+    char *vbuff = xmalloc(vbuff_size);
+
     for (;;)
     {
-        ssize_t res = CfReadLine(vbuff, CF_BUFSIZE, prp);
-        if (res == 0)
-        {
-            break;
-        }
-
+        ssize_t res = CfReadLine(&vbuff, &vbuff_size, prp);
         if (res == -1)
         {
-            Log(LOG_LEVEL_ERR, "Unable to read process list with command '%s'. (fread: %s)", pscomm, GetErrorStr());
-            cf_pclose(prp);
-            return false;
+            if (!feof(prp))
+            {
+                Log(LOG_LEVEL_ERR, "Unable to read process list with command '%s'. (fread: %s)", pscomm, GetErrorStr());
+                cf_pclose(prp);
+                free(vbuff);
+                return false;
+            }
+            else
+            {
+                break;
+            }
         }
 
         for (sp = vbuff + strlen(vbuff) - 1; (sp > vbuff) && (isspace((int)*sp)); sp--)
@@ -817,7 +817,7 @@ int LoadProcessTable(Item **procdata)
 /* Now save the data */
 
     snprintf(vbuff, CF_MAXVARSIZE, "%s/state/cf_procs", CFWORKDIR);
-    RawSaveItemList(*procdata, vbuff);
+    RawSaveItemList(*procdata, vbuff, NewLineMode_Unix);
 
     CopyList(&rootprocs, *procdata);
     CopyList(&otherprocs, *procdata);
@@ -836,13 +836,14 @@ int LoadProcessTable(Item **procdata)
     }
 
     snprintf(vbuff, CF_MAXVARSIZE, "%s/state/cf_rootprocs", CFWORKDIR);
-    RawSaveItemList(rootprocs, vbuff);
+    RawSaveItemList(rootprocs, vbuff, NewLineMode_Unix);
     DeleteItemList(rootprocs);
 
     snprintf(vbuff, CF_MAXVARSIZE, "%s/state/cf_otherprocs", CFWORKDIR);
-    RawSaveItemList(otherprocs, vbuff);
+    RawSaveItemList(otherprocs, vbuff, NewLineMode_Unix);
     DeleteItemList(otherprocs);
 
+    free(vbuff);
     return true;
 }
 #endif

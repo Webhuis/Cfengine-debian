@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -31,27 +31,15 @@ extern bool LEGACY_OUTPUT;
 
 extern pid_t ALARM_PID;
 extern RSA *PRIVKEY, *PUBKEY;
-extern char BINDINTERFACE[CF_BUFSIZE];
 
-extern Item *IPADDRESSES;
-
-extern char STR_CFENGINEPORT[16];
-extern unsigned short SHORT_CFENGINEPORT;
+extern char BINDINTERFACE[CF_MAXVARSIZE];
 extern time_t CONNTIMEOUT;
-
-extern char CFLOCK[CF_BUFSIZE];
 
 extern char CFWORKDIR[CF_BUFSIZE];
 
-extern char VYEAR[];
-extern char VDAY[];
-extern char VMONTH[];
-extern char VSHIFT[];
-
-extern const char *CLASSTEXT[];
+extern const char *const CLASSTEXT[];
 
 extern time_t CFSTARTTIME;
-extern time_t CFINITSTARTTIME;
 
 extern struct utsname VSYSNAME;
 extern char VIPADDRESS[CF_MAX_IP_LEN];
@@ -63,51 +51,36 @@ extern char VFQNAME[];
 extern char VUQNAME[];
 
 extern bool DONTDO;
-extern int IGNORELOCK;
 extern bool MINUSF;
 
-extern const char *VPSCOMM[];
-extern const char *VPSOPTS[];
-extern const char *VFSTAB[];
+extern const char *const VPSCOMM[];
+extern const char *const VPSOPTS[];
+extern const char *const VFSTAB[];
 
 extern int EDITFILESIZE;
 extern int VIFELAPSED;
 extern int VEXPIREAFTER;
 
-extern const char *OBS[CF_OBSERVABLES][2];
+extern const char *const OBS[CF_OBSERVABLES][2];
 
 extern bool FIPS_MODE;
 extern char POLICY_SERVER[CF_MAX_IP_LEN];
 extern HashMethod CF_DEFAULT_DIGEST;
 extern int CF_DEFAULT_DIGEST_LEN;
 
-extern Scope *VSCOPE;
-extern Rlist *CF_STCK;
-
 extern int CF_PERSISTENCE;
-extern int LOOKUP;
 
-extern const char *CF_AGENTTYPES[];
+extern const char *const CF_AGENTTYPES[];
 
 extern int CFA_MAXTHREADS;
 extern AgentType THIS_AGENT_TYPE;
 extern int SHOWREPORTS;
-extern time_t PROMISETIME;
-#define CF_LOCKHORIZON ((time_t)(SECONDS_PER_WEEK * 4))
 extern int LASTSEENEXPIREAFTER;
-extern char *DEFAULT_COPYTYPE;
+extern const char *DEFAULT_COPYTYPE;
 extern Item *PROCESSTABLE;
 
-extern const char *DAY_TEXT[];
-extern const char *MONTH_TEXT[];
-extern const char *SHIFT_TEXT[];
-
-#if defined(__MINGW32__)
-# define FILE_SEPARATOR '\\'
-# define FILE_SEPARATOR_STR "\\"
-#else
-# define FILE_SEPARATOR '/'
-# define FILE_SEPARATOR_STR "/"
-#endif
+extern const char *const DAY_TEXT[];
+extern const char *const MONTH_TEXT[];
+extern const char *const SHIFT_TEXT[];
 
 #endif

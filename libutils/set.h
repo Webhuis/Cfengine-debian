@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,7 +25,9 @@
 #ifndef CFENGINE_SET_H
 #define CFENGINE_SET_H
 
-#include "map.h"
+#include <map.h>
+#include <buffer.h>
+#include <json.h>
 
 typedef Map Set;
 typedef MapIterator SetIterator;
@@ -41,7 +43,7 @@ bool SetRemove(Set *set, const void *element);
 void SetClear(Set *set);
 size_t SetSize(const Set *set);
 
-void SetUnion(Set *set, const Set *other);
+bool SetIsEqual(const Set *set1, const Set *set2);
 
 SetIterator SetIteratorInit(Set *set);
 void *SetIteratorNext(SetIterator *i);
@@ -60,6 +62,7 @@ void *SetIteratorNext(SetIterator *i);
     bool Prefix##SetRemove(const Prefix##Set *Set, const ElementType element);  \
     void Prefix##SetClear(Prefix##Set *set);                            \
     size_t Prefix##SetSize(const Prefix##Set *set);                     \
+    bool Prefix##SetIsEqual(const Prefix##Set *set1, const Prefix##Set *set2); \
     void Prefix##SetDestroy(Prefix##Set *set);                          \
     Prefix##SetIterator Prefix##SetIteratorInit(Prefix##Set *set);      \
     ElementType Prefix##SetIteratorNext(Prefix##SetIterator *iter);     \
@@ -90,12 +93,17 @@ void *SetIteratorNext(SetIterator *i);
                                                                         \
     void Prefix##SetClear(Prefix##Set *set)                             \
     {                                                                   \
-        return SetClear(set->impl);                                     \
+        SetClear(set->impl);                                            \
     }                                                                   \
                                                                         \
     size_t Prefix##SetSize(const Prefix##Set *set)                      \
     {                                                                   \
         return SetSize(set->impl);                                      \
+    }                                                                   \
+                                                                        \
+    bool Prefix##SetIsEqual(const Prefix##Set *set1, const Prefix##Set *set2) \
+    {                                                                   \
+        return SetIsEqual(set1->impl, set2->impl);                      \
     }                                                                   \
                                                                         \
     void Prefix##SetDestroy(Prefix##Set *set)                           \
@@ -120,6 +128,9 @@ void *SetIteratorNext(SetIterator *i);
 
 TYPED_SET_DECLARE(String, char *)
 
+void StringSetAddSplit(StringSet *set, const char *str, char delimiter);
 StringSet *StringSetFromString(const char *str, char delimiter);
+Buffer *StringSetToBuffer(StringSet *set, const char delimiter);
+JsonElement *StringSetToJson(const StringSet *set);
 
 #endif

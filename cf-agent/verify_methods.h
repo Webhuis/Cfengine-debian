@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -25,9 +25,9 @@
 #ifndef CFENGINE_VERIFY_METHODS_H
 #define CFENGINE_VERIFY_METHODS_H
 
-#include "cf3.defs.h"
+#include <cf3.defs.h>
 
-void VerifyMethodsPromise(EvalContext *ctx, Promise *pp);
-int VerifyMethod(EvalContext *ctx, char *attrname, Attributes a, Promise *pp);
+PromiseResult VerifyMethodsPromise(EvalContext *ctx, const Promise *pp);
+PromiseResult VerifyMethod(EvalContext *ctx, const Rval call, Attributes a, const Promise *pp);
 
 #endif

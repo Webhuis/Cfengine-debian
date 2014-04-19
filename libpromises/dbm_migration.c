@@ -17,20 +17,20 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "dbm_migration.h"
+#include <dbm_migration.h>
 
-#include "lastseen.h"
-#include "string_lib.h"
+#include <lastseen.h>
+#include <string_lib.h>
 
-extern DBMigrationFunction dbm_migration_plan_bundles[];
-extern DBMigrationFunction dbm_migration_plan_lastseen[];
+extern const DBMigrationFunction dbm_migration_plan_bundles[];
+extern const DBMigrationFunction dbm_migration_plan_lastseen[];
 
-static const DBMigrationFunction *dbm_migration_plans[dbid_max] = {
+static const DBMigrationFunction *const dbm_migration_plans[dbid_max] = {
     [dbid_bundles] = dbm_migration_plan_bundles,
     [dbid_lastseen] = dbm_migration_plan_lastseen
 };

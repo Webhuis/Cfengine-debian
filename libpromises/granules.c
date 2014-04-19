@@ -17,20 +17,19 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
 
-#include "granules.h"
-#include "misc_lib.h"
-#include <math.h>
-#include <assert.h>
+#include <granules.h>
+#include <misc_lib.h>
+
 
 char *GenTimeKey(time_t now)
 {
     struct tm tm;
-    static char buf[18];
+    static char buf[18]; /* GLOBAL_R, no initialization needed */
 
     gmtime_r(&now, &tm);
 
