@@ -85,6 +85,10 @@ PromiseResult VerifyExecPromise(EvalContext *ctx, const Promise *pp)
     PromiseBanner(pp);
 
     PromiseResult result = PROMISE_RESULT_NOOP;
+    /* See VerifyCommandRetcode for interpretation of return codes.
+     * Unless overridden by attributes in body classes, an exit code 0 means
+     * reparied (PROMISE_RESULT_CHANGE), an exit code != 0 means failure.
+     */
     switch (RepairExec(ctx, a, pp, &result))
     {
     case ACTION_RESULT_OK:
@@ -101,13 +105,6 @@ PromiseResult VerifyExecPromise(EvalContext *ctx, const Promise *pp)
 
     default:
         ProgrammingError("Unexpected ActionResult value");
-    }
-
-    // explicitly set commands promises that end up changing to KEPT. This is because commands promises
-    // shares code with packages promises (VerifyCommandRetcode), so we enforce this condition here.
-    if (result == PROMISE_RESULT_CHANGE)
-    {
-        result = PROMISE_RESULT_NOOP;
     }
 
     YieldCurrentLock(thislock);

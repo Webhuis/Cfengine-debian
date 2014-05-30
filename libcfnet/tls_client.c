@@ -54,16 +54,17 @@ static X509 *SSLCLIENTCERT = NULL; /* GLOBAL_X */
 bool TLSClientInitialize()
 {
     int ret;
-    static bool is_initialised = false; /* GLOBAL_X */
+    static bool is_initialised = false;
 
     if (is_initialised)
     {
         return true;
     }
 
-    /* OpenSSL is needed for our new protocol over TLS. */
-    SSL_library_init();
-    SSL_load_error_strings();
+    if (!TLSGenericInitialize())
+    {
+        return false;
+    }
 
     SSLCLIENTCONTEXT = SSL_CTX_new(SSLv23_client_method());
     if (SSLCLIENTCONTEXT == NULL)
@@ -73,14 +74,7 @@ bool TLSClientInitialize()
         goto err1;
     }
 
-    /* Use only TLS v1 or later.
-       TODO option for SSL_OP_NO_TLSv{1,1_1} */
-    SSL_CTX_set_options(SSLCLIENTCONTEXT,
-                        SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
-
-    /* Never bother with retransmissions, SSL_write() should
-     * always either write the whole amount or fail. */
-    SSL_CTX_set_mode(SSLCLIENTCONTEXT, SSL_MODE_AUTO_RETRY);
+    TLSSetDefaultOptions(SSLCLIENTCONTEXT);
 
     if (PRIVKEY == NULL || PUBKEY == NULL)
     {
@@ -122,14 +116,6 @@ bool TLSClientInitialize()
             ERR_reason_error_string(ERR_get_error()));
         goto err3;
     }
-
-    /* Set options to always request a certificate from the peer, either we
-     * are client or server. */
-    SSL_CTX_set_verify(SSLCLIENTCONTEXT, SSL_VERIFY_PEER, NULL);
-    /* Always accept that certificate, we do proper checking after TLS
-     * connection is established since OpenSSL can't pass a connection
-     * specific pointer to the callback (so we would have to lock).  */
-    SSL_CTX_set_cert_verify_callback(SSLCLIENTCONTEXT, TLSVerifyCallback, NULL);
 
     is_initialised = true;
     return true;
@@ -284,6 +270,9 @@ int TLSTry(ConnectionInfo *conn_info)
         return -1;
     }
 
+    /* Pass conn_info inside the ssl struct for TLSVerifyCallback(). */
+    SSL_set_ex_data(ssl, CONNECTIONINFO_SSL_IDX, conn_info);
+
     /* Initiate the TLS handshake over the already open TCP socket. */
     int sd = ConnectionInfoSocket(conn_info);
     SSL_set_fd(ssl, sd);
@@ -308,7 +297,7 @@ int TLSTry(ConnectionInfo *conn_info)
             ret = SSL_connect(ssl);
             if (ret <= 0)
             {
-                Log(LOG_LEVEL_VERBOSE, "The connect operation was retried and failed");
+                Log(LOG_LEVEL_VERBOSE, "The connect operation was retried and failed.  Make sure the remote is not running a 3.5.x or older cf-serverd.");
                 TLSLogError(ssl, LOG_LEVEL_ERR,
                             "Connection handshake client connect", ret);
                 return -1;
@@ -317,7 +306,7 @@ int TLSTry(ConnectionInfo *conn_info)
         }
         else
         {
-            Log(LOG_LEVEL_VERBOSE, "The connect operation cannot be retried");
+            Log(LOG_LEVEL_VERBOSE, "The connect operation cannot be retried.  Make sure the remote is not running a 3.5.x or older cf-serverd.");
             TLSLogError(ssl, LOG_LEVEL_ERR, "Connection handshake client select", ret);
             return -1;
         }

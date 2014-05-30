@@ -53,9 +53,10 @@ bool ServerTLSInitialize()
 {
     int ret;
 
-    /* OpenSSL is needed for our new protocol over TLS. */
-    SSL_library_init();
-    SSL_load_error_strings();
+    if (!TLSGenericInitialize())
+    {
+        return false;
+    }
 
     assert(SSLSERVERCONTEXT == NULL);
     SSLSERVERCONTEXT = SSL_CTX_new(SSLv23_server_method());
@@ -66,10 +67,7 @@ bool ServerTLSInitialize()
         goto err1;
     }
 
-    /* Use only TLS v1 or later.
-       TODO option for SSL_OP_NO_TLSv{1,1_1} */
-    SSL_CTX_set_options(SSLSERVERCONTEXT,
-                        SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+    TLSSetDefaultOptions(SSLSERVERCONTEXT);
 
     /*
      * CFEngine is not a web server so we don't need many ciphers. We only
@@ -91,10 +89,6 @@ bool ServerTLSInitialize()
             "No valid ciphers in cipher list: %s",
             cipher_list);
     }
-
-    /* Never bother with retransmissions, SSL_write() should
-     * always either write the whole amount or fail. */
-    SSL_CTX_set_mode(SSLSERVERCONTEXT, SSL_MODE_AUTO_RETRY);
 
     if (PRIVKEY == NULL || PUBKEY == NULL)
     {
@@ -131,14 +125,6 @@ bool ServerTLSInitialize()
             ERR_reason_error_string(ERR_get_error()));
         goto err3;
     }
-
-    /* Set options to always request a certificate from the peer, either we
-     * are client or server. */
-    SSL_CTX_set_verify(SSLSERVERCONTEXT, SSL_VERIFY_PEER, NULL);
-    /* Always accept that certificate, we do proper checking after TLS
-     * connection is established since OpenSSL can't pass a connection
-     * specific pointer to the callback (so we would have to lock).  */
-    SSL_CTX_set_cert_verify_callback(SSLSERVERCONTEXT, TLSVerifyCallback, NULL);
 
     return true;
 
@@ -398,6 +384,9 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
         }
         ConnectionInfoSetSSL(conn->conn_info, ssl);
 
+        /* Pass conn_info inside the ssl struct for TLSVerifyCallback(). */
+        SSL_set_ex_data(ssl, CONNECTIONINFO_SSL_IDX, conn->conn_info);
+
         /* Now we are letting OpenSSL take over the open socket. */
         int sd = ConnectionInfoSocket(conn->conn_info);
         SSL_set_fd(ssl, sd);
@@ -468,18 +457,12 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
 
         if (ret == 0)                                  /* untrusted key */
         {
-            Log(LOG_LEVEL_WARNING,
-                "%s: Client's public key is UNKNOWN!",
-                KeyPrintableHash(ConnectionInfoKey(conn->conn_info)));
-
             if ((SV.trustkeylist != NULL) &&
-                (IsMatchItemIn(SV.trustkeylist, MapAddress(conn->ipaddr))))
+                (IsMatchItemIn(SV.trustkeylist, conn->ipaddr)))
             {
                 Log(LOG_LEVEL_VERBOSE,
-                    "Host %s was found in the \"trustkeysfrom\" list",
-                    conn->ipaddr);
-                Log(LOG_LEVEL_WARNING,
-                    "%s: Explicitly trusting this key from now on.",
+                    "Peer was found in \"trustkeysfrom\" list");
+                Log(LOG_LEVEL_NOTICE, "Trusting new key: %s",
                     KeyPrintableHash(ConnectionInfoKey(conn->conn_info)));
 
                 SavePublicKey(conn->username, KeyPrintableHash(ConnectionInfoKey(conn->conn_info)),
@@ -488,9 +471,9 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
             else
             {
                 Log(LOG_LEVEL_NOTICE,
-                    "TRUST FAILED, WARNING: possible MAN IN THE MIDDLE attack, dropping connection!");
-                Log(LOG_LEVEL_NOTICE,
-                    "Add host to \"trustkeysfrom\" if you really want to start trusting this new key.");
+                    "TRUST FAILED, peer presented an untrusted key, dropping connection!");
+                Log(LOG_LEVEL_VERBOSE,
+                    "Add peer to \"trustkeysfrom\" if you really want to start trusting this new key.");
                 return -1;
             }
         }
@@ -560,22 +543,22 @@ static ProtocolCommandNew GetCommandNew(char *str)
 
 bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
 {
-    char recvbuffer[CF_BUFSIZE + CF_BUFEXT];
+    /* The CF_BUFEXT extra space is there to ensure we're not reading out of
+     * bounds in commands that carry extra binary arguments, like MD5. */
+    char recvbuffer[CF_BUFSIZE + CF_BUFEXT] = { 0 };
     char sendbuffer[CF_BUFSIZE] = { 0 };
-    char filename[sizeof(recvbuffer)];
+    char filename[CF_BUFSIZE + 1];      /* +1 for appending slash sometimes */
     int received;
-    ServerFileGetState get_args;
+    ServerFileGetState get_args = { 0 };
 
     /* We already encrypt because of the TLS layer, no need to encrypt more. */
     const int encrypted = 0;
 
-    memset(recvbuffer, 0, CF_BUFSIZE + CF_BUFEXT);
-    memset(&get_args, 0, sizeof(get_args));
-
-    /* Legacy stuff only for old protocol */
+    /* Legacy stuff only for old protocol. */
     assert(conn->rsa_auth == 1);
     assert(conn->user_data_set == 1);
 
+    /* Receive up to CF_BUFSIZE - 1 bytes. */
     received = ReceiveTransaction(conn->conn_info, recvbuffer, NULL);
     if (received == -1 || received == 0)
     {
@@ -859,10 +842,62 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         return true;
     }
     case PROTOCOL_COMMAND_MD5:
+    {
+        int ret = sscanf(recvbuffer, "MD5 %[^\n]", filename);
+        if (ret != 1)
+        {
+            goto protocol_error;
+        }
 
-        CompareLocalHash(conn, sendbuffer, recvbuffer);
+        Log(LOG_LEVEL_VERBOSE, "%14s %7s %s",
+            "Received:", "MD5", filename);
+
+        /* TODO batch all the following in one function since it's very
+         * similar in all of GET, OPENDIR and STAT. */
+
+        size_t zret = ShortcutsExpand(filename, sizeof(filename),
+                                     SV.path_shortcuts,
+                                     conn->ipaddr, conn->revdns,
+                                     KeyPrintableHash(ConnectionInfoKey(conn->conn_info)));
+        if (zret == (size_t) -1)
+        {
+            goto protocol_error;
+        }
+
+        zret = PreprocessRequestPath(filename, sizeof(filename));
+        if (zret == (size_t) -1)
+        {
+            goto protocol_error;
+        }
+
+        PathRemoveTrailingSlash(filename, strlen(filename));
+
+        Log(LOG_LEVEL_VERBOSE, "%14s %7s %s",
+            "Translated to:", "MD5", filename);
+
+        if (acl_CheckPath(paths_acl, filename,
+                          conn->ipaddr, conn->revdns,
+                          KeyPrintableHash(ConnectionInfoKey(conn->conn_info)))
+            == false)
+        {
+            Log(LOG_LEVEL_INFO, "access denied to file: %s", filename);
+            RefuseAccess(conn, recvbuffer);
+            return true;
+        }
+
+        assert(CF_DEFAULT_DIGEST_LEN <= EVP_MAX_MD_SIZE);
+        unsigned char digest[EVP_MAX_MD_SIZE + 1];
+
+        assert(CF_BUFSIZE + CF_SMALL_OFFSET + CF_DEFAULT_DIGEST_LEN
+               <= sizeof(recvbuffer));
+        memcpy(digest, recvbuffer + strlen(recvbuffer) + CF_SMALL_OFFSET,
+               CF_DEFAULT_DIGEST_LEN);
+
+        CompareLocalHash(filename, digest, sendbuffer);
+        SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE);
+
         return true;
-
+    }
     case PROTOCOL_COMMAND_VAR:
     {
         char var[256];

@@ -81,8 +81,6 @@ struct EvalContext_
     StringSet *dependency_handles;
     RBTree *function_cache;
 
-    void *enterprise_state;
-
     uid_t uid;
     uid_t gid;
     pid_t pid;
@@ -544,27 +542,35 @@ void EvalContextHeapPersistentLoadAll(EvalContext *ctx)
 
     const char *key;
     int key_size = 0;
-    const PersistentClassInfo *info;
+    void *info_p;
     int info_size = 0;
 
-    while (NextDB(dbcp, (char **)&key, &key_size, (void **)&info, &info_size))
+    while (NextDB(dbcp, (char **)&key, &key_size, &info_p, &info_size))
     {
         Log(LOG_LEVEL_DEBUG, "Found key persistent class key '%s'", key);
+
+        /* Info points to db-owned data, which is not aligned properly and
+         * dereferencing might be slow or even cause SIGBUS! */
+        PersistentClassInfo info = { 0 };
+        memcpy(&info, info_p,
+               info_size < sizeof(info) ? info_size : sizeof(info));
 
         const char *tags = NULL;
         if (info_size > sizeof(PersistentClassInfo))
         {
-            tags = info->tags;
+            /* This is char pointer, it can point to unaligned data. */
+            tags = ((PersistentClassInfo *) info_p)->tags;
         }
 
-        if (now > info->expires)
+        if (now > info.expires)
         {
             Log(LOG_LEVEL_VERBOSE, "Persistent class '%s' expired", key);
             DBCursorDeleteEntry(dbcp);
         }
         else
         {
-            Log(LOG_LEVEL_VERBOSE, "Persistent class '%s' for %jd more minutes", key, (intmax_t)((info->expires - now) / 60));
+            Log(LOG_LEVEL_VERBOSE, "Persistent class '%s' for %jd more minutes",
+                key, (intmax_t) ((info.expires - now) / 60));
             Log(LOG_LEVEL_VERBOSE, "Adding persistent class '%s' to heap", key);
 
             ClassRef ref = ClassRefParse(key);
@@ -824,8 +830,6 @@ EvalContext *EvalContextNew(void)
         LoggingPrivSetContext(pctx);
     }
 
-    ctx->enterprise_state = EvalContextEnterpriseStateNew();
-
     ctx->launch_directory = NULL;
 
     return ctx;
@@ -836,7 +840,6 @@ void EvalContextDestroy(EvalContext *ctx)
     if (ctx)
     {
         free(ctx->launch_directory);
-        EvalContextEnterpriseStateDestroy(ctx->enterprise_state);
 
         {
             LoggingPrivContext *pctx = LoggingPrivGetContext();
@@ -2170,17 +2173,13 @@ static void SetPromiseOutcomeClasses(EvalContext *ctx, PromiseResult status, Def
 
     case PROMISE_RESULT_WARN:
     case PROMISE_RESULT_FAIL:
+    case PROMISE_RESULT_INTERRUPTED:
         add_classes = dc.failure;
         del_classes = dc.del_notkept;
         break;
 
     case PROMISE_RESULT_DENIED:
         add_classes = dc.denied;
-        del_classes = dc.del_notkept;
-        break;
-
-    case PROMISE_RESULT_INTERRUPTED:
-        add_classes = dc.interrupt;
         del_classes = dc.del_notkept;
         break;
 
@@ -2479,11 +2478,6 @@ void EvalContextSetEvalOption(EvalContext *ctx, EvalContextOption option, bool v
 bool EvalContextGetEvalOption(EvalContext *ctx, EvalContextOption option)
 {
     return !!(ctx->eval_options & option);
-}
-
-EvalContextEnterpriseState *EvalContextGetEnterpriseState(const EvalContext *ctx)
-{
-    return ctx->enterprise_state;
 }
 
 void EvalContextSetLaunchDirectory(EvalContext *ctx, const char *path)

@@ -179,7 +179,7 @@ static PromiseResult ExpandPromiseAndDo(EvalContext *ctx, const Promise *pp,
 
     PromiseIterator *iter_ctx = NULL;
     size_t i = 0;
-    PromiseResult result = PROMISE_RESULT_NOOP;
+    PromiseResult result = PROMISE_RESULT_SKIPPED;
     Buffer *expbuf = BufferNew();
     for (iter_ctx = PromiseIteratorNew(ctx, pp, lists, containers); PromiseIteratorHasMore(iter_ctx); i++, PromiseIteratorNext(iter_ctx))
     {
@@ -518,6 +518,14 @@ static Rval ExpandListEntry(EvalContext *ctx,
         {
             char naked[CF_MAXVARSIZE];
             GetNaked(naked, entry.item);
+
+            if (IsExpandable(naked))
+            {
+                Buffer *out = BufferNew();
+                ExpandScalar(ctx, ns, scope, naked, out);
+                strlcpy(naked, BufferData(out), CF_MAXVARSIZE);
+                BufferDestroy(out);
+            }
 
             if (!IsExpandable(naked))
             {

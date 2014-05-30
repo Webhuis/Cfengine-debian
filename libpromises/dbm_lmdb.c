@@ -26,23 +26,35 @@
  * Implementation using LMDB API.
  */
 
-#include "cf3.defs.h"
-#include "dbm_priv.h"
-#include "logging.h"
-#include "string_lib.h"
-#include "known_dirs.h"
+#include <cf3.defs.h>
+#include <dbm_priv.h>
+#include <logging.h>
+#include <string_lib.h>
+#include <misc_lib.h>
+#include <known_dirs.h>
 
 #ifdef LMDB
 
 #include <lmdb.h>
 
+// Shared between threads.
 struct DBPriv_
 {
     MDB_env *env;
     MDB_dbi dbi;
-    MDB_txn *wtxn;
-    MDB_cursor *mc;
+    // Used to keep track of transactions.
+    // We set this to the transaction address when a thread creates a
+    // transaction, and back to 0x0 when it is destroyed.
+    pthread_key_t txn_key;
 };
+
+// Not shared between threads.
+typedef struct DBTxn_
+{
+    MDB_txn *txn;
+    // Whether txn is a read/write (true) or read-only (false) transaction.
+    bool rw_txn;
+} DBTxn;
 
 struct DBCursorPriv_
 {
@@ -54,6 +66,90 @@ struct DBCursorPriv_
 };
 
 /******************************************************************************/
+
+static int GetReadTransaction(DBPriv *db, MDB_txn **txn)
+{
+    DBTxn *db_txn = pthread_getspecific(db->txn_key);
+    int rc = MDB_SUCCESS;
+
+    if (!db_txn)
+    {
+        db_txn = xcalloc(1, sizeof(DBTxn));
+        pthread_setspecific(db->txn_key, db_txn);
+    }
+
+    if (!db_txn->txn)
+    {
+        rc = mdb_txn_begin(db->env, NULL, MDB_RDONLY, &db_txn->txn);
+        if (rc != MDB_SUCCESS)
+        {
+            Log(LOG_LEVEL_ERR, "Unable to open read transaction: %s", mdb_strerror(rc));
+        }
+    }
+
+    *txn = db_txn->txn;
+
+    return rc;
+}
+
+static int GetWriteTransaction(DBPriv *db, MDB_txn **txn)
+{
+    DBTxn *db_txn = pthread_getspecific(db->txn_key);
+    int rc = MDB_SUCCESS;
+
+    if (!db_txn)
+    {
+        db_txn = xcalloc(1, sizeof(DBTxn));
+        pthread_setspecific(db->txn_key, db_txn);
+    }
+
+    if (db_txn->txn && !db_txn->rw_txn)
+    {
+        rc = mdb_txn_commit(db_txn->txn);
+        if (rc != MDB_SUCCESS)
+        {
+            Log(LOG_LEVEL_ERR, "Unable to close read-only transaction: %s", mdb_strerror(rc));
+        }
+        db_txn->txn = NULL;
+    }
+
+    if (!db_txn->txn)
+    {
+        rc = mdb_txn_begin(db->env, NULL, 0, &db_txn->txn);
+        if (rc == MDB_SUCCESS)
+        {
+            db_txn->rw_txn = true;
+        }
+        else
+        {
+            Log(LOG_LEVEL_ERR, "Unable to open write transaction: %s", mdb_strerror(rc));
+        }
+    }
+
+    *txn = db_txn->txn;
+
+    return rc;
+}
+
+static void AbortTransaction(DBPriv *db)
+{
+    DBTxn *db_txn = pthread_getspecific(db->txn_key);
+    mdb_txn_abort(db_txn->txn);
+    db_txn->txn = NULL;
+    db_txn->rw_txn = false;
+}
+
+static void DestroyTransaction(void *ptr)
+{
+    DBTxn *db_txn = (DBTxn *)ptr;
+    UnexpectedError("Transaction object still exists when terminating thread");
+    if (db_txn->txn)
+    {
+        UnexpectedError("Transaction still open when terminating thread!");
+        mdb_txn_abort(db_txn->txn);
+    }
+    free(db_txn);
+}
 
 const char *DBPrivGetFileExtension(void)
 {
@@ -72,6 +168,15 @@ DBPriv *DBPrivOpenDB(const char *dbpath, dbid id)
     DBPriv *db = xcalloc(1, sizeof(DBPriv));
     MDB_txn *txn = NULL;
     int rc;
+
+    rc = pthread_key_create(&db->txn_key, &DestroyTransaction);
+    if (rc)
+    {
+        Log(LOG_LEVEL_ERR, "Could not create transaction key. (pthread_key_create: '%s')",
+            GetErrorStrFromCode(rc));
+        free(db);
+        return NULL;
+    }
 
     rc = mdb_env_create(&db->env);
     if (rc)
@@ -124,6 +229,7 @@ DBPriv *DBPrivOpenDB(const char *dbpath, dbid id)
     {
         Log(LOG_LEVEL_ERR, "Could not open database dbi %s: %s",
               dbpath, mdb_strerror(rc));
+        mdb_txn_abort(txn);
         goto err;
     }
     rc = mdb_txn_commit(txn);
@@ -133,8 +239,7 @@ DBPriv *DBPrivOpenDB(const char *dbpath, dbid id)
               dbpath, mdb_strerror(rc));
         goto err;
     }
-    txn = NULL;
-    db->wtxn = NULL;
+
     return db;
 
 err:
@@ -142,7 +247,12 @@ err:
     {
         mdb_env_close(db->env);
     }
+    pthread_key_delete(db->txn_key);
     free(db);
+    if (rc == MDB_INVALID)
+    {
+        return DB_PRIV_DATABASE_BROKEN;
+    }
     return NULL;
 }
 
@@ -151,24 +261,24 @@ void DBPrivCloseDB(DBPriv *db)
     if (db->env)
     {
         mdb_env_close(db->env);
-        db->wtxn = NULL;
     }
+    pthread_key_delete(db->txn_key);
     free(db);
 }
 
 void DBPrivCommit(DBPriv *db)
 {
-    if (db->wtxn)
+    DBTxn *db_txn = pthread_getspecific(db->txn_key);
+    if (db_txn && db_txn->txn)
     {
-        int rc;
-        rc = mdb_txn_commit(db->wtxn);
-        if (rc)
+        int rc = mdb_txn_commit(db_txn->txn);
+        if (rc != MDB_SUCCESS)
         {
-            Log(LOG_LEVEL_ERR, "Could not commit database dbi : %s",
-                  mdb_strerror(rc));
+            Log(LOG_LEVEL_ERR, "Could not commit database transaction: %s", mdb_strerror(rc));
         }
-        db->wtxn = NULL;
     }
+    pthread_setspecific(db->txn_key, NULL);
+    free(db_txn);
 }
 
 bool DBPrivHasKey(DBPriv *db, const void *key, int key_size)
@@ -178,7 +288,7 @@ bool DBPrivHasKey(DBPriv *db, const void *key, int key_size)
     int rc;
     // FIXME: distinguish between "entry not found" and "error occured"
 
-    rc = mdb_txn_begin(db->env, NULL, MDB_RDONLY, &txn);
+    rc = GetReadTransaction(db, &txn);
     if (rc == MDB_SUCCESS)
     {
         mkey.mv_data = (void *)key;
@@ -186,13 +296,9 @@ bool DBPrivHasKey(DBPriv *db, const void *key, int key_size)
         rc = mdb_get(txn, db->dbi, &mkey, &data);
         if (rc && rc != MDB_NOTFOUND)
         {
-            Log(LOG_LEVEL_ERR, "Could not read: %s", mdb_strerror(rc));
+            Log(LOG_LEVEL_ERR, "Could not read database entry: %s", mdb_strerror(rc));
+            AbortTransaction(db);
         }
-        mdb_txn_abort(txn);
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Could not create read txn: %s", mdb_strerror(rc));
     }
 
     return rc == MDB_SUCCESS;
@@ -206,7 +312,7 @@ int DBPrivGetValueSize(DBPriv *db, const void *key, int key_size)
 
     data.mv_size = 0;
 
-    rc = mdb_txn_begin(db->env, NULL, MDB_RDONLY, &txn);
+    rc = GetReadTransaction(db, &txn);
     if (rc == MDB_SUCCESS)
     {
         mkey.mv_data = (void *)key;
@@ -214,13 +320,9 @@ int DBPrivGetValueSize(DBPriv *db, const void *key, int key_size)
         rc = mdb_get(txn, db->dbi, &mkey, &data);
         if (rc && rc != MDB_NOTFOUND)
         {
-            Log(LOG_LEVEL_ERR, "Could not read: %s", mdb_strerror(rc));
+            Log(LOG_LEVEL_ERR, "Could not read database entry: %s", mdb_strerror(rc));
+            AbortTransaction(db);
         }
-        mdb_txn_abort(txn);
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Could not create read txn: %s", mdb_strerror(rc));
     }
 
     return data.mv_size;
@@ -233,7 +335,7 @@ bool DBPrivRead(DBPriv *db, const void *key, int key_size, void *dest, int dest_
     int rc;
     bool ret = false;
 
-    rc = mdb_txn_begin(db->env, NULL, MDB_RDONLY, &txn);
+    rc = GetReadTransaction(db, &txn);
     if (rc == MDB_SUCCESS)
     {
         mkey.mv_data = (void *)key;
@@ -250,13 +352,9 @@ bool DBPrivRead(DBPriv *db, const void *key, int key_size, void *dest, int dest_
         }
         else if (rc != MDB_NOTFOUND)
         {
-            Log(LOG_LEVEL_ERR, "Could not read: %s", mdb_strerror(rc));
+            Log(LOG_LEVEL_ERR, "Could not read database entry: %s", mdb_strerror(rc));
+            AbortTransaction(db);
         }
-        mdb_txn_abort(txn);
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Could not create read txn: %s", mdb_strerror(rc));
     }
     return ret;
 }
@@ -265,18 +363,7 @@ bool DBPrivWrite(DBPriv *db, const void *key, int key_size, const void *value, i
 {
     MDB_val mkey, data;
     MDB_txn *txn;
-    int rc;
-
-    /* If there's an open cursor, use its txn */
-    if (db->mc)
-    {
-        txn = mdb_cursor_txn(db->mc);
-        rc = MDB_SUCCESS;
-    }
-    else
-    {
-        rc = mdb_txn_begin(db->env, NULL, 0, &txn);
-    }
+    int rc = GetWriteTransaction(db, &txn);
     if (rc == MDB_SUCCESS)
     {
         mkey.mv_data = (void *)key;
@@ -284,74 +371,11 @@ bool DBPrivWrite(DBPriv *db, const void *key, int key_size, const void *value, i
         data.mv_data = (void *)value;
         data.mv_size = value_size;
         rc = mdb_put(txn, db->dbi, &mkey, &data, 0);
-        /* don't commit here if there's a cursor */
-        if (!db->mc)
-        {
-            if (rc == MDB_SUCCESS)
-            {
-                rc = mdb_txn_commit(txn);
-                if (rc)
-                {
-                    Log(LOG_LEVEL_ERR, "Could not commit: %s", mdb_strerror(rc));
-                }
-            }
-            else
-            {
-                Log(LOG_LEVEL_ERR, "Could not write: %s", mdb_strerror(rc));
-                mdb_txn_abort(txn);
-            }
-        }
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Could not create write txn: %s", mdb_strerror(rc));
-    }
-    return rc == MDB_SUCCESS;
-}
-
-bool DBPrivWriteNoCommit(DBPriv *db, const void *key, int key_size, const void *value, int value_size)
-{
-    MDB_val mkey, data;
-    int rc;
-    if (db->wtxn == NULL)
-    {
-        rc = mdb_txn_begin(db->env, NULL, 0, &db->wtxn);
-        if (rc == MDB_SUCCESS)
-        {
-            rc = mdb_open(db->wtxn, NULL, 0, &db->dbi);
-            if (rc)
-            {
-                Log(LOG_LEVEL_ERR, "Could not open database dbi : %s",
-                      mdb_strerror(rc));
-                db->wtxn = NULL;
-            }
-        }
-        else
-        {
-            Log(LOG_LEVEL_ERR, "Could not create wtxn: %s", mdb_strerror(rc));
-        }
-    }
-    else
-    {
-        rc = MDB_SUCCESS;
-    }
-    if (rc == MDB_SUCCESS)
-    {
-        mkey.mv_data = (void *)key;
-        mkey.mv_size = key_size;
-        data.mv_data = (void *)value;
-        data.mv_size = value_size;
-        rc = mdb_put(db->wtxn, db->dbi, &mkey, &data, 0);
         if (rc != MDB_SUCCESS)
         {
-            Log(LOG_LEVEL_ERR, "Could not write: %s", mdb_strerror(rc));
-            mdb_txn_abort(db->wtxn);
-            db->wtxn = NULL;
+            Log(LOG_LEVEL_ERR, "Could not write database entry: %s", mdb_strerror(rc));
+            AbortTransaction(db);
         }
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Could not create write txn: %s", mdb_strerror(rc));
     }
     return rc == MDB_SUCCESS;
 }
@@ -360,48 +384,21 @@ bool DBPrivDelete(DBPriv *db, const void *key, int key_size)
 {
     MDB_val mkey;
     MDB_txn *txn;
-    int rc;
-
-    /* If there's an open cursor, use its txn */
-    if (db->mc)
-    {
-        txn = mdb_cursor_txn(db->mc);
-        rc = MDB_SUCCESS;
-    } else
-    {
-        rc = mdb_txn_begin(db->env, NULL, 0, &txn);
-    }
+    int rc = GetWriteTransaction(db, &txn);
     if (rc == MDB_SUCCESS)
     {
         mkey.mv_data = (void *)key;
         mkey.mv_size = key_size;
         rc = mdb_del(txn, db->dbi, &mkey, NULL);
-        /* don't commit here if there's a cursor */
-        if (!db->mc)
+        if (rc == MDB_NOTFOUND)
         {
-            if (rc == MDB_SUCCESS)
-            {
-                rc = mdb_txn_commit(txn);
-                if (rc)
-                {
-                    Log(LOG_LEVEL_ERR, "Could not commit: %s", mdb_strerror(rc));
-                }
-            }
-            else if (rc == MDB_NOTFOUND)
-            {
-                Log(LOG_LEVEL_DEBUG, "Entry not found: %s", mdb_strerror(rc));
-                mdb_txn_abort(txn);
-            }
-            else
-            {
-                Log(LOG_LEVEL_ERR, "Could not delete: %s", mdb_strerror(rc));
-                mdb_txn_abort(txn);
-            }
+            Log(LOG_LEVEL_DEBUG, "Entry not found: %s", mdb_strerror(rc));
         }
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Could not create write txn: %s", mdb_strerror(rc));
+        else if (rc != MDB_SUCCESS)
+        {
+            Log(LOG_LEVEL_ERR, "Could not delete: %s", mdb_strerror(rc));
+            AbortTransaction(db);
+        }
     }
     return rc == MDB_SUCCESS;
 }
@@ -411,27 +408,24 @@ DBCursorPriv *DBPrivOpenCursor(DBPriv *db)
     DBCursorPriv *cursor = NULL;
     MDB_txn *txn;
     int rc;
+    MDB_cursor *mc;
 
-    rc = mdb_txn_begin(db->env, NULL, 0, &txn);
+    rc = GetWriteTransaction(db, &txn);
     if (rc == MDB_SUCCESS)
     {
-        rc = mdb_cursor_open(txn, db->dbi, &db->mc);
+        rc = mdb_cursor_open(txn, db->dbi, &mc);
         if (rc == MDB_SUCCESS)
         {
             cursor = xcalloc(1, sizeof(DBCursorPriv));
             cursor->db = db;
-            cursor->mc = db->mc;
+            cursor->mc = mc;
         }
         else
         {
             Log(LOG_LEVEL_ERR, "Could not open cursor: %s", mdb_strerror(rc));
-            mdb_txn_abort(txn);
+            AbortTransaction(db);
         }
         /* txn remains with cursor */
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Could not create cursor txn: %s", mdb_strerror(rc));
     }
 
     return cursor;
@@ -503,18 +497,27 @@ bool DBPrivWriteCursorEntry(DBCursorPriv *cursor, const void *value, int value_s
     data.mv_data = (void *)value;
     data.mv_size = value_size;
 
-    if ((rc = mdb_cursor_put(cursor->mc, NULL, &data, MDB_CURRENT)) != MDB_SUCCESS)
+    if (cursor->curkv)
     {
-        Log(LOG_LEVEL_ERR, "Could not write cursor entry: %s", mdb_strerror(rc));
+        MDB_val curkey;
+        curkey.mv_data = cursor->curkv;
+        curkey.mv_size = sizeof(cursor->curkv);
+
+        if ((rc = mdb_cursor_put(cursor->mc, &curkey, &data, MDB_CURRENT)) != MDB_SUCCESS)
+        {
+            Log(LOG_LEVEL_ERR, "Could not write cursor entry: %s", mdb_strerror(rc));
+        }
+    }
+    else
+    {
+        Log(LOG_LEVEL_ERR, "Could not write cursor entry: cannot find current key");
+        rc = MDB_INVALID;
     }
     return rc == MDB_SUCCESS;
 }
 
 void DBPrivCloseCursor(DBCursorPriv *cursor)
 {
-    MDB_txn *txn;
-    int rc;
-
     if (cursor->curkv)
     {
         free(cursor->curkv);
@@ -525,14 +528,7 @@ void DBPrivCloseCursor(DBCursorPriv *cursor)
         mdb_cursor_del(cursor->mc, 0);
     }
 
-    cursor->db->mc = NULL;
-    txn = mdb_cursor_txn(cursor->mc);
     mdb_cursor_close(cursor->mc);
-    rc = mdb_txn_commit(txn);
-    if (rc)
-    {
-        Log(LOG_LEVEL_ERR, "Could not commit cursor txn: %s", mdb_strerror(rc));
-    }
     free(cursor);
 }
 

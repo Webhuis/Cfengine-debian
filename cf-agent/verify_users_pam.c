@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -66,6 +66,8 @@ typedef enum
     i_locked
 } which;
 
+static bool SupportsOption(const char *cmd, const char *option);
+
 static const char *GetPlatformSpecificExpirationDate()
 {
      // 2nd January 1970.
@@ -74,6 +76,8 @@ static const char *GetPlatformSpecificExpirationDate()
     return "0102000070";
 #elif defined(__hpux) || defined(__SVR4)
     return "02/01/70";
+#elif defined(__NetBSD__)
+    return "January 02 1970";
 #elif defined(__linux__)
     return "1970-01-02";
 #else
@@ -358,10 +362,10 @@ static bool ChangePasswordHashUsingLckpwdf(const char *puser, const char *passwo
 
     while (true)
     {
-        size_t line_size = CF_BUFSIZE;
-        char *line = xmalloc(line_size);
+        size_t line_size = 0;
+        char *line = NULL;
 
-        int read_result = getline(&line, &line_size, passwd_fd);
+        int read_result = CfReadLine(&line, &line_size, passwd_fd);
         if (read_result < 0)
         {
             if (!feof(passwd_fd))
@@ -374,11 +378,6 @@ static bool ChangePasswordHashUsingLckpwdf(const char *puser, const char *passwo
             {
                 break;
             }
-        }
-        else if (read_result >= sizeof(line))
-        {
-            Log(LOG_LEVEL_ERR, "Unusually long line found in password database while editing user '%s'. Not updating.",
-                puser);
         }
 
         // Editing the password database is risky business, so do as little parsing as possible.
@@ -480,7 +479,7 @@ static bool ChangePassword(const char *puser, const char *password, PasswordForm
 
 #ifdef HAVE_CHPASSWD
     struct stat statbuf;
-    if (stat(CHPASSWD, &statbuf) != -1)
+    if (stat(CHPASSWD, &statbuf) != -1 && SupportsOption(CHPASSWD, "-e"))
     {
         return ChangePasswordHashUsingChpasswd(puser, password);
     }
@@ -578,16 +577,26 @@ static bool GroupGetUserMembership (const char *user, StringSet *result)
     bool ret = true;
     struct group *group_info;
 
-    setgrent();
+    FILE *fptr = fopen("/etc/group", "r");
+    if (!fptr)
+    {
+        Log(LOG_LEVEL_ERR, "Could not open '/etc/group': %s", GetErrorStr());
+        return false;
+    }
+
     while (true)
     {
         errno = 0;
-        group_info = getgrent();
+        // Use fgetgrent() instead of getgrent(), to guarantee that the
+        // returned group is a local group, and not for example from LDAP.
+        group_info = fgetgrent(fptr);
         if (!group_info)
         {
-            if (errno)
+            // Documentation among Unices is conflicting on return codes, but at
+            // least Linux returns ENOENT when there are no more entries.
+            if (errno && errno != ENOENT)
             {
-                Log(LOG_LEVEL_ERR, "Error while getting group list. (getgrent: '%s')", GetErrorStr());
+                Log(LOG_LEVEL_ERR, "Error while getting group list. (fgetgrent: '%s')", GetErrorStr());
                 ret = false;
             }
             break;
@@ -601,9 +610,59 @@ static bool GroupGetUserMembership (const char *user, StringSet *result)
             }
         }
     }
-    endgrent();
+
+    fclose(fptr);
 
     return ret;
+}
+
+static bool EqualGid(const char *key, const struct group *entry)
+{
+    return (atoi(key) == entry->gr_gid);
+}
+
+static bool EqualGroupName(const char *key, const struct group *entry)
+{
+    return (strcmp(key, entry->gr_name) == 0);
+}
+
+// Uses fgetgrent() instead of getgrnam(), to guarantee that the returned group
+// is a local group, and not for example from LDAP.
+static struct group *GetGrEntry(const char *key,
+                                bool (*equal_fn)(const char *key, const struct group *entry))
+{
+    FILE *fptr = fopen("/etc/group", "r");
+    if (!fptr)
+    {
+        Log(LOG_LEVEL_ERR, "Could not open '/etc/group': %s", GetErrorStr());
+        return NULL;
+    }
+
+    struct group *group_info;
+    bool found = false;
+    while ((group_info = fgetgrent(fptr)))
+    {
+        if (equal_fn(key, group_info))
+        {
+            found = true;
+            break;
+        }
+    }
+
+    fclose(fptr);
+
+    if (found)
+    {
+        return group_info;
+    }
+    else
+    {
+        // Failure to find the user means we just set errno to zero.
+        // Perhaps not optimal, but we cannot pass ENOENT, because the fopen might
+        // fail for this reason, and that should not be treated the same.
+        errno = 0;
+        return NULL;
+    }
 }
 
 static void TransformGidsToGroups(StringSet **list)
@@ -620,50 +679,32 @@ static void TransformGidsToGroups(StringSet **list)
             continue;
         }
         // In groups vs gids, groups take precedence. So check if it exists.
-        errno = 0;
-        struct group *group_info = getgrnam(data);
+        struct group *group_info = GetGrEntry(data, &EqualGroupName);
         if (!group_info)
         {
-            switch (errno)
+            if (errno == 0)
             {
-            case 0:
-            case ENOENT:
-            case EBADF:
-            case ESRCH:
-            case EWOULDBLOCK:
-            case EPERM:
-                // POSIX is apparently ambiguous here. All values mean "not found".
-                errno = 0;
-                group_info = getgrgid(atoi(data));
+                group_info = GetGrEntry(data, &EqualGid);
                 if (!group_info)
                 {
-                    switch (errno)
+                    if (errno != 0)
                     {
-                    case 0:
-                    case ENOENT:
-                    case EBADF:
-                    case ESRCH:
-                    case EWOULDBLOCK:
-                    case EPERM:
-                        // POSIX is apparently ambiguous here. All values mean "not found".
-                        //
-                        // Neither group nor gid is found. This will lead to an error later, but we don't
-                        // handle that here.
-                        break;
-                    default:
-                        Log(LOG_LEVEL_ERR, "Error while checking group name '%s'. (getgrgid: '%s')", data, GetErrorStr());
+                        Log(LOG_LEVEL_ERR, "Error while checking group name '%s': %s", data, GetErrorStr());
                         StringSetDestroy(new_list);
                         return;
                     }
+                    // Neither group nor gid is found. This will lead to an error later, but we don't
+                    // handle that here.
                 }
                 else
                 {
                     // Replace gid with group name.
                     StringSetAdd(new_list, xstrdup(group_info->gr_name));
                 }
-                break;
-            default:
-                Log(LOG_LEVEL_ERR, "Error while checking group name '%s'. (getgrnam: '%s')", data, GetErrorStr());
+            }
+            else
+            {
+                Log(LOG_LEVEL_ERR, "Error while checking group name '%s': '%s'", data, GetErrorStr());
                 StringSetDestroy(new_list);
                 return;
             }
@@ -721,12 +762,10 @@ static bool VerifyIfUserNeedsModifs (const char *puser, User u, const struct pas
         // We try name first, even if it looks like a gid. Only fall back to gid.
         struct group *group_info;
         errno = 0;
-        group_info = getgrnam(u.group_primary);
-        // Apparently POSIX is ambiguous here. All the values below mean "not found".
-        if (!group_info && errno != 0 && errno != ENOENT && errno != EBADF && errno != ESRCH
-            && errno != EWOULDBLOCK && errno != EPERM)
+        group_info = GetGrEntry(u.group_primary, &EqualGroupName);
+        if (!group_info && errno != 0)
         {
-            Log(LOG_LEVEL_ERR, "Could not obtain information about group '%s'. (getgrnam: '%s')", u.group_primary, GetErrorStr());
+            Log(LOG_LEVEL_ERR, "Could not obtain information about group '%s': %s", u.group_primary, GetErrorStr());
             gid = -1;
         }
         else if (!group_info)
@@ -784,6 +823,65 @@ static bool VerifyIfUserNeedsModifs (const char *puser, User u, const struct pas
     {
         return true;
     }
+}
+
+static bool SupportsOption(const char *cmd, const char *option)
+{
+    bool supports_option = false;
+    char help_argument[] = " --help";
+    char help_command[strlen(cmd) + sizeof(help_argument)];
+    snprintf(help_command, sizeof(help_command), "%s%s", cmd, help_argument);
+
+    FILE *fptr = cf_popen(help_command, "r", true);
+    char *buf = NULL;
+    size_t bufsize = 0;
+    size_t optlen = strlen(option);
+    while (CfReadLine(&buf, &bufsize, fptr) >= 0)
+    {
+        char *m_pos = buf;
+        while ((m_pos = strstr(m_pos, option)))
+        {
+            // Check against false alarms, e.g. hyphenated words in normal text or an
+            // option (say, "-M") that is part of "--M".
+            if ((m_pos == buf
+                    || (m_pos[-1] != '-' && (isspace(m_pos[-1]) || ispunct(m_pos[-1]))))
+                && (m_pos[optlen] == '\0'
+                    || (isspace(m_pos[optlen]) || ispunct(m_pos[optlen]))))
+            {
+                supports_option = true;
+                // Break out of strstr loop, but read till the end to avoid broken pipes.
+                break;
+            }
+            m_pos++;
+        }
+    }
+    cf_pclose(fptr);
+    free(buf);
+
+    return supports_option;
+}
+
+static bool ExecuteUserCommand(const char *puser, const char *cmd, size_t sizeof_cmd,
+                               const char *action_msg, const char *cap_action_msg)
+{
+    if (strlen(cmd) >= sizeof_cmd - 1)
+    {
+        // Instead of checking every StringAppend call, assume that a maxed out
+        // string length overflowed the string.
+        Log(LOG_LEVEL_ERR, "Command line too long while %s user '%s'", action_msg, puser);
+        return false;
+    }
+
+    Log(LOG_LEVEL_VERBOSE, "%s user '%s'. (command: '%s')", cap_action_msg, puser, cmd);
+
+    int status;
+    status = system(cmd);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+    {
+        Log(LOG_LEVEL_ERR, "Command returned error while %s user '%s'. (Command line: '%s')", action_msg, puser, cmd);
+        return false;
+    }
+    return true;
 }
 
 static bool DoCreateUser(const char *puser, User u, enum cfopaction action,
@@ -845,6 +943,12 @@ static bool DoCreateUser(const char *puser, User u, enum cfopaction action,
         StringAppend(cmd, u.shell, sizeof(cmd));
         StringAppend(cmd, "\"", sizeof(cmd));
     }
+    if (SupportsOption(USERADD, "-M"))
+    {
+        // Prevents creation of home_dir.
+        // We want home_bundle to do that.
+        StringAppend(cmd, " -M", sizeof(cmd));
+    }
     StringAppend(cmd, " ", sizeof(cmd));
     StringAppend(cmd, puser, sizeof(cmd));
 
@@ -855,21 +959,8 @@ static bool DoCreateUser(const char *puser, User u, enum cfopaction action,
     }
     else
     {
-        if (strlen(cmd) >= sizeof(cmd) - 1)
+        if (!ExecuteUserCommand(puser, cmd, sizeof(cmd), "creating", "Creating"))
         {
-            // Instead of checking every string call above, assume that a maxed out
-            // string length overflowed the string.
-            Log(LOG_LEVEL_ERR, "Command line too long while creating user '%s'", puser);
-            return false;
-        }
-
-        Log(LOG_LEVEL_VERBOSE, "Creating user '%s'. (command: '%s')", puser, cmd);
-
-        int status;
-        status = system(cmd);
-        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
-        {
-            Log(LOG_LEVEL_ERR, "Command returned error while creating user '%s'. (Command line: '%s')", puser, cmd);
             return false;
         }
 
@@ -920,27 +1011,8 @@ static bool DoRemoveUser (const char *puser, enum cfopaction action)
         Log(LOG_LEVEL_NOTICE, "Need to remove user '%s'.", puser);
         return false;
     }
-    else
-    {
-        if (strlen(cmd) >= sizeof(cmd) - 1)
-        {
-            // Instead of checking every string call above, assume that a maxed out
-            // string length overflowed the string.
-            Log(LOG_LEVEL_ERR, "Command line too long while removing user '%s'", puser);
-            return false;
-        }
 
-        Log(LOG_LEVEL_VERBOSE, "Removing user '%s'. (command: '%s')", puser, cmd);
-
-        int status;
-        status = system(cmd);
-        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
-        {
-            Log(LOG_LEVEL_ERR, "Command returned error while removing user '%s'. (Command line: '%s')", puser, cmd);
-            return false;
-        }
-    }
-    return true;
+    return ExecuteUserCommand(puser, cmd, sizeof(cmd), "removing", "Removing");
 }
 
 static bool DoModifyUser (const char *puser, User u, const struct passwd *passwd_info, uint32_t changemap, enum cfopaction action)
@@ -972,18 +1044,13 @@ static bool DoModifyUser (const char *puser, User u, const struct passwd *passwd
 
     if (CFUSR_CHECKBIT (changemap, i_groups) != 0)
     {
-        StringAppend(cmd, " -G \"", sizeof(cmd));
-        char sep[2] = { '\0', '\0' };
-        for (Rlist *i = u.groups_secondary; i; i = i->next)
-        {
-            if (strcmp(RvalScalarValue(i->val), CF_NULL_VALUE) != 0)
-            {
-                StringAppend(cmd, sep, sizeof(cmd));
-                StringAppend(cmd, RvalScalarValue(i->val), sizeof(cmd));
-                sep[0] = ',';
-            }
-        }
-        StringAppend(cmd, "\"", sizeof(cmd));
+        /* Work around bug on SUSE. If secondary groups contain a group that is
+           the same group as the primary group, the secondary group is not set.
+           This happens even if the primary group is changed in the same call.
+           Therefore, set an empty group list first, and then set it to the real
+           list later.
+        */
+        StringAppend(cmd, " -G \"\"", sizeof(cmd));
     }
 
     if (CFUSR_CHECKBIT (changemap, i_home) != 0)
@@ -1051,25 +1118,72 @@ static bool DoModifyUser (const char *puser, User u, const struct passwd *passwd
     }
     else if (changemap != 0)
     {
-        if (strlen(cmd) >= sizeof(cmd) - 1)
+        if (!ExecuteUserCommand(puser, cmd, sizeof(cmd), "modifying", "Modifying"))
         {
-            // Instead of checking every string call above, assume that a maxed out
-            // string length overflowed the string.
-            Log(LOG_LEVEL_ERR, "Command line too long while modifying user '%s'", puser);
             return false;
         }
-
-        Log(LOG_LEVEL_VERBOSE, "Modifying user '%s'. (command: '%s')", puser, cmd);
-
-        int status;
-        status = system(cmd);
-        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+        if (CFUSR_CHECKBIT (changemap, i_groups) != 0)
         {
-            Log(LOG_LEVEL_ERR, "Command returned error while modifying user '%s'. (Command line: '%s')", puser, cmd);
-            return false;
+            // Set real group list (see -G comment earlier).
+            strcpy(cmd, USERMOD);
+            StringAppend(cmd, " -G \"", sizeof(cmd));
+            char sep[2] = { '\0', '\0' };
+            for (Rlist *i = u.groups_secondary; i; i = i->next)
+            {
+                if (strcmp(RvalScalarValue(i->val), CF_NULL_VALUE) != 0)
+                {
+                    StringAppend(cmd, sep, sizeof(cmd));
+                    StringAppend(cmd, RvalScalarValue(i->val), sizeof(cmd));
+                    sep[0] = ',';
+                }
+            }
+            StringAppend(cmd, "\" ", sizeof(cmd));
+            StringAppend(cmd, puser, sizeof(cmd));
+            if (!ExecuteUserCommand(puser, cmd, sizeof(cmd), "modifying", "Modifying"))
+            {
+                return false;
+            }
         }
     }
     return true;
+}
+
+// Uses fgetpwent() instead of getpwnam(), to guarantee that the returned user
+// is a local user, and not for example from LDAP.
+static struct passwd *GetPwEntry(const char *puser)
+{
+    FILE *fptr = fopen("/etc/passwd", "r");
+    if (!fptr)
+    {
+        Log(LOG_LEVEL_ERR, "Could not open '/etc/passwd': %s", GetErrorStr());
+        return NULL;
+    }
+
+    struct passwd *passwd_info;
+    bool found = false;
+    while ((passwd_info = fgetpwent(fptr)))
+    {
+        if (strcmp(puser, passwd_info->pw_name) == 0)
+        {
+            found = true;
+            break;
+        }
+    }
+
+    fclose(fptr);
+
+    if (found)
+    {
+        return passwd_info;
+    }
+    else
+    {
+        // Failure to find the user means we just set errno to zero.
+        // Perhaps not optimal, but we cannot pass ENOENT, because the fopen might
+        // fail for this reason, and that should not be treated the same.
+        errno = 0;
+        return NULL;
+    }
 }
 
 void VerifyOneUsersPromise (const char *puser, User u, PromiseResult *result, enum cfopaction action,
@@ -1078,13 +1192,10 @@ void VerifyOneUsersPromise (const char *puser, User u, PromiseResult *result, en
     bool res;
 
     struct passwd *passwd_info;
-    errno = 0;
-    passwd_info = getpwnam(puser);
-    // Apparently POSIX is ambiguous here. All the values below mean "not found".
-    if (!passwd_info && errno != 0 && errno != ENOENT && errno != EBADF && errno != ESRCH
-        && errno != EWOULDBLOCK && errno != EPERM)
+    passwd_info = GetPwEntry(puser);
+    if (!passwd_info && errno != 0)
     {
-        Log(LOG_LEVEL_ERR, "Could not get information from user database. (getpwnam: '%s')", GetErrorStr());
+        Log(LOG_LEVEL_ERR, "Could not get information from user database.");
         return;
     }
 
