@@ -365,7 +365,7 @@ libmock_package_manager_la_LIBADD = ../../libpromises/libpromises.la
 @HAVE_LIBXML2_TRUE@xml_c14nize_LDADD = ../../libutils/libutils.la \
 @HAVE_LIBXML2_TRUE@    $(LIBXML2_LIBS)
 
-EXTRA_DIST = default.cf.sub testall
+EXTRA_DIST = default.cf.sub dcs.cf.sub plucked.cf.sub testall
 TESTS = testall
 TESTS_ENVIRONMENT = env AGENT=`pwd`/../../cf-agent/cf-agent \
 	CF_PROMISES=`pwd`/../../cf-promises/cf-promises \
