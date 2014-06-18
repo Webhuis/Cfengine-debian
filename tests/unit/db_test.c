@@ -18,6 +18,43 @@ void tests_teardown(void)
     system(cmd);
 }
 
+void test_open_close(void)
+{
+    // Test that we can simply open and close a database without doing anything.
+    CF_DB *db;
+    assert_int_equal(OpenDB(&db, dbid_classes), true);
+    CloseDB(db);
+}
+
+void test_read_write(void)
+{
+    // Test that we can do normal reads and write, and that the values are
+    // reflected in the database.
+    CF_DB *db;
+    char value[CF_BUFSIZE];
+    strcpy(value, "myvalue");
+    int vsize = strlen(value) + 1;
+
+    assert_int_equal(OpenDB(&db, dbid_classes), true);
+
+    assert_int_equal(ReadDB(db, "written_entry", &value, vsize), false);
+    assert_string_equal(value, "myvalue");
+    assert_int_equal(WriteDB(db, "written_entry", value, vsize), true);
+    strcpy(value, "");
+    assert_int_equal(ReadDB(db, "written_entry", &value, vsize), true);
+    assert_string_equal(value, "myvalue");
+
+    CloseDB(db);
+
+    // Check also after we reopen the database.
+    assert_int_equal(OpenDB(&db, dbid_classes), true);
+    strcpy(value, "");
+    assert_int_equal(ReadDB(db, "written_entry", &value, vsize), true);
+    assert_string_equal(value, "myvalue");
+
+    CloseDB(db);
+}
+
 void test_iter_modify_entry(void)
 {
     /* Test that deleting entry under cursor does not interrupt iteration */
@@ -81,7 +118,7 @@ void test_iter_delete_entry(void)
     CloseDB(db);
 }
 
-#if defined(HAVE_LIBTOKYOCABINET) || defined(HAVE_LIBQDBM)
+#if defined(HAVE_LIBTOKYOCABINET) || defined(HAVE_LIBQDBM) || defined(HAVE_LIBLMDB)
 static void CreateGarbage(const char *filename)
 {
     FILE *fh = fopen(filename, "w");
@@ -106,6 +143,12 @@ void test_recreate(void)
     snprintf(qdbm_db, CF_BUFSIZE, "%s/cf_classes.qdbm", CFWORKDIR);
     CreateGarbage(qdbm_db);
 #endif
+#ifdef HAVE_LIBLMDB
+    char lmdb_db[CF_BUFSIZE];
+    snprintf(lmdb_db, CF_BUFSIZE, "%s/cf_classes.lmdb", CFWORKDIR);
+    CreateGarbage(lmdb_db);
+#endif
+
     CF_DB *db;
     assert_int_equal(OpenDB(&db, dbid_classes), true);
     CloseDB(db);
@@ -118,6 +161,8 @@ int main()
 
     const UnitTest tests[] =
         {
+            unit_test(test_open_close),
+            unit_test(test_read_write),
             unit_test(test_iter_modify_entry),
             unit_test(test_iter_delete_entry),
             unit_test(test_recreate),
@@ -131,12 +176,6 @@ int main()
 }
 
 /* STUBS */
-
-void __ProgrammingError(const char *file, int lineno, const char *format, ...)
-{
-    fail();
-    exit(42);
-}
 
 void FatalError(char *s, ...)
 {

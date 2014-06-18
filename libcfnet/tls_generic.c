@@ -35,27 +35,237 @@
 #include <assert.h>
 
 
-/**
- * this is an always succeeding callback for SSL_CTX_set_cert_verify_callback().
- *
- * Verifying with a callback is the best way, *but* OpenSSL does not provide a
- * thread-safe way to passing a pointer with custom data (connection info). So
- * we always succeed verification here, and verify properly *after* the
- * handshake is complete.
- */
-int TLSVerifyCallback(X509_STORE_CTX *ctx ARG_UNUSED,
-                      void *arg ARG_UNUSED)
+int CONNECTIONINFO_SSL_IDX = -1;
+
+
+bool TLSGenericInitialize()
 {
-    return 1;
+    static bool is_initialised = false;
+
+    /* We must make sure that SSL_get_ex_new_index() is called only once! */
+    if (is_initialised)
+    {
+        return true;
+    }
+
+    /* OpenSSL is needed for TLS. */
+    SSL_library_init();
+    SSL_load_error_strings();
+
+    /* Register a unique place to store ConnectionInfo within SSL struct. */
+    CONNECTIONINFO_SSL_IDX =
+        SSL_get_ex_new_index(0, "Pointer to ConnectionInfo",
+                             NULL, NULL, NULL);
+
+    is_initialised = true;
+    return true;
 }
 
 /**
- * @return 1 if the certificate received during the TLS handshake is valid
- *         signed and its public key is the same with the stored one for that
- *         host.
- * @return 0 if stored key for the host is missing or differs from the one
+ * @retval 1 equal
+ * @retval 0 not equal
+ * @retval -1 error
+ */
+static int CompareCertToRSA(X509 *cert, RSA *rsa_key)
+{
+    int ret;
+    int retval = -1;                                            /* ERROR */
+
+    EVP_PKEY *cert_pkey = X509_get_pubkey(cert);
+    if (cert_pkey == NULL)
+    {
+        Log(LOG_LEVEL_ERR, "X509_get_pubkey: %s",
+            ERR_reason_error_string(ERR_get_error()));
+        goto ret1;
+    }
+    if (EVP_PKEY_type(cert_pkey->type) != EVP_PKEY_RSA)
+    {
+        Log(LOG_LEVEL_ERR,
+            "Received key of unknown type, only RSA currently supported!");
+        goto ret2;
+    }
+
+    RSA *cert_rsa_key = EVP_PKEY_get1_RSA(cert_pkey);
+    if (cert_rsa_key == NULL)
+    {
+        Log(LOG_LEVEL_ERR, "TLSVerifyPeer: EVP_PKEY_get1_RSA failed!");
+        goto ret2;
+    }
+
+    EVP_PKEY *rsa_pkey = EVP_PKEY_new();
+    if (rsa_pkey == NULL)
+    {
+        Log(LOG_LEVEL_ERR, "TLSVerifyPeer: EVP_PKEY_new allocation failed!");
+        goto ret3;
+    }
+
+    ret = EVP_PKEY_set1_RSA(rsa_pkey, rsa_key);
+    if (ret == 0)
+    {
+        Log(LOG_LEVEL_ERR, "TLSVerifyPeer: EVP_PKEY_set1_RSA failed!");
+        goto ret4;
+    }
+
+    ret = EVP_PKEY_cmp(cert_pkey, rsa_pkey);
+    if (ret == 1)
+    {
+        Log(LOG_LEVEL_DEBUG,
+            "Public key to certificate compare equal");
+        retval = 1;                                             /* EQUAL */
+    }
+    else if (ret == 0 || ret == -1)
+    {
+        Log(LOG_LEVEL_DEBUG,
+            "Public key to certificate compare different");
+        retval = 0;                                            /* NOT EQUAL */
+    }
+    else
+    {
+        const char *errmsg = ERR_reason_error_string(ERR_get_error());
+        Log(LOG_LEVEL_ERR, "OpenSSL EVP_PKEY_cmp: %d %s",
+            ret, errmsg ? errmsg : "");
+    }
+
+  ret4:
+    EVP_PKEY_free(rsa_pkey);
+  ret3:
+    RSA_free(cert_rsa_key);
+  ret2:
+    EVP_PKEY_free(cert_pkey);
+
+  ret1:
+    return retval;
+}
+
+/**
+ * The only thing we make sure here is that any key change is not allowed. All
+ * the rest of authentication happens separately *after* the initial
+ * handshake, thus *after* this callback has returned successfully and TLS
+ * session has been established.
+ */
+int TLSVerifyCallback(X509_STORE_CTX *store_ctx,
+                      void *arg ARG_UNUSED)
+{
+
+    /* It's kind of tricky to get custom connection-specific info in this
+     * callback. We first acquire a pointer to the SSL struct of the
+     * connection and... */
+    int ssl_idx = SSL_get_ex_data_X509_STORE_CTX_idx();
+    SSL *ssl = X509_STORE_CTX_get_ex_data(store_ctx, ssl_idx);
+    if (ssl == NULL)
+    {
+        UnexpectedError("No SSL context during handshake, denying!");
+        return 0;
+    }
+
+    /* ...and then we ask for the custom data we attached there. */
+    ConnectionInfo *conn_info = SSL_get_ex_data(ssl, CONNECTIONINFO_SSL_IDX);
+    if (conn_info == NULL)
+    {
+        UnexpectedError("No conn_info at index %d", CONNECTIONINFO_SSL_IDX);
+        return 0;
+    }
+
+    /* From that data get the key if the connection is already established. */
+    RSA *already_negotiated_key = KeyRSA(ConnectionInfoKey(conn_info));
+    /* Is there an already negotiated certificate? */
+    X509 *previous_tls_cert = SSL_get_peer_certificate(ssl);
+
+    if (previous_tls_cert == NULL)
+    {
+        Log(LOG_LEVEL_DEBUG, "TLSVerifyCallback: no ssl->peer_cert");
+        if (already_negotiated_key == NULL)
+        {
+            Log(LOG_LEVEL_DEBUG, "TLSVerifyCallback: no conn_info->key");
+            Log(LOG_LEVEL_DEBUG,
+                "This must be the initial TLS handshake, accepting");
+            return 1;                                   /* ACCEPT HANDSHAKE */
+        }
+        else
+        {
+            UnexpectedError("Initial handshake, but old keys differ, denying!");
+            return 0;
+        }
+    }
+    else                                     /* TLS renegotiation handshake */
+    {
+        if (already_negotiated_key == NULL)
+        {
+            Log(LOG_LEVEL_DEBUG, "TLSVerifyCallback: no conn_info->key");
+            Log(LOG_LEVEL_ERR,
+                "Renegotiation handshake before trust was established, denying!");
+            X509_free(previous_tls_cert);
+            return 0;                                           /* fishy */
+        }
+        else
+        {
+            /* previous_tls_cert key should match already_negotiated_key. */
+            if (CompareCertToRSA(previous_tls_cert,
+                                 already_negotiated_key) != 1)
+            {
+                UnexpectedError("Renegotiation caused keys to differ, denying!");
+                X509_free(previous_tls_cert);
+                return 0;
+            }
+            else
+            {
+                /* THIS IS THE ONLY WAY TO CONTINUE */
+            }
+        }
+    }
+
+    assert(previous_tls_cert != NULL);
+    assert(already_negotiated_key != NULL);
+
+    /* At this point we have ensured that previous_tls_cert->key is equal
+     * to already_negotiated_key, so we might as well forget the former. */
+    X509_free(previous_tls_cert);
+
+    /* We want to compare already_negotiated_key to the one the peer
+     * negotiates in this TLS renegotiation. So, extract first certificate out
+     * of the chain the peer sent. It should be the only one since we do not
+     * support certificate chains, we just want the RSA key. */
+    STACK_OF(X509) *chain = X509_STORE_CTX_get_chain(store_ctx);
+    if (chain == NULL)
+    {
+        Log(LOG_LEVEL_ERR,
+            "No certificate chain inside TLS handshake, denying!");
+        return 0;
+    }
+
+    int chain_len = sk_X509_num(chain);
+    if (chain_len != 1)
+    {
+        Log(LOG_LEVEL_ERR,
+            "More than one certificate presented in TLS handshake, refusing handshake!");
+        return 0;
+    }
+
+    X509 *new_cert = sk_X509_value(chain, 0);
+    if (new_cert == NULL)
+    {
+        UnexpectedError("NULL certificate at the beginning of chain!");
+        return 0;
+    }
+
+    if (CompareCertToRSA(new_cert, already_negotiated_key) != 1)
+    {
+        Log(LOG_LEVEL_ERR,
+            "Peer attempted to change key during TLS renegotiation, denying!");
+        return 0;
+    }
+
+    Log(LOG_LEVEL_DEBUG,
+        "TLS renegotiation occurred but keys are still the same, accepting");
+    return 1;                                           /* ACCEPT HANDSHAKE */
+}
+
+/**
+ * @retval 1 if the public key used by the peer in the TLS handshake is the
+ *         same with the one stored for that host.
+ * @retval 0 if stored key for the host is missing or differs from the one
  *         received.
- * @return -1 in case of other error (error will be Log()ed).
+ * @retval -1 in case of other error (error will be Log()ed).
  * @note When return value is != -1 (so no error occured) the #conn_info struct
  *       should have been populated, with key received and its hash.
  */
@@ -191,7 +401,7 @@ X509 *TLSGenerateCertFromPrivKey(RSA *privkey)
     }
 
     ASN1_TIME *t1 = X509_gmtime_adj(X509_get_notBefore(x509), 0);
-    ASN1_TIME *t2 = X509_gmtime_adj(X509_get_notAfter(x509), 60*60*24*365*50);
+    ASN1_TIME *t2 = X509_gmtime_adj(X509_get_notAfter(x509), 60*60*24*365*10);
     if (t1 == NULL || t2 == NULL)
     {
         Log(LOG_LEVEL_ERR, "X509_gmtime_adj: %s",
@@ -242,6 +452,11 @@ X509 *TLSGenerateCertFromPrivKey(RSA *privkey)
         Log(LOG_LEVEL_ERR, "OpenSSL: Uknown digest algorithm %s",
             "sha384");
         goto err3;
+    }
+
+    if (getenv("CFENGINE_TEST_PURIFY_OPENSSL") != NULL)
+    {
+        RSA_blinding_off(privkey);
     }
 
     /* Not really needed since the other side does not
@@ -295,20 +510,6 @@ static const char *TLSPrimarySSLError(int code)
     return "Unknown OpenSSL error code!";
 }
 
-/**
- * @brief Sends the data stored on the buffer using a TLS session.
- * @param ssl SSL information.
- * @param buffer Data to send.
- * @param length Length of the data to send.
- * @return The length of the data sent (which could be smaller than the
- *         requested length) or -1 in case of error.
- * @note Use only for *blocking* sockets. Set
- *       SSL_CTX_set_mode(SSL_MODE_AUTO_RETRY) to make sure that either
- *       operation completed or an error occured.
- *
- * @TODO ERR_get_error is only meaningful for some error codes, so check and
- *       return empty string otherwise.
- */
 static const char *TLSSecondarySSLError(int code ARG_UNUSED)
 {
     return ERR_reason_error_string(ERR_get_error());
@@ -327,17 +528,69 @@ void TLSLogError(SSL *ssl, LogLevel level, const char *prepend, int code)
 {
     assert(prepend != NULL);
 
-    const char *err2 = TLSSecondarySSLError(code);
+    /* For when code==SSL_ERROR_SYSCALL. */
+    const char *syserr = (errno != 0) ? GetErrorStr() : "";
+    int errcode         = SSL_get_error(ssl, code);
+    const char *errstr1 = TLSPrimarySSLError(errcode);
+    /* The following is only logged for completeness reasons, it's not useful
+     * for SSL_read() and SSL_write(). */
+    const char *errstr2 = TLSSecondarySSLError(code);
 
-    Log(level, "%s: (%d %s) %s",
-        prepend, code,
-        TLSPrimarySSLError(SSL_get_error(ssl, code)),
-        err2 == NULL ? "" : err2);
+    /* We know the socket is always blocking. However our blocking sockets
+     * have a timeout set via means of setsockopt(SO_RCVTIMEO), so internally
+     * OpenSSL can still get the EWOULDBLOCK error code from recv(). In that
+     * case OpenSSL gives us SSL_ERROR_WANT_READ despite the socket being
+     * blocking. So we log a proper error message! */
+    if (errcode == SSL_ERROR_WANT_READ)
+    {
+        Log(level, "%s: receive timeout", prepend);
+    }
+    else if (errcode == SSL_ERROR_WANT_WRITE)
+    {
+        Log(level, "%s: send timeout", prepend);
+    }
+    else
+    {
+        Log(level, "%s: (%d %s) %s %s",
+            prepend, code, errstr1,
+            (errstr2 == NULL) ? "" : errstr2,          /* most likely empty */
+            syserr);
+    }
 }
 
+static void assert_SSLIsBlocking(const SSL *ssl)
+{
+#ifndef NDEBUG
+    int fd = SSL_get_fd(ssl);
+    if (fd >= 0)
+    {
+        int flags = fcntl(fd, F_GETFL, 0);
+        if (flags != -1 && (flags & O_NONBLOCK) != 0)
+        {
+            ProgrammingError("OpenSSL socket is non-blocking!");
+        }
+    }
+#endif
+}
+
+/**
+ * @brief Sends the data stored on the buffer using a TLS session.
+ * @param ssl SSL information.
+ * @param buffer Data to send.
+ * @param length Length of the data to send.
+ * @return The length of the data sent (which could be smaller than the
+ *         requested length) or -1 in case of error.
+ * @note Use only for *blocking* sockets. Set
+ *       SSL_CTX_set_mode(SSL_MODE_AUTO_RETRY) to make sure that either
+ *       operation completed or an error occured.
+ *
+ * @TODO ERR_get_error is only meaningful for some error codes, so check and
+ *       return empty string otherwise.
+ */
 int TLSSend(SSL *ssl, const char *buffer, int length)
 {
     assert(length >= 0);
+    assert_SSLIsBlocking(ssl);
 
     if (length == 0)
     {
@@ -356,7 +609,7 @@ int TLSSend(SSL *ssl, const char *buffer, int length)
         else
         {
             TLSLogError(ssl, LOG_LEVEL_ERR,
-                        "TLS session abruptly closed. SSL_write", sent);
+                        "Connection unexpectedly closed. SSL_write", sent);
             return 0;
         }
     }
@@ -385,6 +638,7 @@ int TLSRecv(SSL *ssl, char *buffer, int length)
 {
     assert(length > 0);
     assert(length < CF_BUFSIZE);
+    assert_SSLIsBlocking(ssl);
 
     int received = SSL_read(ssl, buffer, length);
     if (received < 0)
@@ -401,7 +655,7 @@ int TLSRecv(SSL *ssl, char *buffer, int length)
         else
         {
             TLSLogError(ssl, LOG_LEVEL_ERR,
-                        "TLS session abruptly closed. SSL_read", received);
+                        "Connection unexpectedly closed. SSL_read", received);
         }
     }
 
@@ -459,4 +713,47 @@ int TLSRecvLines(SSL *ssl, char *buf, size_t buf_size)
 
     LogRaw(LOG_LEVEL_DEBUG, "TLSRecvLines(): ", buf, got);
     return got;
+}
+
+/**
+ * Set safe OpenSSL defaults commonly used by both clients and servers.
+ */
+void TLSSetDefaultOptions(SSL_CTX *ssl_ctx)
+{
+    /* Clear all flags, we do not want compatibility tradeoffs like
+     * SSL_OP_LEGACY_SERVER_CONNECT. */
+    SSL_CTX_clear_options(ssl_ctx, SSL_CTX_get_options(ssl_ctx));
+
+    /* Use only TLS v1 or later.
+       TODO policy option for SSL_OP_NO_TLSv{1,1_1} */
+    long options = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+
+    /* No session resumption or renegotiation for now. */
+    options |= SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
+
+    /* Disable another way of resuption, session tickets (RFC 5077). */
+    options |= SSL_OP_NO_TICKET;
+
+    SSL_CTX_set_options(ssl_ctx, options);
+
+
+    /* Disable both server-side and client-side session caching, to
+       complement the previous options. Safe for now, might enable for
+       performance in the future. */
+    SSL_CTX_set_session_cache_mode(ssl_ctx, SSL_SESS_CACHE_OFF);
+
+
+    /* Never bother with retransmissions, SSL_write() should
+     * always either write the whole amount or fail. */
+    SSL_CTX_set_mode(ssl_ctx, SSL_MODE_AUTO_RETRY);
+
+    /* Set options to always request a certificate from the peer,
+       either we are client or server. */
+    SSL_CTX_set_verify(ssl_ctx,
+                       SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+                       NULL);
+    /* Always accept that certificate, we do proper checking after TLS
+     * connection is established since OpenSSL can't pass a connection
+     * specific pointer to the callback (so we would have to lock).  */
+    SSL_CTX_set_cert_verify_callback(ssl_ctx, TLSVerifyCallback, NULL);
 }

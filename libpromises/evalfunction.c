@@ -60,6 +60,7 @@
 #include <files_lib.h>
 #include <connection_info.h>
 #include <printsize.h>
+#include <csv_parser.h>
 
 #include <math_eval.h>
 
@@ -1328,6 +1329,8 @@ static FnCallResult FnCallPackagesMatching(ARG_UNUSED EvalContext *ctx, ARG_UNUS
         GetSoftwarePatchesFilename(filename);
     }
 
+    Log(LOG_LEVEL_DEBUG, "%s: reading inventory from '%s'", fp->name, filename);
+
     if ((fin = fopen(filename, "r")) == NULL)
     {
         Log(LOG_LEVEL_VERBOSE, "%s cannot open the %s packages inventory '%s' - "
@@ -1340,13 +1343,10 @@ static FnCallResult FnCallPackagesMatching(ARG_UNUSED EvalContext *ctx, ARG_UNUS
 
     int linenumber = 0;
 
-    size_t line_size = CF_BUFSIZE;
-    char *line = xmalloc(line_size);
-
     for(;;)
     {
-        ssize_t res = CfReadLine(&line, &line_size, fin);
-        if (res == -1)
+        char *line = GetCsvLineNext(fin);
+        if (NULL == line)
         {
             if (!feof(fin))
             {
@@ -1374,29 +1374,31 @@ static FnCallResult FnCallPackagesMatching(ARG_UNUSED EvalContext *ctx, ARG_UNUS
 
         if (StringMatchFull(regex, line))
         {
-            char name[CF_MAXVARSIZE], version[CF_MAXVARSIZE], arch[CF_MAXVARSIZE], method[CF_MAXVARSIZE];
+            Seq *list = SeqParseCsvString(line);
             JsonElement *line_obj = JsonObjectCreate(4);
-            int scancount = sscanf(line, "%250[^,],%250[^,],%250[^,],%250[^\n]", name, version, arch, method);
-            if (scancount != 4)
+            if (SeqLength(list) != 4)
             {
-                Log(LOG_LEVEL_ERR, "Line %d from package inventory '%s' did not yield 4 elements", linenumber, filename);
+                Log(LOG_LEVEL_ERR, "Line %d from package inventory '%s' did not yield 4 elements: %s", linenumber, filename, line);
                 JsonDestroy(line_obj);
                 ++linenumber;
+                SeqDestroy(list);
                 continue;
             }
 
-            JsonObjectAppendString(line_obj, "name", name);
-            JsonObjectAppendString(line_obj, "version", version);
-            JsonObjectAppendString(line_obj, "arch", arch);
-            JsonObjectAppendString(line_obj, "method", method);
+            JsonObjectAppendString(line_obj, "name", SeqAt(list, 0));
+            JsonObjectAppendString(line_obj, "version", SeqAt(list, 1));
+            JsonObjectAppendString(line_obj, "arch", SeqAt(list, 2));
+            JsonObjectAppendString(line_obj, "method", SeqAt(list, 3));
+            SeqDestroy(list);
+
             JsonArrayAppendObject(json, line_obj);
         }
 
         ++linenumber;
+        free(line);
     }
 
     fclose(fin);
-    free(line);
 
     return (FnCallResult) { FNCALL_SUCCESS, (Rval) { json, RVAL_TYPE_CONTAINER } };
 
@@ -2457,6 +2459,7 @@ static FnCallResult FnCallMapArray(EvalContext *ctx, ARG_UNUSED const Policy *po
     const char *arg_array = RlistScalarValue(finalargs->next);
 
     VariableTableIterator *iter;
+    size_t selected_index = 0;
     {
         VarRef *ref = VarRefParse(arg_array);
         if (!VarRefIsQualified(ref))
@@ -2466,6 +2469,7 @@ static FnCallResult FnCallMapArray(EvalContext *ctx, ARG_UNUSED const Policy *po
         }
 
         iter = EvalContextVariableTableIteratorNew(ctx, ref->ns, ref->scope, ref->lval);
+        selected_index = ref->num_indices;
         VarRefDestroy(ref);
     }
 
@@ -2474,12 +2478,12 @@ static FnCallResult FnCallMapArray(EvalContext *ctx, ARG_UNUSED const Policy *po
     Buffer *expbuf = BufferNew();
     while ((var = VariableTableIteratorNext(iter)))
     {
-        if (var->ref->num_indices != 1)
+        if (var->ref->num_indices <= selected_index)
         {
             continue;
         }
 
-        EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "k", var->ref->indices[0], CF_DATA_TYPE_STRING, "source=function,function=maparray");
+        EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "k", var->ref->indices[selected_index], CF_DATA_TYPE_STRING, "source=function,function=maparray");
 
         switch (var->rval.type)
         {
@@ -2786,7 +2790,9 @@ static FnCallResult FnCallSelectServers(EvalContext *ctx,
     }
     else
     {
-        Log(LOG_LEVEL_VERBOSE, "Function selectservers was promised a list called '%s' but this was not found", listvar);
+        Log(LOG_LEVEL_VERBOSE,
+            "Function selectservers was promised a list called '%s' but this was not found",
+            listvar);
         return FnFailure();
     }
 
@@ -2808,7 +2814,8 @@ static FnCallResult FnCallSelectServers(EvalContext *ctx,
     if (DataTypeToRvalType(value_type) != RVAL_TYPE_LIST)
     {
         Log(LOG_LEVEL_VERBOSE,
-            "Function selectservers was promised a list called '%s' but this variable is not a list", listvar);
+            "Function selectservers was promised a list called '%s' but this variable is not a list",
+            listvar);
         free(array_lval);
         return FnFailure();
     }
@@ -2848,51 +2855,42 @@ static FnCallResult FnCallSelectServers(EvalContext *ctx,
                                txtaddr, sizeof(txtaddr));
         if (sd == -1)
         {
-            Log(LOG_LEVEL_VERBOSE, "Couldn't open a tcp socket. (socket %s)",
-                GetErrorStr());
             continue;
         }
 
         if (strlen(sendstring) > 0)
         {
-            if (SendSocketStream(sd, sendstring, strlen(sendstring)) == -1)
+            if (SendSocketStream(sd, sendstring, strlen(sendstring)) != -1)
             {
-                cf_closesocket(sd);
-                continue;
-            }
+                char recvbuf[CF_BUFSIZE];
+                ssize_t n_read = recv(sd, recvbuf, maxbytes, 0);
 
-            char recvbuf[CF_BUFSIZE];
-            ssize_t n_read = recv(sd, recvbuf, maxbytes, 0);
-            cf_closesocket(sd);
+                if (n_read != -1)
+                {
+                    /* maxbytes was checked earlier, but just make sure... */
+                    assert(n_read < sizeof(recvbuf));
+                    recvbuf[n_read] = '\0';
 
-            if (n_read == -1)
-            {
-                continue;
-            }
+                    if (strlen(regex) == 0 || StringMatchFull(regex, recvbuf))
+                    {
+                        Log(LOG_LEVEL_VERBOSE,
+                            "selectservers: Got matching reply from host %s address %s",
+                            host, txtaddr);
 
-            assert(n_read < sizeof(recvbuf));
-            recvbuf[n_read] = '\0';
+                        char buffer[CF_MAXVARSIZE] = "";
+                        snprintf(buffer, sizeof(buffer), "%s[%zu]", array_lval, count);
+                        VarRef *ref = VarRefParse(buffer);
+                        EvalContextVariablePut(ctx, ref, host, CF_DATA_TYPE_STRING,
+                                               "source=function,function=selectservers");
+                        VarRefDestroy(ref);
 
-            if (strlen(regex) == 0 || StringMatchFull(regex, recvbuf))
-            {
-                count++;                                   /* query matches */
-
-                Log(LOG_LEVEL_VERBOSE,
-                    "selectservers: Got matching reply from host %s address %s",
-                    host, txtaddr);
-
-                char buffer[CF_MAXVARSIZE] = "";
-                snprintf(buffer, sizeof(buffer), "%s[%zu]", array_lval, count);
-                VarRef *ref = VarRefParse(buffer);
-                EvalContextVariablePut(ctx, ref, host, CF_DATA_TYPE_STRING,
-                                       "source=function,function=selectservers");
-                VarRefDestroy(ref);
+                        count++;
+                    }
+                }
             }
         }
-        else
+        else                      /* If query is empty, all hosts are added */
         {
-            count++;              /* If query is empty, all hosts are added */
-
             Log(LOG_LEVEL_VERBOSE,
                 "selectservers: Got reply from host %s address %s",
                 host, txtaddr);
@@ -2904,16 +2902,10 @@ static FnCallResult FnCallSelectServers(EvalContext *ctx,
                                    "source=function,function=selectservers");
             VarRefDestroy(ref);
 
-            /* TODO is this some kind of undocumented feature? */
-            if (IsDefinedClass(ctx, CanonifyName(host)))
-            {
-                Log(LOG_LEVEL_VERBOSE,
-                    "This host is in the list and has promised to join the class '%s' - joined",
-                    array_lval);
-                EvalContextClassPutSoft(ctx, array_lval, CONTEXT_SCOPE_NAMESPACE,
-                                        "source=function,function=selectservers");
-            }
+            count++;
         }
+
+        cf_closesocket(sd);
     }
 
     PolicyDestroy(select_server_policy);
@@ -4875,6 +4867,7 @@ static FnCallResult FnCallRegExtract(EvalContext *ctx, ARG_UNUSED const Policy *
     if (!s || SeqLength(s) == 0)
     {
         SeqDestroy(s);
+        free(arrayname);
         return FnReturnContext(false);
     }
 

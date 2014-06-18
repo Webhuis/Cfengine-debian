@@ -17,7 +17,7 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 
   To the extent this program is licensed as part of the Enterprise
-  versions of CFEngine, the applicable Commerical Open Source License
+  versions of CFEngine, the applicable Commercial Open Source License
   (COSL) may apply to this file if you as a licensee so wish it. See
   included file COSL.txt.
 */
@@ -60,7 +60,7 @@ PromiseResult VerifyUsersPromise(EvalContext *ctx, const Promise *pp)
 
     switch (result) {
     case PROMISE_RESULT_NOOP:
-        cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_NOOP, pp, a, "User promise kept");
+        cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, a, "User promise kept");
         break;
     case PROMISE_RESULT_FAIL:
     case PROMISE_RESULT_DENIED:

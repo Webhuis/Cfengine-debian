@@ -25,6 +25,8 @@
 #ifndef CFENGINE_DBM_API_H
 #define CFENGINE_DBM_API_H
 
+#include <map.h>
+
 typedef enum
 {
     dbid_classes,
@@ -59,7 +61,6 @@ typedef DBCursor CF_DBC;
 
 bool OpenDB(CF_DB **dbp, dbid db);
 void CloseDB(CF_DB *dbp);
-void CloseDBCommit(CF_DB *dbp);
 
 bool HasKeyDB(CF_DB *dbp, const char *key, int key_size);
 int ValueSizeDB(CF_DB *dbp, const char *key, int key_size);
@@ -68,7 +69,6 @@ bool WriteComplexKeyDB(CF_DB *dbp, const char *key, int keySz, const void *src, 
 bool DeleteComplexKeyDB(CF_DB *dbp, const char *key, int size);
 bool ReadDB(CF_DB *dbp, const char *key, void *dest, int destSz);
 bool WriteDB(CF_DB *dbp, const char *key, const void *src, int srcSz);
-bool WriteDBNoCommit(CF_DB *dbp, const char *key, const void *src, int srcSz);
 bool DeleteDB(CF_DB *dbp, const char *key);
 
 /*
@@ -88,4 +88,5 @@ bool DeleteDBCursor(CF_DBC *dbcp);
 char *DBIdToPath(const char *workdir, dbid id);
 
 int UpdateLastSeenMaxReaders(int maxreaders);
+StringMap *LoadDatabaseToStringMap(dbid database_id);
 #endif  /* NOT CFENGINE_DBM_API_H */

@@ -25,7 +25,7 @@ dnl The version in the next line is the only one to set
 dnl
 
 _AM_SET_OPTION([tar-ustar])
-AM_INIT_AUTOMAKE(cfengine, 3.6.0.revision)
+AM_INIT_AUTOMAKE(cfengine, 3.6.0)
 AM_MAINTAINER_MODE([enable])
 
 AC_DEFINE(BUILD_YEAR, esyscmd([date +%Y | tr -d '\n']), "Software build year")
@@ -623,6 +623,7 @@ AC_REPLACE_FUNCS(getline)
 AC_CHECK_DECLS(localtime_r, [], [], [[#include <time.h>]])
 AC_REPLACE_FUNCS(localtime_r)
 
+AC_CHECK_DECLS(fgetgrent, [], [], [[#include <grp.h>]])
 AC_CHECK_FUNCS(getpwent setpwent endpwent)
 
 AC_CHECK_FUNCS(getspnam lckpwdf ulckpwdf)
@@ -846,6 +847,8 @@ AC_CHECK_DECLS([[inet_ntop], [inet_pton]], [], [], [[#include <arpa/inet.h>]])
 AC_REPLACE_FUNCS(inet_ntop inet_pton)
 
 AC_CHECK_FUNCS(getifaddrs)
+
+AC_CHECK_FUNCS(getprocs64)
 
 AC_CHECK_FUNC(lchown, AC_DEFINE(HAVE_LCHOWN, 1, [Whether to use lchown(3) to change ownerships]))
 

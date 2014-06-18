@@ -85,6 +85,10 @@ PromiseResult VerifyExecPromise(EvalContext *ctx, const Promise *pp)
     PromiseBanner(pp);
 
     PromiseResult result = PROMISE_RESULT_NOOP;
+    /* See VerifyCommandRetcode for interpretation of return codes.
+     * Unless overridden by attributes in body classes, an exit code 0 means
+     * reparied (PROMISE_RESULT_CHANGE), an exit code != 0 means failure.
+     */
     switch (RepairExec(ctx, a, pp, &result))
     {
     case ACTION_RESULT_OK:
@@ -101,13 +105,6 @@ PromiseResult VerifyExecPromise(EvalContext *ctx, const Promise *pp)
 
     default:
         ProgrammingError("Unexpected ActionResult value");
-    }
-
-    // explicitly set commands promises that end up changing to KEPT. This is because commands promises
-    // shares code with packages promises (VerifyCommandRetcode), so we enforce this condition here.
-    if (result == PROMISE_RESULT_CHANGE)
-    {
-        result = PROMISE_RESULT_NOOP;
     }
 
     YieldCurrentLock(thislock);
@@ -294,11 +291,12 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a,
         }
 #endif /* !__MINGW32__ */
 
+        const char *open_mode = a.module ? "rt" : "r";
         if (a.contain.shelltype == SHELL_TYPE_POWERSHELL)
         {
 #ifdef __MINGW32__
             pfp =
-                cf_popen_powershell_setuid(cmdline, "r", a.contain.owner, a.contain.group, a.contain.chdir, a.contain.chroot,
+                cf_popen_powershell_setuid(cmdline, open_mode, a.contain.owner, a.contain.group, a.contain.chdir, a.contain.chroot,
                                   a.transaction.background);
 #else // !__MINGW32__
             Log(LOG_LEVEL_ERR, "Powershell is only supported on Windows");
@@ -308,13 +306,13 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a,
         else if (a.contain.shelltype == SHELL_TYPE_USE)
         {
             pfp =
-                cf_popen_shsetuid(cmdline, "r", a.contain.owner, a.contain.group, a.contain.chdir, a.contain.chroot,
+                cf_popen_shsetuid(cmdline, open_mode, a.contain.owner, a.contain.group, a.contain.chdir, a.contain.chroot,
                                   a.transaction.background);
         }
         else
         {
             pfp =
-                cf_popensetuid(cmdline, "r", a.contain.owner, a.contain.group, a.contain.chdir, a.contain.chroot,
+                cf_popensetuid(cmdline, open_mode, a.contain.owner, a.contain.group, a.contain.chdir, a.contain.chroot,
                                a.transaction.background);
         }
 
