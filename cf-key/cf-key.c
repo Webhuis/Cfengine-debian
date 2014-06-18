@@ -36,6 +36,7 @@
 #include <crypto.h>
 #include <known_dirs.h>
 #include <man.h>
+#include <signals.h>
 
 #include <cf-key-functions.h>
 
@@ -97,6 +98,26 @@ static const char *const HINTS[] =
 
 /*****************************************************************************/
 
+typedef void (*CfKeySigHandler)(int signum);
+bool cf_key_interrupted = false;
+
+static void handleShowKeysSignal(int signum)
+{
+    cf_key_interrupted = true;
+
+    signal(signum, handleShowKeysSignal);
+}
+
+static void ThisAgentInit(CfKeySigHandler sighandler)
+{
+    signal(SIGINT, sighandler);
+    signal(SIGTERM, sighandler);
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
+    signal(SIGUSR1, HandleSignalsForAgent);
+    signal(SIGUSR2, HandleSignalsForAgent);
+}
+
 int main(int argc, char *argv[])
 {
     GenericAgentConfig *config = CheckOpts(argc, argv);
@@ -107,6 +128,7 @@ int main(int argc, char *argv[])
 
     if (SHOWHOSTS)
     {
+        ThisAgentInit(handleShowKeysSignal);
         ShowLastSeenHosts();
         return 0;
     }
@@ -116,6 +138,7 @@ int main(int argc, char *argv[])
         return PrintDigest(print_digest_arg);
     }
 
+    ThisAgentInit(HandleSignalsForAgent);
     if (REMOVEKEYS)
     {
         int status;
