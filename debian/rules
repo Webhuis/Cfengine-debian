@@ -27,7 +27,7 @@ override_dh_auto_configure:
 
 override_dh_clean:
 	dh_autoreconf_clean
-	dh_clean
+	dh_clean --exclude=#008.cf#
 
 override_dh_compress:
 	dh_compress -X.cf
