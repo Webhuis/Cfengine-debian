@@ -63,7 +63,7 @@ override_dh_install:
 	## Man pages are created with an undocumented flag
 	#
 	/bin/mkdir -p $(CURDIR)/debian/cfengine3/usr/share/man/man8/
-	for p in cf-agent cf-key cf-promises cf-runagent cf-execd cf-serverd cf-monitord; \
+	for p in cf-agent cf-key cf-promises cf-runagent cf-execd cf-serverd cf-monitord cf-upgrade; \
     do \
         $(CURDIR)/$$p/$$p -M > $(CURDIR)/debian/cfengine3/usr/share/man/man8/$$p.8 ;\
     done
