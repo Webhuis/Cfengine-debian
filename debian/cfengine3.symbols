@@ -1,4 +1,4 @@
-libpromises.so.3 cfenigne3 #MINVER#
+libpromises.so.3 cfengine3 #MINVER#
  ALARM_PID@Base 3.6.0
  Abort@Base 3.6.0
  AclDefaultFromString@Base 3.6.0
