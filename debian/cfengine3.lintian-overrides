@@ -1,7 +1,7 @@
 # not a spelling error, the correct phrase is "offering these package-promise
 # suggestions to ..."
 cfengine3: spelling-error-in-binary usr/sbin/cf-agent these package this package
-cfengine3: package-name-doesnt-match-sonames libpromises3
+#cfengine3: package-name-doesnt-match-sonames libpromises3
 cfengine3: manpage-has-errors-from-man usr/share/man/man8/cf-agent.8.gz 33: warning: numeric expression expected (got `v')
 cfengine3: manpage-has-errors-from-man usr/share/man/man8/cf-execd.8.gz 42: warning: numeric expression expected (got `v')
 cfengine3: manpage-has-errors-from-man usr/share/man/man8/cf-key.8.gz 41: warning: numeric expression expected (got `v')
@@ -11,5 +11,5 @@ cfengine3: manpage-has-errors-from-man usr/share/man/man8/cf-runagent.8.gz 35: w
 cfengine3: manpage-has-errors-from-man usr/share/man/man8/cf-serverd.8.gz 40: warning: numeric expression expected (got `v')
 cfengine3: binary-without-manpage usr/sbin/cf-upgrade
 cfengine3: binary-without-manpage usr/sbin/rpmvercmp
-cfengine3: non-dev-pkg-with-shlib-symlink usr/lib/libpromises.so.3.0.6 usr/lib/libpromises.so
-cfengine3: symbols-declares-dependency-on-other-package cfenigne3 #MINVER#
+#cfengine3: non-dev-pkg-with-shlib-symlink usr/lib/libpromises.so.3.0.6 usr/lib/libpromises.so
+#cfengine3: symbols-declares-dependency-on-other-package cfenigne3 #MINVER#
