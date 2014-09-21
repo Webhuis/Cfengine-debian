@@ -1,9 +1,11 @@
 #include <test.h>
+
 #include <unistd.h>
 #include <string.h>
 #include <key.h>
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
+#include <openssl/bn.h>
 
 /*
  * Initialization

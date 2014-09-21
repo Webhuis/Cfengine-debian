@@ -22,15 +22,9 @@
   included file COSL.txt.
 */
 
-#ifndef CFENGINE_DIR_H
-#define CFENGINE_DIR_H
+#ifndef CFENGINE_DIR_IMPL_H
+#define CFENGINE_DIR_IMPL_H
 
-#include <cf3.defs.h>
-
-typedef struct Dir_ Dir;
-
-Dir *DirOpen(const char *dirname);
-const struct dirent *DirRead(Dir *dir);
-void DirClose(Dir *dir);
+struct dirent *AllocateDirentForFilename(const char *filename);
 
 #endif

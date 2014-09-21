@@ -28,7 +28,7 @@
 /*
  * Platform-specific definitions and declarations.
  *
- * This header has to be included first in order to define apropriate macros for
+ * INCLUDE THIS HEADER ALWAYS FIRST in order to define apropriate macros for
  * including system headers (such as _FILE_OFFSET_BITS).
  */
 
@@ -71,6 +71,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
+#include <stddef.h>                                     /* offsetof, size_t */
 
 /* POSIX but available in all platforms. */
 #include <strings.h>
@@ -143,21 +144,7 @@ struct utsname
 
 #include <bool.h>
 
-#include <openssl/err.h>
-#include <openssl/pem.h>
-#include <openssl/evp.h>
-#include <openssl/rsa.h>
-#include <openssl/rand.h>
-#include <openssl/bn.h>
 #include <errno.h>
-
-#ifdef HAVE_PCRE_H
-# include <pcre.h>
-#endif
-
-#ifdef HAVE_PCRE_PCRE_H
-# include <pcre/pcre.h>
-#endif
 
 #ifdef HAVE_DIRENT_H
 # include <dirent.h>
@@ -278,6 +265,22 @@ int socketpair(int domain, int type, int protocol, int sv[2]);
 int fsync(int fd);
 #endif
 
+#if !HAVE_DECL_GLOB
+#define GLOB_NOSPACE 1
+#define GLOB_ABORTED 2
+#define GLOB_NOMATCH 3
+typedef struct {
+    size_t   gl_pathc;    /* Count of paths matched so far  */
+    char   **gl_pathv;    /* List of matched pathnames.  */
+    size_t   gl_offs;
+} glob_t;
+int glob(const char *pattern,
+         int flags,
+         int (*errfunc) (const char *epath, int eerrno),
+         glob_t *pglob);
+void globfree(glob_t *pglob);
+#endif
+
 #ifdef __APPLE__
 # include <sys/malloc.h>
 # include <sys/paths.h>
@@ -385,6 +388,10 @@ typedef int socklen_t;
 
 #ifndef PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP
 #  define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP PTHREAD_MUTEX_INITIALIZER
+#endif
+
+#if !HAVE_DECL_GETLOADAVG
+int getloadavg (double loadavg[], int nelem);
 #endif
 
 #if !HAVE_DECL_PTHREAD_ATTR_SETSTACKSIZE
@@ -535,13 +542,20 @@ int setegid(gid_t egid);
 #if !HAVE_DECL_SETLINEBUF
 void setlinebuf(FILE *stream);
 #endif
+
 #if HAVE_STDARG_H
 # include <stdarg.h>
 # if !HAVE_VSNPRINTF
 int rpl_vsnprintf(char *, size_t, const char *, va_list);
+/* If [v]snprintf() does not exist or is not C99 compatible, then we assume
+ * that [v]printf() and [v]fprintf() need to be provided as well. */
+int rpl_vprintf(const char *format, va_list ap);
+int rpl_vfprintf(FILE *stream, const char *format, va_list ap);
 # endif
 # if !HAVE_SNPRINTF
 int rpl_snprintf(char *, size_t, const char *, ...);
+int rpl_printf(const char *format, ...);
+int rpl_fprintf(FILE *stream, const char *format, ...);
 # endif
 # if !HAVE_VASPRINTF
 int rpl_vasprintf(char **, const char *, va_list);
@@ -550,9 +564,13 @@ int rpl_vasprintf(char **, const char *, va_list);
 int rpl_asprintf(char **, const char *, ...);
 # endif
 #endif /* HAVE_STDARG_H */
-#if !defined(isfinite)
+
+/* For example Solaris, does not have isfinite() in <math.h>. */
+#if !HAVE_DECL_ISFINITE && defined(HAVE_IEEEFP_H)
+# include <ieeefp.h>
 # define isfinite(x) finite(x)
 #endif
+
 #if !HAVE_DECL_GETLINE
 ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 #endif
@@ -882,6 +900,7 @@ struct timespec
 #endif
 
 /* Must be always the last one! */
+#include <deprecated.h>
 #include <config.post.h>
 
 

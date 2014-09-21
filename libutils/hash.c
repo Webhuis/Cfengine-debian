@@ -22,6 +22,11 @@
   included file COSL.txt.
 */
 
+#include <platform.h>
+
+#include <openssl/evp.h>                                       /* EVP_* */
+#include <openssl/bn.h>                                        /* BN_bn2bin */
+
 #include <alloc.h>
 #include <logging.h>
 #include <hash.h>
@@ -98,7 +103,9 @@ void HashCalculatePrintableRepresentation(Hash *hash)
     unsigned int i;
     for (i = 0; i < hash->size; i++)
     {
-        sprintf((char *) (hash->printable + 4 + 2 * i), "%02x", hash->digest[i]);
+        snprintf(hash->printable + 4 + 2 * i,
+                 sizeof(hash->printable) - (4 + 2 * i), "%02x",
+                 hash->digest[i]);
     }
     hash->printable[4 + 2 * hash->size] = '\0';
 }
@@ -254,7 +261,7 @@ int HashCopy(Hash *origin, Hash **destination)
     }
     *destination = xmalloc(sizeof(Hash));
     memcpy((*destination)->digest, origin->digest, origin->size);
-    strncpy((*destination)->printable, origin->printable, (EVP_MAX_MD_SIZE * 4) - 1);
+    strlcpy((*destination)->printable, origin->printable, (EVP_MAX_MD_SIZE * 4));
     (*destination)->method = origin->method;
     (*destination)->size = origin->size;
     return 0;

@@ -30,6 +30,7 @@ static const int CF_NOSIZE = -1;
 
 #include <item_lib.h>                                 /* ItemList2CSV_bound */
 #include <string_lib.h>                               /* ToLower */
+#include <regex.h>                                    /* StringMatchFull */
 #include <crypto.h>                                   /* EncryptString */
 #include <files_names.h>
 #include <files_interfaces.h>
@@ -46,7 +47,9 @@ static const int CF_NOSIZE = -1;
 #include <rlist.h>
 #include <cf-serverd-enterprise-stubs.h>
 #include <connection_info.h>
-#include <misc_lib.h>                                    /* UnexpectedError */
+#include <misc_lib.h>                              /* UnexpectedError */
+#include <cf-windows-functions.h>                  /* NovaWin_UserNameToSid */
+#include <mutex.h>                                 /* ThreadLock */
 
 
 void RefuseAccess(ServerConnectionState *conn, char *errmesg)
@@ -80,7 +83,7 @@ void RefuseAccess(ServerConnectionState *conn, char *errmesg)
         username, ipaddr, errmesg);
 }
 
-bool IsUserNameValid(char *username)
+bool IsUserNameValid(const char *username)
 {
     /* Add whatever characters are considered invalid in username */
     const char *invalid_username_characters = "\\/";
@@ -416,7 +419,9 @@ void DoExec(EvalContext *ctx, ServerConnectionState *conn, char *args)
         if ((*sp == ';') || (*sp == '&') || (*sp == '|'))
         {
             char sendbuffer[CF_BUFSIZE];
-            snprintf(sendbuffer, CF_BUFSIZE, "You are not authorized to activate these classes/roles on host %s\n", VFQNAME);
+            snprintf(sendbuffer, CF_BUFSIZE,
+                     "You are not authorized to activate these classes/roles on host %s\n",
+                     VFQNAME);
             SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE);
             return;
         }
@@ -447,7 +452,9 @@ void DoExec(EvalContext *ctx, ServerConnectionState *conn, char *args)
             if (!AuthorizeRoles(ctx, conn, sp))
             {
                 char sendbuffer[CF_BUFSIZE];
-                snprintf(sendbuffer, CF_BUFSIZE, "You are not authorized to activate these classes/roles on host %s\n", VFQNAME);
+                snprintf(sendbuffer, CF_BUFSIZE,
+                         "You are not authorized to activate these classes/roles on host %s\n",
+                         VFQNAME);
                 SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE);
                 return;
             }
@@ -459,7 +466,8 @@ void DoExec(EvalContext *ctx, ServerConnectionState *conn, char *args)
     if (strlen(ebuff) + strlen(args) + 6 > CF_BUFSIZE)
     {
         char sendbuffer[CF_BUFSIZE];
-        snprintf(sendbuffer, CF_BUFSIZE, "Command line too long with args: %s\n", ebuff);
+        snprintf(sendbuffer, CF_BUFSIZE,
+                 "Command line too long with args: %s\n", ebuff);
         SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE);
         return;
     }
@@ -470,7 +478,8 @@ void DoExec(EvalContext *ctx, ServerConnectionState *conn, char *args)
             char sendbuffer[CF_BUFSIZE];
             strcat(ebuff, " ");
             strncat(ebuff, args, CF_BUFSIZE - strlen(ebuff));
-            snprintf(sendbuffer, CF_BUFSIZE, "cf-serverd Executing %s\n", ebuff);
+            snprintf(sendbuffer, CF_BUFSIZE,
+                     "cf-serverd Executing %s\n", ebuff);
             SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE);
         }
     }
@@ -479,7 +488,9 @@ void DoExec(EvalContext *ctx, ServerConnectionState *conn, char *args)
 
     if ((pp = cf_popen_sh(ebuff, "r")) == NULL)
     {
-        Log(LOG_LEVEL_ERR, "Couldn't open pipe to command '%s'. (pipe: %s)", ebuff, GetErrorStr());
+        Log(LOG_LEVEL_ERR,
+            "Couldn't open pipe to command '%s'. (pipe: %s)",
+            ebuff, GetErrorStr());
         char sendbuffer[CF_BUFSIZE];
         snprintf(sendbuffer, CF_BUFSIZE, "Unable to run %s\n", ebuff);
         SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE);
@@ -518,7 +529,8 @@ void DoExec(EvalContext *ctx, ServerConnectionState *conn, char *args)
             snprintf(sendbuffer, CF_BUFSIZE, "%s\n", line);
             if (SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE) == -1)
             {
-                Log(LOG_LEVEL_ERR, "Sending failed, aborting. (send: %s)", GetErrorStr());
+                Log(LOG_LEVEL_ERR,
+                    "Sending failed, aborting. (send: %s)", GetErrorStr());
                 break;
             }
         }
@@ -528,85 +540,95 @@ void DoExec(EvalContext *ctx, ServerConnectionState *conn, char *args)
     cf_pclose(pp);
 }
 
-/* TODO don't pass "args" just the things we actually check: sid, username, maproot, uid */
-static int TransferRights(char *filename, ServerFileGetState *args, struct stat *sb)
+static int TransferRights(const ServerConnectionState *conn,
+                          const char *filename, const struct stat *sb)
 {
+    Log(LOG_LEVEL_DEBUG, "Checking ownership of file: %s", filename);
+
+    /* Don't do any check if connected user claims to be "root" or if
+     * "maproot" in access_rules contains the connecting IP address. */
+    if ((conn->uid == 0) || (conn->maproot))
+    {
+        Log(LOG_LEVEL_DEBUG, "Access granted because %s",
+            (conn->uid == 0) ? "remote user is root"
+                             : "of maproot");
+        return true;                                      /* access granted */
+    }
+
 #ifdef __MINGW32__
+
     SECURITY_DESCRIPTOR *secDesc;
     SID *ownerSid;
 
-    if (GetNamedSecurityInfo
-        (filename, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, (PSID *) & ownerSid, NULL, NULL, NULL,
-         (void **)&secDesc) == ERROR_SUCCESS)
+    if (GetNamedSecurityInfo(
+            filename, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION,
+            (PSID *) &ownerSid, NULL, NULL, NULL, (void **) &secDesc)
+        != ERROR_SUCCESS)
     {
-        if (IsValidSid((args->connect)->sid) && EqualSid(ownerSid, (args->connect)->sid))
-        {
-            Log(LOG_LEVEL_DEBUG, "Caller '%s' is the owner of the file", (args->connect)->username);
-        }
-        else
-        {
-            // If the process doesn't own the file, we can access if we are
-            // root AND granted root map
-
-            LocalFree(secDesc);
-
-            if (args->connect->maproot)
-            {
-                Log(LOG_LEVEL_VERBOSE, "Caller '%s' not owner of '%s', but mapping privilege",
-                      (args->connect)->username, filename);
-                return true;
-            }
-            else
-            {
-                Log(LOG_LEVEL_VERBOSE, "Remote user denied right to file '%s' (consider maproot?)", filename);
-                return false;
-            }
-        }
-
-        LocalFree(secDesc);
-    }
-    else
-    {
-        Log(LOG_LEVEL_ERR, "Could not retreive existing owner of '%s'. (GetNamedSecurityInfo)", filename);
+        Log(LOG_LEVEL_ERR,
+            "Could not retrieve owner of file '%s' "
+            "(GetNamedSecurityInfo: %s)",
+            filename, GetErrorStr());
         return false;
     }
 
-#else
+    LocalFree(secDesc);
 
-    uid_t uid = (args->connect)->uid;
-
-    if ((uid != 0) && (!args->connect->maproot))    /* should remote root be local root */
+    if (!IsValidSid(conn->sid) ||
+        !EqualSid(ownerSid, conn->sid))
     {
-        if (sb->st_uid == uid)
+        /* If "maproot" we've already granted access. */
+        assert(!conn->maproot);
+
+        Log(LOG_LEVEL_VERBOSE,
+            "Remote user '%s' is not the owner of the file, access denied, "
+            "consider maproot", conn->username);
+
+        return false;
+    }
+
+    Log(LOG_LEVEL_DEBUG,
+        "User '%s' is the owner of the file, access granted",
+        conn->username);
+
+#else                                         /* UNIX systems - common path */
+
+    if (sb->st_uid != conn->uid)                   /* does not own the file */
+    {
+        if (!(sb->st_mode & S_IROTH))            /* file not world readable */
         {
-            Log(LOG_LEVEL_DEBUG, "Caller '%s' is the owner of the file", (args->connect)->username);
+            Log(LOG_LEVEL_VERBOSE,
+                "Remote user '%s' is not owner of the file, access denied, "
+                "consider maproot or making file world-readable",
+                conn->username);
+            return false;
         }
         else
         {
-            if (sb->st_mode & S_IROTH)
-            {
-                Log(LOG_LEVEL_DEBUG, "Caller %s not owner of the file but permission granted", (args->connect)->username);
-            }
-            else
-            {
-                Log(LOG_LEVEL_DEBUG, "Caller '%s' is not the owner of the file", (args->connect)->username);
-                Log(LOG_LEVEL_VERBOSE, "Remote user denied right to file '%s' (consider maproot?)", filename);
-                return false;
-            }
+            Log(LOG_LEVEL_DEBUG,
+                "Remote user '%s' is not the owner of the file, "
+                "but file is world readable, access granted",
+                conn->username);                 /* access granted */
         }
     }
+    else
+    {
+        Log(LOG_LEVEL_DEBUG,
+            "User '%s' is the owner of the file, access granted",
+            conn->username);                     /* access granted */
+    }
 
-    /* Return true if one of the following is true: */
+    /* ADMIT ACCESS, to summarise the following condition is now true: */
 
     /* Remote user is root, where "user" is just a string in the protocol, he
      * might claim whatever he wants but will be able to login only if the
      * user-key.pub key is found, */
-    assert((args->connect->uid == 0) ||
+    assert((conn->uid == 0) ||
     /* OR remote IP has maproot in the file's access_rules, */
-           (args->connect->maproot == true) ||
+           (conn->maproot == true) ||
     /* OR file is owned by the same username the user claimed - useless or
      * even dangerous outside NIS, KERBEROS or LDAP authenticated domains,  */
-           (sb->st_uid == uid) ||
+           (sb->st_uid == conn->uid) ||
     /* file is readable by everyone */
            (sb->st_mode & S_IROTH));
 
@@ -620,11 +642,13 @@ static void AbortTransfer(ConnectionInfo *connection, char *filename)
     Log(LOG_LEVEL_VERBOSE, "Aborting transfer of file due to source changes");
 
     char sendbuffer[CF_BUFSIZE];
-    snprintf(sendbuffer, CF_BUFSIZE, "%s%s: %s", CF_CHANGEDSTR1, CF_CHANGEDSTR2, filename);
+    snprintf(sendbuffer, CF_BUFSIZE, "%s%s: %s",
+             CF_CHANGEDSTR1, CF_CHANGEDSTR2, filename);
 
     if (SendTransaction(connection, sendbuffer, 0, CF_DONE) == -1)
     {
-        Log(LOG_LEVEL_VERBOSE, "Send failed in GetFile. (send: %s)", GetErrorStr());
+        Log(LOG_LEVEL_VERBOSE, "Send failed in GetFile. (send: %s)",
+            GetErrorStr());
     }
 }
 
@@ -638,7 +662,8 @@ static void FailedTransfer(ConnectionInfo *connection)
 
     if (SendTransaction(connection, sendbuffer, 0, CF_DONE) == -1)
     {
-        Log(LOG_LEVEL_VERBOSE, "Send failed in GetFile. (send: %s)", GetErrorStr());
+        Log(LOG_LEVEL_VERBOSE, "Send failed in GetFile. (send: %s)",
+            GetErrorStr());
     }
 }
 
@@ -650,19 +675,20 @@ void CfGetFile(ServerFileGetState *args)
     struct stat sb;
     int blocksize = 2048;
 
-    ConnectionInfo *conn_info = (args->connect)->conn_info;
+    ConnectionInfo *conn_info = args->conn->conn_info;
 
     TranslatePath(filename, args->replyfile);
 
     stat(filename, &sb);
 
-    Log(LOG_LEVEL_DEBUG, "CfGetFile('%s'), size = %" PRIdMAX, filename, (intmax_t) sb.st_size);
+    Log(LOG_LEVEL_DEBUG, "CfGetFile('%s'), size = %jd",
+        filename, (intmax_t) sb.st_size);
 
 /* Now check to see if we have remote permission */
 
-    if (!TransferRights(filename, args, &sb))
+    if (!TransferRights(args->conn, filename, &sb))
     {
-        RefuseAccess(args->connect, args->replyfile);
+        RefuseAccess(args->conn, args->replyfile);
         snprintf(sendbuffer, CF_BUFSIZE, "%s", CF_FAILEDSTR);
         if (ConnectionInfoProtocolVersion(conn_info) == CF_PROTOCOL_CLASSIC)
         {
@@ -751,7 +777,9 @@ void CfGetFile(ServerFileGetState *args)
                         }
                     }
 
-                    Log(LOG_LEVEL_DEBUG, "Aborting transfer after %" PRIdMAX ": file is changing rapidly at source.", (intmax_t)total);
+                    Log(LOG_LEVEL_DEBUG,
+                        "Aborting transfer after %jd: file is changing rapidly at source.",
+                        (intmax_t) total);
                     break;
                 }
 
@@ -803,22 +831,23 @@ void CfEncryptGetFile(ServerFileGetState *args)
     EVP_CIPHER_CTX ctx;
     char *key, enctype;
     struct stat sb;
-    ConnectionInfo *conn_info = args->connect->conn_info;
+    ConnectionInfo *conn_info = args->conn->conn_info;
 
-    key = (args->connect)->session_key;
-    enctype = (args->connect)->encryption_type;
+    key = args->conn->session_key;
+    enctype = args->conn->encryption_type;
 
     TranslatePath(filename, args->replyfile);
 
     stat(filename, &sb);
 
-    Log(LOG_LEVEL_DEBUG, "CfEncryptGetFile('%s'), size = %" PRIdMAX, filename, (intmax_t) sb.st_size);
+    Log(LOG_LEVEL_DEBUG, "CfEncryptGetFile('%s'), size = %jd",
+        filename, (intmax_t) sb.st_size);
 
 /* Now check to see if we have remote permission */
 
-    if (!TransferRights(filename, args, &sb))
+    if (!TransferRights(args->conn, filename, &sb))
     {
-        RefuseAccess(args->connect, args->replyfile);
+        RefuseAccess(args->conn, args->replyfile);
         FailedTransfer(conn_info);
     }
 
@@ -1063,13 +1092,16 @@ int StatFile(ServerConnectionState *conn, char *sendbuffer, char *ofilename)
 
     /* send as plain text */
 
-    Log(LOG_LEVEL_DEBUG, "OK: type = %d, mode = %" PRIoMAX ", lmode = %" PRIoMAX ", uid = %" PRIuMAX ", gid = %" PRIuMAX ", size = %" PRIdMAX ", atime=%" PRIdMAX ", mtime = %" PRIdMAX,
-            cfst.cf_type, (uintmax_t)cfst.cf_mode, (uintmax_t)cfst.cf_lmode, (uintmax_t)cfst.cf_uid, (uintmax_t)cfst.cf_gid, (intmax_t) cfst.cf_size,
-            (intmax_t) cfst.cf_atime, (intmax_t) cfst.cf_mtime);
+    Log(LOG_LEVEL_DEBUG, "OK: type = %d, mode = %jo, lmode = %jo, "
+        "uid = %ju, gid = %ju, size = %jd, atime=%jd, mtime = %jd",
+        cfst.cf_type, (uintmax_t) cfst.cf_mode, (uintmax_t) cfst.cf_lmode,
+        (uintmax_t) cfst.cf_uid, (uintmax_t) cfst.cf_gid, (intmax_t) cfst.cf_size,
+        (intmax_t) cfst.cf_atime, (intmax_t) cfst.cf_mtime);
 
-    snprintf(sendbuffer, CF_BUFSIZE, "OK: %d %ju %ju %ju %ju %jd %jd %jd %jd %d %d %d %jd",
-             cfst.cf_type, (uintmax_t)cfst.cf_mode, (uintmax_t)cfst.cf_lmode,
-             (uintmax_t)cfst.cf_uid, (uintmax_t)cfst.cf_gid, (intmax_t)cfst.cf_size,
+    snprintf(sendbuffer, CF_BUFSIZE,
+             "OK: %d %ju %ju %ju %ju %jd %jd %jd %jd %d %d %d %jd",
+             cfst.cf_type, (uintmax_t) cfst.cf_mode, (uintmax_t) cfst.cf_lmode,
+             (uintmax_t) cfst.cf_uid, (uintmax_t) cfst.cf_gid,   (intmax_t) cfst.cf_size,
              (intmax_t) cfst.cf_atime, (intmax_t) cfst.cf_mtime, (intmax_t) cfst.cf_ctime,
              cfst.cf_makeholes, cfst.cf_ino, cfst.cf_nlink, (intmax_t) cfst.cf_dev);
 
@@ -1226,7 +1258,7 @@ int CfOpenDirectory(ServerConnectionState *conn, char *sendbuffer, char *oldDirn
             memset(sendbuffer, 0, CF_BUFSIZE);
         }
 
-        strncpy(sendbuffer + offset, dirp->d_name, CF_MAXLINKSIZE);
+        strlcpy(sendbuffer + offset, dirp->d_name, CF_MAXLINKSIZE);
         offset += strlen(dirp->d_name) + 1;     /* + zero byte separator */
     }
 
@@ -1279,7 +1311,7 @@ int CfSecOpenDirectory(ServerConnectionState *conn, char *sendbuffer, char *dirn
             memset(out, 0, CF_BUFSIZE);
         }
 
-        strncpy(sendbuffer + offset, dirp->d_name, CF_MAXLINKSIZE);
+        strlcpy(sendbuffer + offset, dirp->d_name, CF_MAXLINKSIZE);
         /* + zero byte separator */
         offset += strlen(dirp->d_name) + 1;
     }
@@ -1680,3 +1712,52 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
     return reqpath_len;
 }
 
+
+/**
+ * Set conn->uid (and conn->sid on Windows).
+ */
+void SetConnIdentity(ServerConnectionState *conn, const char *username)
+{
+    size_t username_len = strlen(username);
+
+    conn->uid = CF_UNKNOWN_OWNER;
+    conn->username[0] = '\0';
+
+    if (username_len < sizeof(conn->username))
+    {
+        memcpy(conn->username, username, username_len + 1);
+    }
+
+#ifdef __MINGW32__            /* NT uses security identifier instead of uid */
+
+    if (!NovaWin_UserNameToSid(conn->username, (SID *) conn->sid,
+                               CF_MAXSIDSIZE, false))
+    {
+        memset(conn->sid, 0, CF_MAXSIDSIZE);  /* is invalid sid - discarded */
+    }
+
+    if (strcmp(conn->username, "root") == 0)
+    {
+        /* It the remote user identifies himself as root, even on Windows
+         * cf-serverd must grant access to all files. uid==0 is checked later
+         * in TranferRights() for that. */
+        conn->uid = 0;
+    }
+
+#else                                                 /* UNIX - common path */
+
+    static pthread_mutex_t pwnam_mtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+    struct passwd *pw = NULL;
+
+    if (ThreadLock(&pwnam_mtx))
+    {
+        pw = getpwnam(conn->username);
+        if (pw != NULL)
+        {
+            conn->uid = pw->pw_uid;
+        }
+        ThreadUnlock(&pwnam_mtx);
+    }
+
+#endif
+}

@@ -26,7 +26,7 @@
 
 #include <actuator.h>
 #include <promises.h>
-#include <files_names.h>
+#include <files_lib.h>
 #include <files_interfaces.h>
 #include <vars.h>
 #include <conversion.h>
@@ -246,14 +246,14 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a,
 
     if (DONTDO && (!a.contain.preview))
     {
-        Log(LOG_LEVEL_ERR, "Would execute script '%s'", cmdline);
+        cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, a, "Would execute script '%s'", cmdline);
         *result = PromiseResultUpdate(*result, PROMISE_RESULT_WARN);
         return ACTION_RESULT_OK;
     }
 
     if (a.transaction.action != cfa_fix)
     {
-        Log(LOG_LEVEL_ERR, "Command '%s' needs to be executed, but only warning was promised", cmdline);
+        cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_WARN, pp, a, "Command '%s' needs to be executed, but only warning was promised", cmdline);
         *result = PromiseResultUpdate(*result, PROMISE_RESULT_WARN);
         return ACTION_RESULT_OK;
     }
@@ -375,7 +375,9 @@ static ActionResult RepairExec(EvalContext *ctx, Attributes a,
                         Log(LOG_LEVEL_NOTICE, "%s", cmdOutBuf);
                         cmdOutBufPos = 0;
                     }
-                    sprintf(cmdOutBuf + cmdOutBufPos, "Q: \"...%s\": %s\n", comm, line);
+                    snprintf(cmdOutBuf + cmdOutBufPos,
+                             sizeof(cmdOutBuf) - cmdOutBufPos,
+                             "Q: \"...%s\": %s\n", comm, line);
                     cmdOutBufPos += (lineOutLen - 1);
                 }
                 count++;

@@ -1,11 +1,13 @@
 noinst_LTLIBRARIES = libcf-serverd.la
 
-AM_CPPFLAGS = @CPPFLAGS@ -I$(srcdir)/../libpromises -I$(srcdir)/../libutils \
+AM_CPPFLAGS = -I$(srcdir)/../libpromises -I$(srcdir)/../libutils \
 	-I$(srcdir)/../libcfnet \
 	-I$(srcdir)/../libenv \
+	$(OPENSSL_CPPFLAGS) \
 	$(ENTERPRISE_CPPFLAGS)
 
-AM_CFLAGS = @CFLAGS@ \
+AM_CFLAGS = \
+	$(OPENSSL_CFLAGS) \
 	$(ENTERPRISE_CFLAGS)
 
 libcf_serverd_la_LIBADD = ../libpromises/libpromises.la
@@ -18,7 +20,7 @@ libcf_serverd_la_SOURCES = \
 	server.c server.h \
 	server_transform.c server_transform.h \
 	server_classic.c server_classic.h \
-	tls_server.c tls_server.h \
+	server_tls.c server_tls.h \
 	server_access.c server_access.h \
 	strlist.c strlist.h
 

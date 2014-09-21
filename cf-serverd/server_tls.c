@@ -23,8 +23,10 @@
 */
 
 
-#include <tls_server.h>
+#include <server_tls.h>
 #include <server_common.h>
+
+#include <openssl/err.h>                                   /* ERR_get_error */
 
 #include <crypto.h>                                        /* DecryptString */
 #include <conversion.h>
@@ -35,7 +37,7 @@
 #include <tls_generic.h>              /* TLSSend */
 #include <cf-serverd-enterprise-stubs.h>
 #include <connection_info.h>
-#include <string_lib.h>                                  /* StringMatchFull */
+#include <regex.h>                                       /* StringMatchFull */
 #include <known_dirs.h>
 #include <file_lib.h>                                           /* IsDirReal */
 
@@ -63,7 +65,7 @@ bool ServerTLSInitialize()
     if (SSLSERVERCONTEXT == NULL)
     {
         Log(LOG_LEVEL_ERR, "SSL_CTX_new: %s",
-            ERR_reason_error_string(ERR_get_error()));
+            TLSErrorString(ERR_get_error()));
         goto err1;
     }
 
@@ -113,7 +115,7 @@ bool ServerTLSInitialize()
     if (ret != 1)
     {
         Log(LOG_LEVEL_ERR, "Failed to use RSA private key: %s",
-            ERR_reason_error_string(ERR_get_error()));
+            TLSErrorString(ERR_get_error()));
         goto err3;
     }
 
@@ -122,7 +124,7 @@ bool ServerTLSInitialize()
     if (ret != 1)
     {
         Log(LOG_LEVEL_ERR, "Inconsistent key and TLS cert: %s",
-            ERR_reason_error_string(ERR_get_error()));
+            TLSErrorString(ERR_get_error()));
         goto err3;
     }
 
@@ -136,6 +138,33 @@ bool ServerTLSInitialize()
     SSLSERVERCONTEXT = NULL;
   err1:
     return false;
+}
+
+void ServerTLSDeInitialize()
+{
+    if (PUBKEY)
+    {
+        RSA_free(PUBKEY);
+        PUBKEY = NULL;
+    }
+
+    if (PRIVKEY)
+    {
+        RSA_free(PRIVKEY);
+        PRIVKEY = NULL;
+    }
+
+    if (SSLSERVERCERT != NULL)
+    {
+        X509_free(SSLSERVERCERT);
+        SSLSERVERCERT = NULL;
+    }
+
+    if (SSLSERVERCONTEXT != NULL)
+    {
+        SSL_CTX_free(SSLSERVERCONTEXT);
+        SSLSERVERCONTEXT = NULL;
+    }
 }
 
 /**
@@ -172,8 +201,8 @@ int ServerTLSPeek(ConnectionInfo *conn_info)
     else if (got < peek_size)
     {
         Log(LOG_LEVEL_INFO,
-            "Peer sent only %lld bytes! Considering the protocol as Classic",
-            (long long)got);
+            "Peer sent only %zd bytes! Considering the protocol as Classic",
+            got);
         ConnectionInfoSetProtocolVersion(conn_info, CF_PROTOCOL_CLASSIC);
     }
     else if (got == peek_size &&
@@ -379,7 +408,7 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
         if (ssl == NULL)
         {
             Log(LOG_LEVEL_ERR, "SSL_new: %s",
-                ERR_reason_error_string(ERR_get_error()));
+                TLSErrorString(ERR_get_error()));
             return -1;
         }
         ConnectionInfoSetSSL(conn->conn_info, ssl);
@@ -388,40 +417,14 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
         SSL_set_ex_data(ssl, CONNECTIONINFO_SSL_IDX, conn->conn_info);
 
         /* Now we are letting OpenSSL take over the open socket. */
-        int sd = ConnectionInfoSocket(conn->conn_info);
-        SSL_set_fd(ssl, sd);
+        SSL_set_fd(ssl, ConnectionInfoSocket(conn->conn_info));
 
         ret = SSL_accept(ssl);
         if (ret <= 0)
         {
-            Log(LOG_LEVEL_VERBOSE, "Checking if the accept operation can be retried");
-            /* Retry just in case something was problematic at that point in time */
-            fd_set rfds;
-            FD_ZERO(&rfds);
-            FD_SET(sd, &rfds);
-            struct timeval tv;
-            tv.tv_sec = 10;
-            tv.tv_usec = 0;
-            int ready = select(sd+1, &rfds, NULL, NULL, &tv);
-
-            if (ready > 0)
-            {
-                Log(LOG_LEVEL_VERBOSE, "The accept operation can be retried");
-                ret = SSL_accept(ssl);
-                if (ret <= 0)
-                {
-                    Log(LOG_LEVEL_VERBOSE, "The accept operation was retried and failed");
-                    TLSLogError(ssl, LOG_LEVEL_NOTICE, "Connection handshake server accept", ret);
-                    return -1;
-                }
-                Log(LOG_LEVEL_VERBOSE, "The accept operation was retried and succeeded");
-            }
-            else
-            {
-                Log(LOG_LEVEL_VERBOSE, "The connect operation cannot be retried");
-                TLSLogError(ssl, LOG_LEVEL_NOTICE, "Connection handshake server select", ret);
-                return -1;
-            }
+            TLSLogError(ssl, LOG_LEVEL_ERR,
+                        "Failed to accept TLS connection", ret);
+            return -1;
         }
 
         Log(LOG_LEVEL_VERBOSE, "TLS cipher negotiated: %s, %s",
@@ -430,9 +433,10 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
         Log(LOG_LEVEL_VERBOSE, "TLS session established, checking trust...");
 
         /* Send/Receive "CFE_v%d" version string, agree on version, receive
-           identity of peer. */
-        bool b = ServerIdentificationDialog(conn->conn_info, conn->username,
-                                            sizeof(conn->username));
+           identity (username) of peer. */
+        char username[sizeof(conn->username)] = "";
+        bool b = ServerIdentificationDialog(conn->conn_info,
+                                            username, sizeof(username));
         if (b != true)
         {
             return -1;
@@ -442,7 +446,7 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
          * the TLS handshake, since we need the username to do so. TODO in the
          * future store keys irrelevant of username, so that we can match them
          * before IDENTIFY. */
-        ret = TLSVerifyPeer(conn->conn_info, conn->ipaddr, conn->username);
+        ret = TLSVerifyPeer(conn->conn_info, conn->ipaddr, username);
         if (ret == -1)                                      /* error */
         {
             return -1;
@@ -465,7 +469,7 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
                 Log(LOG_LEVEL_NOTICE, "Trusting new key: %s",
                     KeyPrintableHash(ConnectionInfoKey(conn->conn_info)));
 
-                SavePublicKey(conn->username, KeyPrintableHash(ConnectionInfoKey(conn->conn_info)),
+                SavePublicKey(username, KeyPrintableHash(conn->conn_info->remote_key),
                               KeyRSA(ConnectionInfoKey(conn->conn_info)));
             }
             else
@@ -478,10 +482,14 @@ int ServerTLSSessionEstablish(ServerConnectionState *conn)
             }
         }
 
-        /* skipping CAUTH */
+        /* All checks succeeded, set conn->uid (conn->sid for Windows)
+         * according to the received USERNAME identity. */
+        SetConnIdentity(conn, username);
+
+        /* No CAUTH, SAUTH in non-classic protocol. */
         conn->user_data_set = 1;
-        /* skipping SAUTH, allow access to read-only files */
         conn->rsa_auth = 1;
+
         LastSaw1(conn->ipaddr, KeyPrintableHash(ConnectionInfoKey(conn->conn_info)),
                  LAST_SEEN_ROLE_ACCEPT);
 
@@ -574,6 +582,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
     /* Don't process request if we're signalled to exit. */
     if (IsPendingTermination())
     {
+        Log(LOG_LEVEL_VERBOSE, "Server must exit, closing connection");
         return false;
     }
 
@@ -700,7 +709,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         }
 
         /* TODO eliminate! */
-        get_args.connect = conn;
+        get_args.conn = conn;
         get_args.encrypt = false;
         get_args.replybuff = sendbuffer;
         get_args.replyfile = filename;
@@ -987,8 +996,8 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
     case PROTOCOL_COMMAND_QUERY:
     {
         char query[256], name[128];
-        int ret1 = sscanf(recvbuffer, "QUERY %256[^\n]", query);
-        int ret2 = sscanf(recvbuffer, "QUERY %128s", name);
+        int ret1 = sscanf(recvbuffer, "QUERY %255[^\n]", query);
+        int ret2 = sscanf(recvbuffer, "QUERY %127s", name);
         if (ret1 != 1 || ret2 != 1)
         {
             goto protocol_error;
@@ -1044,6 +1053,6 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
 protocol_error:
     strcpy(sendbuffer, "BAD: Request denied");
     SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE);
-    Log(LOG_LEVEL_INFO, "Closing connection, due to request: '%s'", recvbuffer);
+    Log(LOG_LEVEL_INFO, "Closing connection due to request: %s", recvbuffer);
     return false;
 }

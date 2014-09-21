@@ -28,6 +28,7 @@
 #include <prototypes3.h>
 #include <syntax.h>
 #include <eval_context.h>
+#include <file_lib.h>
 
 #include <enterprise_extension.h>
 
@@ -119,7 +120,7 @@ ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, LogTotalCompliance, const char *, ve
     }
     else
     {
-        fprintf(fout, "%" PRIdMAX ",%" PRIdMAX ": %s\n", (intmax_t)CFSTARTTIME, (intmax_t)time(NULL), string);
+        fprintf(fout, "%jd,%jd: %s\n", (intmax_t)CFSTARTTIME, (intmax_t)time(NULL), string);
         fclose(fout);
     }
 }
@@ -205,7 +206,7 @@ ENTERPRISE_FUNC_4ARG_DEFINE_STUB(bool, ListHostsWithClass, EvalContext *, ctx, R
 
 ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, TranslatePath, char *, new, const char *, old)
 {
-    strncpy(new, old, CF_BUFSIZE - 1);
+    strlcpy(new, old, CF_BUFSIZE);
 }
 
 
@@ -230,5 +231,9 @@ ENTERPRISE_VOID_FUNC_3ARG_DEFINE_STUB(void, GetObservable, ARG_UNUSED int, i, AR
 }
 
 ENTERPRISE_VOID_FUNC_1ARG_DEFINE_STUB(void, SetMeasurementPromises, ARG_UNUSED Item **, classlist)
+{
+}
+
+ENTERPRISE_VOID_FUNC_2ARG_DEFINE_STUB(void, CheckAndSetHAState, const char *, workdir, EvalContext *, ctx)
 {
 }

@@ -164,10 +164,9 @@ int main(int argc, char *argv[])
         StartServer(ctx, policy, config, &execd_config, &exec_config);
     }
 
-    EvalContextDestroy(ctx);
+    GenericAgentFinalize(ctx, config);
     ExecConfigDestroy(exec_config);
     ExecdConfigDestroy(execd_config);
-    GenericAgentConfigDestroy(config);
 
     return 0;
 }
@@ -424,7 +423,7 @@ static void Apoptosis(void)
     if (LoadProcessTable(&PROCESSTABLE))
     {
         char myuid[PRINTSIZE(unsigned)];
-        sprintf(myuid, "%u", (unsigned)getuid());
+        xsnprintf(myuid, sizeof(myuid), "%u", (unsigned) getuid());
 
         Rlist *owners = NULL;
         RlistPrepend(&owners, myuid, RVAL_TYPE_SCALAR);

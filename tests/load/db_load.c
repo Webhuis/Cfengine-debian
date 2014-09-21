@@ -177,7 +177,7 @@ int WriteReturnValues(int retvals[MAX_THREADS], pthread_t tids[MAX_THREADS], int
 static void Cleanup(void)
 {
     char cmd[CF_BUFSIZE];
-    snprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
+    xsnprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
     system(cmd);
 }
 
@@ -192,7 +192,7 @@ int main(int argc, char **argv)
     /* To clean up after databases are closed */
     atexit(&Cleanup);
 
-    snprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/db_load.XXXXXX");
+    xsnprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/db_load.XXXXXX");
     mkdtemp(CFWORKDIR);
 
     int numthreads = atoi(argv[1]);
@@ -246,9 +246,8 @@ static void DBWriteTestData(CF_DB *db)
 }
 
 /* Stub out */
-#pragma GCC diagnostic ignored "-Wunused-parameter"
 
-void FatalError(const EvalContext *ctx, char *fmt, ...)
+void FatalError(ARG_UNUSED const EvalContext *ctx, char *fmt, ...)
 {
     if (fmt)
     {

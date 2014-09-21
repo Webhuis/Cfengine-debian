@@ -56,10 +56,7 @@ typedef struct
 
 #define CF_COULD_NOT_CONNECT -2
 
-/* With this lock we ensure we read the list head atomically, but we don't
- * guarantee anything about the queue's contents. It should be OK since we
- * never remove elements from the queue, only prepend to the head.*/
-static pthread_mutex_t cft_serverlist = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP; /* GLOBAL_T */
+static pthread_mutex_t cft_serverlist = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
 static void NewClientCache(Stat *data, AgentConnection *conn);
 static void FlushFileStream(int sd, int toget);
@@ -77,6 +74,12 @@ bool cfnet_init()
         return true;
     else
         return false;
+}
+
+void cfnet_shut()
+{
+    TLSDeInitialize();
+    CryptoDeInitialize();
 }
 
 static Seq *GetGlobalServerList(void)
@@ -793,7 +796,7 @@ int EncryptCopyRegularFileNet(const char *source, const char *dest, off_t size, 
     if ((dd = safe_open(dest, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL | O_BINARY, 0600)) == -1)
     {
         Log(LOG_LEVEL_ERR,
-            "NetCopy to destination '%s:%s' security - failed attempt to exploit a race? (Not copied). (open: %s)",
+            "Copy from server '%s' to destination '%s' failed (open: %s)",
             conn->this_server, dest, GetErrorStr());
         unlink(dest);
         return false;
@@ -945,7 +948,7 @@ int CopyRegularFileNet(const char *source, const char *dest, off_t size, bool en
     if ((dd = safe_open(dest, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL | O_BINARY, 0600)) == -1)
     {
         Log(LOG_LEVEL_ERR,
-            "NetCopy to destination '%s:%s' security - failed attempt to exploit a race? (Not copied) (open: %s)",
+            "Copy from server '%s' to destination '%s' failed (open: %s)",
             conn->this_server, dest, GetErrorStr());
         unlink(dest);
         return false;

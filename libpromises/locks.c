@@ -340,7 +340,7 @@ static void LogLockCompletion(char *cflog, int pid, char *str, char *op, char *o
         Log(LOG_LEVEL_DEBUG, "Couldn't read system clock");
     }
 
-    sprintf(buffer, "%s", ctime(&tim));
+    snprintf(buffer, sizeof(buffer), "%s", ctime(&tim));
 
     if (Chop(buffer, CF_EXPANDSIZE) == -1)
     {
@@ -604,8 +604,9 @@ CfLock AcquireLock(EvalContext *ctx, const char *operand, const char *host, time
 
     unsigned char digest[EVP_MAX_MD_SIZE + 1];
     PromiseRuntimeHash(pp, operand, digest, CF_DEFAULT_DIGEST);
-    char str_digest[CF_BUFSIZE];
-    HashPrintSafe(CF_DEFAULT_DIGEST, true, digest, str_digest);
+    char str_digest[CF_HOSTKEY_STRING_SIZE];
+    HashPrintSafe(str_digest, sizeof(str_digest), digest,
+                  CF_DEFAULT_DIGEST, true);
 
     if (EvalContextPromiseLockCacheContains(ctx, str_digest))
     {
@@ -624,7 +625,7 @@ CfLock AcquireLock(EvalContext *ctx, const char *operand, const char *host, time
     char *promise = BodyName(pp);
     char cc_operator[CF_BUFSIZE], cc_operand[CF_BUFSIZE];
     snprintf(cc_operator, CF_MAXVARSIZE - 1, "%s-%s", promise, host);
-    strncpy(cc_operand, operand, CF_BUFSIZE - 1);
+    strlcpy(cc_operand, operand, CF_BUFSIZE);
     CanonifyNameInPlace(cc_operand);
     RemoveDates(cc_operand);
 
@@ -934,7 +935,8 @@ void PurgeLocks(void)
     CF_DBC *dbcp;
     char *key;
     int ksize, vsize;
-    LockData entry;
+    LockData lock_horizon;
+    LockData *entry = NULL;
     time_t now = time(NULL);
 
     CF_DB *dbp = OpenLock();
@@ -944,11 +946,11 @@ void PurgeLocks(void)
         return;
     }
 
-    memset(&entry, 0, sizeof(entry));
+    memset(&lock_horizon, 0, sizeof(lock_horizon));
 
-    if (ReadDB(dbp, "lock_horizon", &entry, sizeof(entry)))
+    if (ReadDB(dbp, "lock_horizon", &lock_horizon, sizeof(lock_horizon)))
     {
-        if (now - entry.time < SECONDS_PER_WEEK * 4)
+        if (now - lock_horizon.time < SECONDS_PER_WEEK * 4)
         {
             Log(LOG_LEVEL_VERBOSE, "No lock purging scheduled");
             CloseLock(dbp);
@@ -964,7 +966,7 @@ void PurgeLocks(void)
         return;
     }
 
-    while (NextDB(dbcp, &key, &ksize, (void *) &entry, &vsize))
+    while (NextDB(dbcp, &key, &ksize, (void **)&entry, &vsize))
     {
 #ifdef LMDB
         if (key[0] == 'X')
@@ -979,17 +981,17 @@ void PurgeLocks(void)
         }
 #endif
 
-        if (now - entry.time > (time_t) CF_LOCKHORIZON)
+        if (now - entry->time > (time_t) CF_LOCKHORIZON)
         {
-            Log(LOG_LEVEL_VERBOSE, " --> Purging lock (%jd) %s", (intmax_t)(now - entry.time), key);
+            Log(LOG_LEVEL_VERBOSE, " --> Purging lock (%jd) %s", (intmax_t)(now - entry->time), key);
             DBCursorDeleteEntry(dbcp);
         }
     }
 
-    entry.time = now;
+    lock_horizon.time = now;
     DeleteDBCursor(dbcp);
 
-    WriteDB(dbp, "lock_horizon", &entry, sizeof(entry));
+    WriteDB(dbp, "lock_horizon", &lock_horizon, sizeof(lock_horizon));
     CloseLock(dbp);
 }
 

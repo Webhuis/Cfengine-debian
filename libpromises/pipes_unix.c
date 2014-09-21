@@ -67,6 +67,8 @@ static void CloseChildrenFD()
             close(i);
         }
     }
+    free(CHILDREN);
+    CHILDREN = NULL;
     ThreadUnlock(cft_count);
 }
 
@@ -74,22 +76,22 @@ static void CloseChildrenFD()
 
 static void SetChildFD(int fd, pid_t pid)
 {
-    int new_fd = 0;
+    int new_max = 0;
 
     if (fd >= MAX_FD)
     {
-        Log(LOG_LEVEL_ERR,
-                "File descriptor %d of child %jd higher than MAX_FD, check for defunct children",
-                fd, (intmax_t)pid);
-        new_fd = fd + 32;
+        Log(LOG_LEVEL_WARNING,
+            "File descriptor %d of child %jd higher than MAX_FD, check for defunct children",
+            fd, (intmax_t) pid);
+        new_max = fd + 32;
     }
 
     ThreadLock(cft_count);
 
-    if (new_fd)
+    if (new_max)
     {
-        CHILDREN = xrealloc(CHILDREN, new_fd * sizeof(pid_t));
-        MAX_FD = new_fd;
+        CHILDREN = xrealloc(CHILDREN, new_max * sizeof(pid_t));
+        MAX_FD = new_max;
     }
 
     CHILDREN[fd] = pid;
@@ -533,7 +535,7 @@ static int cf_pwait(pid_t pid)
 {
     int status;
 
-    Log(LOG_LEVEL_DEBUG, "cf_pwait - Waiting for process %" PRIdMAX, (intmax_t)pid);
+    Log(LOG_LEVEL_DEBUG, "cf_pwait - Waiting for process %jd", (intmax_t)pid);
 
     while (waitpid(pid, &status, 0) < 0)
     {
@@ -555,44 +557,40 @@ static int cf_pwait(pid_t pid)
 
 int cf_pclose(FILE *pp)
 {
-    int fd;
+    int fd = fileno(pp);
     pid_t pid;
 
     if (!ThreadLock(cft_count))
     {
+        fclose(pp);
         return -1;
     }
 
     if (CHILDREN == NULL)       /* popen hasn't been called */
     {
         ThreadUnlock(cft_count);
+        fclose(pp);
         return -1;
     }
 
-    ThreadUnlock(cft_count);
-
     ALARM_PID = -1;
-    fd = fileno(pp);
 
     if (fd >= MAX_FD)
     {
+        ThreadUnlock(cft_count);
         Log(LOG_LEVEL_ERR,
-              "File descriptor %d of child higher than MAX_FD in cf_pclose, check for defunct children", fd);
-        pid = -1;
+            "File descriptor %d of child higher than MAX_FD in cf_pclose!",
+            fd);
+        pid = 0;
     }
     else
     {
-        if ((pid = CHILDREN[fd]) == 0)
-        {
-            return -1;
-        }
-
-        ThreadLock(cft_count);
+        pid = CHILDREN[fd];
         CHILDREN[fd] = 0;
         ThreadUnlock(cft_count);
     }
 
-    if (fclose(pp) == EOF)
+    if (fclose(pp) == EOF || pid == 0)
     {
         return -1;
     }
@@ -602,6 +600,7 @@ int cf_pclose(FILE *pp)
 
 bool PipeToPid(pid_t *pid, FILE *pp)
 {
+    int fd = fileno(pp);
     if (!ThreadLock(cft_count))
     {
         return false;
@@ -613,9 +612,7 @@ bool PipeToPid(pid_t *pid, FILE *pp)
         return false;
     }
 
-    int fd = fileno(pp);
     *pid = CHILDREN[fd];
-
     ThreadUnlock(cft_count);
 
     return true;

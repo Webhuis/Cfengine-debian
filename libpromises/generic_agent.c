@@ -72,8 +72,10 @@ static void CheckWorkingDirectories(EvalContext *ctx);
 static void GetAutotagDir(char *dirname, size_t max_size, const char *maybe_dirname);
 static void GetPromisesValidatedFile(char *filename, size_t max_size, const GenericAgentConfig *config, const char *maybe_dirname);
 static bool WriteReleaseIdFile(const char *filename, const char *dirname);
-static bool GeneratePolicyReleaseIDFromTree(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir);
-static bool GeneratePolicyReleaseIDFromGit(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir);
+static bool GeneratePolicyReleaseIDFromGit(char *release_id_out, size_t out_size,
+                                           const char *policy_dir);
+static bool GeneratePolicyReleaseID(char *release_id_out, size_t out_size,
+                                    const char *policy_dir);
 static char* ReadReleaseIdFromReleaseIdFileMasterfiles(const char *maybe_dirname);
 
 static bool MissingInputFile(const char *input_file);
@@ -166,6 +168,12 @@ void GenericAgentDiscoverContext(EvalContext *ctx, GenericAgentConfig *config)
 
         WritePolicyServerFile(GetWorkDir(), config->agent_specific.agent.bootstrap_policy_server);
         SetPolicyServer(ctx, config->agent_specific.agent.bootstrap_policy_server);
+
+        if (am_policy_server) //It makes sense to check HA status only on policy hub.
+        {
+            CheckAndSetHAState(GetWorkDir(), ctx);
+        }
+
         /* FIXME: Why it is called here? Can't we move both invocations to before if? */
         UpdateLastPolicyUpdateTime(ctx);
         Log(LOG_LEVEL_INFO, "Bootstrapping to '%s'", POLICY_SERVER);
@@ -192,6 +200,8 @@ void GenericAgentDiscoverContext(EvalContext *ctx, GenericAgentConfig *config)
             Log(LOG_LEVEL_VERBOSE, "Additional class defined: am_policy_hub");
             EvalContextClassPutHard(ctx, "policy_server", "inventory,attribute_name=CFEngine roles,source=bootstrap");
             Log(LOG_LEVEL_VERBOSE, "Additional class defined: policy_server");
+
+            CheckAndSetHAState(GetWorkDir(), ctx);
         }
     }
 }
@@ -366,7 +376,7 @@ bool GenericAgentTagReleaseDirectory(const GenericAgentConfig *config, const cha
 
     char filename[CF_MAXVARSIZE];
     char git_checksum[GENERIC_AGENT_CHECKSUM_SIZE];
-    bool have_git_checksum = GeneratePolicyReleaseIDFromGit(git_checksum, dirname);
+    bool have_git_checksum = GeneratePolicyReleaseIDFromGit(git_checksum, sizeof(git_checksum), dirname);
 
     Log(LOG_LEVEL_DEBUG, "Tagging directory %s for release (write_validated: %s, write_release: %s)",
         dirname,
@@ -439,7 +449,8 @@ static bool WriteReleaseIdFile(const char *filename, const char *dirname)
 {
     char release_id[GENERIC_AGENT_CHECKSUM_SIZE];
 
-    bool have_release_id = GeneratePolicyReleaseID(release_id, dirname);
+    bool have_release_id =
+        GeneratePolicyReleaseID(release_id, sizeof(release_id), dirname);
 
     if (!have_release_id)
     {
@@ -621,7 +632,8 @@ void GenericAgentInitialize(EvalContext *ctx, GenericAgentConfig *config)
         chmod(vbuff, sb.st_mode | 0700);
     }
 
-    sprintf(ebuff, "%s%cstate%ccf_procs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+    snprintf(ebuff, sizeof(ebuff), "%s%cstate%ccf_procs",
+             CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
     MakeParentDirectory(ebuff, force);
 
     if (stat(ebuff, &statbuf) == -1)
@@ -629,27 +641,32 @@ void GenericAgentInitialize(EvalContext *ctx, GenericAgentConfig *config)
         CreateEmptyFile(ebuff);
     }
 
-    sprintf(ebuff, "%s%cstate%ccf_rootprocs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+    snprintf(ebuff, sizeof(ebuff), "%s%cstate%ccf_rootprocs",
+             CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
 
     if (stat(ebuff, &statbuf) == -1)
     {
         CreateEmptyFile(ebuff);
     }
 
-    sprintf(ebuff, "%s%cstate%ccf_otherprocs", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
+    snprintf(ebuff, sizeof(ebuff), "%s%cstate%ccf_otherprocs",
+             CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR);
 
     if (stat(ebuff, &statbuf) == -1)
     {
         CreateEmptyFile(ebuff);
     }
 
-    sprintf(ebuff, "%s%cstate%cprevious_state%c", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
+    snprintf(ebuff, sizeof(ebuff), "%s%cstate%cprevious_state%c",
+             CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
     MakeParentDirectory(ebuff, force);
 
-    sprintf(ebuff, "%s%cstate%cdiff%c", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
+    snprintf(ebuff, sizeof(ebuff), "%s%cstate%cdiff%c",
+             CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
     MakeParentDirectory(ebuff, force);
 
-    sprintf(ebuff, "%s%cstate%cuntracked%c", CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
+    snprintf(ebuff, sizeof(ebuff), "%s%cstate%cuntracked%c",
+            CFWORKDIR, FILE_SEPARATOR, FILE_SEPARATOR, FILE_SEPARATOR);
     MakeParentDirectory(ebuff, force);
 
     OpenNetwork();
@@ -711,6 +728,18 @@ void GenericAgentInitialize(EvalContext *ctx, GenericAgentConfig *config)
     }
 }
 
+void GenericAgentFinalize(EvalContext *ctx, GenericAgentConfig *config)
+{
+    /* TODO, FIXME: what else from the above do we need to undo here ? */
+    if (config->agent_type != AGENT_TYPE_KEYGEN)
+    {
+        cfnet_shut();
+    }
+    CryptoDeInitialize();
+    GenericAgentConfigDestroy(config);
+    EvalContextDestroy(ctx);
+}
+
 static bool MissingInputFile(const char *input_file)
 {
     struct stat sb;
@@ -725,7 +754,8 @@ static bool MissingInputFile(const char *input_file)
 }
 
 // Git only.
-bool GeneratePolicyReleaseIDFromGit(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir)
+static bool GeneratePolicyReleaseIDFromGit(char *release_id_out, ARG_UNUSED size_t out_size,
+                                           const char *policy_dir)
 {
     char git_filename[PATH_MAX + 1];
     snprintf(git_filename, PATH_MAX, "%s/.git/HEAD", policy_dir);
@@ -742,6 +772,7 @@ bool GeneratePolicyReleaseIDFromGit(char release_id_out[GENERIC_AGENT_CHECKSUM_S
         git_file = fopen(git_filename, "r");
         if (git_file)
         {
+            assert(out_size > 40);
             fscanf(git_file, "%40s", release_id_out);
             fclose(git_file);
             return true;
@@ -761,7 +792,8 @@ bool GeneratePolicyReleaseIDFromGit(char release_id_out[GENERIC_AGENT_CHECKSUM_S
     return false;
 }
 
-bool GeneratePolicyReleaseIDFromTree(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir)
+static bool GeneratePolicyReleaseIDFromTree(char *release_id_out, size_t out_size,
+                                            const char *policy_dir)
 {
     if (access(policy_dir, R_OK) != 0)
     {
@@ -781,18 +813,21 @@ bool GeneratePolicyReleaseIDFromTree(char release_id_out[GENERIC_AGENT_CHECKSUM_
     unsigned char digest[EVP_MAX_MD_SIZE + 1] = { 0 };
     EVP_DigestFinal(&crypto_ctx, digest, &md_len);
 
-    HashPrintSafe(GENERIC_AGENT_CHECKSUM_METHOD, false, digest, release_id_out);
+    HashPrintSafe(release_id_out, out_size, digest,
+                  GENERIC_AGENT_CHECKSUM_METHOD, false);
     return success;
 }
 
-bool GeneratePolicyReleaseID(char release_id_out[GENERIC_AGENT_CHECKSUM_SIZE], const char *policy_dir)
+static bool GeneratePolicyReleaseID(char *release_id_out, size_t out_size,
+                                    const char *policy_dir)
 {
-    if (GeneratePolicyReleaseIDFromGit(release_id_out, policy_dir))
+    if (GeneratePolicyReleaseIDFromGit(release_id_out, out_size, policy_dir))
     {
         return true;
     }
 
-    return GeneratePolicyReleaseIDFromTree(release_id_out, policy_dir);
+    return GeneratePolicyReleaseIDFromTree(release_id_out, out_size,
+                                           policy_dir);
 }
 
 /**
@@ -1262,7 +1297,7 @@ void WritePID(char *filename)
         return;
     }
 
-    fprintf(fp, "%" PRIuMAX "\n", (uintmax_t)getpid());
+    fprintf(fp, "%ju\n", (uintmax_t)getpid());
 
     fclose(fp);
 }

@@ -26,7 +26,7 @@
 
 #include <actuator.h>
 #include <attributes.h>
-#include <string_lib.h>
+#include <regex.h>      /* CompileRegex,StringMatchFullWithPrecompiledRegex */
 #include <buffer.h>
 #include <misc_lib.h>
 #include <fncall.h>
@@ -55,11 +55,12 @@ static int CompareRval(const void *rval1_item, RvalType rval1_type, const void *
 
 static bool IsValidVariableName(const char *var_name)
 {
-    // must be removed at some point (global), but for now this offers an attractive speedup
+    /* TODO: remove at some point (global, leaked), but for now
+     * this offers an attractive speedup. */
     static pcre *rx = NULL;
     if (!rx)
     {
-        rx = CompileRegex("[a-zA-Z0-9_\200-\377.]+(\\[.+\\])*");
+        rx = CompileRegex("[a-zA-Z0-9_\200-\377.]+(\\[.+\\])*"); /* Known leak, see TODO. */
     }
 
     return StringMatchFullWithPrecompiledRegex(rx, var_name);
@@ -390,9 +391,7 @@ PromiseResult VerifyVarPromise(EvalContext *ctx, const Promise *pp, bool allow_d
     else
     {
         Log(LOG_LEVEL_ERR, "Variable %s has no promised value", pp->promiser);
-        Log(LOG_LEVEL_ERR, "Rule from %s at/before line %llu",
-            PromiseGetBundle(pp)->source_path,
-            (unsigned long long)opts.cp_save->offset.line);
+        Log(LOG_LEVEL_ERR, "Rule from %s at/before line %zu", PromiseGetBundle(pp)->source_path, opts.cp_save->offset.line);
         result = PromiseResultUpdate(result, PROMISE_RESULT_FAIL);
     }
 

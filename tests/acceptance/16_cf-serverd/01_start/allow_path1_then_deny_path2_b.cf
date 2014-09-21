@@ -9,8 +9,8 @@ body common control
 bundle agent test
 {
   meta:
-      "test_suppress_fail" string => "freebsd",
-        meta => { "redmine5224" };
+      "test_suppress_fail" string => "freebsd|sunos_5_10",
+        meta => { "redmine6406" };
 
   methods:
       "any" usebundle => generate_key;

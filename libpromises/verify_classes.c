@@ -33,7 +33,8 @@
 #include <promises.h>
 #include <conversion.h>
 #include <logic_expressions.h>
-#include <string_lib.h>
+#include <string_lib.h>                                  /* StringHash */
+#include <regex.h>                                       /* StringMatchFull */
 
 
 static int EvalClassExpression(EvalContext *ctx, Constraint *cp, const Promise *pp);
@@ -49,7 +50,7 @@ PromiseResult VerifyClassPromise(EvalContext *ctx, const Promise *pp, ARG_UNUSED
     if (!StringMatchFull("[a-zA-Z0-9_]+", pp->promiser))
     {
         Log(LOG_LEVEL_VERBOSE, "Class identifier '%s' contains illegal characters - canonifying", pp->promiser);
-        snprintf(pp->promiser, strlen(pp->promiser) + 1, "%s", CanonifyName(pp->promiser));
+        xsnprintf(pp->promiser, strlen(pp->promiser) + 1, "%s", CanonifyName(pp->promiser));
     }
 
     if (a.context.nconstraints == 0)

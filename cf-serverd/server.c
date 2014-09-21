@@ -40,7 +40,7 @@
 #include <cf-serverd-enterprise-stubs.h>
 #include <audit.h>
 #include <cfnet.h>
-#include <tls_server.h>
+#include <server_tls.h>                                       /* ServerTLS* */
 #include <server_common.h>
 #include <connection_info.h>
 #include <cf-windows-functions.h>
@@ -149,7 +149,7 @@ void ServerEntryPoint(EvalContext *ctx, const char *ipaddr, ConnectionInfo *info
     }
 
     char intime[PRINTSIZE(now)];
-    snprintf(intime, sizeof(intime), "%jd", (intmax_t) now);
+    xsnprintf(intime, sizeof(intime), "%jd", (intmax_t) now);
 
     if (!ThreadLock(cft_count))
     {
@@ -422,7 +422,7 @@ static void *HandleConnection(void *c)
     /* ============================================================ */
 
 
-    Log(LOG_LEVEL_INFO, "Connection closed, terminating thread");
+    Log(LOG_LEVEL_INFO, "Closed connection, terminating thread");
 
   ret1:
     ThreadLock(cft_server_children);
@@ -459,17 +459,15 @@ static ServerConnectionState *NewConn(EvalContext *ctx, ConnectionInfo *info)
     conn->hostname[0] = '\0';
     conn->ipaddr[0] = '\0';
     conn->username[0] = '\0';
+    conn->revdns[0] = '\0';
     conn->session_key = NULL;
     conn->encryption_type = 'c';
-    conn->maproot = false;      /* Only public files (chmod o+r) accessible */
-    conn->revdns[0] = '\0';
-
-    Log(LOG_LEVEL_DEBUG, "New socket %d", ConnectionInfoSocket(info));
+    /* Only public files (chmod o+r) accessible to non-root */
+    conn->maproot = false;
+    conn->uid = CF_UNKNOWN_OWNER;                    /* Careful, 0 is root! */
 
     return conn;
 }
-
-/***************************************************************/
 
 /**
  * @note This function is thread-safe. Do NOT wrap it with mutex!

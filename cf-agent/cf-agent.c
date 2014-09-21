@@ -265,8 +265,8 @@ int main(int argc, char *argv[])
     }
 
     // only note class usage when default policy is run
-    Nova_NoteClassUsage(ctx);
-    Nova_NoteVarUsageDB(ctx);
+    Nova_NoteClassUsage(ctx, config);
+    Nova_NoteVarUsageDB(ctx, config);
     Nova_TrackExecution(config->input_file);
     PurgeLocks();
     BackupLockDatabase();
@@ -281,12 +281,11 @@ int main(int argc, char *argv[])
     }
 
     EndAudit(ctx, CFA_BACKGROUND);
-    EvalContextDestroy(ctx);
 
     GenerateDiffReports(config);
     Nova_NoteAgentExecutionPerformance(config->input_file, start);
 
-    GenericAgentConfigDestroy(config);
+    GenericAgentFinalize(ctx, config);
 
 #ifdef HAVE_LIBXML2
         xmlCleanupParser();
@@ -764,7 +763,7 @@ static void KeepControlPromises(EvalContext *ctx, const Policy *policy)
                 {
                     char name[CF_MAXVARSIZE] = "";
 
-                    strncpy(name, RlistScalarValue(rp), CF_MAXVARSIZE - 1);
+                    strlcpy(name, RlistScalarValue(rp), CF_MAXVARSIZE);
 
                     EvalContextHeapAddAbort(ctx, name, cp->classes);
                 }
@@ -779,7 +778,7 @@ static void KeepControlPromises(EvalContext *ctx, const Policy *policy)
                 for (const Rlist *rp = value; rp != NULL; rp = rp->next)
                 {
                     char name[CF_MAXVARSIZE] = "";
-                    strncpy(name, RlistScalarValue(rp), CF_MAXVARSIZE - 1);
+                    strlcpy(name, RlistScalarValue(rp), CF_MAXVARSIZE);
 
                     EvalContextHeapAddAbortCurrentBundle(ctx, name, cp->classes);
                 }

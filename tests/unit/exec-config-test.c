@@ -6,11 +6,13 @@
 #include <parser.h>
 #include <eval_context.h>
 #include <expand.h>
+#include <misc_lib.h>                                          /* xsnprintf */
+
 
 static Policy *TestParsePolicy(const char *filename)
 {
-    char path[1024];
-    sprintf(path, "%s/%s", TESTDATADIR, filename);
+    char path[PATH_MAX];
+    xsnprintf(path, sizeof(path), "%s/%s", TESTDATADIR, filename);
 
     return ParserParseFile(AGENT_TYPE_COMMON, path, PARSER_WARNING_ALL, PARSER_WARNING_ALL);
 }
@@ -34,8 +36,7 @@ static void run_test_in_policy(const char *policy_filename, TestFn fn)
     fn(ctx, policy);
 
     PolicyDestroy(policy);
-    EvalContextDestroy(ctx);
-    GenericAgentConfigDestroy(agent_config);
+    GenericAgentFinalize(ctx, agent_config);
 }
 
 static void execd_config_empty_cb(const EvalContext *ctx, const Policy *policy)
