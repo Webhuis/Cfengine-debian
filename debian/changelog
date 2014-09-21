@@ -1,10 +1,10 @@
-cfengine3 (3.6.0-0.1) UNRELEASED; urgency=low
+cfengine3 (3.6.1-1) UNRELEASED; urgency=low
 
   [ Brian Bennett ]
   * Non-maintainer upload.
-  * New upstream release.
+  * New upstream release 3.6.1.
 
- -- Brian Bennett <bahamat@digitalelf.net>  Wed, 18 Jun 2014 09:17:22 -0700
+ -- Brian Bennett <bahamat@digitalelf.net>  Sun, 21 Sep 2014 09:30:28 -0700
 
 cfengine3 (3.2.4-2+nmu1) unstable; urgency=medium
 
