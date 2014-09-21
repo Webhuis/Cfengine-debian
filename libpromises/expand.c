@@ -1005,15 +1005,14 @@ static void ResolveControlBody(EvalContext *ctx, GenericAgentConfig *config,
 
         if (!EvalContextVariablePut(ctx, ref, returnval.item, ConstraintSyntaxGetDataType(body_syntax, cp->lval), "source=promise"))
         {
-            Log(LOG_LEVEL_ERR, "Rule from %s at/before line %llu",
-                control_body->source_path, (unsigned long long)cp->offset.line);
+            Log(LOG_LEVEL_ERR, "Rule from %s at/before line %zu", control_body->source_path, cp->offset.line);
         }
 
         VarRefDestroy(ref);
 
         if (strcmp(cp->lval, CFG_CONTROLBODY[COMMON_CONTROL_OUTPUT_PREFIX].lval) == 0)
         {
-            strncpy(VPREFIX, returnval.item, CF_MAXVARSIZE);
+            strlcpy(VPREFIX, returnval.item, CF_MAXVARSIZE);
         }
 
         if (strcmp(cp->lval, CFG_CONTROLBODY[COMMON_CONTROL_DOMAIN].lval) == 0)
@@ -1248,7 +1247,7 @@ void GetNaked(char *s2, const char *s1)
     if (strlen(s1) < 4)
     {
         Log(LOG_LEVEL_ERR, "Naked variable expected, but '%s' is malformed", s1);
-        strncpy(s2, s1, CF_MAXVARSIZE - 1);
+        strlcpy(s2, s1, CF_MAXVARSIZE);
         return;
     }
 

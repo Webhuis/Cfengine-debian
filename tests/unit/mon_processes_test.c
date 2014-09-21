@@ -1,23 +1,25 @@
 #include "test.h"
-
+#include "systype.h"
 #include "generic_agent.h"
 #include "item_lib.h"
 #include "mon.h"
+#include <misc_lib.h>                                          /* xsnprintf */
+
 
 static void tests_setup(void)
 {
-    snprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/mon_processes_test.XXXXXX");
+    xsnprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/mon_processes_test.XXXXXX");
     mkdtemp(CFWORKDIR);
 
     char buf[CF_BUFSIZE];
-    snprintf(buf, CF_BUFSIZE, "%s/state", CFWORKDIR);
+    xsnprintf(buf, CF_BUFSIZE, "%s/state", CFWORKDIR);
     mkdir(buf, 0755);
 }
 
 static void tests_teardown(void)
 {
     char cmd[CF_BUFSIZE];
-    snprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
+    xsnprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
     system(cmd);
 }
 
@@ -29,11 +31,11 @@ static bool GetSysUsers( int *userListSz, int *numRootProcs, int *numOtherProcs)
     char cbuff[CF_BUFSIZE];
 
 #if defined(__sun)
-    snprintf(cbuff, CF_BUFSIZE, "/bin/ps -eo user > %s/users.txt", CFWORKDIR);
+    xsnprintf(cbuff, CF_BUFSIZE, "/bin/ps -eo user > %s/users.txt", CFWORKDIR);
 #elif defined(_AIX)
-    snprintf(cbuff, CF_BUFSIZE, "/bin/ps -N -eo user > %s/users.txt", CFWORKDIR);
+    xsnprintf(cbuff, CF_BUFSIZE, "/bin/ps -N -eo user > %s/users.txt", CFWORKDIR);
 #elif defined(__linux__)
-    snprintf(cbuff, CF_BUFSIZE, "/bin/ps -eo user > %s/users.txt", CFWORKDIR);
+    xsnprintf(cbuff, CF_BUFSIZE, "/bin/ps -eo user > %s/users.txt", CFWORKDIR);
 #else
     assert_true(1);
     return false;
@@ -41,7 +43,7 @@ static bool GetSysUsers( int *userListSz, int *numRootProcs, int *numOtherProcs)
 
     Item *userList = NULL;
     system(cbuff);
-    snprintf(cbuff, CF_BUFSIZE, "%s/users.txt", CFWORKDIR);
+    xsnprintf(cbuff, CF_BUFSIZE, "%s/users.txt", CFWORKDIR);
     if ((fp = fopen(cbuff, "r")) == NULL)
     {
         return false;
@@ -76,6 +78,7 @@ static bool GetSysUsers( int *userListSz, int *numRootProcs, int *numOtherProcs)
 
 void test_processes_monitor(void)
 {
+
     double cf_this[100] = { 0.0 };
     MonProcessesGatherData(cf_this);
     MonProcessesGatherData(cf_this);

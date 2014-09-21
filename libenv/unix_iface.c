@@ -30,6 +30,7 @@
 #include <misc_lib.h>
 #include <communication.h>
 #include <string_lib.h>
+#include <regex.h>                                       /* StringMatchFull */
 
 #ifdef HAVE_SYS_JAIL_H
 # include <sys/jail.h>
@@ -393,7 +394,7 @@ void GetInterfacesInfo(EvalContext *ctx)
         /* TODO IPv6 should be handled transparently */
         if (ifp->ifr_addr.sa_family == AF_INET)
         {
-            strncpy(ifr.ifr_name, ifp->ifr_name, sizeof(ifp->ifr_name));
+            strlcpy(ifr.ifr_name, ifp->ifr_name, sizeof(ifp->ifr_name));
 
             if (ioctl(fd, SIOCGIFFLAGS, &ifr) == -1)
             {

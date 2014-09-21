@@ -23,9 +23,10 @@
 */
 
 #include <cf-serverd-functions.h>
+#include <cf-serverd-enterprise-stubs.h> /* CleanReportBookFilterSet() */
 
-#include <known_dirs.h>
 #include <server_transform.h>
+#include <known_dirs.h>
 #include <loading.h>
 
 
@@ -64,13 +65,14 @@ int main(int argc, char *argv[])
     KeepPromises(ctx, policy, config);
     Summarize();
 
-    StartServer(ctx, &policy, config);
+    int threads_left = StartServer(ctx, &policy, config);
 
-    Log(LOG_LEVEL_NOTICE, "Cleaning up and exiting...");
-
-    GenericAgentConfigDestroy(config);
-    PolicyDestroy(policy);
-    EvalContextDestroy(ctx);
+    if (threads_left <= 0)
+    {
+        PolicyDestroy(policy);
+        GenericAgentFinalize(ctx, config);
+        CleanReportBookFilterSet();
+    }
 
     return 0;
 }

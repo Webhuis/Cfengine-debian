@@ -26,12 +26,16 @@
 #define CFENGINE_CRYPTO_H
 
 #include <platform.h>
+
+#include <openssl/rsa.h>
+
 #include <logging.h>
 
 
 void CryptoInitialize(void);
 void CryptoDeInitialize(void);
 
+const char *CryptoLastErrorString(void);
 void DebugBinOut(char *buffer, int len, char *com);
 bool LoadSecretKeys(void);
 void PolicyHubUpdateKeys(const char *policy_server);

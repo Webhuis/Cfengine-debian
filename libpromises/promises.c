@@ -122,8 +122,8 @@ Promise *DeRefCopyPromise(EvalContext *ctx, const Promise *pp)
             {
                 Log(LOG_LEVEL_ERR,
                     "Body type mismatch for body reference '%s' in promise "
-                    "at line %llu of file '%s', '%s' does not equal '%s'",
-                    body_reference, (unsigned long long)pp->offset.line,
+                    "at line %zu of file '%s', '%s' does not equal '%s'",
+                    body_reference, pp->offset.line,
                     PromiseGetBundle(pp)->source_path, bp->type, cp->lval);
             }
 
@@ -143,8 +143,8 @@ Promise *DeRefCopyPromise(EvalContext *ctx, const Promise *pp)
                 {
                     Log(LOG_LEVEL_ERR,
                         "Argument mismatch for body reference '%s' in promise "
-                        "at line %llu of file '%s'",
-                        body_reference, (unsigned long long) pp->offset.line,
+                        "at line %zu of file '%s'",
+                        body_reference, pp->offset.line,
                         PromiseGetBundle(pp)->source_path);
                 }
 
@@ -169,8 +169,8 @@ Promise *DeRefCopyPromise(EvalContext *ctx, const Promise *pp)
                     Log(LOG_LEVEL_ERR,
                         "Apparent body '%s' was undeclared or could "
                         "have incorrect args, but used in a promise near "
-                        "line %llu of %s (possible unquoted literal value)",
-                        RvalScalarValue(cp->rval), (unsigned long long) pp->offset.line,
+                        "line %zu of %s (possible unquoted literal value)",
+                        RvalScalarValue(cp->rval), pp->offset.line,
                         PromiseGetBundle(pp)->source_path);
                 }
                 else
@@ -220,9 +220,9 @@ Promise *DeRefCopyPromise(EvalContext *ctx, const Promise *pp)
                 {
                     Log(LOG_LEVEL_ERR,
                         "Apparent bundle '%s' was undeclared, but "
-                        "used in a promise near line %llu of %s "
+                        "used in a promise near line %zu of %s "
                         "(possible unquoted literal value)",
-                        RvalScalarValue(cp->rval), (unsigned long long)pp->offset.line,
+                        RvalScalarValue(cp->rval), pp->offset.line,
                         PromiseGetBundle(pp)->source_path);
                 }
             }
@@ -309,6 +309,23 @@ Promise *ExpandDeRefPromise(EvalContext *ctx, const Promise *pp, bool *excluded)
     pcopy->org_pp = pp->org_pp;
 
     {
+        // if this is a class promise, check if it is already set, if so, skip
+        if (strcmp("classes", pp->parent_promise_type->name) == 0)
+        {
+            if (IsDefinedClass(ctx, pcopy->promiser))
+            {
+                Log(LOG_LEVEL_VERBOSE, "Skipping evaluation of classes promise as class '%s' is already set",
+                    pcopy->promiser);
+
+                if (excluded)
+                {
+                    *excluded = true;
+                }
+
+                return pcopy;
+            }
+        }
+
         // look for ifvarclass exclusion, to short-circuit evaluation of other constraints
         const Constraint *ifvarclass = PromiseGetConstraint(pp, "ifvarclass");
         if (ifvarclass)
@@ -421,17 +438,13 @@ void PromiseRef(LogLevel level, const Promise *pp)
 
     if (PromiseGetBundle(pp)->source_path)
     {
-        Log(level,
-            "Promise belongs to bundle '%s' in file '%s' near line %llu",
-            PromiseGetBundle(pp)->name,
-            PromiseGetBundle(pp)->source_path,
-            (unsigned long long)pp->offset.line);
+        Log(level, "Promise belongs to bundle '%s' in file '%s' near line %zu", PromiseGetBundle(pp)->name,
+             PromiseGetBundle(pp)->source_path, pp->offset.line);
     }
     else
     {
-        Log(level, "Promise belongs to bundle '%s' near line %llu",
-            PromiseGetBundle(pp)->name,
-            (unsigned long long)pp->offset.line);
+        Log(level, "Promise belongs to bundle '%s' near line %zu", PromiseGetBundle(pp)->name,
+              pp->offset.line);
     }
 
     if (pp->comment)
@@ -471,7 +484,7 @@ static void DereferenceComment(Promise *pp)
     {
         *sp = '\0';
         offset = sp - pre_buffer + strlen("$(this.promiser)");
-        strncpy(post_buffer, pp->comment + offset, CF_BUFSIZE);
+        strlcpy(post_buffer, pp->comment + offset, CF_BUFSIZE);
         snprintf(buffer, CF_BUFSIZE, "%s%s%s", pre_buffer, pp->promiser, post_buffer);
 
         free(pp->comment);

@@ -1,6 +1,7 @@
 #include <test.h>
 
 #include <item_lib.h>
+#include <misc_lib.h>                                          /* xsnprintf */
 #include <server.h>
 #include <server_common.h>
 
@@ -22,13 +23,13 @@ static void test_purge_old_connections_nochange(void)
     Item *connections = NULL;
     char time_str[64];
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS);
     PrependItem(&connections, "123.123.123.3", time_str);
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 1);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 1);
     PrependItem(&connections, "123.123.123.2", time_str);
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 100);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 100);
     PrependItem(&connections, "123.123.123.1", time_str);
 
     assert_int_equal(ListLen(connections), 3);
@@ -52,13 +53,13 @@ static void test_purge_old_connections_purge_first(void)
     Item *connections = NULL;
     char time_str[64];
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 100);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 100);
     PrependItem(&connections, "123.123.123.3", time_str);
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 2);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 2);
     PrependItem(&connections, "123.123.123.2", time_str);
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS - 5);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS - 5);
     PrependItem(&connections, "123.123.123.1", time_str);
 
     assert_int_equal(ListLen(connections), 3);
@@ -82,13 +83,13 @@ static void test_purge_old_connections_purge_middle(void)
     Item *connections = NULL;
     char time_str[64];
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS);
     PrependItem(&connections, "123.123.123.3", time_str);
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS - 1);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS - 1);
     PrependItem(&connections, "123.123.123.2", time_str);
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 100);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 100);
     PrependItem(&connections, "123.123.123.1", time_str);
 
     assert_int_equal(ListLen(connections), 3);
@@ -112,13 +113,13 @@ static void test_purge_old_connections_purge_last(void)
     Item *connections = NULL;
     char time_str[64];
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS - 100);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS - 100);
     PrependItem(&connections, "123.123.123.3", time_str);
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 10);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS + 10);
     PrependItem(&connections, "123.123.123.2", time_str);
 
-    snprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS);
+    xsnprintf(time_str, sizeof(time_str), "%ld", time_now - CONNECTION_MAX_AGE_SECONDS);
     PrependItem(&connections, "123.123.123.1", time_str);
 
     assert_int_equal(ListLen(connections), 3);

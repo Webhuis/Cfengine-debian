@@ -22,6 +22,8 @@
   included file COSL.txt.
 */
 
+#include <platform.h>
+
 #include <sys/types.h>
 #include <time.h>
 #include <stdio.h>
@@ -50,7 +52,8 @@ int main(int argc, char **argv)
     Configuration *configuration = NULL;
 
     logInit();
-    log_entry(LogDebug, "Starting");
+    log_entry(LogVerbose, "Starting %s", argv[0]);
+
     result = parse(argc, argv, &configuration);
     if (result < 0)
     {
@@ -68,8 +71,11 @@ int main(int argc, char **argv)
         usage();
         return 0;
     }
+
     result = RunUpdate(configuration);
-    log_entry(LogDebug, "Shutting down");
+
+    log_entry(LogVerbose, "Finished %s", argv[0]);
     logFinish();
-    return result;
+
+    return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

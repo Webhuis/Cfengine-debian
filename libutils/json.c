@@ -28,6 +28,7 @@
 #include <string_lib.h>
 #include <file_lib.h>
 #include <printsize.h>
+#include <regex.h>
 
 #include <json.h>
 
@@ -1149,8 +1150,8 @@ JsonElement *JsonStringCreate(const char *value)
 
 JsonElement *JsonIntegerCreate(int value)
 {
-    char *buffer = xmalloc(PRINTSIZE(value));
-    sprintf(buffer, "%d", value);
+    char *buffer;
+    xasprintf(&buffer, "%d", value);
 
     return JsonElementCreatePrimitive(JSON_PRIMITIVE_TYPE_INTEGER, buffer);
 }

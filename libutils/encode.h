@@ -22,11 +22,15 @@
   included file COSL.txt.
 */
 
-#ifndef CFENGINE_DIR_IMPL_H
-#define CFENGINE_DIR_IMPL_H
 
-#include <cf3.defs.h>
+#ifndef CFENGINE_ENCODE_H
+#define CFENGINE_ENCODE_H
 
-struct dirent *AllocateDirentForFilename(const char *filename);
 
-#endif
+#include <platform.h>
+
+
+char *StringEncodeBase64(const char *str, size_t len);
+
+
+#endif /* CFENGINE_ENCODE_H */

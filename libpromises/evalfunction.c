@@ -44,6 +44,7 @@
 #include <hashes.h>
 #include <unix.h>
 #include <string_lib.h>
+#include <regex.h>          /* CompileRegex,StringMatchWithPrecompiledRegex */
 #include <net.h>                                           /* SocketConnect */
 #include <communication.h>
 #include <classic.h>                                    /* SendSocketStream */
@@ -411,8 +412,8 @@ static bool CallHostsSeenCallback(const char *hostkey, const char *address,
         return true;
     }
 
-    char buf[CF_BUFSIZE];
-    snprintf(buf, sizeof(buf), "%ju", (uintmax_t)quality->lastseen);
+    char buf[PRINTSIZE(uintmax_t)];
+    xsnprintf(buf, sizeof(buf), "%ju", (uintmax_t) quality->lastseen);
 
     PrependItem(addresses, address, buf);
 
@@ -712,10 +713,11 @@ static FnCallResult FnCallHandlerHash(ARG_UNUSED EvalContext *ctx, ARG_UNUSED co
 
     HashString(string, strlen(string), digest, type);
 
-    char hashbuffer[EVP_MAX_MD_SIZE * 4];
+    char hashbuffer[CF_HOSTKEY_STRING_SIZE];
 
     snprintf(buffer, CF_BUFSIZE - 1, "%s",
-             HashPrintSafe(type, true, digest, hashbuffer));
+             HashPrintSafe(hashbuffer, sizeof(hashbuffer),
+                           digest, type, true));
     return FnReturn(SkipHashType(buffer));
 }
 
@@ -739,9 +741,10 @@ static FnCallResult FnCallHashMatch(ARG_UNUSED EvalContext *ctx, ARG_UNUSED cons
     type = HashIdFromName(typestring);
     HashFile(string, digest, type);
 
-    char hashbuffer[EVP_MAX_MD_SIZE * 4];
+    char hashbuffer[CF_HOSTKEY_STRING_SIZE];
     snprintf(buffer, CF_BUFSIZE - 1, "%s",
-             HashPrintSafe(type, true, digest, hashbuffer));
+             HashPrintSafe(hashbuffer, sizeof(hashbuffer),
+                           digest, type, true));
     Log(LOG_LEVEL_VERBOSE, "File '%s' hashes to '%s', compare to '%s'", string, buffer, compare);
 
     return FnReturnContext(strcmp(buffer + 4, compare) == 0);
@@ -1415,14 +1418,15 @@ static FnCallResult FnCallCanonify(ARG_UNUSED EvalContext *ctx, ARG_UNUSED const
 
     if (!strcmp(fp->name, "canonifyuniquely"))
     {
-        char hashbuffer[EVP_MAX_MD_SIZE * 4];
+        char hashbuffer[CF_HOSTKEY_STRING_SIZE];
         unsigned char digest[EVP_MAX_MD_SIZE + 1];
         HashMethod type;
 
         type = HashIdFromName("sha1");
         HashString(string, strlen(string), digest, type);
         snprintf(buf, CF_BUFSIZE, "%s_%s", string,
-                 SkipHashType(HashPrintSafe(type, true, digest, hashbuffer)));
+                 SkipHashType(HashPrintSafe(hashbuffer, sizeof(hashbuffer),
+                                            digest, type, true)));
     }
     else
     {
@@ -1441,7 +1445,7 @@ static FnCallResult FnCallTextXform(ARG_UNUSED EvalContext *ctx, ARG_UNUSED cons
     int len = 0;
 
     memset(buf, 0, sizeof(buf));
-    strncpy(buf, string, sizeof(buf) - 1);
+    strlcpy(buf, string, sizeof(buf));
     len = strlen(buf);
 
     if (!strcmp(fp->name, "string_downcase"))
@@ -1472,11 +1476,11 @@ static FnCallResult FnCallTextXform(ARG_UNUSED EvalContext *ctx, ARG_UNUSED cons
     }
     else if (!strcmp(fp->name, "string_length"))
     {
-        sprintf(buf, "%d", len);
+        xsnprintf(buf, sizeof(buf), "%d", len);
     }
     else if (!strcmp(fp->name, "string_head"))
     {
-        long max = IntFromString(RlistScalarValue(finalargs->next));
+        const long max = IntFromString(RlistScalarValue(finalargs->next));
         if (max < sizeof(buf))
         {
             buf[max] = '\0';
@@ -1484,7 +1488,7 @@ static FnCallResult FnCallTextXform(ARG_UNUSED EvalContext *ctx, ARG_UNUSED cons
     }
     else if (!strcmp(fp->name, "string_tail"))
     {
-        long max = IntFromString(RlistScalarValue(finalargs->next));
+        const long max = IntFromString(RlistScalarValue(finalargs->next));
         if (max < len)
         {
             strncpy(buf, string + len - max, sizeof(buf) - 1);
@@ -2567,7 +2571,7 @@ static FnCallResult FnCallMapList(EvalContext *ctx, ARG_UNUSED const Policy *pol
     }
     else
     {
-        strncpy(naked, listvar, CF_MAXVARSIZE - 1);
+        strlcpy(naked, listvar, CF_MAXVARSIZE);
     }
 
     VarRef *ref = VarRefParse(naked);
@@ -3278,10 +3282,6 @@ static FnCallResult FnCallFindfiles(EvalContext *ctx, ARG_UNUSED const Policy *p
          arg = arg->next)  /* arg steps forward every time. */
     {
         const char *pattern = RlistScalarValue(arg);
-#ifdef __MINGW32__
-        RlistAppendScalarIdemp(&returnlist, pattern);
-#else /* !__MINGW32__ */
-
         glob_t globbuf;
         int globflags = 0; // TODO: maybe add GLOB_BRACE later
 
@@ -3293,6 +3293,14 @@ static FnCallResult FnCallFindfiles(EvalContext *ctx, ARG_UNUSED const Policy *p
         for (int pi = 0; pi < candidate_count; pi++)
         {
             char* expanded = starstar ? SearchAndReplace(pattern, "**", candidates[pi]) : (char*) pattern;
+
+#ifdef _WIN32
+            if (strchr(expanded, '\\'))
+            {
+                Log(LOG_LEVEL_VERBOSE, "Found backslash escape character in glob pattern '%s'. "
+                    "Was forward slash intended?", expanded);
+            }
+#endif
 
             if (0 == glob(expanded, globflags, NULL, &globbuf))
             {
@@ -3315,7 +3323,6 @@ static FnCallResult FnCallFindfiles(EvalContext *ctx, ARG_UNUSED const Policy *p
                 free(expanded);
             }
         }
-#endif /* __MINGW32__ */
     }
 
     // When no entries were found, mark the empty list
@@ -3705,7 +3712,7 @@ static FnCallResult FnCallLength(EvalContext *ctx, ARG_UNUSED const Policy *poli
             }
         }
     case RVAL_TYPE_CONTAINER:
-        return FnReturnF("%llu", (unsigned long long)JsonLength(value));
+        return FnReturnF("%zd", JsonLength(value));
     default:
         Log(LOG_LEVEL_ERR, "Function '%s', argument '%s' resolved to unsupported datatype '%s'",
             fp->name, name, DataTypeToString(type));
@@ -4266,7 +4273,7 @@ static FnCallResult FnCallFormat(EvalContext *ctx, ARG_UNUSED const Policy *poli
             {
                 if (SeqLength(s) >= 4)
                 {
-                    strncpy(check_buffer, SeqAt(s, 3), CF_BUFSIZE);
+                    strlcpy(check_buffer, SeqAt(s, 3), CF_BUFSIZE);
                     check = check_buffer;
                 }
                 else
@@ -5211,6 +5218,7 @@ static FnCallResult FnCallNow(ARG_UNUSED EvalContext *ctx, ARG_UNUSED const Poli
 /*********************************************************************/
 
 #ifdef __sun /* Lacks %P and */
+#define STRFTIME_F_HACK
 #define STRFTIME_s_HACK
 #define STRFTIME_R_HACK
 #endif /* http://www.unix.com/man-page/opensolaris/3c/strftime/ */
@@ -5262,7 +5270,7 @@ bool PortablyFormatTime(char *buffer, size_t bufsiz,
 
 #ifdef STRFTIME_s_HACK /* %s: seconds since epoch */
     char epoch[PRINTSIZE(when)];
-    sprintf(epoch, "%" PRIdMAX, (intmax_t)when);
+    xsnprintf(epoch, sizeof(epoch), "%jd", (intmax_t) when);
 #endif /* STRFTIME_s_HACK */
 
     typedef char * SearchReplacePair[2];
@@ -6568,11 +6576,25 @@ void ModuleProtocol(EvalContext *ctx, char *command, const char *line, int print
     case '^':
         content[0] = '\0';
 
+        pcre *context_name_rx = CompileRegex("[a-zA-Z0-9_]+"); // symbol ID without \200 to \377
         // Allow modules to set their variable context (up to 50 characters)
-        if (1 == sscanf(line + 1, "context=%50[a-z]", content) && content[0] != '\0')
+        if (1 == sscanf(line + 1, "context=%50[^\n]", content) && content[0] != '\0')
         {
-            Log(LOG_LEVEL_VERBOSE, "Module changed variable context from '%s' to '%s'", context, content);
-            strcpy(context, content);
+            if (!context_name_rx)
+            {
+                Log(LOG_LEVEL_ERR,
+                    "Internal error compiling module protocol context regex, aborting!!!");
+            }
+            else if (StringMatchFullWithPrecompiledRegex(context_name_rx, content))
+            {
+                Log(LOG_LEVEL_VERBOSE, "Module changed variable context from '%s' to '%s'", context, content);
+                strcpy(context, content);
+            }
+            else
+            {
+                Log(LOG_LEVEL_ERR,
+                    "Module protocol was given an unacceptable ^context directive '%s', skipping", content);
+            }
         }
         else if (1 == sscanf(line + 1, "meta=%1024[^\n]", content) && content[0] != '\0')
         {
@@ -6585,6 +6607,11 @@ void ModuleProtocol(EvalContext *ctx, char *command, const char *line, int print
         else
         {
             Log(LOG_LEVEL_INFO, "Unknown extended module command '%s'", line);
+        }
+
+        if (context_name_rx)
+        {
+            pcre_free(context_name_rx);
         }
         break;
 

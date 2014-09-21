@@ -1,10 +1,10 @@
+#include <test.h>
+
 #include <cf3.defs.h>
 #include <dbm_api.h>
-#include <test.h>
 #include <lastseen.h>
+#include <misc_lib.h>                                          /* xsnprintf */
 
-#include <setjmp.h>
-#include <cmockery.h>
 
 typedef struct
 {
@@ -18,7 +18,7 @@ char CFWORKDIR[CF_BUFSIZE];
 
 void tests_setup(void)
 {
-    snprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/lastseen_migration_test.XXXXXX");
+    xsnprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/lastseen_migration_test.XXXXXX");
     mkdtemp(CFWORKDIR);
 }
 
@@ -28,7 +28,7 @@ void tests_setup(void)
 static DBHandle *setup(bool clean)
 {
     char cmd[CF_BUFSIZE];
-    snprintf(cmd, CF_BUFSIZE, "rm -rf '%s'/*", CFWORKDIR);
+    xsnprintf(cmd, CF_BUFSIZE, "rm -rf '%s'/*", CFWORKDIR);
     system(cmd);
 
     DBHandle *db;
@@ -66,7 +66,7 @@ static DBHandle *setup(bool clean)
 static void tests_teardown(void)
 {
     char cmd[CF_BUFSIZE];
-    snprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
+    xsnprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
     system(cmd);
 }
 
@@ -241,7 +241,7 @@ int main()
 
 /* STUBS */
 
-void FatalError(char *s, ...)
+void FatalError(ARG_UNUSED char *s, ...)
 {
     fail();
     exit(42);
@@ -253,17 +253,21 @@ char VIPADDRESS[CF_MAX_IP_LEN];
 RSA *PUBKEY;
 bool MINUSF;
 
-char *MapAddress(char *addr)
+char *MapAddress(ARG_UNUSED char *addr)
 {
     fail();
 }
 
-char *HashPrintSafe(HashMethod type, unsigned char digest[EVP_MAX_MD_SIZE + 1], char buffer[EVP_MAX_MD_SIZE * 4])
+char *HashPrintSafe(ARG_UNUSED char *dst, ARG_UNUSED size_t dst_size,
+                    ARG_UNUSED const unsigned char *digest,
+                    ARG_UNUSED HashMethod type, ARG_UNUSED bool use_prefix)
 {
     fail();
 }
 
-void HashPubKey(RSA *key, unsigned char digest[EVP_MAX_MD_SIZE + 1], HashMethod type)
+void HashPubKey(ARG_UNUSED RSA *key,
+                ARG_UNUSED unsigned char digest[EVP_MAX_MD_SIZE + 1],
+                ARG_UNUSED HashMethod type)
 {
     fail();
 }

@@ -261,8 +261,8 @@ Bundle *MakeTemporaryBundleFromTemplate(EvalContext *ctx, Policy *policy, Attrib
 
                 for (const Item *ip = lines; ip != NULL; ip = ip->next)
                 {
-                    int len = strlen(ip->name);
-                    strncpy(sp, ip->name, len);
+                    const int len = strlen(ip->name);
+                    memcpy(sp, ip->name, len);
                     sp += len;
                 }
 
@@ -1143,8 +1143,7 @@ static int ReplacePatterns(EvalContext *ctx, Item *file_start, Item *file_end, A
                   cutoff);
 
             // Save portion of line after substitution:
-            after[0] = '\0'; // Do what strncpy() should, using strncat():
-            strncat(after, line_buff + end_off, sizeof(after) - 1);
+            strlcpy(after, line_buff + end_off, sizeof(after));
             // TODO: gripe if that truncated !
 
             // Substitute into line_buff:
@@ -1268,8 +1267,7 @@ static int EditColumns(EvalContext *ctx, Item *file_start, Item *file_end, Attri
             return false;
         }
 
-        strncpy(separator, ip->name + s, e - s);
-        separator[e - s] = '\0';
+        strlcpy(separator, ip->name + s, e - s + 1);
 
         columns = RlistFromSplitRegex(ip->name, a.column.column_separator, CF_INFINITY, a.column.blanks_ok);
         retval = EditLineByColumn(ctx, &columns, a, pp, edcontext, result);
@@ -1413,8 +1411,8 @@ static int MatchPolicy(EvalContext *ctx, const char *camel, const char *haystack
             break;
         }
 
-        memset(final, 0, CF_BUFSIZE);
-        strncpy(final, ip->name, CF_BUFSIZE - 1);
+        
+        strlcpy(final, ip->name, CF_BUFSIZE);
 
         for (rp = insert_match; rp != NULL; rp = rp->next)
         {
@@ -1650,9 +1648,10 @@ static int InsertCompoundLineAtLocation(EvalContext *ctx, char *chunk, Item **st
     bool retval = false;
     char buf[CF_EXPANDSIZE];
     char *sp;
-    int preserve_block = a.sourcetype && (strcmp(a.sourcetype, "preserve_all_lines") == 0 || strcmp(a.sourcetype, "preserve_block") == 0 || strcmp(a.sourcetype, "file_preserve_block") == 0);
+    int preserve_all_lines = a.sourcetype && strcmp(a.sourcetype, "preserve_all_lines") == 0;
+    int preserve_block = a.sourcetype && (preserve_all_lines || strcmp(a.sourcetype, "preserve_block") == 0 || strcmp(a.sourcetype, "file_preserve_block") == 0);
 
-    if (!preserve_block && MatchRegion(ctx, chunk, location, NULL, false))
+    if (!preserve_all_lines && MatchRegion(ctx, chunk, location, NULL, false))
     {
         cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, a, "Promised chunk '%s' exists within selected region of %s (promise kept)", pp->promiser, edcontext->filename);
         return false;

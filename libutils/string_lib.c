@@ -22,9 +22,13 @@
   included file COSL.txt.
 */
 
+#include <platform.h>
 #include <string_lib.h>
 
-#include <platform.h>
+#include <openssl/buffer.h>                                 /* BUF_MEM */
+#include <openssl/bio.h>                                    /* BIO_* */
+#include <openssl/evp.h>                                    /* BIO_f_base64 */
+
 #include <alloc.h>
 #include <writer.h>
 #include <misc_lib.h>
@@ -73,9 +77,6 @@ unsigned int StringHash(const char *str, unsigned int seed, unsigned int max)
     return (h & (max - 1));
 }
 
-
-#define STRING_MATCH_OVECCOUNT 30
-#define NULL_OR_EMPTY(str) ((str == NULL) || (str[0] == '\0'))
 
 char ToLower(char ch)
 {
@@ -296,7 +297,7 @@ char *StringSubstring(const char *source, size_t source_len, int start, int len)
 
     char *result = xcalloc(end - start + 2, sizeof(char));
 
-    strncpy(result, source + start, end - start + 1);
+    memcpy(result, source + start, end - start + 1);
     return result;
 }
 
@@ -395,191 +396,28 @@ char *NULLStringToEmpty(char *str)
     return str;
 }
 
-pcre *CompileRegex(const char *regex)
-{
-    const char *errorstr;
-    int erroffset;
-
-    pcre *rx = pcre_compile(regex, PCRE_MULTILINE | PCRE_DOTALL, &errorstr, &erroffset, NULL);
-
-    if (!rx)
-    {
-        Log(LOG_LEVEL_ERR, "Regular expression error: pcre_compile() '%s' in expression '%s' (offset: %d)",
-            errorstr, regex, erroffset);
-    }
-
-    return rx;
-}
-
-bool StringMatchWithPrecompiledRegex(pcre *regex, const char *str, int *start, int *end)
-{
-    assert(regex);
-    assert(str);
-
-    int ovector[STRING_MATCH_OVECCOUNT] = { 0 };
-    int result = pcre_exec(regex, NULL, str, strlen(str), 0, 0, ovector, STRING_MATCH_OVECCOUNT);
-
-    if (result)
-    {
-        if (start)
-        {
-            *start = ovector[0];
-        }
-        if (end)
-        {
-            *end = ovector[1];
-        }
-    }
-    else
-    {
-        if (start)
-        {
-            *start = 0;
-        }
-        if (end)
-        {
-            *end = 0;
-        }
-    }
-
-    return result >= 0;
-}
-
-bool StringMatch(const char *regex, const char *str, int *start, int *end)
-{
-    pcre *pattern = CompileRegex(regex);
-
-    if (pattern == NULL)
-    {
-        return false;
-    }
-
-    bool ret = StringMatchWithPrecompiledRegex(pattern, str, start, end);
-
-    pcre_free(pattern);
-    return ret;
-
-}
-
-bool StringMatchFull(const char *regex, const char *str)
-{
-    pcre *pattern = CompileRegex(regex);
-
-    if (pattern == NULL)
-    {
-        return false;
-    }
-
-    bool ret = StringMatchFullWithPrecompiledRegex(pattern, str);
-
-    pcre_free(pattern);
-    return ret;
-}
-
-bool StringMatchFullWithPrecompiledRegex(pcre *pattern, const char *str)
-{
-    int start = 0, end = 0;
-
-    if (StringMatchWithPrecompiledRegex(pattern, str, &start, &end))
-    {
-        return (start == 0) && (end == strlen(str));
-    }
-    else
-    {
-        return false;
-    }
-}
-
-Seq *StringMatchCaptures(const char *regex, const char *str)
-{
-    assert(regex);
-    assert(str);
-
-    pcre *pattern = NULL;
-    {
-        const char *errorstr;
-        int erroffset;
-        pattern = pcre_compile(regex, PCRE_MULTILINE | PCRE_DOTALL, &errorstr, &erroffset, NULL);
-    }
-    assert(pattern);
-
-    if (pattern == NULL)
-    {
-        return NULL;
-    }
-
-    int captures;
-    int res = pcre_fullinfo(pattern, NULL, PCRE_INFO_CAPTURECOUNT, &captures);
-    if (res != 0)
-    {
-        pcre_free(pattern);
-        return NULL;
-    }
-
-    int *ovector = xmalloc(sizeof(int) * (captures + 1) * 3);
-
-    int result = pcre_exec(pattern, NULL, str, strlen(str), 0, 0, ovector, (captures + 1) * 3);
-
-    if (result <= 0)
-    {
-        free(ovector);
-        pcre_free(pattern);
-        return NULL;
-    }
-
-    Seq *ret = SeqNew(captures + 1, free);
-    for (int i = 0; i <= captures; ++i)
-    {
-        SeqAppend(ret, xstrndup(str + ovector[2*i], ovector[2*i + 1] - ovector[2 * i]));
-    }
-    free(ovector);
-    pcre_free(pattern);
-    return ret;
-}
-
-char *StringEncodeBase64(const char *str, size_t len)
-{
-    assert(str);
-    if (!str)
-    {
-        return NULL;
-    }
-
-    if (len == 0)
-    {
-        return xcalloc(1, sizeof(char));
-    }
-
-    BIO *b64 = BIO_new(BIO_f_base64());
-    BIO *bio = BIO_new(BIO_s_mem());
-    b64 = BIO_push(b64, bio);
-    BIO_write(b64, str, len);
-    if (!BIO_flush(b64))
-    {
-        assert(false && "Unable to encode string to base64" && str);
-        return NULL;
-    }
-
-    BUF_MEM *buffer = NULL;
-    BIO_get_mem_ptr(b64, &buffer);
-    char *out = xcalloc(1, buffer->length);
-    memcpy(out, buffer->data, buffer->length - 1);
-    out[buffer->length - 1] = '\0';
-
-    BIO_free_all(b64);
-
-    return out;
-}
-
-void StringBytesToHex(const unsigned char *bytes, size_t num_bytes, char out[(num_bytes * 2) + 1])
+/**
+ * @NOTE this function always '\0'-terminates the destination string #dst.
+ * @return length of written string #dst.
+ */
+size_t StringBytesToHex(char *dst, size_t dst_size,
+                        const unsigned char *src_bytes, size_t src_len)
 {
     static const char *const hex_chars = "0123456789abcdef";
-    for (size_t i = 0; i < num_bytes; i++)
+
+    size_t i = 0;
+    while ((i < src_len) &&
+           (i*2 + 2 < dst_size))               /* room for 2 more hex chars */
     {
-        out[(2 * i)] = hex_chars[(bytes[i] >> 4) & 0xf];
-        out[(2 * i) + 1] = hex_chars[bytes[i] & 0xf];
+        dst[2*i]     = hex_chars[(src_bytes[i] >> 4) & 0xf];
+        dst[2*i + 1] = hex_chars[src_bytes[i] & 0xf];
+        i++;
     }
-    out[num_bytes * 2] = '\0';
+
+    assert(2*i < dst_size);
+    dst[2*i] = '\0';
+
+    return 2*i;
 }
 
 bool IsStrIn(const char *str, const char *const strs[])
@@ -849,7 +687,7 @@ char **String2StringArray(const char *str, char separator)
         }
 
         arr[i] = xcalloc(len + 1, sizeof(char));
-        strncpy(arr[i], sp, len);
+        memcpy(arr[i], sp, len);
 
         sp = esp;
         i++;
@@ -870,10 +708,10 @@ void FreeStringArray(char **strs)
     for (i = 0; strs[i] != NULL; i++)
     {
         free(strs[i]);
+        strs[i] = NULL;
     }
 
     free(strs);
-    strs = NULL;
 }
 
 
@@ -1037,25 +875,7 @@ void *MemSpanInverse(const void *mem, char c, size_t n)
     return (char *)mem;
 }
 
-bool CompareStringOrRegex(const char *value, const char *compareTo, bool regex)
-{
-    if (regex)
-    {
-        if (!NULL_OR_EMPTY(compareTo) && !StringMatchFull(compareTo, value))
-        {
-            return false;
-        }
-    }
-    else
-    {
-        if (!NULL_OR_EMPTY(compareTo)  && strcmp(compareTo, value) != 0)
-        {
-            return false;
-        }
-    }
-    return true;
-}
-/* 
+/*
  * @brief extract info from input string given two types of constraints:
  *        - length of the extracted string is bounded
  *        - extracted string should stop at first element of an exclude list
@@ -1066,20 +886,20 @@ bool CompareStringOrRegex(const char *value, const char *compareTo, bool regex)
  * @param[out] obuf   : the output buffer
  * @retval    true if string was capped, false if not
  */
-bool StringNotMatchingSetCapped(const char *isp, int limit, 
+bool StringNotMatchingSetCapped(const char *isp, int limit,
                       const char *exclude, char *obuf)
 {
     size_t l = strcspn(isp, exclude);
 
     if (l < limit-1)
     {
-        strncpy(obuf, isp, l);
+        memcpy(obuf, isp, l);
         obuf[l]='\0';
         return false;
     }
     else
     {
-        strncpy(obuf, isp, limit-1);
+        memcpy(obuf, isp, limit-1);
         obuf[limit-1]='\0';
         return true;
     }

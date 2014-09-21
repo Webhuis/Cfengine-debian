@@ -1,11 +1,15 @@
 #include <test.h>
+
 #include <mustache.h>
 #include <files_lib.h>
+#include <misc_lib.h>                                          /* xsnprintf */
+
 
 size_t TestSpecFile(const char *testfile)
 {
-    char path[1024];
-    sprintf(path, "%s/mustache_%s.json", TESTDATADIR, testfile);
+    char path[PATH_MAX];
+    xsnprintf(path, sizeof(path), "%s/mustache_%s.json",
+              TESTDATADIR, testfile);
 
     Writer *w = FileRead(path, SIZE_MAX, NULL);
     if (w == NULL)

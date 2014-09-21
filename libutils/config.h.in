@@ -40,8 +40,8 @@
 /* Define to 1 if you have the `asprintf' function. */
 #undef HAVE_ASPRINTF
 
-/* Define to 1 if you have the <attr/xattr.h,> header file. */
-#undef HAVE_ATTR_XATTR_H_
+/* Define to 1 if you have the <attr/xattr.h> header file. */
+#undef HAVE_ATTR_XATTR_H
 
 /* Define to 1 if you have the <avahi-client/client.h> header file. */
 #undef HAVE_AVAHI_CLIENT_CLIENT_H
@@ -117,6 +117,10 @@
    don't. */
 #undef HAVE_DECL_GETLINE
 
+/* Define to 1 if you have the declaration of `getloadavg', and to 0 if you
+   don't. */
+#undef HAVE_DECL_GETLOADAVG
+
 /* Define to 1 if you have the declaration of `getnetgrent', and to 0 if you
    don't. */
 #undef HAVE_DECL_GETNETGRENT
@@ -124,6 +128,10 @@
 /* Define to 1 if you have the declaration of `getuid', and to 0 if you don't.
    */
 #undef HAVE_DECL_GETUID
+
+/* Define to 1 if you have the declaration of `glob', and to 0 if you don't.
+   */
+#undef HAVE_DECL_GLOB
 
 /* Define to 1 if you have the declaration of `gmtime_r', and to 0 if you
    don't. */
@@ -136,6 +144,10 @@
 /* Define to 1 if you have the declaration of `inet_pton', and to 0 if you
    don't. */
 #undef HAVE_DECL_INET_PTON
+
+/* Define to 1 if you have the declaration of `isfinite', and to 0 if you
+   don't. */
+#undef HAVE_DECL_ISFINITE
 
 /* Define to 1 if you have the declaration of `localtime_r', and to 0 if you
    don't. */
@@ -204,6 +216,10 @@
 /* Define to 1 if you have the declaration of `srand48', and to 0 if you
    don't. */
 #undef HAVE_DECL_SRAND48
+
+/* Define to 1 if you have the declaration of `SSL_CTX_clear_options', and to
+   0 if you don't. */
+#undef HAVE_DECL_SSL_CTX_CLEAR_OPTIONS
 
 /* Define to 1 if you have the declaration of `strcasecmp', and to 0 if you
    don't. */
@@ -305,6 +321,15 @@
 /* Whether to use fexecve(3) to execute a new process */
 #undef HAVE_FEXECVE
 
+/* Define to 1 if you have the `fgetgrent' function. */
+#undef HAVE_FGETGRENT
+
+/* Define to 1 if you have the `fgetpwent' function. */
+#undef HAVE_FGETPWENT
+
+/* Define to 1 if you have the `fgetspent' function. */
+#undef HAVE_FGETSPENT
+
 /* Define to 1 if you have the `fpathconf' function. */
 #undef HAVE_FPATHCONF
 
@@ -338,9 +363,6 @@
 /* Define to 1 if you have the `getpwent' function. */
 #undef HAVE_GETPWENT
 
-/* Define to 1 if you have the `getspnam' function. */
-#undef HAVE_GETSPNAM
-
 /* Define to 1 if you have the `getzoneid' function. */
 #undef HAVE_GETZONEID
 
@@ -349,6 +371,9 @@
 
 /* Define to 1 if you have the `gmtime_r' function. */
 #undef HAVE_GMTIME_R
+
+/* Define to 1 if you have the <ieeefp.h> header file. */
+#undef HAVE_IEEEFP_H
 
 /* Define to 1 if you have the `inet_ntop' function. */
 #undef HAVE_INET_NTOP
@@ -802,6 +827,12 @@
 /* Define to 1 if you have the <utime.h> header file. */
 #undef HAVE_UTIME_H
 
+/* Define to 1 if you have the <utmpx.h> header file. */
+#undef HAVE_UTMPX_H
+
+/* Define to 1 if you have the <utmp.h> header file. */
+#undef HAVE_UTMP_H
+
 /* Define to 1 if you have the <varargs.h> header file. */
 #undef HAVE_VARARGS_H
 
@@ -863,9 +894,6 @@
 /* Define to 1 if your `struct nlist' has an `n_un' member. Obsolete, depend
    on `HAVE_STRUCT_NLIST_N_UN_N_NAME */
 #undef NLIST_NAME_UNION
-
-/* Define to 1 if your C compiler doesn't accept -c and -o together. */
-#undef NO_MINUS_C_MINUS_O
 
 /* Define if non deprecated API is available. */
 #undef OPENSSL_NO_DEPRECATED
@@ -960,11 +988,6 @@
    `char[]'. */
 #undef YYTEXT_POINTER
 
-/* Enable large inode numbers on Mac OS X 10.5.  */
-#ifndef _DARWIN_USE_64_BIT_INODE
-# define _DARWIN_USE_64_BIT_INODE 1
-#endif
-
 /* Number of bits in a file offset, on hosts where this is settable. */
 #undef _FILE_OFFSET_BITS
 
@@ -986,6 +1009,9 @@
 /* Define to empty if `const' does not conform to ANSI C. */
 #undef const
 
+/* Define to rpl_fprintf if the replacement function should be used. */
+#undef fprintf
+
 /* Define to `int' if <sys/types.h> doesn't define. */
 #undef gid_t
 
@@ -1001,6 +1027,9 @@
 
 /* Define to `int' if <sys/types.h> does not define. */
 #undef pid_t
+
+/* Define to rpl_printf if the replacement function should be used. */
+#undef printf
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */
 #undef size_t
@@ -1021,6 +1050,12 @@
 
 /* Define to rpl_vasprintf if the replacement function should be used. */
 #undef vasprintf
+
+/* Define to rpl_vfprintf if the replacement function should be used. */
+#undef vfprintf
+
+/* Define to rpl_vprintf if the replacement function should be used. */
+#undef vprintf
 
 /* Define to rpl_vsnprintf if the replacement function should be used. */
 #undef vsnprintf

@@ -22,7 +22,11 @@
   included file COSL.txt.
 */
 
-#include <generic_agent.h>
+#include <platform.h>
+#include <cf-key-functions.h>
+
+#include <openssl/bn.h>                                     /* BN_*, BIGNUM */
+#include <openssl/rand.h>                                   /* RAND_* */
 
 #include <lastseen.h>
 #include <dir.h>
@@ -36,13 +40,11 @@
 #include <crypto.h>
 #include <file_lib.h>
 
-#include <cf-key-functions.h>
 
 static const char *const passphrase = "Cfengine passphrase";
 
 RSA* LoadPublicKey(const char* filename)
 {
-    unsigned long err;
     FILE* fp;
     RSA* key;
 
@@ -56,9 +58,9 @@ RSA* LoadPublicKey(const char* filename)
     if ((key = PEM_read_RSAPublicKey(fp, NULL, NULL,
                                      (void *)passphrase)) == NULL)
     {
-        err = ERR_get_error();
-        Log(LOG_LEVEL_ERR, "Error reading public key. (PEM_read_RSAPublicKey: %s)",
-            ERR_reason_error_string(err));
+        Log(LOG_LEVEL_ERR,
+            "Error reading public key. (PEM_read_RSAPublicKey: %s)",
+            CryptoLastErrorString());
         fclose(fp);
         return NULL;
     };
@@ -81,7 +83,7 @@ char* GetPubkeyDigest(const char* pubkey)
 {
     unsigned char digest[EVP_MAX_MD_SIZE + 1];
     RSA* key = NULL;
-    char* buffer = xmalloc(EVP_MAX_MD_SIZE * 4);
+    char* buffer = xmalloc(CF_HOSTKEY_STRING_SIZE);
 
     key = LoadPublicKey(pubkey);
     if (NULL == key)
@@ -90,7 +92,8 @@ char* GetPubkeyDigest(const char* pubkey)
     }
 
     HashPubKey(key, digest, CF_DEFAULT_DIGEST);
-    HashPrintSafe(CF_DEFAULT_DIGEST, true, digest, buffer);
+    HashPrintSafe(buffer, CF_HOSTKEY_STRING_SIZE,
+                  digest, CF_DEFAULT_DIGEST, true);
     return buffer;
 }
 
@@ -211,7 +214,6 @@ int RemoveKeys(const char *input, bool must_be_coherent)
 
 void KeepKeyPromises(const char *public_key_file, const char *private_key_file)
 {
-    unsigned long err;
 #ifdef OPENSSL_NO_DEPRECATED
     RSA *pair = RSA_new();
     BIGNUM *rsa_bignum = BN_new();
@@ -250,8 +252,8 @@ void KeepKeyPromises(const char *public_key_file, const char *private_key_file)
     if (pair == NULL)
 #endif
     {
-        err = ERR_get_error();
-        Log(LOG_LEVEL_ERR, "Unable to generate key '%s'", ERR_reason_error_string(err));
+        Log(LOG_LEVEL_ERR, "Unable to generate key (RSA_generate_key: %s)",
+            CryptoLastErrorString());
         return;
     }
 
@@ -275,8 +277,9 @@ void KeepKeyPromises(const char *public_key_file, const char *private_key_file)
     if (!PEM_write_RSAPrivateKey(fp, pair, cipher, (void *)passphrase,
                                  strlen(passphrase), NULL, NULL))
     {
-        err = ERR_get_error();
-        Log(LOG_LEVEL_ERR, "Couldn't write private key. (PEM_write_RSAPrivateKey: %s)", ERR_reason_error_string(err));
+        Log(LOG_LEVEL_ERR,
+            "Couldn't write private key. (PEM_write_RSAPrivateKey: %s)",
+            CryptoLastErrorString());
         return;
     }
 
@@ -302,8 +305,9 @@ void KeepKeyPromises(const char *public_key_file, const char *private_key_file)
 
     if (!PEM_write_RSAPublicKey(fp, pair))
     {
-        err = ERR_get_error();
-        Log(LOG_LEVEL_ERR, "Unable to write public key. (PEM_write_RSAPublicKey: %s)", ERR_reason_error_string(err));
+        Log(LOG_LEVEL_ERR,
+            "Unable to write public key. (PEM_write_RSAPublicKey: %s)",
+            CryptoLastErrorString());
         return;
     }
 

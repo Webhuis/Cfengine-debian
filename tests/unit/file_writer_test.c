@@ -3,10 +3,14 @@
 #include <alloc.h>
 #include <writer.h>
 
+
 static Writer *global_w;
 static bool global_w_closed;
 
-size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+
+/* Override libc's fwrite(). */
+static size_t CFENGINE_TEST_fwrite(const void *ptr, size_t size, size_t nmemb,
+                                   ARG_UNUSED FILE *stream)
 {
     for (int i = 0; i < nmemb; ++i)
     {
@@ -18,11 +22,16 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
     return nmemb * size;
 }
 
-int fclose(FILE *stream)
+/* Override libc's fclose(). */
+static int CFENGINE_TEST_fclose(ARG_UNUSED FILE *stream)
 {
     global_w_closed = true;
     return 0;
 }
+
+
+#include <writer.c>                /* MUST be included after the overrides. */
+
 
 void test_empty_file_buffer(void)
 {
@@ -100,13 +109,15 @@ int main()
 
 /* STUB */
 
-void __ProgrammingError(const char *file, int lineno, const char *format, ...)
+void __ProgrammingError(ARG_UNUSED const char *file,
+                        ARG_UNUSED int lineno,
+                        ARG_UNUSED const char *format, ...)
 {
     fail();
     exit(42);
 }
 
-void FatalError(char *s, ...)
+void FatalError(ARG_UNUSED char *s, ...)
 {
     fail();
     exit(42);

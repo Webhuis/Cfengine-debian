@@ -84,6 +84,8 @@ ENTERPRISE_VOID_FUNC_1ARG_DECLARE(void, ShowPromise, const Promise *, pp);
 ENTERPRISE_VOID_FUNC_3ARG_DECLARE(void, GetObservable, int, i, char *, name, char *, desc);
 ENTERPRISE_VOID_FUNC_1ARG_DECLARE(void, SetMeasurementPromises, Item **, classlist);
 
+ENTERPRISE_VOID_FUNC_2ARG_DECLARE(void, CheckAndSetHAState, const char *, workdir, EvalContext *, ctx);
+
 /* manual.c */
 
 void TexinfoManual(EvalContext *ctx, const char *source_dir, const char *output_file);
@@ -95,9 +97,6 @@ int ParseModeString(const char *modestring, mode_t *plusmask, mode_t *minusmask)
 /* patches.c */
 
 int IsPrivileged(void);
-char *MapName(char *s);
-char *MapNameCopy(const char *s);
-char *MapNameForward(char *s);
 char *cf_strtimestamp_local(const time_t time, char *buf);
 char *cf_strtimestamp_utc(const time_t time, char *buf);
 int cf_closesocket(int sd);

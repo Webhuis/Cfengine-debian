@@ -30,12 +30,13 @@
 #include <bootstrap.h>
 #include <scope.h>
 #include <signals.h>
+#include <systype.h>
 #include <mutex.h>
 #include <locks.h>
 #include <exec_tools.h>
 #include <unix.h>
 #include <man.h>
-#include <tls_server.h>                              /* ServerTLSInitialize */
+#include <server_tls.h>                              /* ServerTLSInitialize */
 #include <timeout.h>
 #include <unix_iface.h>
 #include <known_dirs.h>
@@ -316,6 +317,40 @@ static void KeepHardClasses(EvalContext *ctx)
     GenericAgentAddEditionClasses(ctx);
 }
 
+/* Must not be called unless ACTIVE_THREADS is zero: */
+static void ClearAuthAndACLs(void)
+{
+    /* Old ACLs */
+    DeleteAuthList(&SV.admit, &SV.admittail);
+    DeleteAuthList(&SV.deny, &SV.denytail);
+    DeleteAuthList(&SV.varadmit, &SV.varadmittail);
+    DeleteAuthList(&SV.vardeny, &SV.vardenytail);
+    DeleteAuthList(&SV.roles, &SV.rolestail);
+
+    /* Should be no currently open connections */
+    assert(SV.connectionlist == NULL);
+
+    /* body server control ACLs */
+    DeleteItemList(SV.trustkeylist);        SV.trustkeylist = NULL;
+    DeleteItemList(SV.attackerlist);        SV.attackerlist = NULL;
+    DeleteItemList(SV.nonattackerlist);     SV.nonattackerlist = NULL;
+    DeleteItemList(SV.allowuserlist);       SV.allowuserlist = NULL;
+    DeleteItemList(SV.multiconnlist);       SV.multiconnlist = NULL;
+    DeleteItemList(SV.allowuserlist);       SV.allowuserlist = NULL;
+    DeleteItemList(SV.allowlegacyconnects); SV.allowlegacyconnects = NULL;
+
+    StringMapDestroy(SV.path_shortcuts);    SV.path_shortcuts = NULL;
+    free(SV.allowciphers);                  SV.allowciphers = NULL;
+
+    /* New ACLs */
+    NEED_REVERSE_LOOKUP = false;
+    acl_Free(paths_acl);    paths_acl = NULL;
+    acl_Free(classes_acl);  classes_acl = NULL;
+    acl_Free(vars_acl);     vars_acl = NULL;
+    acl_Free(literals_acl); literals_acl = NULL;
+    acl_Free(query_acl);    query_acl = NULL;
+}
+
 static void CheckFileChanges(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
 {
     Log(LOG_LEVEL_DEBUG, "Checking file updates for input file '%s'",
@@ -332,7 +367,8 @@ static void CheckFileChanges(EvalContext *ctx, Policy **policy, GenericAgentConf
 
         if (GenericAgentArePromisesValid(config))
         {
-            Log(LOG_LEVEL_INFO, "Rereading policy file '%s'", config->input_file);
+            Log(LOG_LEVEL_NOTICE, "Rereading policy file '%s'",
+                config->input_file);
 
             /* STEP 1: Free everything */
 
@@ -340,32 +376,7 @@ static void CheckFileChanges(EvalContext *ctx, Policy **policy, GenericAgentConf
 
             strcpy(VDOMAIN, "undefined.domain");
 
-            /* Old ACLs */
-            DeleteAuthList(&SV.admit, &SV.admittail);
-            DeleteAuthList(&SV.deny, &SV.denytail);
-            DeleteAuthList(&SV.varadmit, &SV.varadmittail);
-            DeleteAuthList(&SV.vardeny, &SV.vardenytail);
-            DeleteAuthList(&SV.roles, &SV.rolestail);
-
-            /* body server control ACLs */
-            DeleteItemList(SV.trustkeylist);    SV.trustkeylist = NULL;
-            DeleteItemList(SV.attackerlist);    SV.attackerlist = NULL;
-            DeleteItemList(SV.nonattackerlist); SV.nonattackerlist = NULL;
-            DeleteItemList(SV.multiconnlist);   SV.multiconnlist = NULL;
-            DeleteItemList(SV.allowuserlist);   SV.allowuserlist = NULL;
-            DeleteItemList(SV.allowlegacyconnects);
-            SV.allowlegacyconnects = NULL;
-
-            /* New ACLs */
-            NEED_REVERSE_LOOKUP = false;
-            acl_Free(paths_acl);    paths_acl = NULL;
-            acl_Free(classes_acl);  classes_acl = NULL;
-            acl_Free(vars_acl);     vars_acl = NULL;
-            acl_Free(literals_acl); literals_acl = NULL;
-            acl_Free(query_acl);    query_acl = NULL;
-
-            StringMapDestroy(SV.path_shortcuts);  SV.path_shortcuts = NULL;
-            free(SV.allowciphers);                SV.allowciphers = NULL;
+            ClearAuthAndACLs();
             PolicyDestroy(*policy);               *policy = NULL;
 
             /* STEP 2: Set Environment, Parse and Evaluate policy */
@@ -430,7 +441,7 @@ static int OpenReceiverChannel(void)
     }
 
     char servname[PRINTSIZE(CFENGINE_PORT)];
-    sprintf(servname, "%d", CFENGINE_PORT);
+    xsnprintf(servname, sizeof(servname), "%d", CFENGINE_PORT);
 
     /* Resolve listening interface. */
     int gres;
@@ -509,8 +520,10 @@ static int OpenReceiverChannel(void)
         else
         {
             Log(LOG_LEVEL_INFO,
-                "Could not bind server address. (bind: %s)", GetErrorStr());
+                "Could not bind server address. (bind: %s)",
+                GetErrorStr());
             cf_closesocket(sd);
+            sd = -1;
         }
     }
 
@@ -537,7 +550,12 @@ static int InitServer(size_t queue_size)
     return sd;
 }
 
-void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
+/**
+ *  @retval >0 Number of threads still working
+ *  @retval 0  All threads are done
+ *  @retval -1 Server didn't run
+ */
+int StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
 {
     int sd = -1;
     CfLock thislock;
@@ -576,7 +594,11 @@ void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
     if (thislock.lock == NULL)
     {
         PolicyDestroy(server_cfengine_policy);
-        return;
+        if (sd >= 0)
+        {
+            cf_closesocket(sd);
+        }
+        return -1;
     }
 
     if (sd != -1)
@@ -714,12 +736,55 @@ void StartServer(EvalContext *ctx, Policy **policy, GenericAgentConfig *config)
         }
     }
 
+    Log(LOG_LEVEL_NOTICE, "Cleaning up and exiting...");
+
     CollectCallStop();
+
     if (sd != -1)
     {
+        Log(LOG_LEVEL_VERBOSE, "Closing listening socket");
         cf_closesocket(sd);                       /* Close listening socket */
     }
 
+    /* This is a graceful exit, give 2 seconds chance to threads. */
+    int threads_left = 1;
+    for (int i = 2; i > 0; i--)
+    {
+        if (ThreadLock(cft_server_children))
+        {
+            threads_left = ACTIVE_THREADS;
+            ThreadUnlock(cft_server_children);
+        }
+
+        if (threads_left == 0)
+        {
+            break;
+        }
+
+        Log(LOG_LEVEL_VERBOSE,
+            "Waiting %ds for %d connection threads to finish",
+            i, threads_left);
+
+        sleep(1);
+    }
+
+    if (threads_left > 0)
+    {
+        Log(LOG_LEVEL_VERBOSE,
+            "There are %d connection threads left, exiting anyway",
+            threads_left);
+    }
+    else
+    {
+        assert(threads_left == 0);
+        Log(LOG_LEVEL_VERBOSE,
+            "All threads are done, cleaning up allocations");
+        ClearAuthAndACLs();
+        PolicyDestroy(server_cfengine_policy);
+        ServerTLSDeInitialize();
+    }
+
     YieldCurrentLock(thislock);
-    PolicyDestroy(server_cfengine_policy);
+
+    return threads_left;
 }

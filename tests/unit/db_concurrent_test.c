@@ -2,19 +2,21 @@
 
 #include <cf3.defs.h>
 #include <dbm_api.h>
+#include <misc_lib.h>                                          /* xsnprintf */
+
 
 char CFWORKDIR[CF_BUFSIZE];
 
 void tests_setup(void)
 {
-    snprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/db_test.XXXXXX");
+    xsnprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/db_test.XXXXXX");
     mkdtemp(CFWORKDIR);
 }
 
 void tests_teardown(void)
 {
     char cmd[CF_BUFSIZE];
-    snprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
+    xsnprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
     system(cmd);
 }
 
@@ -59,13 +61,13 @@ static void *fct2(void *arguments)
     OpenDB(&db, dbid_classes);
 
     for(int i = base*2000; i<base*2000+100; i++) {
-        sprintf(key, "foo%d", i);
-        sprintf(val, "bar%d", i);
+        xsnprintf(key, sizeof(key), "foo%d", i);
+        xsnprintf(val, sizeof(val), "bar%d", i);
         WriteDB(db, key, val, strlen(val) + 1);
     }
     for(int i = base*2000; i<base*2000+100; i++) {
-        sprintf(key, "foo%d", i);
-        sprintf(val, "bar%d", i + 1);
+        xsnprintf(key, sizeof(key), "foo%d", i);
+        xsnprintf(val, sizeof(val), "bar%d", i + 1);
 
         if ( (i % 2) == 0)
         {
@@ -75,16 +77,16 @@ static void *fct2(void *arguments)
     for(int i = base*2000; i<base*2000+100; i++) {
         if ( (i % 5) == 0)
         {
-            sprintf(key, "foo%d", i);
+            xsnprintf(key, sizeof(key), "foo%d", i);
             DeleteDB(db, key);
         }
     }
 
-    sprintf(key, "foo%d", base*2000+90);
+    xsnprintf(key, sizeof(key), "foo%d", base*2000+90);
     assert_int_equal(HasKeyDB(db, key, strlen(key)+1), false);
-    sprintf(key, "foo%d", base*2000+88);
+    xsnprintf(key, sizeof(key), "foo%d", base*2000+88);
     assert_int_equal(HasKeyDB(db, key, strlen(key)+1), true);
-    sprintf(key, "foo%d", base*2000+89);
+    xsnprintf(key, sizeof(key), "foo%d", base*2000+89);
     assert_int_equal(HasKeyDB(db, key, strlen(key)+1), true); 
 
     CloseDB(db);
@@ -126,7 +128,7 @@ int main()
 
 /* STUBS */
 
-void FatalError(char *s, ...)
+void FatalError(ARG_UNUSED char *s, ...)
 {
     fail();
     exit(42);

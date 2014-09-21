@@ -22,22 +22,30 @@
   included file COSL.txt.
 */
 
-
-#ifndef CFENGINE_SERVER_TLS_H
-#define CFENGINE_SERVER_TLS_H
+#ifndef CFENGINE_DEPRECATED_H
+#define CFENGINE_DEPRECATED_H
 
 
 #include <platform.h>
-
-#include <cf3.defs.h>                              /* EvalContext */
-#include <cfnet.h>                                 /* ConnectionInfo */
-#include <server.h>                                /* ServerConnectionState */
+#include <compiler.h>
 
 
-bool ServerTLSInitialize();
-int ServerTLSPeek(ConnectionInfo *conn_info);
-int ServerTLSSessionEstablish(ServerConnectionState *conn);
-bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn);
+/* Mark specific functions as deprecated so that we don't use them. Since the
+ * signature of the functions has to be exactly the same as in libc, we only
+ * do that for Linux, where main development happens. */
 
 
-#endif  /* CFENGINE_SERVER_TLS_H */
+#if defined(__linux__) && defined(__GLIBC__)
+
+
+int sprintf(char *str, const char *format, ...) \
+    FUNC_DEPRECATED("Better use snprintf() or xsnprintf()");
+
+int setenv(const char *name, const char *value, int overwrite) \
+    FUNC_DEPRECATED("Always use putenv() in place of non-portable setenv()!");
+
+
+#endif  /* __linux__ && __GLIBC__ */
+
+
+#endif  /* CFENGINE_DEPRECATED_H */

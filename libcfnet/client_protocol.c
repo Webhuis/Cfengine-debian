@@ -24,6 +24,8 @@
 
 #include <client_protocol.h>
 
+#include <openssl/bn.h>                                         /* BN_* */
+
 #include <communication.h>
 #include <net.h>
 
@@ -34,10 +36,10 @@
 extern char VIPADDRESS[CF_MAX_IP_LEN];
 extern char VDOMAIN[];
 extern char VFQNAME[];
-#include <unix.h>                           /* GetCurrentUsername */
-#include <lastseen.h>                          /* LastSaw */
-#include <crypto.h>                            /* PublicKeyFile */
-#include <files_hashes.h> /* HashString,HashesMatch,HashPubKey,HashPrintSafe */
+#include <unix.h>                       /* GetCurrentUsername */
+#include <lastseen.h>                   /* LastSaw */
+#include <crypto.h>                     /* PublicKeyFile */
+#include <files_hashes.h>               /* HashString,HashesMatch,HashPubKey*/
 #include <known_dirs.h>
 #include <hash.h>
 #include <connection_info.h>
@@ -197,7 +199,6 @@ int AuthenticateAgent(AgentConnection *conn, bool trust_key)
 {
     char sendbuffer[CF_EXPANDSIZE], in[CF_BUFSIZE], *out, *decrypted_cchall;
     BIGNUM *nonce_challenge, *bn = NULL;
-    unsigned long err;
     unsigned char digest[EVP_MAX_MD_SIZE];
     int encrypted_len, nonce_len = 0, len, session_size;
     bool need_to_implicitly_trust_server;
@@ -267,8 +268,9 @@ int AuthenticateAgent(AgentConnection *conn, bool trust_key)
     {
         if (RSA_public_encrypt(nonce_len, in, out, server_pubkey, RSA_PKCS1_PADDING) <= 0)
         {
-            err = ERR_get_error();
-            Log(LOG_LEVEL_ERR, "Public encryption failed. (RSA_public_encrypt: %s)", ERR_reason_error_string(err));
+            Log(LOG_LEVEL_ERR,
+                "Public encryption failed. (RSA_public_encrypt: %s)",
+            CryptoLastErrorString());
             free(out);
             RSA_free(server_pubkey);
             return false;
@@ -388,9 +390,9 @@ int AuthenticateAgent(AgentConnection *conn, bool trust_key)
 
     if (RSA_private_decrypt(encrypted_len, in, decrypted_cchall, PRIVKEY, RSA_PKCS1_PADDING) <= 0)
     {
-        err = ERR_get_error();
-        Log(LOG_LEVEL_ERR, "Private decrypt failed, abandoning. (RSA_private_decrypt: %s)",
-             ERR_reason_error_string(err));
+        Log(LOG_LEVEL_ERR,
+            "Private decrypt failed, abandoning. (RSA_private_decrypt: %s)",
+            CryptoLastErrorString());
         RSA_free(server_pubkey);
         return false;
     }
@@ -433,8 +435,9 @@ int AuthenticateAgent(AgentConnection *conn, bool trust_key)
 
         if ((newkey->n = BN_mpi2bn(in, len, NULL)) == NULL)
         {
-            err = ERR_get_error();
-            Log(LOG_LEVEL_ERR, "Private key decrypt failed. (BN_mpi2bn: %s)", ERR_reason_error_string(err));
+            Log(LOG_LEVEL_ERR,
+                "Private key decrypt failed. (BN_mpi2bn: %s)",
+                CryptoLastErrorString());
             RSA_free(newkey);
             return false;
         }
@@ -451,8 +454,9 @@ int AuthenticateAgent(AgentConnection *conn, bool trust_key)
 
         if ((newkey->e = BN_mpi2bn(in, len, NULL)) == NULL)
         {
-            err = ERR_get_error();
-            Log(LOG_LEVEL_ERR, "Public key decrypt failed. (BN_mpi2bn: %s)", ERR_reason_error_string(err));
+            Log(LOG_LEVEL_ERR,
+                "Public key decrypt failed. (BN_mpi2bn: %s)",
+                CryptoLastErrorString());
             RSA_free(newkey);
             return false;
         }
@@ -483,8 +487,9 @@ int AuthenticateAgent(AgentConnection *conn, bool trust_key)
 
     if (RSA_public_encrypt(session_size, conn->session_key, out, server_pubkey, RSA_PKCS1_PADDING) <= 0)
     {
-        err = ERR_get_error();
-        Log(LOG_LEVEL_ERR, "Public encryption failed. (RSA_public_encrypt: %s)", ERR_reason_error_string(err));
+        Log(LOG_LEVEL_ERR,
+            "Public encryption failed. (RSA_public_encrypt: %s)",
+            CryptoLastErrorString());
         free(out);
         RSA_free(server_pubkey);
         return false;

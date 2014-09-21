@@ -23,8 +23,8 @@
 */
 
 #include <test.h>
-#include <file_lib.h>
 
+#include <file_lib.h>
 #include <bool.h>
 
 #define TEMP_DIR "/tmp/file_lib_test"
@@ -1240,7 +1240,7 @@ static void test_safe_creat_doesnt_exist(void)
     return_to_test_dir();
 }
 
-static void try_gaining_root_privileges(int argc, char **argv)
+static void try_gaining_root_privileges(ARG_UNUSED int argc, char **argv)
 {
     if (system("sudo -n /bin/true") == 0)
     {

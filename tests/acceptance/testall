@@ -62,8 +62,10 @@ LOG=test.log
 SUMMARY=summary.log
 XML=test.xml
 XMLTMP=xml.tmp
+WHOAMI=/c/Windows/System32/whoami.exe
 BASE_WORKDIR="$(pwd)/workdir"
 QUIET=
+TIMED_TESTS=${TIMED_TESTS:-1}
 CRASHING_TESTS=${CRASHING_TESTS:-1}
 STAGING_TESTS=${STAGING_TESTS:-0}
 NETWORK_TESTS=${NETWORK_TESTS:-1}
@@ -74,9 +76,21 @@ BASECLASSES="AUTO"
 EXTRACLASSES="DEBUG"
 VALGRIND_OPTS="--leak-check=full --show-reachable=yes --suppressions=valgrind-suppressions"
 
+# Use TEST_INDEX for indexing a poor man's array. Basically the subscript is
+# just appended to the variable name.
+TEST_INDEX=0
+TEST_TIMED_INDEX=0
+#TESTS_TIMED_<index>=0
+#TESTS_TIMEOUT_<index>=0
+#TESTS_PASSES_<index>=0
+TESTS_COUNT=0
+TESTS_NORMAL_COUNT=0
+TESTS_TIMED_COUNT=0
+TESTS_TIMED_REMAINING=0
+
 case "$OSTYPE" in
   msys)
-    if whoami -priv | grep SeTakeOwnershipPrivilege > /dev/null; then
+    if "$WHOAMI" -priv | grep SeTakeOwnershipPrivilege > /dev/null; then
       # Don't use elevate if we already have the privileges. It is slower and
       # pops up a flashing window for every single test.
       DEFAULT_GAINROOT=
@@ -174,7 +188,8 @@ usage() {
   echo " --quiet"
   echo
   echo " --gainroot=<command> forces use of command to gain root privileges,"
-  echo "           otherwise fakeroot is used."
+  echo "           otherwise fakeroot is used.  Use --gainroot=env to make this"
+  echo "           option a no-op (e.g. you're running inside fakeroot already)"
   echo
   echo " --agent   provides a way to specify non-default cf-agent location,"
   echo "           and defaults to $DEFAGENT."
@@ -214,6 +229,8 @@ usage() {
   echo
   echo " --no-crashing disable tests that are expected to crash (for use with valgrind)."
   echo
+  echo " --no-timed disable timed tests that may introduce wait times."
+  echo
   echo " --printlog   print the full test.log output immediately.  Override with $PRINTLOG"
   echo
   echo " --gdb         Run test under GDB"
@@ -223,17 +240,25 @@ usage() {
   echo "            (by default it gets cleaned only if test passed)."
 }
 
+# Takes the following arguments:
+# 1. Agent - The agent to execute.
+# 2. Test - The test to execute.
+# 3. Pass number - [Optional] The current pass number. Used by timed tests.
+# 4. Timeout variable - [Optional] The name of the variable to put the next
+#        timeout into. Used by timed tests.
 runtest() {
   # Clear local variables
   unset AGENT TEST EXPECTED_CRASH SKIP SKIPREASON RESULT RESULT_MSG TEST_START_TIME FLATNAME WORKDIR OUTFILE
 
   AGENT="$1"
   TEST="$2"
+  PASS_NUM="$3"
+  NEXT_TIMEOUT_VAR="$4"
   if [ -z "$QUIET" ]; then
     printf "$TEST "
   fi
 
-  if echo "$TEST" | grep -F -e .x.cf > /dev/null; then
+  if echo "$TEST" | fgrep -e .x.cf > /dev/null; then
     EXPECTED_CRASH=1
   else
     EXPECTED_CRASH=
@@ -242,16 +267,16 @@ runtest() {
   if [ "x$CRASHING_TESTS" = "x0" ] && [ "x$EXPECTED_CRASH" = "x1" ]; then
     SKIP=1
     SKIPREASON="${COLOR_WARNING}Crashing tests are disabled${COLOR_NORMAL}"
-  elif [ "x$STAGING_TESTS" = "x0" ] && echo "$TEST" | grep -e '/staging/' > /dev/null; then
+  elif [ "x$STAGING_TESTS" = "x0" ] && echo "$TEST" | grep '/staging/' > /dev/null; then
     SKIP=1
     SKIPREASON="${COLOR_WARNING}Staging tests are disabled${COLOR_NORMAL}"
-  elif [ "x$UNSAFE_TESTS" != "x1" ] && echo "$TEST" | grep -e '/unsafe/' > /dev/null; then
+  elif [ "x$UNSAFE_TESTS" != "x1" ] && echo "$TEST" | grep '/unsafe/' > /dev/null; then
     SKIP=1
     SKIPREASON="${COLOR_WARNING}Unsafe tests are disabled${COLOR_NORMAL}"
-  elif [ "x$NETWORK_TESTS" = "x0" ] && echo "$TEST" | grep -e '/network/' > /dev/null; then
+  elif [ "x$NETWORK_TESTS" = "x0" ] && echo "$TEST" | grep '/network/' > /dev/null; then
     SKIP=1
     SKIPREASON="${COLOR_WARNING}Network-dependent tests are disabled${COLOR_NORMAL}"
-  elif [ "x$LIBXML2_TESTS" = "x0" ] && echo "$TEST" | grep -e '/11_xml_edits/' > /dev/null; then
+  elif [ "x$LIBXML2_TESTS" = "x0" ] && echo "$TEST" | grep '/11_xml_edits/' > /dev/null; then
     SKIP=1
     SKIPREASON="XML file editing tests are disabled"
   else
@@ -264,29 +289,32 @@ runtest() {
     echo ----------------------------------------------------------------------
   ) >> "$LOG"
 
+  TEST_START_TIME=$(unix_seconds)
+
   if [ -n "$SKIP" ]; then
-    echo "              time=\"NULL\">" >> "$XMLTMP"
+    TEST_END_TIME=$TEST_START_TIME
     RESULT=Skip
     RESULT_MSG="${COLOR_WARNING}Skipped ($SKIPREASON)${COLOR_NORMAL}"
   else
-    TEST_START_TIME=$(unix_seconds)
-
     FLATNAME="$(echo "$TEST" | sed 's,[./],_,g')"
 
     # Prepare workdir
     WORKDIR="$BASE_WORKDIR/$FLATNAME"
     OUTFILE=$WORKDIR/test.log
-    $GAINROOT rm -rf "$WORKDIR"
-    mkdir -p "$WORKDIR/bin" "$WORKDIR/tmp"
-    chmod ugo+rwxt "$WORKDIR/tmp"
-    if [ -n "$BINDIR" ]; then
-      # Copy everything, because Windows depends on DLLs.
-      $LN_CMD "$BINDIR"/* "$WORKDIR/bin"
-    else
-      $LN_CMD "$AGENT" "$WORKDIR/bin"
-      $LN_CMD "$CF_PROMISES" "$WORKDIR/bin"
-      $LN_CMD "$CF_SERVERD" "$WORKDIR/bin"
-      $LN_CMD "$CF_KEY" "$WORKDIR/bin"
+    if [ -z "$PASS_NUM" ] || [ "$PASS_NUM" -eq 1 ]; then
+      # Don't reset workdir if this is a subsequent pass.
+      $GAINROOT rm -rf "$WORKDIR"
+      mkdir -p "$WORKDIR/bin" "$WORKDIR/tmp"
+      chmod ugo+rwxt "$WORKDIR/tmp"
+      if [ -n "$BINDIR" ]; then
+        # Copy everything, because Windows depends on DLLs.
+        $LN_CMD "$BINDIR"/* "$WORKDIR/bin"
+      else
+        $LN_CMD "$AGENT" "$WORKDIR/bin"
+        $LN_CMD "$CF_PROMISES" "$WORKDIR/bin"
+        $LN_CMD "$CF_SERVERD" "$WORKDIR/bin"
+        $LN_CMD "$CF_KEY" "$WORKDIR/bin"
+      fi
     fi
     if uname | grep MINGW > /dev/null; then
         PLATFORM_WORKDIR="$(echo $WORKDIR | sed -e 's%^/\([a-cA-Z]\)/%\1:/%' | sed -e 's%/%\\%g')"
@@ -311,24 +339,13 @@ export CFENGINE_TEST_OVERRIDE_WORKDIR TEMP CFENGINE_TEST_OVERRIDE_EXTENSION_LIBR
       printf "gdb --args " >> "$WORKDIR/runtest"
     fi
 
-    if [ "$OSTYPE" = "msys" ]; then
-      # On Windows we need to redirect from within runtest, because processes
-      # spawned with GAINROOT do not inherit the console.
-      INNER_REDIRECT=">$OUTFILE 2>&1"
-      OUTER_REDIRECT=
-    else
-      # On Unix we need to redirect outside of runtest, to avoid the file being
-      # owned by the wrong user in case GAINROOT is sudo.
-      INNER_REDIRECT=
-      OUTER_REDIRECT=">$OUTFILE 2>&1"
-    fi
     if [ -n "$USE_VALGRIND" ] && [ x"$EXPECTED_CRASH" = "x" ]; then
       if grep libtool < "$AGENT" > /dev/null; then
         printf "\"$LIBTOOL\" --mode=execute " >> "$WORKDIR/runtest"
       fi
-      printf "valgrind ${VALGRIND_OPTS} \"$AGENT\" $VERBOSE -Kf \"$TEST\" -D ${BASECLASSES},${EXTRACLASSES} 2>&1\n" >> "$WORKDIR/runtest"
+      printf "valgrind ${VALGRIND_OPTS} \"$AGENT\" $VERBOSE -Kf \"$TEST\" -D ${PASS_NUM:+test_pass_$PASS_NUM,}${BASECLASSES},${EXTRACLASSES} 2>&1\n" >> "$WORKDIR/runtest"
     else
-      printf "\"$AGENT\" $VERBOSE -Kf \"$TEST\" -D ${BASECLASSES},${EXTRACLASSES} $INNER_REDIRECT\n" >> "$WORKDIR/runtest"
+      printf "\"$AGENT\" $VERBOSE -Kf \"$TEST\" -D ${PASS_NUM:+test_pass_$PASS_NUM,}${BASECLASSES},${EXTRACLASSES}\n" >> "$WORKDIR/runtest"
     fi
 
     chmod +x "$WORKDIR/runtest"
@@ -336,7 +353,7 @@ export CFENGINE_TEST_OVERRIDE_WORKDIR TEMP CFENGINE_TEST_OVERRIDE_EXTENSION_LIBR
     if [ "$GDB" = 1 ]; then
       $GAINROOT "$WORKDIR/runtest"
     else
-      eval $GAINROOT "$WORKDIR/runtest" $OUTER_REDIRECT
+      eval $GAINROOT "$WORKDIR/runtest" >$OUTFILE 2>&1
     fi
     RETVAL=$?
     cat $OUTFILE >> "$LOG"
@@ -344,7 +361,10 @@ export CFENGINE_TEST_OVERRIDE_WORKDIR TEMP CFENGINE_TEST_OVERRIDE_EXTENSION_LIBR
     echo "Return code is $RETVAL." >> "$LOG"
 
     TEST_END_TIME=$(unix_seconds)
-    echo "              time=\"$(($TEST_END_TIME - $TEST_START_TIME)) seconds\">" >> "$XMLTMP"
+
+    if [ -n "$NEXT_TIMEOUT_VAR" ]; then
+      eval $NEXT_TIMEOUT_VAR=
+    fi
 
     RESULT_MSG=
     if [ -z "$EXPECTED_CRASH" ] && [ $RETVAL -ne 0 ]; then
@@ -372,6 +392,16 @@ export CFENGINE_TEST_OVERRIDE_WORKDIR TEMP CFENGINE_TEST_OVERRIDE_EXTENSION_LIBR
       elif egrep -e "R: .*$ESCAPED_TEST FAIL/no_redmine_number" $OUTFILE > /dev/null; then
         RESULT=FAIL
         RESULT_MSG="${COLOR_FAILURE}FAIL (Tried to suppress failure, but no Redmine issue number is provided)${COLOR_NORMAL}"
+      elif egrep -e "R: .*$ESCAPED_TEST Wait/[0-9]+" $OUTFILE > /dev/null; then
+        if [ -z "$NEXT_TIMEOUT_VAR" ]; then
+          RESULT=FAIL
+          RESULT_MSG="${COLOR_FAILURE}FAIL (Test tried to wait but is not in \"timed\" directory)${COLOR_NORMAL}"
+        else
+          WAIT_TIME=$(egrep -e "R: .*$ESCAPED_TEST Wait/[0-9]+" $OUTFILE | sed -e 's,.*Wait/\([0-9][0-9]*\).*,\1,')
+          eval $NEXT_TIMEOUT_VAR=$(($TEST_END_TIME+$WAIT_TIME))
+          RESULT=Wait
+          RESULT_MSG="Awaiting ($WAIT_TIME seconds)..."
+        fi
       elif egrep -e "R: .*$ESCAPED_TEST Pass" $OUTFILE > /dev/null; then
         RESULT=Pass
         RESULT_MSG="${COLOR_SUCCESS}Pass${COLOR_NORMAL}"
@@ -405,6 +435,17 @@ export CFENGINE_TEST_OVERRIDE_WORKDIR TEMP CFENGINE_TEST_OVERRIDE_EXTENSION_LIBR
   fi
 
 
+  if [ "$RESULT" = "XFAIL" ]; then
+    echo "    <testcase name=\"$(basename $TEST)\"" >> "$XMLTMP"
+    echo "              classname=\"$TEST $RESULT_MSG\"" >> "$XMLTMP"
+    echo "              time=\"$(($TEST_END_TIME - $TEST_START_TIME)) seconds\">" >> "$XMLTMP"
+  elif [ "$RESULT" != Wait ]; then
+    echo "    <testcase name=\"$(basename $TEST)\"" >> "$XMLTMP"
+    echo "              classname=\"$TEST\"" >> "$XMLTMP"
+    echo "              time=\"$(($TEST_END_TIME - $TEST_START_TIME)) seconds\">" >> "$XMLTMP"
+  fi
+  
+
   case "$RESULT" in
     Pass)
       echo $RESULT $TEST >> "$SUMMARY"
@@ -436,7 +477,11 @@ export CFENGINE_TEST_OVERRIDE_WORKDIR TEMP CFENGINE_TEST_OVERRIDE_EXTENSION_LIBR
       ;;
   esac
 
-  if [ "$RESULT" != "FAIL" -a "$NO_CLEAN" = "0" ]; then
+  if [ "$RESULT" != Wait ]; then
+    echo "    </testcase>" >> "$XMLTMP"
+  fi
+
+  if [ "$RESULT" != "FAIL" -a "$RESULT" != "Wait" -a "$NO_CLEAN" = "0" ]; then
     $GAINROOT rm -rf "$WORKDIR"
   fi
 
@@ -463,6 +508,7 @@ export CFENGINE_TEST_OVERRIDE_WORKDIR TEMP CFENGINE_TEST_OVERRIDE_EXTENSION_LIBR
   ) >> "$LOG"
 }
 
+ORIG_ARGS=
 while true; do
   case "$1" in
     -h|--help)
@@ -487,6 +533,8 @@ while true; do
       LIBXML2_TESTS=0;;
     --no-crashing)
       CRASHING_TESTS=0;;
+    --no-timed)
+      TIMED_TESTS=0;;
     --agent=*)
       AGENT=${1#--agent=};;
     --baseclasses=*)
@@ -519,8 +567,27 @@ while true; do
     *)
       break;;
   esac
+  # Make sure spaces are preserved by escaping them.
+  ORIG_ARGS="$ORIG_ARGS $(echo "$1" | sed -e 's/ /\\ /g')"
   shift
 done
+
+if [ "$OSTYPE" = "msys" ] && [ "$TESTALL_DO_NOT_RECURSE" != 1 ] &&
+    ! "$WHOAMI" -priv | grep SeTakeOwnershipPrivilege > /dev/null; then
+  # On Windows we run the entire test run under GAINROOT, because doing it for
+  # each test is horribly slow.
+  echo "export GAINROOT=" > runtests.sh
+  echo "export TESTALL_DO_NOT_RECURSE=1" >> runtests.sh
+  echo "export VERBOSE='$VERBOSE'" >> runtests.sh
+  echo "$0 $ORIG_ARGS $@ &" >> runtests.sh
+  # Note quote change. We want to keep below variables unexpanded.
+  echo 'trap "kill $!" INT' >> runtests.sh
+  echo 'trap "kill $!" TERM' >> runtests.sh
+  # Traps do not fire during commands, but *do* fire during wait.
+  echo 'wait $!' >> runtests.sh
+  $GAINROOT "./runtests.sh"
+  exit $?
+fi
 
 if [ -n "$AGENT" -o -n "$CF_PROMISES" -o -n "$CF_SERVERD" -o -n "$CF_KEY" ]; then
   if [ -n "$BINDIR" ]; then
@@ -582,17 +649,31 @@ if [ $# -gt 0 ]; then
     fi
 
     if [ -f $test ]; then
-      TESTS="$TESTS${TESTS:+ }$test"
+      ADDTESTS="$ADDTESTS${ADDTESTS:+ }$test"
     elif [ -d $test ]; then
-      ADDTESTS=$(find "$test" -name '*.cf' | sort)
-      TESTS="$TESTS${TESTS:+ }$ADDTESTS"
+      ADDTESTS="$ADDTESTS${ADDTESTS:+ }$(find "$test" -name '*.cf' | sort)"
     else
       echo "Unable to open test file/directory: $test"
     fi
   done
 else
-  TESTS=$(find . -name '*.cf' | sort)
+  ADDTESTS="$ADDTESTS${ADDTESTS:+ }$(find . -name '*.cf' | sort)"
 fi
+
+for addtest in $ADDTESTS; do
+  if echo "$addtest" | fgrep "/timed/" > /dev/null; then
+    if [ "$TIMED_TESTS" = 1 ]; then
+      eval TESTS_TIMED_$TEST_TIMED_INDEX="$addtest"
+      eval TESTS_TIMEOUT_$TEST_TIMED_INDEX=0
+      eval TESTS_PASSES_$TEST_TIMED_INDEX=0
+      TEST_TIMED_INDEX=$(($TEST_TIMED_INDEX+1))
+    fi
+  else
+    eval TESTS_$TEST_INDEX="$addtest"
+    TEST_INDEX=$(($TEST_INDEX+1))
+  fi
+
+done
 
 #
 # fd 7 is a /dev/null for quiet execution and stdout for default one
@@ -607,7 +688,10 @@ fi
 # Now run the tests
 #
 
-TESTS_COUNT=$(echo $TESTS | wc -w)
+TESTS_NORMAL_COUNT=$TEST_INDEX
+TESTS_TIMED_COUNT=$TEST_TIMED_INDEX
+TESTS_COUNT=$(($TESTS_NORMAL_COUNT + $TESTS_TIMED_COUNT))
+TESTS_TIMED_REMAINING=$TEST_TIMED_INDEX
 START_TIME=$(unix_seconds)
 
 ( echo ======================================================================
@@ -653,11 +737,38 @@ START_TIME=$(unix_seconds)
 
   echo -n "" > "$XMLTMP"
 
-for test in $TESTS; do
-  echo "    <testcase name=\"$(basename $test)\"" >> "$XMLTMP"
-  echo "              classname=\"$test\"" >> "$XMLTMP"
-  runtest "$AGENT" "$test"
-  echo "    </testcase>" >> "$XMLTMP"
+check_and_run_timed_tests() {
+  TEST_TIMED_INDEX=0
+  time=$(unix_seconds)
+  # Run timed tests if any deadlines have expired.
+  while [ $TEST_TIMED_INDEX -lt $TESTS_TIMED_COUNT ]; do
+    eval test=\$TESTS_TIMED_$TEST_TIMED_INDEX
+    eval timeout=\$TESTS_TIMEOUT_$TEST_TIMED_INDEX
+    if [ -n "$timeout" ] && [ "$time" -ge "$timeout" ]; then
+      eval TESTS_PASSES_$TEST_TIMED_INDEX="\$((\$TESTS_PASSES_$TEST_TIMED_INDEX+1))"
+      eval pass=\$TESTS_PASSES_$TEST_TIMED_INDEX
+      runtest "$AGENT" "$test" "$pass" "TESTS_TIMEOUT_$TEST_TIMED_INDEX"
+      eval timeout=\$TESTS_TIMEOUT_$TEST_TIMED_INDEX
+      if [ -z "$timeout" ]; then
+        TESTS_TIMED_REMAINING=$(($TESTS_TIMED_REMAINING - 1))
+      fi
+    fi
+    TEST_TIMED_INDEX=$(($TEST_TIMED_INDEX+1))
+  done
+}
+
+TEST_INDEX=0
+while [ $TEST_INDEX -lt $TESTS_NORMAL_COUNT -o $TESTS_TIMED_REMAINING -gt 0 ]; do
+  check_and_run_timed_tests
+
+  # Run normal test.
+  if [ $TEST_INDEX -lt $TESTS_NORMAL_COUNT ]; then
+    eval test=\$TESTS_$TEST_INDEX
+    runtest "$AGENT" "$test"
+    TEST_INDEX=$(($TEST_INDEX+1))
+  elif [ $TESTS_TIMED_REMAINING -gt 0 ]; then
+    sleep 1
+  fi
 done
 
 END_TIME=$(unix_seconds)

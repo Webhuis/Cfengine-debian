@@ -264,14 +264,14 @@ static void ShowContext(EvalContext *ctx)
 
 static Policy *LoadPolicyFile(EvalContext *ctx, GenericAgentConfig *config, const char *policy_file, StringSet *parsed_files_and_checksums, StringSet *failed_files)
 {
-    Policy *policy = NULL;
     unsigned char digest[EVP_MAX_MD_SIZE + 1] = { 0 };
-    char hashbuffer[EVP_MAX_MD_SIZE * 4] = { 0 };
+    char hashbuffer[CF_HOSTKEY_STRING_SIZE] = { 0 };
     char hashprintbuffer[CF_BUFSIZE] = { 0 };
 
     HashFile(policy_file, digest, CF_DEFAULT_DIGEST);
     snprintf(hashprintbuffer, CF_BUFSIZE - 1, "{checksum}%s",
-             HashPrintSafe(CF_DEFAULT_DIGEST, true, digest, hashbuffer));
+             HashPrintSafe(hashbuffer, sizeof(hashbuffer), digest,
+                           CF_DEFAULT_DIGEST, true));
 
     Log(LOG_LEVEL_DEBUG, "Hashed policy file %s to %s", policy_file, hashprintbuffer);
 
@@ -290,7 +290,7 @@ static Policy *LoadPolicyFile(EvalContext *ctx, GenericAgentConfig *config, cons
         Log(LOG_LEVEL_DEBUG, "Loading policy file %s", policy_file);
     }
 
-    policy = Cf3ParseFile(config, policy_file);
+    Policy *policy = Cf3ParseFile(config, policy_file);
     // we keep the checksum and the policy file name to help debugging
     StringSetAdd(parsed_files_and_checksums, xstrdup(policy_file));
     StringSetAdd(parsed_files_and_checksums, xstrdup(hashprintbuffer));
@@ -309,6 +309,7 @@ static Policy *LoadPolicyFile(EvalContext *ctx, GenericAgentConfig *config, cons
             SeqDestroy(errors);
 
             StringSetAdd(failed_files, xstrdup(policy_file));
+            PolicyDestroy(policy);
             return NULL;
         }
 

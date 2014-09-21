@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <stdlib.h>
 #include <net/if.h>
+#include <unistd.h>
 #include <solaris_ifaddrs.h>
 
 
@@ -131,8 +132,8 @@ retry:
     for (n = 0; n < numifs; n++, lifrp++) {
 
         /* Prepare for the ioctl call */
-        (void) strncpy(lifrl.lifr_name, lifrp->lifr_name,
-            sizeof (lifrl.lifr_name));
+        (void) strlcpy(lifrl.lifr_name, lifrp->lifr_name,
+                       sizeof(lifrl.lifr_name));
         lifr_af = lifrp->lifr_addr.ss_family;
         if (af != AF_UNSPEC && lifr_af != af)
             continue;

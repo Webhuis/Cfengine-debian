@@ -25,19 +25,19 @@
 #ifndef CFENGINE_CF3_DEFS_H
 #define CFENGINE_CF3_DEFS_H
 
+
+/* ALWAYS INCLUDE EITHER THIS FILE OR platform.h FIRST */
+
+
 #include <platform.h>
+
 #include <compiler.h>
-
-#ifdef HAVE_LIBXML2
-#include <libxml/parser.h>
-#include <libxml/xpathInternals.h>
-#endif
-
-#include <hash.h> /* Required for HashMethod */
+#include <hash_method.h>                                      /* HashMethod */
 #include <sequence.h>
 #include <logging.h>
 
 #include <cfnet.h>                       /* ProtocolVersion, CF_BUFSIZE etc */
+#include <misc_lib.h>                    /* xsnprintf, ProgrammingError etc */
 
 
 /*******************************************************************/
@@ -86,19 +86,10 @@
 #define SHIFTS_PER_DAY 4
 #define SHIFTS_PER_WEEK (4*7)
 
-#define CF_INDEX_FIELD_LEN 7
-#define CF_INDEX_OFFSET  CF_INDEX_FIELD_LEN+1
-
 #define MAX_MONTH_NAME 9
 
 #define MAX_DIGEST_BYTES (512 / 8)  /* SHA-512 */
 #define MAX_DIGEST_HEX (MAX_DIGEST_BYTES * 2)
-
-#define CF_EDIT_IFELAPSED 3     /* NOTE: If doing copy template then edit working copy,
-                                   the edit ifelapsed must not be higher than
-                                   the copy ifelapsed. This will make the working
-                                   copy equal to the copied template file - not the
-                                   copied + edited file. */
 
 
 /*******************************************************************/
@@ -257,13 +248,9 @@ typedef struct
 #ifdef __MINGW32__
 # define NULLFILE "nul"
 # define EXEC_SUFFIX ".exe"
-# define FILE_SEPARATOR '\\'
-# define FILE_SEPARATOR_STR "\\"
 #else
 # define NULLFILE "/dev/null"
 # define EXEC_SUFFIX ""
-# define FILE_SEPARATOR '/'
-# define FILE_SEPARATOR_STR "/"
 #endif /* !__MINGW32__ */
 
 #define CF_WORDSIZE 8           /* Number of bytes in a word */
@@ -287,32 +274,6 @@ typedef enum
     CONTEXT_STATE_POLICY_RESET,                    /* Policy when trying to add already defined persistent states */
     CONTEXT_STATE_POLICY_PRESERVE
 } PersistentClassPolicy;
-
-/*******************************************************************/
-
-typedef enum
-{
-    PLATFORM_CONTEXT_UNKNOWN,
-    PLATFORM_CONTEXT_OPENVZ,
-    PLATFORM_CONTEXT_HP,
-    PLATFORM_CONTEXT_AIX,
-    PLATFORM_CONTEXT_LINUX,
-    PLATFORM_CONTEXT_SOLARIS,
-    PLATFORM_CONTEXT_FREEBSD,
-    PLATFORM_CONTEXT_NETBSD,
-    PLATFORM_CONTEXT_CRAYOS,
-    PLATFORM_CONTEXT_WINDOWS_NT,
-    PLATFORM_CONTEXT_SYSTEMV,
-    PLATFORM_CONTEXT_OPENBSD,
-    PLATFORM_CONTEXT_CFSCO,
-    PLATFORM_CONTEXT_DARWIN,
-    PLATFORM_CONTEXT_QNX,
-    PLATFORM_CONTEXT_DRAGONFLY,
-    PLATFORM_CONTEXT_MINGW,
-    PLATFORM_CONTEXT_VMWARE,
-    PLATFORM_CONTEXT_ANDROID,
-    PLATFORM_CONTEXT_MAX
-} PlatformContext;
 
 /*******************************************************************/
 
@@ -340,21 +301,6 @@ struct GidList_
     char *gidname;              /* when gid is -2 */
     GidList *next;
 };
-
-/*******************************************************************/
-/* File path manipulation primitives                               */
-/*******************************************************************/
-
-/* Defined maximum length of a filename. */
-
-/* File node separator (cygwin can use \ or / but prefer \ for communicating
- * with native windows commands). */
-
-#ifdef _WIN32
-# define IsFileSep(c) ((c) == '\\' || (c) == '/')
-#else
-# define IsFileSep(c) ((c) == '/')
-#endif
 
 /*************************************************************************/
 /* Fundamental (meta) types                                              */
@@ -802,16 +748,6 @@ typedef enum
 
 typedef enum
 {
-    FILE_STATE_NEW,
-    FILE_STATE_REMOVED,
-    FILE_STATE_CONTENT_CHANGED,
-    FILE_STATE_STATS_CHANGED
-} FileState;
-
-/************************************************************************************/
-
-typedef enum
-{
     ACL_METHOD_APPEND,
     ACL_METHOD_OVERWRITE,
     ACL_METHOD_NONE
@@ -875,16 +811,6 @@ typedef enum
 #define OVECCOUNT 30
 
 /*******************************************************************/
-
-typedef struct
-{
-    char *name;
-    RSA *key;
-    char *address;
-    time_t timestamp;
-} KeyBinding;
-
-/*************************************************************************/
 
 typedef struct
 {

@@ -29,6 +29,8 @@
 
 #include <cfnet.h>
 
+#include <openssl/ssl.h>
+
 #include <logging.h>                                            /* LogLevel */
 
 
@@ -44,5 +46,6 @@ int TLSSend(SSL *ssl, const char *buffer, int length);
 int TLSRecv(SSL *ssl, char *buffer, int length);
 int TLSRecvLines(SSL *ssl, char *buf, size_t buf_size);
 void TLSSetDefaultOptions(SSL_CTX *ssl_ctx);
+const char *TLSErrorString(intmax_t errcode);
 
 #endif

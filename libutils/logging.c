@@ -43,8 +43,6 @@ typedef struct
 
 static LogLevel global_level = LOG_LEVEL_NOTICE; /* GLOBAL_X */
 
-static void LogToSystemLog(const char *msg, LogLevel level);
-
 static pthread_once_t log_context_init_once = PTHREAD_ONCE_INIT; /* GLOBAL_T */
 static pthread_key_t log_context_key; /* GLOBAL_T, initialized by pthread_key_create */
 
@@ -209,7 +207,7 @@ static int LogLevelToSyslogPriority(LogLevel level)
 
 }
 
-static void LogToSystemLog(const char *msg, LogLevel level)
+void LogToSystemLog(const char *msg, LogLevel level)
 {
     syslog(LogLevelToSyslogPriority(level), "%s", msg);
 }
@@ -261,8 +259,8 @@ void VLog(LogLevel level, const char *fmt, va_list ap)
 void LogRaw(LogLevel level, const char *prefix, const void *buf, size_t buflen)
 {
     /* Translate non printable characters to printable ones. */
-    const char *src = (const char *) buf;
-    char dst[buflen+1];
+    const unsigned char *src = (const unsigned char *) buf;
+    unsigned char dst[buflen+1];
     size_t i;
 
     for (i = 0; i < buflen; i++)

@@ -1,19 +1,30 @@
 if !BUILTIN_EXTENSIONS
  projlib_LTLIBRARIES = libpromises.la
- libpromises_la_LDFLAGS = -version-info 3:6:0 -no-undefined
+ AM_LDFLAGS = -version-info 3:6:0 -no-undefined
 else
  noinst_LTLIBRARIES = libpromises.la
+ AM_LDFLAGS =
 endif
+
+AM_LDFLAGS += $(LMDB_LDFLAGS) $(TOKYOCABINET_LDFLAGS) $(QDBM_LDFLAGS) \
+	$(PCRE_LDFLAGS) $(OPENSSL_LDFLAGS) $(SQLITE3_LDFLAGS) $(LIBACL_LDFLAGS)
 
 EXTRA_DIST = extensions_template.c extensions_template.h enterprise_extension.sed math.pc
 
-AM_CPPFLAGS = @CPPFLAGS@ -I$(srcdir)/../libutils -I $(srcdir)/../libcfnet \
-	-I$(srcdir)/../libenv $(ENTERPRISE_CPPFLAGS)
+AM_CPPFLAGS = \
+	-I$(srcdir)/../libutils -I$(srcdir)/../libcfnet \
+	-I$(srcdir)/../libenv $(ENTERPRISE_CPPFLAGS) \
+	$(LMDB_CPPFLAGS) $(TOKYOCABINET_CPPFLAGS) $(QDBM_CPPFLAGS) \
+	$(PCRE_CPPFLAGS) $(OPENSSL_CPPFLAGS) $(SQLITE3_CPPFLAGS) $(LIBACL_CPPFLAGS)
 
-AM_CFLAGS = @CFLAGS@ \
-	$(ENTERPRISE_CFLAGS)
+AM_CFLAGS = $(ENTERPRISE_CFLAGS) \
+	$(LMDB_CFLAGS) $(TOKYOCABINET_CFLAGS) $(QDBM_CFLAGS) \
+	$(PCRE_CFLAGS) $(OPENSSL_CFLAGS) $(SQLITE3_CFLAGS) $(LIBACL_CFLAGS)
 
 AM_YFLAGS = -d
+
+LIBS = $(LMDB_LIBS) $(TOKYOCABINET_LIBS) $(QDBM_LIBS) \
+	$(PCRE_LIBS) $(OPENSSL_LIBS) $(SQLITE3_LIBS) $(LIBACL_LIBS)
 
 libpromises_la_LIBADD = ../libutils/libutils.la ../libcfnet/libcfnet.la \
 	../libenv/libenv.la $(ENTERPRISE_LDADD)
@@ -33,7 +44,6 @@ libpromises_la_SOURCES = \
         cf3globals.c \
         chflags.c chflags.h \
         class.c class.h \
-        classes.c \
         constants.c \
         conversion.c conversion.h \
         crypto.c crypto.h \
@@ -44,7 +54,6 @@ libpromises_la_SOURCES = \
         dbm_lmdb.c \
         dbm_quick.c \
         dbm_tokyocab.c \
-        dir.h dir_priv.h \
         enterprise_extension.c enterprise_extension.h \
         enterprise_stubs.c \
         eval_context.c eval_context.h \
@@ -108,6 +117,7 @@ libpromises_la_SOURCES = \
         string_expressions.c string_expressions.h \
         syntax.c syntax.h \
         syslog_client.c syslog_client.h \
+        systype.c systype.h \
         timeout.c timeout.h \
         unix.c unix.h \
         var_expressions.c var_expressions.h \
@@ -152,15 +162,6 @@ endif
 
 endif # !NT
 
-if !NT
-libpromises_la_SOURCES += \
-        unix_dir.c
-endif
-if CYGWIN
-libpromises_la_SOURCES += \
-        unix_dir.c
-endif
-
 BUILT_SOURCES = cf3lex.c cf3parse.h cf3parse.c \
 	enterprise_extension.c \
 	enterprise_extension.h
@@ -179,17 +180,6 @@ CLEANFILES = *.gcno *.gcda $(BUILT_SOURCES)
 # Some basic clean ups
 #
 MOSTLYCLEANFILES = *~ *.orig *.rej
-
-# libutils dependency
-
-# Automake need to be guided due to symlinking
-libpromises_la_DEPENDENCIES = ../libutils/libutils.la ../libcfnet/libcfnet.la \
-	../libenv/libenv.la $(ENTERPRISE_LDADD)
-
-.PRECIOUS: ../libutils/libutils.la
-
-../libutils/libutils.la:
-	$(MAKE) -C ../libutils $(AM_MAKEFLAGS) libutils.la
 
 bootstrap.inc:
 	perl ./text2cstring.pl failsafe.cf > bootstrap.inc

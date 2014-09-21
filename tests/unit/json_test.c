@@ -2,8 +2,10 @@
 
 #include <json.h>
 #include <files_lib.h>
+#include <misc_lib.h>                                          /* xsnprintf */
 
 #include <float.h>
+
 
 static const char *OBJECT_ARRAY = "{\n" "  \"first\": [\n" "    \"one\",\n" "    \"two\"\n" "  ]\n" "}";
 
@@ -28,8 +30,8 @@ static const char *ARRAY_OBJECT = "[\n" "  {\n" "    \"first\": \"one\"\n" "  }\
 
 static JsonElement *LoadTestFile(const char *filename)
 {
-    char path[1024];
-    sprintf(path, "%s/%s", TESTDATADIR, filename);
+    char path[PATH_MAX];
+    xsnprintf(path, sizeof(path), "%s/%s", TESTDATADIR, filename);
 
     Writer *w = FileRead(path, SIZE_MAX, NULL);
     if (!w)

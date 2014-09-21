@@ -24,6 +24,10 @@
 
 #include <crypto.h>
 
+#include <openssl/err.h>                                        /* ERR_* */
+#include <openssl/rand.h>                                       /* RAND_* */
+#include <openssl/bn.h>                                         /* BN_* */
+
 #include <cf3.defs.h>
 #include <lastseen.h>
 #include <files_interfaces.h>
@@ -34,6 +38,7 @@
 #include <known_dirs.h>
 #include <bootstrap.h>
 #include <misc_lib.h>                   /* UnexpectedError,ProgrammingError */
+#include <file_lib.h>
 
 #ifdef DARWIN
 // On Mac OSX 10.7 and later, majority of functions in /usr/include/openssl/crypto.h
@@ -55,6 +60,13 @@ LogLevel CryptoGetMissingKeyLogLevel();
  * lastseen db. */
 
 static bool crypto_initialized = false; /* GLOBAL_X */
+
+
+const char *CryptoLastErrorString()
+{
+    const char *errmsg = ERR_reason_error_string(ERR_get_error());
+    return (errmsg != NULL) ? errmsg : "no error message";
+}
 
 void CryptoInitialize()
 {
@@ -81,6 +93,8 @@ void CryptoDeInitialize()
     {
         EVP_cleanup();
         CleanupOpenSSLThreadLocks();
+        // TODO: Is there an ERR_unload_crypto_strings() ?
+        // TODO: Are there OpenSSL_clear_all_{digests,algorithms} ?
         crypto_initialized = false;
     }
 }
@@ -89,25 +103,38 @@ static void RandomSeed(void)
 {
     char vbuff[CF_BUFSIZE];
 
-/* Use the system database as the entropy source for random numbers */
-    Log(LOG_LEVEL_DEBUG, "RandomSeed() work directory is '%s'", CFWORKDIR);
-
+    /* randseed file is written by cf-key. */
     snprintf(vbuff, CF_BUFSIZE, "%s%crandseed", CFWORKDIR, FILE_SEPARATOR);
-
     Log(LOG_LEVEL_VERBOSE, "Looking for a source of entropy in '%s'", vbuff);
 
     if (!RAND_load_file(vbuff, -1))
     {
-        Log(LOG_LEVEL_VERBOSE, "Could not read sufficient randomness from '%s'", vbuff);
+        Log(LOG_LEVEL_VERBOSE,
+            "Could not read sufficient randomness from '%s'", vbuff);
     }
 
-    /* Submit some random data to random pool */
-    RAND_seed(&CFSTARTTIME, sizeof(time_t));
-    RAND_seed(VFQNAME, strlen(VFQNAME));
-    time_t now = time(NULL);
-    RAND_seed(&now, sizeof(time_t));
-    char uninitbuffer[100];
-    RAND_seed(uninitbuffer, sizeof(uninitbuffer));
+#ifndef __MINGW32__                                     /* windows may hang */
+    RAND_poll();
+#else
+    RAND_screen();
+#endif
+
+    /* We should have had enough entropy by now. */
+    if (RAND_status() != 1)
+    {
+        Log(LOG_LEVEL_VERBOSE,
+            "PRNG hasn't been seeded enough! Using some system data for seed");
+        RAND_seed(&CFSTARTTIME, sizeof(time_t));
+        RAND_seed(VFQNAME, strlen(VFQNAME));
+        time_t now = time(NULL);
+        RAND_seed(&now, sizeof(time_t));
+
+        if (RAND_status() != 1)
+        {
+            UnexpectedError("Low entropy! "
+                            "Please report which platform you are using.");
+        }
+    }
 }
 
 static const char *const priv_passphrase = "Cfengine passphrase";
@@ -132,10 +159,9 @@ bool LoadSecretKeys(void)
         if ((PRIVKEY = PEM_read_RSAPrivateKey(fp, (RSA **) NULL, NULL,
                                               (void *)priv_passphrase)) == NULL)
         {
-            unsigned long err = ERR_get_error();
             Log(LOG_LEVEL_ERR,
                 "Error reading private key. (PEM_read_RSAPrivateKey: %s)",
-                ERR_reason_error_string(err));
+                CryptoLastErrorString());
             PRIVKEY = NULL;
             fclose(fp);
             return false;
@@ -161,10 +187,9 @@ bool LoadSecretKeys(void)
         PUBKEY = PEM_read_RSAPublicKey(fp, NULL, NULL, (void *)priv_passphrase);
         if (NULL == PUBKEY)
         {
-            unsigned long err = ERR_get_error();
             Log(LOG_LEVEL_ERR,
                 "Error reading public key at '%s'. (PEM_read_RSAPublicKey: %s)",
-                pubkeyfile, ERR_reason_error_string(err));
+                pubkeyfile, CryptoLastErrorString());
             fclose(fp);
             free(pubkeyfile);
             return false;
@@ -194,13 +219,13 @@ void PolicyHubUpdateKeys(const char *policy_server)
 
         char dst_public_key_filename[CF_BUFSIZE] = "";
         {
-            char buffer[EVP_MAX_MD_SIZE * 4];
+            char buffer[CF_HOSTKEY_STRING_SIZE];
             HashPubKey(PUBKEY, digest, CF_DEFAULT_DIGEST);
-            snprintf(dst_public_key_filename, CF_MAXVARSIZE,
+            snprintf(dst_public_key_filename, sizeof(dst_public_key_filename),
                      "%s/ppkeys/%s-%s.pub",
-                     CFWORKDIR,
-                     "root",
-                     HashPrintSafe(CF_DEFAULT_DIGEST, true, digest, buffer));
+                     CFWORKDIR, "root",
+                     HashPrintSafe(buffer, sizeof(buffer), digest,
+                                   CF_DEFAULT_DIGEST, true));
             MapName(dst_public_key_filename);
         }
 
@@ -234,9 +259,9 @@ void PolicyHubUpdateKeys(const char *policy_server)
  */
 RSA *HavePublicKeyByIP(const char *username, const char *ipaddress)
 {
-    char hash[CF_MAXVARSIZE];
+    char hash[CF_HOSTKEY_STRING_SIZE];
 
-    bool found = Address2Hostkey(ipaddress, hash);
+    bool found = Address2Hostkey(hash, sizeof(hash), ipaddress);
     if (found)
     {
         return HavePublicKey(username, ipaddress, hash);
@@ -261,7 +286,6 @@ RSA *HavePublicKey(const char *username, const char *ipaddress, const char *dige
 {
     char keyname[CF_MAXVARSIZE], newname[CF_BUFSIZE], oldname[CF_BUFSIZE];
     struct stat statbuf;
-    unsigned long err;
     FILE *fp;
     RSA *newkey = NULL;
 
@@ -314,8 +338,9 @@ RSA *HavePublicKey(const char *username, const char *ipaddress, const char *dige
     if ((newkey = PEM_read_RSAPublicKey(fp, NULL, NULL,
                                         (void *)pub_passphrase)) == NULL)
     {
-        err = ERR_get_error();
-        Log(LOG_LEVEL_ERR, "Error reading public key. (PEM_read_RSAPublicKey: %s)", ERR_reason_error_string(err));
+        Log(LOG_LEVEL_ERR,
+            "Error reading public key. (PEM_read_RSAPublicKey: %s)",
+            CryptoLastErrorString());
         fclose(fp);
         return NULL;
     }
@@ -339,7 +364,7 @@ void SavePublicKey(const char *user, const char *digest, const RSA *key)
     char keyname[CF_MAXVARSIZE], filename[CF_BUFSIZE];
     struct stat statbuf;
     FILE *fp;
-    int err, ret;
+    int ret;
 
     ret = snprintf(keyname, sizeof(keyname), "%s-%s", user, digest);
     if (ret >= sizeof(keyname))
@@ -373,8 +398,9 @@ void SavePublicKey(const char *user, const char *digest, const RSA *key)
 
     if (!PEM_write_RSAPublicKey(fp, key))
     {
-        err = ERR_get_error();
-        Log(LOG_LEVEL_ERR, "Error saving public key to '%s'. (PEM_write_RSAPublicKey: %s)", filename, ERR_reason_error_string(err));
+        Log(LOG_LEVEL_ERR,
+            "Error saving public key to '%s'. (PEM_write_RSAPublicKey: %s)",
+            filename, CryptoLastErrorString());
     }
 
     fclose(fp);
@@ -466,7 +492,7 @@ void DebugBinOut(char *buffer, int len, char *comment)
 
     for (sp = buffer; sp < (unsigned char *) (buffer + len); sp++)
     {
-        snprintf(hexStr, sizeof(hexStr), "%2.2x", (int) *sp);
+        xsnprintf(hexStr, sizeof(hexStr), "%2.2x", (int) *sp);
         strcat(buf, hexStr);
     }
 

@@ -2,19 +2,21 @@
 
 #include <cf3.defs.h>
 #include <dbm_api.h>
+#include <misc_lib.h>                                          /* xsnprintf */
+
 
 char CFWORKDIR[CF_BUFSIZE];
 
 void tests_setup(void)
 {
-    snprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/db_test.XXXXXX");
+    xsnprintf(CFWORKDIR, CF_BUFSIZE, "/tmp/db_test.XXXXXX");
     mkdtemp(CFWORKDIR);
 }
 
 void tests_teardown(void)
 {
     char cmd[CF_BUFSIZE];
-    snprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
+    xsnprintf(cmd, CF_BUFSIZE, "rm -rf '%s'", CFWORKDIR);
     system(cmd);
 }
 
@@ -135,17 +137,17 @@ void test_recreate(void)
     /* Test that recreating database works properly */
 #ifdef HAVE_LIBTOKYOCABINET
     char tcdb_db[CF_BUFSIZE];
-    snprintf(tcdb_db, CF_BUFSIZE, "%s/cf_classes.tcdb", CFWORKDIR);
+    xsnprintf(tcdb_db, CF_BUFSIZE, "%s/cf_classes.tcdb", CFWORKDIR);
     CreateGarbage(tcdb_db);
 #endif
 #ifdef HAVE_LIBQDBM
     char qdbm_db[CF_BUFSIZE];
-    snprintf(qdbm_db, CF_BUFSIZE, "%s/cf_classes.qdbm", CFWORKDIR);
+    xsnprintf(qdbm_db, CF_BUFSIZE, "%s/cf_classes.qdbm", CFWORKDIR);
     CreateGarbage(qdbm_db);
 #endif
 #ifdef HAVE_LIBLMDB
     char lmdb_db[CF_BUFSIZE];
-    snprintf(lmdb_db, CF_BUFSIZE, "%s/cf_classes.lmdb", CFWORKDIR);
+    xsnprintf(lmdb_db, CF_BUFSIZE, "%s/cf_classes.lmdb", CFWORKDIR);
     CreateGarbage(lmdb_db);
 #endif
 
@@ -177,7 +179,7 @@ int main()
 
 /* STUBS */
 
-void FatalError(char *s, ...)
+void FatalError(ARG_UNUSED char *s, ...)
 {
     fail();
     exit(42);

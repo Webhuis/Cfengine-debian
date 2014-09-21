@@ -242,7 +242,7 @@ static void EvalContextStackFrameAddSoft(EvalContext *ctx, const char *context, 
     }
     else
     {
-         strncpy(copy, context, CF_MAXVARSIZE);
+         strlcpy(copy, context, CF_MAXVARSIZE);
     }
 
     if (Chop(copy, CF_EXPANDSIZE) == -1)
@@ -1089,12 +1089,8 @@ void EvalContextStackPushBodyFrame(EvalContext *ctx, const Promise *caller, cons
     {
         if (caller)
         {
-            Log(LOG_LEVEL_ERR,
-                "Argument arity mismatch in body '%s' at line %llu "
-                "in file '%s', expected %d, got %d",
-                body->name, (unsigned long long)caller->offset.line,
-                PromiseGetBundle(caller)->source_path, RlistLen(body->args),
-                RlistLen(args));
+            Log(LOG_LEVEL_ERR, "Argument arity mismatch in body '%s' at line %zu in file '%s', expected %d, got %d",
+                body->name, caller->offset.line, PromiseGetBundle(caller)->source_path, RlistLen(body->args), RlistLen(args));
         }
         else
         {
@@ -1158,19 +1154,19 @@ void EvalContextStackPushPromiseFrame(EvalContext *ctx, const Promise *owner, bo
         ChopLastNode(path);
 
         EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promise_dirname", path, CF_DATA_TYPE_STRING, "source=promise");
-        char number[CF_SMALLBUF];
-        snprintf(number, CF_SMALLBUF, "%llu", (unsigned long long)owner->offset.line);
+        char number[PRINTSIZE(uintmax_t)];
+        xsnprintf(number, CF_SMALLBUF, "%ju", (uintmax_t) owner->offset.line);
         EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promise_linenumber", number, CF_DATA_TYPE_STRING, "source=promise");
     }
 
     char v[PRINTSIZE(int)];
-    sprintf(v, "%d", (int) ctx->uid);
+    xsnprintf(v, sizeof(v), "%d", (int) ctx->uid);
     EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser_uid", v, CF_DATA_TYPE_INT, "source=agent");
-    sprintf(v, "%d", (int) ctx->gid);
+    xsnprintf(v, sizeof(v), "%d", (int) ctx->gid);
     EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser_gid", v, CF_DATA_TYPE_INT, "source=agent");
-    sprintf(v, "%d", (int) ctx->pid);
+    xsnprintf(v, sizeof(v), "%d", (int) ctx->pid);
     EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser_pid", v, CF_DATA_TYPE_INT, "source=agent");
-    sprintf(v, "%d", (int) ctx->ppid);
+    xsnprintf(v, sizeof(v), "%d", (int) ctx->ppid);
     EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser_ppid", v, CF_DATA_TYPE_INT, "source=agent");
 
     EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "bundle", PromiseGetBundle(owner)->name, CF_DATA_TYPE_STRING, "source=promise");
@@ -1306,7 +1302,7 @@ static bool EvalContextClassPut(EvalContext *ctx, const char *ns, const char *na
         }
         else
         {
-            strncpy(context_copy, canonified_context, CF_MAXVARSIZE);
+            strlcpy(context_copy, canonified_context, CF_MAXVARSIZE);
         }
 
         if (strlen(context_copy) == 0)
@@ -1486,8 +1482,7 @@ char *EvalContextStackPath(const EvalContext *ctx)
             BufferAppendChar(path, '\'');
             if (i == SeqLength(ctx->stack) - 1)
             {
-                BufferAppendF(path, "[%llu]",
-                             (unsigned long long)frame->data.promise_iteration.index);
+                BufferAppendF(path, "[%zd]", frame->data.promise_iteration.index);
             }
             break;
         }
@@ -2254,7 +2249,9 @@ static void SummarizeTransaction(EvalContext *ctx, TransactionContext tc, const 
                 int fd = creat(logname, filemode);
                 if (fd >= 0)
                 {
-                    Log(LOG_LEVEL_VERBOSE, "Created log file '%s' with requested permissions %o", logname, filemode);
+                    Log(LOG_LEVEL_VERBOSE,
+                        "Created log file '%s' with requested permissions %jo",
+                        logname, (intmax_t) filemode);
                     close(fd);
                 }
             }
@@ -2367,9 +2364,7 @@ static void LogPromiseContext(const EvalContext *ctx, const Promise *pp)
 
     if (PromiseGetBundle(pp)->source_path)
     {
-        WriterWriteF(w, " source path '%s' at line %llu",
-                     PromiseGetBundle(pp)->source_path,
-                     (unsigned long long)pp->offset.line);
+        WriterWriteF(w, " source path '%s' at line %zu", PromiseGetBundle(pp)->source_path, pp->offset.line);
     }
 
     switch (pp->promisee.type)

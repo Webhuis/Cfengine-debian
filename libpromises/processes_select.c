@@ -24,17 +24,27 @@
 
 #include <processes_select.h>
 
+#include <string.h>
+
 #include <eval_context.h>
 #include <files_names.h>
 #include <conversion.h>
 #include <matching.h>
-#include <string_lib.h>
+#include <systype.h>
+#include <string_lib.h>                                         /* Chop */
+#include <regex.h> /* CompileRegex,StringMatchWithPrecompiledRegex,StringMatchFull */
 #include <item_lib.h>
 #include <pipes.h>
 #include <files_interfaces.h>
 #include <rlist.h>
 #include <policy.h>
 #include <zones.h>
+#include <printsize.h>
+
+# ifdef HAVE_GETZONEID
+#include <sequence.h>
+#define MAX_ZONENAME_SIZE 64
+# endif
 
 static int SelectProcRangeMatch(char *name1, char *name2, int min, int max, char **names, char **line);
 static bool SelectProcRegexMatch(const char *name1, const char *name2, const char *regex, char **colNames, char **line);
@@ -326,8 +336,10 @@ static int SelectProcTimeCounterRangeMatch(char *name1, char *name2, time_t min,
         }
         else
         {
-            Log(LOG_LEVEL_DEBUG, "Selection filter REJECTED counter range '%s/%s' = '%s' in [%" PRIdMAX ",%" PRIdMAX "] (= %" PRIdMAX " secs)", name1, name2,
-                    line[i], (intmax_t)min, (intmax_t)max, (intmax_t)value);
+            Log(LOG_LEVEL_DEBUG,
+                "Selection filter REJECTED counter range '%s/%s' = '%s' in [%jd,%jd] (= %jd secs)",
+                name1, name2, line[i],
+                (intmax_t) min, (intmax_t) max, (intmax_t) value);
             return false;
         }
     }
@@ -548,10 +560,11 @@ static int SplitProcLine(char *proc, char **names, int *start, int *end, char **
 
         if (strcmp(cols2[i], cols1[i]) != 0)
         {
-            Log(LOG_LEVEL_INFO, "Unacceptable model uncertainty examining processes");
+            Log(LOG_LEVEL_INFO, "Unacceptable model uncertainty examining process(%s): '%s' != '%s'", proc, cols1[i], cols2[i]);
         }
 
-        line[i] = xstrdup(cols1[i]);
+        /* Fall back on cols1 if cols2 got an empty answer: */
+        line[i] = xstrdup(cols2[i][0] ? cols2[i] : cols1[i]);
     }
 
     return true;
@@ -686,13 +699,6 @@ static void GetProcessColumnNames(char *proc, char **names, int *start, int *end
 #ifndef __MINGW32__
 static const char *GetProcessOptions(void)
 {
-    static char psopts[CF_BUFSIZE]; /* GLOBAL_R, no initialization needed */
-
-    if (IsGlobalZone())
-    {
-        snprintf(psopts, CF_BUFSIZE, "%s,zone", VPSOPTS[VSYSTEMHARDCLASS]);
-        return psopts;
-    }
 
 # ifdef __linux__
     if (strncmp(VSYSNAME.release, "2.4", 3) == 0)
@@ -752,13 +758,142 @@ static int ExtractPid(char *psentry, char **names, int *end)
     return pid;
 }
 
-#ifndef __MINGW32__
+# ifndef __MINGW32__
+# ifdef HAVE_GETZONEID
+/* ListLookup with the following return semantics
+ * -1 if the first argument is smaller than the second
+ *  0 if the arguments are equal
+ *  1 if the first argument is bigger than the second
+ */
+int PidListCompare(const void *pid1, const void *pid2, ARG_UNUSED void *user_data)
+{
+    int p1 = (intptr_t)(void *)pid1;
+    int p2 = (intptr_t)(void *)pid2;
+
+    if (p1 < p2)
+    {
+        return -1;
+    }
+    else if (p1 > p2)
+    {
+        return 1;
+    }
+    return 0;
+}
+/* Load processes using zone-aware ps
+ * to obtain solaris list of global
+ * process ids for root and non-root
+ * users to lookup later */
+int ZLoadProcesstable(Seq *pidlist, Seq *rootpidlist)
+{
+
+    char *names[CF_PROCCOLS];
+    int start[CF_PROCCOLS];
+    int end[CF_PROCCOLS];
+
+    int index = 0;
+    const char *pscmd = "/usr/bin/ps -Aleo zone,user,pid";
+
+    FILE *psf = cf_popen(pscmd, "r", false);
+    if (psf == NULL)
+    {
+        Log(LOG_LEVEL_ERR, "ZLoadProcesstable: Couldn't open the process list with command %s.", pscmd);
+        return false;
+    }
+
+    size_t pbuff_size = CF_BUFSIZE;
+    char *pbuff = xmalloc(pbuff_size);
+
+    while (true)
+    {
+        ssize_t res = CfReadLine(&pbuff, &pbuff_size, psf);
+        if (res == -1)
+        {
+            if (!feof(psf))
+            {
+                Log(LOG_LEVEL_ERR, "IsGlobalProcess(char **, int): Unable to read process list with command '%s'. (fread: %s)", pscmd, GetErrorStr());
+                cf_pclose(psf);
+                free(pbuff);
+                return false;
+            }
+            else
+            {
+                break;
+            }
+        }
+        Chop(pbuff, pbuff_size);
+        if (strstr(pbuff, "PID")) /*this is the banner*/
+        {
+            GetProcessColumnNames(pbuff, &names[0], start, end);
+        }
+        else
+        {
+            int pid = ExtractPid(pbuff, &names[0], end);
+
+            size_t zone_offset = strspn(pbuff, " ");
+            size_t zone_end_offset = strcspn(pbuff + zone_offset, " ") + zone_offset;
+            size_t user_offset = strspn(pbuff + zone_end_offset, " ") + zone_end_offset;
+            size_t user_end_offset = strcspn(pbuff + user_offset, " ") + user_offset;
+            bool is_global = (zone_end_offset - zone_offset == 6
+                                  && strncmp(pbuff + zone_offset, "global", 6) == 0);
+            bool is_root = (user_end_offset - user_offset == 4
+                                && strncmp(pbuff + user_offset, "root", 4) == 0);
+
+            if (is_global && is_root)
+            {
+                SeqAppend(rootpidlist, (void*)(intptr_t)pid);
+            }
+            else if (is_global && !is_root)
+            {
+                SeqAppend(pidlist, (void*)(intptr_t)pid);
+            }
+        }
+    }
+    cf_pclose(psf);
+    free(pbuff);
+    return true;
+}
+bool PidInSeq(Seq *list, int pid)
+{
+    void *res = SeqLookup(list, (void *)(intptr_t)pid, PidListCompare);
+    int result = (intptr_t)(void*)res;
+
+    if (result == pid)
+    {
+        return true;
+    }
+    return false;
+}
+/* return true if the process with
+ * pid is in the global zone */
+int IsGlobalProcess(int pid, Seq *pidlist, Seq *rootpidlist)
+{
+    if (PidInSeq(pidlist, pid) || PidInSeq(rootpidlist, pid))
+    {
+       return true;
+    }
+    else
+    {
+       return false;
+    }
+}
+void ZCopyProcessList(Item **dest, const Item *source, Seq *pidlist, char **names, int *end)
+{
+    int gpid = ExtractPid(source->name, names, end);
+
+    if (PidInSeq(pidlist, gpid))
+    {
+        PrependItem(dest, source->name, "");
+    }
+}
+# endif /* HAVE_GETZONEID */
 int LoadProcessTable(Item **procdata)
 {
     FILE *prp;
-    char pscomm[CF_MAXLINKSIZE], *sp = NULL;
+    char pscomm[CF_MAXLINKSIZE];
     Item *rootprocs = NULL;
     Item *otherprocs = NULL;
+
 
     if (PROCESSTABLE)
     {
@@ -781,6 +916,28 @@ int LoadProcessTable(Item **procdata)
     size_t vbuff_size = CF_BUFSIZE;
     char *vbuff = xmalloc(vbuff_size);
 
+# ifdef HAVE_GETZONEID
+
+    char *names[CF_PROCCOLS];
+    int start[CF_PROCCOLS];
+    int end[CF_PROCCOLS];
+    Seq *pidlist = SeqNew(1, NULL);
+    Seq *rootpidlist = SeqNew(1, NULL);
+    bool global_zone = IsGlobalZone();
+
+    if (global_zone)
+    {
+        int res = ZLoadProcesstable(pidlist, rootpidlist);
+
+        if (res == false)
+        {
+            Log(LOG_LEVEL_ERR, "Unable to load solaris zone process table.");
+            return false;
+        }
+    }
+
+# endif
+
     for (;;)
     {
         ssize_t res = CfReadLine(&vbuff, &vbuff_size, prp);
@@ -798,17 +955,28 @@ int LoadProcessTable(Item **procdata)
                 break;
             }
         }
+        Chop(vbuff, vbuff_size);
 
-        for (sp = vbuff + strlen(vbuff) - 1; (sp > vbuff) && (isspace((int)*sp)); sp--)
+# ifdef HAVE_GETZONEID
+
+        if (global_zone)
         {
-            *sp = '\0';
+            if (strstr(vbuff, "PID") != NULL)
+            {   /* this is the banner so get the column header names for later use*/
+                GetProcessColumnNames(vbuff, &names[0], start, end);
+            }
+            else
+            {
+               int gpid = ExtractPid(vbuff, names, end);
+
+               if (!IsGlobalProcess(gpid, pidlist, rootpidlist))
+               {
+                    continue;
+               }
+            }
         }
 
-        if (ForeignZone(vbuff))
-        {
-            continue;
-        }
-
+# endif
         AppendItem(procdata, vbuff, "");
     }
 
@@ -819,22 +987,42 @@ int LoadProcessTable(Item **procdata)
     snprintf(vbuff, CF_MAXVARSIZE, "%s/state/cf_procs", CFWORKDIR);
     RawSaveItemList(*procdata, vbuff, NewLineMode_Unix);
 
-    CopyList(&rootprocs, *procdata);
-    CopyList(&otherprocs, *procdata);
-
-    while (DeleteItemNotContaining(&rootprocs, "root"))
+# ifdef HAVE_GETZONEID
+    if (global_zone) /* pidlist and rootpidlist are empty if we're not in the global zone */
     {
+        Item *ip = *procdata;
+        while (ip != NULL)
+        {
+            ZCopyProcessList(&rootprocs, ip, rootpidlist, names, end);
+            ip = ip->next;
+        }
+        ReverseItemList(rootprocs);
+        ip = *procdata;
+        while (ip != NULL)
+        {
+            ZCopyProcessList(&otherprocs, ip, pidlist, names, end);
+            ip = ip->next;
+        }
+        ReverseItemList(otherprocs);
     }
-
-    while (DeleteItemContaining(&otherprocs, "root"))
+    else
+# endif
     {
-    }
+        CopyList(&rootprocs, *procdata);
+        CopyList(&otherprocs, *procdata);
 
+        while (DeleteItemNotContaining(&rootprocs, "root"))
+        {
+        }
+
+        while (DeleteItemContaining(&otherprocs, "root"))
+        {
+        }
+    }
     if (otherprocs)
     {
         PrependItem(&rootprocs, otherprocs->name, NULL);
     }
-
     snprintf(vbuff, CF_MAXVARSIZE, "%s/state/cf_rootprocs", CFWORKDIR);
     RawSaveItemList(rootprocs, vbuff, NewLineMode_Unix);
     DeleteItemList(rootprocs);
@@ -846,4 +1034,4 @@ int LoadProcessTable(Item **procdata)
     free(vbuff);
     return true;
 }
-#endif
+# endif

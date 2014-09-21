@@ -39,6 +39,7 @@
 #include <files_editxml.h>
 #include <files_editline.h>
 #include <files_properties.h>
+#include <files_select.h>
 #include <item_lib.h>
 #include <match_scope.h>
 #include <attributes.h>
@@ -194,31 +195,97 @@ static bool AttrHasNoAction(Attributes attr)
     }
 }
 
+/*
+ * Expands source in-place.
+ */
+static char *ExpandThisPromiserScalar(EvalContext *ctx, const char *ns, const char *scope, const char *source)
+{
+    if (!source)
+    {
+        return NULL;
+    }
+    Buffer *expanded = BufferNew();
+    ExpandScalar(ctx, ns, scope, source, expanded);
+    char *result = strdup(BufferData(expanded));
+    BufferDestroy(expanded);
+    return result;
+}
+
+/*
+ * Overwrite non-specific attributes with expanded this.promiser.
+ */
+Attributes GetExpandedAttributes(EvalContext *ctx, const Promise *pp, const Attributes *attr)
+{
+    const char *namespace = PromiseGetBundle(pp)->ns;
+    const char *scope = PromiseGetBundle(pp)->name;
+
+    Attributes a = *attr; // shallow copy
+
+    a.classes.change = ExpandList(ctx, namespace, scope, attr->classes.change, true);
+    a.classes.failure = ExpandList(ctx, namespace, scope, attr->classes.failure, true);
+    a.classes.denied = ExpandList(ctx, namespace, scope, attr->classes.denied, true);
+    a.classes.timeout = ExpandList(ctx, namespace, scope, attr->classes.timeout, true);
+    a.classes.kept = ExpandList(ctx, namespace, scope, attr->classes.kept, true);
+
+    a.classes.del_change = ExpandList(ctx, namespace, scope, attr->classes.del_change, true);
+    a.classes.del_kept = ExpandList(ctx, namespace, scope, attr->classes.del_kept, true);
+    a.classes.del_notkept = ExpandList(ctx, namespace, scope, attr->classes.del_notkept, true);
+
+    a.transaction.log_string = ExpandThisPromiserScalar(ctx, namespace, scope, attr->transaction.log_string);
+    a.transaction.log_kept = ExpandThisPromiserScalar(ctx, namespace, scope, attr->transaction.log_kept);
+    a.transaction.log_repaired = ExpandThisPromiserScalar(ctx, namespace, scope, attr->transaction.log_repaired);
+    a.transaction.log_failed = ExpandThisPromiserScalar(ctx, namespace, scope, attr->transaction.log_failed);
+    a.transaction.measure_id = ExpandThisPromiserScalar(ctx, namespace, scope, attr->transaction.measure_id);
+
+    // a.transformer = ExpandThisPromiserScalar(ctx, namespace, scope, attr->transformer);
+    a.edit_template = ExpandThisPromiserScalar(ctx, namespace, scope, attr->edit_template);
+
+    return a;
+}
+
+void ClearExpandedAttributes(Attributes *a)
+{
+    free(a->transaction.log_string);
+    a->transaction.log_string = NULL;
+    free(a->transaction.log_kept);
+    a->transaction.log_kept = NULL;
+    free(a->transaction.log_repaired);
+    a->transaction.log_repaired = NULL;
+    free(a->transaction.log_failed);
+    a->transaction.log_failed = NULL;
+    free(a->transaction.measure_id);
+    a->transaction.measure_id = NULL;
+    free(a->edit_template);
+    a->edit_template = NULL;
+
+    ClearFilesAttributes(a);
+}
+
 static PromiseResult VerifyFilePromise(EvalContext *ctx, char *path, const Promise *pp)
 {
     struct stat osb, oslb, dsb;
     CfLock thislock;
     int exists;
 
-    Attributes a = GetFilesAttributes(ctx, pp);
+    Attributes attr = GetFilesAttributes(ctx, pp);
 
-    if (!FileSanityChecks(path, a, pp))
+    if (!FileSanityChecks(path, attr, pp))
     {
-        ClearFilesAttributes(&a);
+        ClearFilesAttributes(&attr);
         return PROMISE_RESULT_NOOP;
     }
 
-    EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser", path, CF_DATA_TYPE_STRING, "source=promise");
-
-    thislock = AcquireLock(ctx, path, VUQNAME, CFSTARTTIME, a.transaction, pp, false);
+    thislock = AcquireLock(ctx, path, VUQNAME, CFSTARTTIME, attr.transaction, pp, false);
     if (thislock.lock == NULL)
     {
-        ClearFilesAttributes(&a);
+        ClearFilesAttributes(&attr);
         return PROMISE_RESULT_SKIPPED;
     }
 
-    LoadSetuid();
+    EvalContextVariablePutSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser", path, CF_DATA_TYPE_STRING, "source=promise");
+    Attributes a = GetExpandedAttributes(ctx, pp, &attr);
 
+    LoadSetuid();
     PromiseResult result = PROMISE_RESULT_NOOP;
     if (lstat(path, &oslb) == -1)       /* Careful if the object is a link */
     {
@@ -275,8 +342,9 @@ static PromiseResult VerifyFilePromise(EvalContext *ctx, char *path, const Promi
     /* If file or directory exists but it is not selected by body file_select
      * (if we have one) then just exit. But continue if it's a directory and
      * depth_search is on, so that we can file_select into it. */
-    if (exists && (!VerifyFileLeaf(ctx, path, &oslb, a, pp, &result)) &&
-        !(a.havedepthsearch && S_ISDIR(oslb.st_mode)))
+    if (exists
+        && (a.haveselect && !SelectLeaf(ctx, path, &oslb, a.select))
+        && !(a.havedepthsearch && S_ISDIR(oslb.st_mode)))
     {
         goto exit;
     }
@@ -356,18 +424,6 @@ static PromiseResult VerifyFilePromise(EvalContext *ctx, char *path, const Promi
                 cfPS(ctx, LOG_LEVEL_VERBOSE, PROMISE_RESULT_NOOP, pp, a, "Basedir '%s' not promising anything", path);
             }
         }
-
-        if (((a.change.report_changes) == FILE_CHANGE_REPORT_CONTENT_CHANGE) || ((a.change.report_changes) == FILE_CHANGE_REPORT_ALL))
-        {
-            if (a.havedepthsearch)
-            {
-                result = PromiseResultUpdate(result, PurgeHashes(ctx, NULL, a, pp));
-            }
-            else
-            {
-                result = PromiseResultUpdate(result, PurgeHashes(ctx, path, a, pp));
-            }
-        }
     }
 
 /* Phase 2a - copying is potentially threadable if no followup actions */
@@ -407,7 +463,8 @@ static PromiseResult VerifyFilePromise(EvalContext *ctx, char *path, const Promi
 
     exists = (stat(path, &osb) != -1);
 
-    if (exists && (S_ISREG(osb.st_mode)))
+    if (exists && (S_ISREG(osb.st_mode))
+        && (!a.haveselect || SelectLeaf(ctx, path, &osb, a.select)))
     {
         VerifyFileLeaf(ctx, path, &osb, a, pp, &result);
     }
@@ -428,7 +485,9 @@ exit:
 
     SaveSetuid();
     YieldCurrentLock(thislock);
-    ClearFilesAttributes(&a);
+
+    ClearExpandedAttributes(&a);
+    EvalContextVariableRemoveSpecial(ctx, SPECIAL_SCOPE_THIS, "promiser");
 
     return result;
 }
@@ -676,6 +735,8 @@ PromiseResult ScheduleEditOperation(EvalContext *ctx, char *filename, Attributes
     
     if (a.edit_template)
     {
+        Log(LOG_LEVEL_VERBOSE, "Rendering '%s' using template '%s' with method '%s'",
+            filename, a.edit_template, a.template_method ? a.template_method : "cfengine");
         if (!a.template_method || strcmp("cfengine", a.template_method) == 0)
         {
             PromiseResult render_result = RenderTemplateCFEngine(ctx, pp, args, a, edcontext);

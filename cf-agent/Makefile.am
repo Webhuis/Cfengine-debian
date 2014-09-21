@@ -1,35 +1,38 @@
 noinst_LTLIBRARIES = libcf-agent.la
 
-AM_CPPFLAGS = @CPPFLAGS@ -I$(srcdir)/../libpromises -I$(srcdir)/../libutils \
+AM_CPPFLAGS = -I$(srcdir)/../libpromises -I$(srcdir)/../libutils \
 	-I$(srcdir)/../libcfnet \
 	$(ENTERPRISE_CPPFLAGS) \
+	$(OPENSSL_CPPFLAGS) \
+	$(PCRE_CPPFLAGS) \
 	$(LIBVIRT_CPPFLAGS) \
 	$(POSTGRESQL_CPPFLAGS) \
 	$(MYSQL_CPPFLAGS) \
-	$(LIBXML2_CPPFLAGS)
+	$(LIBXML2_CPPFLAGS) \
+	$(PAM_CPPFLAGS)
 
-AM_CFLAGS = @CFLAGS@ \
+AM_CFLAGS = \
 	$(ENTERPRISE_CFLAGS) \
+	$(OPENSSL_CFLAGS) \
+	$(PCRE_CFLAGS) \
 	$(LIBVIRT_CFLAGS) \
 	$(POSTGRESQL_CFLAGS) \
 	$(MYSQL_CFLAGS) \
-	$(LIBXML2_CFLAGS)
+	$(LIBXML2_CFLAGS) \
+	$(PAM_CFLAGS)
 
 AM_LDFLAGS = \
+	$(OPENSSL_LDFLAGS) \
+	$(PCRE_LDFLAGS) \
 	$(LIBVIRT_LDFLAGS) \
 	$(POSTGRESQL_LDFLAGS) \
 	$(MYSQL_LDFLAGS) \
-	$(LIBXML2_LDFLAGS)
+	$(LIBXML2_LDFLAGS) \
+	$(PAM_LDFLAGS)
 
-if !FREEBSD
-if HAVE_AVAHI_COMMON
-if HAVE_AVAHI_CLIENT
-AM_LDFLAGS += -ldl
-endif
-endif
-endif
-
-libcf_agent_la_LIBADD = ../libpromises/libpromises.la \
+libcf_agent_la_LIBADD = ../libutils/libutils.la ../libpromises/libpromises.la \
+	$(OPENSSL_LIBS) \
+	$(PCRE_LIBS) \
 	$(LIBVIRT_LIBS) \
 	$(POSTGRESQL_LIBS) \
 	$(MYSQL_LIBS) \
@@ -45,6 +48,7 @@ libcf_agent_la_SOURCES = \
         comparray.c comparray.h \
         acl_posix.c acl_posix.h \
         cf_sql.c cf_sql.h \
+	files_changes.c files_changes.h \
         promiser_regex_resolver.c promiser_regex_resolver.h \
         match_scope.c match_scope.h \
         retcode.c retcode.h \
@@ -76,7 +80,7 @@ libcf_agent_la_SOURCES = \
 if !NT
 libcf_agent_la_SOURCES += nfs.c nfs.h
 
-if HAVE_PAM_USERPROGS
+if HAVE_USERS_PROMISE_DEPS
   libcf_agent_la_SOURCES += verify_users_pam.c
 else
   libcf_agent_la_SOURCES += verify_users_stub.c
@@ -92,10 +96,13 @@ endif
 endif
 
 if !BUILTIN_EXTENSIONS
- sbin_PROGRAMS = cf-agent
- # Workaround for automake madness (try removing it if you want to know why).
- cf_agent_CFLAGS = $(AM_CFLAGS)
- cf_agent_LDADD = libcf-agent.la
+  sbin_PROGRAMS = cf-agent
+
+  # Workaround for automake madness (try removing it if you want to know why).
+  cf_agent_CFLAGS = $(AM_CFLAGS)
+
+  # Build both a libcf-agent.la library, and a cf-agent executable
+  cf_agent_LDADD = libcf-agent.la
 endif
 
 CLEANFILES = *.gcno *.gcda
