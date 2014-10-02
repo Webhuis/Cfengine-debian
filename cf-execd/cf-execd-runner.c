@@ -32,6 +32,7 @@
 #include <pipes.h>
 #include <unix.h>
 #include <mutex.h>
+#include <signals.h>
 #include <exec_tools.h>
 #include <misc_lib.h>
 #include <file_lib.h>
@@ -253,13 +254,13 @@ void LocalExec(const ExecConfig *config)
     Log(LOG_LEVEL_VERBOSE, "Command is executing...%s", esc_command);
 
     int count = 0;
-
+    int complete = false;
     size_t line_size = CF_BUFSIZE;
     char *line = xmalloc(line_size);
 
-    for (;;)
+    while (!IsPendingTermination())
     {
-        if(!IsReadReady(fileno(pp), (config->agent_expireafter * SECONDS_PER_MINUTE)))
+        if (!IsReadReady(fileno(pp), (config->agent_expireafter * SECONDS_PER_MINUTE)))
         {
             char errmsg[CF_MAXVARSIZE];
             snprintf(errmsg, sizeof(errmsg), "cf-execd: !! Timeout waiting for output from agent (agent_expireafter=%d) - terminating it",
@@ -271,7 +272,7 @@ void LocalExec(const ExecConfig *config)
 
             pid_t pid_agent;
 
-            if(PipeToPid(&pid_agent, pp))
+            if (PipeToPid(&pid_agent, pp))
             {
                 ProcessSignalTerminate(pid_agent);
             }
@@ -286,31 +287,26 @@ void LocalExec(const ExecConfig *config)
         ssize_t res = CfReadLine(&line, &line_size, pp);
         if (res == -1)
         {
-            if (!feof(pp))
+            if (feof(pp))
             {
-                Log(LOG_LEVEL_ERR, "Unable to read output from command '%s'. (cfread: %s)", cmd, GetErrorStr());
-                cf_pclose(pp);
-                free(line);
-                return;
+                complete = true;
             }
             else
             {
-                break;
+                Log(LOG_LEVEL_ERR,
+                    "Unable to read output from command '%s'. (cfread: %s)",
+                    cmd, GetErrorStr());
             }
+            break;
         }
 
-        bool print = false;
-
-        for (const char *sp = line; *sp != '\0'; sp++)
+        const char *sp = line;
+        while (*sp != '\0' && isspace(*sp))
         {
-            if (!isspace((int) *sp))
-            {
-                print = true;
-                break;
-            }
+            sp++;
         }
 
-        if (print)
+        if (*sp != '\0') /* line isn't entirely blank */
         {
             char *line_escaped = xmalloc(2 * line_size);
             ReplaceStr(line, line_escaped, 2 * line_size, "%", "%%");
@@ -341,7 +337,8 @@ void LocalExec(const ExecConfig *config)
     Log(LOG_LEVEL_DEBUG, "Closing fp");
     fclose(fp);
 
-    Log(LOG_LEVEL_VERBOSE, "Command is complete");
+    Log(LOG_LEVEL_VERBOSE,
+        complete ? "Command is complete" : "Terminated command");
 
     if (count)
     {

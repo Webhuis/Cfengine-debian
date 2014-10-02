@@ -25,7 +25,7 @@ dnl The version in the next line is the only one to set
 dnl
 
 _AM_SET_OPTION([tar-ustar])
-AM_INIT_AUTOMAKE(cfengine, 3.6.1)
+AM_INIT_AUTOMAKE(cfengine, 3.6.2)
 AM_MAINTAINER_MODE([enable])
 
 AC_DEFINE(BUILD_YEAR, esyscmd([date +%Y | tr -d '\n']), "Software build year")
@@ -467,21 +467,18 @@ then
     fi
 
     # xml2-config is only for native builds
-    if test "x$cross_compiling" = "xno"
+    if test "x$cross_compiling" = "xno" && test x`which $XML2_CONFIG` != x
     then
-        if test x`which $XML2_CONFIG` != x
+        xml2_include_dir=`$XML2_CONFIG --cflags`
+        if test -n "$xml2_include_dir"
         then
-            xml2_include_dir=`$XML2_CONFIG --cflags`
-            if test -n "$xml2_include_dir"
-            then
-                LIBXML2_CPPFLAGS="$xml2_include_dir"
-            fi
-        else                # xml2-config not found
-            # if a path, e.g. /var/cfengine was given, then we
-            # must take into account that libxml2 includes are in
-            # /var/cfengine/include/libxml2
-            LIBXML2_CPPFLAGS=-I$with_libxml2/include/libxml2
+            LIBXML2_CPPFLAGS="$xml2_include_dir"
         fi
+    else                # xml2-config not found
+        # if a path, e.g. /var/cfengine was given, then we
+        # must take into account that libxml2 includes are in
+        # /var/cfengine/include/libxml2
+        LIBXML2_CPPFLAGS=-I$with_libxml2/include/libxml2
     fi
 
     CF3_WITH_LIBRARY(libxml2,
@@ -703,6 +700,10 @@ AC_CHECK_FUNCS(fgetspent lckpwdf ulckpwdf)
 
 AC_CHECK_DECLS(getloadavg)
 AC_FUNC_GETLOADAVG
+
+AC_C_BIGENDIAN
+AC_CHECK_HEADERS([endian.h])
+AC_CHECK_DECLS(le32toh, [], [], [[#include <endian.h>]])
 
 CF3_PATH_ROOT_PROG([CHPASSWD], [chpasswd], [], [/sbin:/usr/sbin:/bin:/usr/bin:$PATH])
 AS_IF([test "x$CHPASSWD" != "x"],

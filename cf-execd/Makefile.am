@@ -6,13 +6,14 @@ AM_CPPFLAGS = \
 	-I$(srcdir)/../libutils \
 	-I$(srcdir)/../libcfnet \
 	-I$(srcdir)/../libenv \
+	$(PCRE_CPPFLAGS) \
 	$(ENTERPRISE_CPPFLAGS)
 
 AM_CFLAGS = \
 	$(OPENSSL_CFLAGS) \
 	$(ENTERPRISE_CFLAGS)
 
-libcf_execd_la_LIBADD = ../libutils/libutils.la ../libpromises/libpromises.la
+libcf_execd_la_LIBADD = ../libpromises/libpromises.la
 
 libcf_execd_la_SOURCES = \
         cf-execd.c cf-execd.h \

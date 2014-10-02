@@ -139,11 +139,16 @@ static int AccessControl(EvalContext *ctx, const char *req_path, ServerConnectio
     {
         Log(LOG_LEVEL_VERBOSE, "Filename %s is resolved to %s", translated_req_path, transrequest);
     }
-    else
+    else if ((lstat(translated_req_path, &statbuf) == -1) && !S_ISLNK(statbuf.st_mode))
     {
         Log(LOG_LEVEL_INFO, "Couldn't resolve (realpath: %s) filename: %s",
             GetErrorStr(), translated_req_path);
         return false;                /* can't continue without transrequest */
+    }
+    else
+    {
+        Log(LOG_LEVEL_VERBOSE, "Requested file is a dead symbolic link (filename: %s)", translated_req_path);
+        strlcpy(transrequest, translated_req_path, CF_BUFSIZE);
     }
 
     if (lstat(transrequest, &statbuf) == -1)
@@ -534,6 +539,9 @@ static void SetConnectionData(ServerConnectionState *conn, char *buf)
 
     sscanf(buf, "%255s %255s %255s", ipstring, fqname, username);
 
+    /* The "ipstring" that the client sends is currently *ignored* as
+     * conn->ipaddr is always set from the connecting socket address. */
+
     Log(LOG_LEVEL_DEBUG, "(ipstring=[%s],fqname=[%s],username=[%s],socket=[%s])",
             ipstring, fqname, username, conn->ipaddr);
 
@@ -633,28 +641,29 @@ char iscrypt, enterprise_field;
                         sauth, &iscrypt, &crypt_len,
                         &challenge_len, &enterprise_field);
 
-    if (nparam != 5)
+    if (nparam >= 1 && strcmp(sauth, "SAUTH") != 0)
     {
         Log(LOG_LEVEL_ERR, "Authentication failure: "
-            "peer sent only %d out of 5 expected parameters",
-            nparam);
-
-        if (nparam >= 1 && strcmp(sauth, "SAUTH") != 0)
-        {
-            Log(LOG_LEVEL_ERR, "Authentication failure: "
-                "was expecting SAUTH command but got '%s'",
-                sauth);
-        }
-
+            "was expecting SAUTH command but got '%s'",
+            sauth);
         return false;
     }
 
-    if (strcmp(sauth, "SAUTH") != 0)
+    if (nparam != 5 && nparam != 4)
     {
         Log(LOG_LEVEL_ERR, "Authentication failure: "
-            "was expecting SAUTH command but got: %s",
-            sauth);
+            "peer sent only %d arguments to SAUTH command",
+            nparam - 1);
         return false;
+    }
+
+    /* CFEngine 2 had no enterprise/community differentiation. */
+    if (nparam == 4)
+    {
+        Log(LOG_LEVEL_VERBOSE,
+            "Peer sent only 4 parameters, "
+            "assuming it is a legacy community client");
+        enterprise_field = 'c';
     }
 
     if ((challenge_len == 0) || (crypt_len == 0))
@@ -1519,7 +1528,6 @@ int BusyWithClassicConnection(EvalContext *ctx, ServerConnectionState *conn)
         if ((len >= sizeof(out)) || (received != (len + CF_PROTO_OFFSET)))
         {
             Log(LOG_LEVEL_INFO, "Decrypt error CALL_ME_BACK");
-            RefuseAccess(conn, "decrypt error CALL_ME_BACK");
             return true;
         }
 
@@ -1529,21 +1537,20 @@ int BusyWithClassicConnection(EvalContext *ctx, ServerConnectionState *conn)
         if (strncmp(recvbuffer, "CALL_ME_BACK collect_calls", strlen("CALL_ME_BACK collect_calls")) != 0)
         {
             Log(LOG_LEVEL_INFO, "CALL_ME_BACK protocol defect");
-            RefuseAccess(conn, "decryption failure");
             return false;
         }
 
         if (!LiteralAccessControl(ctx, recvbuffer, conn, true))
         {
             Log(LOG_LEVEL_INFO, "Query access failure");
-            RefuseAccess(conn, recvbuffer);
             return false;
         }
 
-        if (ReceiveCollectCall(conn))
-        {
-            return true;
-        }
+        ReceiveCollectCall(conn);
+        /* On success that returned true; otherwise, it did all
+         * relevant Log()ging.  Either way, it closed the connection,
+         * so we're no longer busy with it: */
+        return false;
 
     case PROTOCOL_COMMAND_AUTH_PLAIN:
     case PROTOCOL_COMMAND_AUTH_SECURE:
@@ -1558,4 +1565,3 @@ int BusyWithClassicConnection(EvalContext *ctx, ServerConnectionState *conn)
     Log(LOG_LEVEL_INFO, "Closing connection due to request: %s", recvbuffer);
     return false;
 }
-
