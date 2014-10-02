@@ -171,7 +171,7 @@ static VarRef* ResolveAndQualifyVarName(const FnCall *fp, const char *varname)
         else
         {
             Log(LOG_LEVEL_WARNING,
-                "Function '%s'' was not called from a promise; "
+                "Function '%s' was not called from a promise; "
                 "the unqualified variable reference %s cannot be qualified automatically.",
                 fp->name,
                 varname);
@@ -191,7 +191,7 @@ static JsonElement* VarRefValueToJson(EvalContext *ctx, const FnCall *fp, const 
     DataType value_type = CF_DATA_TYPE_NONE;
     const void *value = EvalContextVariableGet(ctx, ref, &value_type);
     bool want_type = true;
-    
+
     for (int di = 0; di < disallowed_count; di++)
     {
         if (disallowed_datatypes[di] == value_type)
@@ -1313,16 +1313,25 @@ static FnCallResult FnCallBundlesMatching(EvalContext *ctx, const Policy *policy
 static FnCallResult FnCallPackagesMatching(ARG_UNUSED EvalContext *ctx, ARG_UNUSED const Policy *policy, const FnCall *fp, const Rlist *finalargs)
 {
     const bool installed_mode = (0 == strcmp(fp->name, "packagesmatching"));
+    pcre *matcher;
+    {
+        const char *regex_package = RlistScalarValue(finalargs);
+        const char *regex_version = RlistScalarValue(finalargs->next);
+        const char *regex_arch = RlistScalarValue(finalargs->next->next);
+        const char *regex_method = RlistScalarValue(finalargs->next->next->next);
+        char regex[CF_BUFSIZE];
 
-    char *regex_package = RlistScalarValue(finalargs);
-    char *regex_version = RlistScalarValue(finalargs->next);
-    char *regex_arch = RlistScalarValue(finalargs->next->next);
-    char *regex_method = RlistScalarValue(finalargs->next->next->next);
+        // Here we will truncate the regex if the parameters add up to over CF_BUFSIZE
+        snprintf(regex, sizeof(regex), "^%s,%s,%s,%s$",
+                 regex_package, regex_version, regex_arch, regex_method);
+        matcher = CompileRegex(regex);
+        if (matcher == NULL)
+        {
+            return FnFailure();
+        }
+    }
 
-    JsonElement *json = JsonArrayCreate(50);
-    char filename[CF_MAXVARSIZE], regex[CF_BUFSIZE];
-    FILE *fin;
-
+    char filename[CF_MAXVARSIZE];
     if (installed_mode)
     {
         GetSoftwareCacheFilename(filename);
@@ -1334,64 +1343,58 @@ static FnCallResult FnCallPackagesMatching(ARG_UNUSED EvalContext *ctx, ARG_UNUS
 
     Log(LOG_LEVEL_DEBUG, "%s: reading inventory from '%s'", fp->name, filename);
 
-    if ((fin = fopen(filename, "r")) == NULL)
+    FILE *const fin = fopen(filename, "r");
+    if (fin == NULL)
     {
-        Log(LOG_LEVEL_VERBOSE, "%s cannot open the %s packages inventory '%s' - "
-            "This is not necessarily an error. Either the inventory policy has not been included, "
-            "or it has not had time to have an effect yet. A future call may still succeed. (fopen: %s)",
-            fp->name, installed_mode ? "installed" : "available", filename, GetErrorStr());
-        JsonDestroy(json);
+        Log(LOG_LEVEL_VERBOSE,
+            "%s cannot open the %s packages inventory '%s' - "
+            "This is not necessarily an error. "
+            "Either the inventory policy has not been included, "
+            "or it has not had time to have an effect yet. "
+            "A future call may still succeed. (fopen: %s)",
+            fp->name,
+            installed_mode ? "installed" : "available",
+            filename,
+            GetErrorStr());
+
+        pcre_free(matcher);
         return FnFailure();
     }
 
+    JsonElement *json = JsonArrayCreate(50);
     int linenumber = 0;
+    char *line;
 
-    for(;;)
+    while (NULL != (line = GetCsvLineNext(fin)))
     {
-        char *line = GetCsvLineNext(fin);
-        if (NULL == line)
-        {
-            if (!feof(fin))
-            {
-                Log(LOG_LEVEL_ERR, "Unable to read package inventory from '%s'. (fread: %s)", filename, GetErrorStr());
-                fclose(fin);
-                JsonDestroy(json);
-                free(line);
-                return FnFailure();
-            }
-            else
-            {
-                break;
-            }
-        }
-
         if (strlen(line) > CF_BUFSIZE - 80)
         {
-            Log(LOG_LEVEL_ERR, "Line %d from package inventory '%s' is too long to be sensible", linenumber, filename);
-            break;
+            Log(LOG_LEVEL_ERR,
+                "Line %d from package inventory '%s' is too long (%zd) to be sensible",
+                linenumber, filename, strlen(line));
+            free(line);
+            break; /* or continue ? */
         }
 
-        memset(regex, 0, sizeof(regex));
-        // Here we will truncate the regex if the parameters add up to over CF_BUFSIZE
-        snprintf(regex, sizeof(regex)-1, "^%s,%s,%s,%s$", regex_package, regex_version, regex_arch, regex_method);
-
-        if (StringMatchFull(regex, line))
+        if (StringMatchFullWithPrecompiledRegex(matcher, line))
         {
             Seq *list = SeqParseCsvString(line);
-            JsonElement *line_obj = JsonObjectCreate(4);
             if (SeqLength(list) != 4)
             {
-                Log(LOG_LEVEL_ERR, "Line %d from package inventory '%s' did not yield 4 elements: %s", linenumber, filename, line);
-                JsonDestroy(line_obj);
+                Log(LOG_LEVEL_ERR,
+                    "Line %d from package inventory '%s' did not yield 4 elements: %s",
+                    linenumber, filename, line);
                 ++linenumber;
                 SeqDestroy(list);
+                free(line);
                 continue;
             }
 
-            JsonObjectAppendString(line_obj, "name", SeqAt(list, 0));
+            JsonElement *line_obj = JsonObjectCreate(4);
+            JsonObjectAppendString(line_obj, "name",    SeqAt(list, 0));
             JsonObjectAppendString(line_obj, "version", SeqAt(list, 1));
-            JsonObjectAppendString(line_obj, "arch", SeqAt(list, 2));
-            JsonObjectAppendString(line_obj, "method", SeqAt(list, 3));
+            JsonObjectAppendString(line_obj, "arch",    SeqAt(list, 2));
+            JsonObjectAppendString(line_obj, "method",  SeqAt(list, 3));
             SeqDestroy(list);
 
             JsonArrayAppendObject(json, line_obj);
@@ -1400,11 +1403,22 @@ static FnCallResult FnCallPackagesMatching(ARG_UNUSED EvalContext *ctx, ARG_UNUS
         ++linenumber;
         free(line);
     }
+    const char *errstr = GetErrorStr(); /* Only relevant if fail */
 
+    bool fail = !feof(fin);
     fclose(fin);
+    pcre_free(matcher);
+
+    if (fail)
+    {
+        Log(LOG_LEVEL_ERR,
+            "Unable to read (%s) package inventory from '%s'.",
+            errstr, filename);
+        JsonDestroy(json);
+        return FnFailure();
+    }
 
     return (FnCallResult) { FNCALL_SUCCESS, (Rval) { json, RVAL_TYPE_CONTAINER } };
-
 }
 
 /*********************************************************************/
@@ -1919,7 +1933,8 @@ static FnCallResult FnCallGetIndices(EvalContext *ctx, ARG_UNUSED const Policy *
         }
         else
         {
-            Log(LOG_LEVEL_WARNING, "Function '%s'' was given an unqualified variable reference, "
+            Log(LOG_LEVEL_WARNING,
+                "Function '%s' was given an unqualified variable reference, "
                 "and it was not called from a promise. No way to automatically qualify the reference '%s'.",
                 fp->name, RlistScalarValue(finalargs));
             VarRefDestroy(ref);
@@ -2024,7 +2039,8 @@ static FnCallResult FnCallGetValues(EvalContext *ctx, ARG_UNUSED const Policy *p
         }
         else
         {
-            Log(LOG_LEVEL_WARNING, "Function '%s' was given an unqualified variable reference, "
+            Log(LOG_LEVEL_WARNING,
+                "Function '%s' was given an unqualified variable reference, "
                 "and it was not called from a promise. No way to automatically qualify the reference '%s'.",
                 fp->name, RlistScalarValue(finalargs));
             VarRefDestroy(ref);
@@ -2173,17 +2189,32 @@ static FnCallResult JoinRlist(const Rlist *input_list, const char *delimiter)
         return FnReturn("");
     }
 
+    bool more = false;
     Buffer *result = BufferNew();
     for (const Rlist *rp = input_list; rp; rp = rp->next)
     {
-        if (strcmp(RlistScalarValue(rp), CF_NULL_VALUE) == 0)
+        if (!more && strcmp(RlistScalarValue(rp), CF_NULL_VALUE) == 0)
         {
             continue;
         }
 
         BufferAppendString(result, RlistScalarValue(rp));
 
-        if (rp->next)
+        more = false;
+        // skip all following cf_null values
+        while (rp->next)
+        {
+            if (strcmp(RlistScalarValue(rp->next), CF_NULL_VALUE) == 0)
+            {
+                rp = rp->next;
+            }
+            else
+            {
+                more = true;
+                break;
+            }
+        }
+        if (more)
         {
             BufferAppendString(result, delimiter);
         }
@@ -2308,7 +2339,8 @@ static FnCallResult FnCallGetFields(EvalContext *ctx,
                     }
                     else
                     {
-                        Log(LOG_LEVEL_WARNING, "Function '%s'' was given an unqualified variable reference, "
+                        Log(LOG_LEVEL_WARNING,
+                            "Function '%s' was given an unqualified variable reference, "
                             "and it was not called from a promise. No way to automatically qualify the reference '%s'.",
                             fp->name, RlistScalarValue(finalargs));
                         VarRefDestroy(ref);
@@ -5062,10 +5094,13 @@ static FnCallResult FnCallReverse(EvalContext *ctx, ARG_UNUSED const Policy *pol
 static struct tm FnArgsToTm(const Rlist *rp)
 {
     struct tm ret = { .tm_isdst = -1 };
-    ret.tm_year = IntFromString(RlistScalarValue(rp)) - 1900; /* tm.tm_year stores year - 1900 */
+    /* .tm_year stores year - 1900 */
+    ret.tm_year = IntFromString(RlistScalarValue(rp)) - 1900;
     rp = rp->next;
+    /* .tm_mon counts from Jan = 0 to Dec = 11 */
     ret.tm_mon = IntFromString(RlistScalarValue(rp));
     rp = rp->next;
+    /* .tm_mday is day of month, 1 to 31, but we use 0 through 30 (for now) */
     ret.tm_mday = IntFromString(RlistScalarValue(rp)) + 1;
     rp = rp->next;
     ret.tm_hour = IntFromString(RlistScalarValue(rp));
@@ -5131,6 +5166,10 @@ static FnCallResult FnCallLaterThan(ARG_UNUSED EvalContext *ctx, ARG_UNUSED cons
     char buffer[CF_BUFSIZE];
     time_t now = time(NULL);
     struct tm tmv = FnArgsToTm(finalargs);
+    /* Adjust to 1-based counting (input) for month and day of month
+     * (0-based in mktime): */
+    tmv.tm_mon--;
+    tmv.tm_mday--;
     time_t cftime = mktime(&tmv);
 
     if (cftime == -1)
@@ -6261,8 +6300,9 @@ static void *CfReadFile(const char *filename, int maxsize)
 
     /* FIXME: Is it necessary here? Move to caller(s) */
     if (SingleLine(result))
+    {
         StripTrailingNewline(result, size);
-
+    }
     return result;
 }
 
@@ -6388,14 +6428,12 @@ static int BuildLineArray(EvalContext *ctx, const Bundle *bundle,
                           const char *split, int maxent, DataType type,
                           bool int_index)
 {
-    StringSet *lines = StringSetFromString(file_buffer, '\n');
-
-    StringSetIterator iter = StringSetIteratorInit(lines);
-    char *line;
+    Rlist *lines = RlistFromSplitString(file_buffer, '\n');
     int hcount = 0;
 
-    while ((line = StringSetIteratorNext(&iter)) && hcount < maxent)
+    for (Rlist *it = lines; it && hcount < maxent; it = it->next)
     {
+        char *line = RlistScalarValue(it);
         size_t line_len = strlen(line);
 
         if (line_len == 0 || (line_len == 1 && line[0] == '\r'))
@@ -6403,7 +6441,7 @@ static int BuildLineArray(EvalContext *ctx, const Bundle *bundle,
             continue;
         }
 
-        if (line[line_len - 1] ==  '\r')
+        if (line[line_len - 1] == '\r')
         {
             line[line_len - 1] = '\0';
         }
@@ -6482,7 +6520,7 @@ static int BuildLineArray(EvalContext *ctx, const Bundle *bundle,
         line++;
     }
 
-    StringSetDestroy(lines);
+    RlistDestroy(lines);
 
     return hcount;
 }
@@ -6862,12 +6900,23 @@ static const FnCallArg AGO_ARGS[] =
 
 static const FnCallArg LATERTHAN_ARGS[] =
 {
-    {"0,1000", CF_DATA_TYPE_INT, "Years"},
+    {"0,10000", CF_DATA_TYPE_INT, "Years"},
     {"0,1000", CF_DATA_TYPE_INT, "Months"},
     {"0,1000", CF_DATA_TYPE_INT, "Days"},
     {"0,1000", CF_DATA_TYPE_INT, "Hours"},
     {"0,1000", CF_DATA_TYPE_INT, "Minutes"},
     {"0,40000", CF_DATA_TYPE_INT, "Seconds"},
+    {NULL, CF_DATA_TYPE_NONE, NULL}
+};
+
+static const FnCallArg DATE_ARGS[] = /* for on() */
+{
+    {"1970,3000", CF_DATA_TYPE_INT, "Year"},
+    {"0,1000", CF_DATA_TYPE_INT, "Month (January = 0)"},
+    {"0,1000", CF_DATA_TYPE_INT, "Day (First day of month = 0)"},
+    {"0,1000", CF_DATA_TYPE_INT, "Hour"},
+    {"0,1000", CF_DATA_TYPE_INT, "Minute"},
+    {"0,1000", CF_DATA_TYPE_INT, "Second"},
     {NULL, CF_DATA_TYPE_NONE, NULL}
 };
 
@@ -7228,17 +7277,6 @@ static const FnCallArg SUM_ARGS[] =
 static const FnCallArg PRODUCT_ARGS[] =
 {
     {CF_IDRANGE, CF_DATA_TYPE_STRING, "A list of arbitrary real values"},
-    {NULL, CF_DATA_TYPE_NONE, NULL}
-};
-
-static const FnCallArg DATE_ARGS[] =
-{
-    {"1970,3000", CF_DATA_TYPE_INT, "Year"},
-    {"1,12", CF_DATA_TYPE_INT, "Month"},
-    {"1,31", CF_DATA_TYPE_INT, "Day"},
-    {"0,23", CF_DATA_TYPE_INT, "Hour"},
-    {"0,59", CF_DATA_TYPE_INT, "Minute"},
-    {"0,59", CF_DATA_TYPE_INT, "Second"},
     {NULL, CF_DATA_TYPE_NONE, NULL}
 };
 

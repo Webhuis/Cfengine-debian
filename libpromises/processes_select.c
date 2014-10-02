@@ -48,7 +48,7 @@
 
 static int SelectProcRangeMatch(char *name1, char *name2, int min, int max, char **names, char **line);
 static bool SelectProcRegexMatch(const char *name1, const char *name2, const char *regex, char **colNames, char **line);
-static int SplitProcLine(char *proc, char **names, int *start, int *end, char **line);
+static int SplitProcLine(const char *proc, char **names, int *start, int *end, char **line);
 static int SelectProcTimeCounterRangeMatch(char *name1, char *name2, time_t min, time_t max, char **names, char **line);
 static int SelectProcTimeAbsRangeMatch(char *name1, char *name2, time_t min, time_t max, char **names, char **line);
 static int GetProcColumnIndex(const char *name1, const char *name2, char **names);
@@ -279,47 +279,59 @@ static int SelectProcRangeMatch(char *name1, char *name2, int min, int max, char
 
 static long TimeCounter2Int(const char *s)
 {
-    long d = 0, h = 0, m = 0;
-    char output[CF_BUFSIZE];
+    long days, hours, minutes, seconds;
 
     if (s == NULL)
     {
         return CF_NOINT;
     }
 
-    if (strchr(s, '-'))
+    /* If we match dd-hh:mm[:ss], believe it: */
+    int got = sscanf(s, "%ld-%ld:%ld:%ld", &days, &hours, &minutes, &seconds);
+    if (got > 2)
     {
-        if (sscanf(s, "%ld-%ld:%ld", &d, &h, &m) != 3)
-        {
-            snprintf(output, CF_BUFSIZE, "Unable to parse TIME 'ps' field, expected dd-hh:mm, got '%s'", s);
-            return CF_NOINT;
-        }
+        /* All but perhaps seconds set */
+    }
+    /* Failing that, try matching hh:mm[:ss] */
+    else if (1 < (got = sscanf(s, "%ld:%ld:%ld", &hours, &minutes, &seconds)))
+    {
+        /* All but days and perhaps seconds set */
+        days = 0;
+        got++;
     }
     else
     {
-        if (sscanf(s, "%ld:%ld", &h, &m) != 2)
-        {
-            snprintf(output, CF_BUFSIZE, "Unable to parse TIME 'ps' field, expected hH:mm, got '%s'", s);
-            return CF_NOINT;
-        }
+        Log(LOG_LEVEL_ERR,
+            "Unable to parse 'ps' time field as [dd-]hh:mm[:ss], got '%s'",
+            s);
+        return CF_NOINT;
+    }
+    assert(got > 2); /* i.e. all but maybe seconds have been set */
+    /* Clear seconds if unset: */
+    if (got < 4)
+    {
+        seconds = 0;
     }
 
-    return 60 * (m + 60 * (h + 24 * d));
+    Log(LOG_LEVEL_DEBUG,
+        "TimeCounter2Int: Parsed '%s' as elapsed time '%ld-%02ld:%02ld:%02ld'",
+        s, days, hours, minutes, seconds);
+
+    /* Convert to seconds: */
+    return ((days * 24 + hours) * 60 + minutes) * 60 + seconds;
 }
 
 static int SelectProcTimeCounterRangeMatch(char *name1, char *name2, time_t min, time_t max, char **names, char **line)
 {
-    int i;
-    time_t value;
-
     if ((min == CF_NOINT) || (max == CF_NOINT))
     {
         return false;
     }
 
-    if ((i = GetProcColumnIndex(name1, name2, names)) != -1)
+    int i = GetProcColumnIndex(name1, name2, names);
+    if (i != -1)
     {
-        value = (time_t) TimeCounter2Int(line[i]);
+        time_t value = (time_t) TimeCounter2Int(line[i]);
 
         if (value == CF_NOINT)
         {
@@ -359,28 +371,58 @@ static time_t TimeAbs2Int(const char *s)
     tm.tm_sec = 0;
     tm.tm_isdst = -1;
 
-    if (strstr(s, ":"))         /* Hr:Min */
+    /* Try various ways to parse s: */
+    char word[4]; /* Abbreviated month name */
+    long ns[3]; /* Miscellaneous numbers, diverse readings */
+    int got = sscanf(s, "%2ld:%2ld:%2ld", ns, ns + 1, ns + 2);
+    if (1 < got) /* Hr:Min[:Sec] */
     {
-        char h[3], m[3];
-        sscanf(s, "%2[^:]:%2[^:]:", h, m);
-        tm.tm_hour = IntFromString(h);
-        tm.tm_min = IntFromString(m);
+        tm.tm_hour = ns[0];
+        tm.tm_min = ns[1];
+        if (got == 3)
+        {
+            tm.tm_sec = ns[2];
+        }
     }
-    else                        /* Month day */
+    /* or MMM dd (the %ld shall ignore any leading space) */
+    else if (2 == sscanf(s, "%3[a-zA-Z]%ld", word, ns) &&
+             /* Only match if word is a valid month text: */
+             0 < (ns[1] = Month2Int(word)))
     {
-        char mon[4];
-        long day;
-        sscanf(s, "%3[a-zA-Z] %ld", mon, &day);
-        int month = Month2Int(mon);
-        if (tm.tm_mon < month - 1)
+        int month = ns[1] - 1;
+        if (tm.tm_mon < month)
         {
             /* Wrapped around */
             tm.tm_year--;
         }
-        tm.tm_mon = month - 1;
-        tm.tm_mday = day;
+        tm.tm_mon = month;
+        tm.tm_mday = ns[0];
         tm.tm_hour = 0;
         tm.tm_min = 0;
+    }
+    /* or just year, or seconds since 1970 */
+    else if (1 == sscanf(s, "%ld", ns))
+    {
+        if (ns[0] > 9999)
+        {
+            /* Seconds since 1970.
+             *
+             * This is the amended value SplitProcLine() replaces
+             * start time with if it's imprecise and a better value
+             * can be calculated from elapsed time.
+             */
+            return (time_t)ns[0];
+        }
+        /* else year, at most four digits; either 4-digit CE or
+         * already relative to 1900. */
+
+        memset(&tm, 0, sizeof(tm));
+        tm.tm_year = ns[0] < 999 ? ns[0] : ns[0] - 1900;
+        tm.tm_isdst = -1;
+    }
+    else
+    {
+        return CF_NOINT;
     }
 
     return mktime(&tm);
@@ -451,120 +493,245 @@ static bool SelectProcRegexMatch(const char *name1, const char *name2,
 }
 
 /*******************************************************************/
+/* line must be char *line[CF_PROCCOLS] in fact. */
 
-static int SplitProcLine(char *proc, char **names, int *start, int *end, char **line)
+static int SplitProcLine(const char *proc,
+                         char **names, int *start, int *end,
+                         char **line)
 {
-    int i, s, e;
-
-    char *sp = NULL;
-    char cols1[CF_PROCCOLS][CF_SMALLBUF] = { "" };
-    char cols2[CF_PROCCOLS][CF_SMALLBUF] = { "" };
-
-    if ((proc == NULL) || (strlen(proc) == 0))
+    if (proc == NULL || proc[0] == '\0')
     {
         return false;
     }
 
     memset(line, 0, sizeof(char *) * CF_PROCCOLS);
 
-// First try looking at all the separable items
+    const char *sp = proc;
+    /* Scan in parallel for two heuristics: space-delimited fields
+     * found using sp, and ones inferred from the column headers. */
 
-    sp = proc;
-
-    for (i = 0; (i < CF_PROCCOLS) && (names[i] != NULL); i++)
+    for (int i = 0; i < CF_PROCCOLS && names[i] != NULL; i++)
     {
-        while (*sp == ' ')
+        /* Space-delimited heuristic, from sp to just before ep: */
+        while (isspace((unsigned char) sp[0]))
         {
             sp++;
         }
+        const char *ep = sp;
 
-        if ((strcmp(names[i], "CMD") == 0) || (strcmp(names[i], "COMMAND") == 0))
+        /* Header-driven heuristic, field from proc[s] to proc[e].
+         * Start with the column header's position and maybe grow
+         * outwards. */
+        int s = start[i], e;
+        if (i + 1 == CF_PROCCOLS || names[i + 1] == NULL)
         {
-            sscanf(sp, "%127[^\n]", cols1[i]);
-            sp += strlen(cols1[i]);
+            e = strlen(proc) - 1;
+            /* Extend space-delimited field to line end: */
+            while (ep[0] && ep[0] != '\n')
+            {
+                ep++;
+            }
+            /* But trim trailing hspace: */
+            while (isspace((unsigned char)ep[-1]))
+            {
+                ep--;
+            }
         }
         else
         {
-            sscanf(sp, "%127s", cols1[i]);
-            sp += strlen(cols1[i]);
+            e = end[i];
+            /* Extend space-delimited to next space: */
+            while (ep[0] && !isspace((unsigned char)ep[0]))
+            {
+                ep++;
+            }
         }
+        /* ep points at the space (or '\0') *following* the word or
+         * final field. */
 
-        // Some ps stimes may contain spaces, e.g. "Jan 25"
-        if ((strcmp(names[i], "STIME") == 0) && (strlen(cols1[i]) == 3))
+        /* Some ps stimes may contain spaces, e.g. "Jan 25" */
+        if (strcmp(names[i], "STIME") == 0 &&
+            ep - sp == 3)
         {
-            char s[CF_SMALLBUF] = { 0 };
-            sscanf(sp, "%127s", s);
-            strcat(cols1[i], " ");
-            strcat(cols1[i], s);
-            sp += strlen(s) + 1;
+            const char *np = ep;
+            while (isspace((unsigned char) np[0]))
+            {
+                np++;
+            }
+            if (isdigit((unsigned char) np[0]))
+            {
+                do
+                {
+                    np++;
+                }
+                while (isdigit((unsigned char) np[0]));
+                ep = np;
+            }
         }
-    }
 
-// Now try looking at columne alignment
+        /* Numeric columns, including times, are apt to grow leftwards
+         * and be right-aligned; identify candidates for this by
+         * proc[e] being a digit.  Text columns are typically
+         * left-aligned and may grow rightwards; identify candidates
+         * for this by proc[s] being alphabetic.  Some columns shall
+         * match both (e.g. STIME).  Some numeric columns may grow
+         * left even as far as under the heading of the next column
+         * (seen with ps -fel's SZ spilling left into ADDR's space on
+         * Linux).  While widening, it's OK to include a stray space;
+         * we'll trim that afterwards.  Overspill from neighbouring
+         * columns can muck up alignment, so "digit" means any
+         * character that can appear in a numeric field (we may need
+         * to tweak "alphabetic" likewise for text fields; the user
+         * field can, for example, have a '+' appended). */
+        bool overspilt = false;
 
-    for (i = 0; (i < CF_PROCCOLS) && (names[i] != NULL); i++)
-    {
-        // Start from the header/column tab marker and count backwards until we find 0 or space
-        for (s = start[i]; (s >= 0) && (!isspace((int) *(proc + s))); s--)
+        /* Numeric fields may include [-.:] and perhaps other
+         * punctuators: */
+#define IsNumberish(c) (isdigit((unsigned char)(c)) || ispunct((unsigned char)(c)))
+
+        /* Right-aligned numeric: move s left until we run outside the
+         * field or find space. */
+        if (IsNumberish(proc[e]))
         {
-        }
+            bool number = i > 0; /* Should we check for under-spill ? */
+            int outer = number ? end[i - 1] + 1 : 0;
+            while (s >= outer && !isspace((unsigned char) proc[s]))
+            {
+                if (number && !IsNumberish(proc[s]))
+                {
+                    number = false;
+                }
+                s--;
+            }
 
-        if (s < 0)
+            /* Numeric field might overspill under previous header: */
+            if (s < outer)
+            {
+                int spill = s;
+                s = outer; /* By default, don't overlap previous column. */
+
+                if (number && IsNumberish(proc[spill]))
+                {
+                    outer = start[i - 1];
+                    /* Explore all the way to the start-column of the
+                     * previous field's header.  If we get there, in
+                     * digits-and-punctuation, we've got two numeric
+                     * fields that abut; we can't do better than assume
+                     * the boundary is under the right end of the previous
+                     * column label (which is what our parsing of the
+                     * previous column assumed).  So leave s where it is,
+                     * just after the previous field's header's
+                     * end-column. */
+
+                    while (spill > outer)
+                    {
+                        spill--;
+                        if (!IsNumberish(proc[spill]))
+                        {
+                            s = spill + 1; /* Confirmed overlap. */
+                            break;
+                        }
+                    }
+                }
+            }
+
+            overspilt = IsNumberish(proc[e + 1]);
+        }
+#undef IsNumberish
+
+        /* Left-aligned text or numeric misaligned by overspill;
+         * move e right (but never under next heading): */
+        if (overspilt || isalpha((unsigned char) proc[s]))
         {
-            s = 0;
+            int outer;
+            if (i + 1 < CF_PROCCOLS && names[i + 1])
+            {
+                outer = start[i + 1];
+            }
+            else
+            {
+                outer = strlen(proc);
+            }
+            /* Simplify loop condition; we want e to end *before* next
+             * field, not on its first byte (or the terminator): */
+            outer--;
+
+            while (e < outer && !isspace((unsigned char) proc[e]))
+            {
+                e++;
+            }
         }
 
-        // Make sure to strip off leading spaces
-        while (isspace((int) proc[s]))
+        /* Strip off any leading and trailing spaces: */
+        while (isspace((unsigned char) proc[s]))
         {
             s++;
         }
-
-        if ((strcmp(names[i], "CMD") == 0) || (strcmp(names[i], "COMMAND") == 0))
+        /* ... but stop if the field is empty ! */
+        while (s <= e && isspace((unsigned char) proc[e]))
         {
-            e = strlen(proc);
+            e--;
         }
-        else
+
+        /* Grumble if the two heuristics don't agree: */
+        size_t wordlen = ep - sp;
+        if (e < s ? ep > sp : (sp != proc + s || ep != proc + e + 1))
         {
-            for (e = end[i]; (e <= end[i] + 10) && (!isspace((int) *(proc + e))); e++)
+            char word[CF_SMALLBUF];
+            if (wordlen >= CF_SMALLBUF)
             {
+                wordlen = CF_SMALLBUF - 1;
+            }
+            memcpy(word, sp, wordlen);
+            word[wordlen] = '\0';
+
+            char column[CF_SMALLBUF];
+            if (s <= e)
+            {
+                /* Copy proc[s through e] inclusive:  */
+                const size_t len = MIN(1 + e - s, CF_SMALLBUF - 1);
+                memcpy(column, proc + s, len);
+                column[len] = '\0';
+            }
+            else
+            {
+                column[0] = '\0';
             }
 
-            while (isspace((int) proc[e]))
-            {
-                if (e > 0)
-                {
-                    e--;
-                }
+            Log(LOG_LEVEL_VERBOSE,
+                "Unreliable fuzzy parsing of ps output (%s) %s: '%s' != '%s'",
+                proc, names[i], word, column);
+        }
 
-                if(e == 0)
-                {
-                    break;
-                }
+        /* Fall back on word if column got an empty answer: */
+        line[i] = e < s ? xstrndup(sp, ep - sp) : xstrndup(proc + s, 1 + e - s);
+        sp = ep;
+    }
+
+    /* Since start times can be very imprecise (e.g. just a past day's
+     * date, or a past year), calculate a better value from elapsed
+     * time, if available: */
+    int k = GetProcColumnIndex("ELAPSED", "ELAPSED", names);
+    if (k != -1)
+    {
+        const long elapsed = TimeCounter2Int(line[k]);
+        if (elapsed != CF_NOINT) /* Only use if parsed successfully ! */
+        {
+            int j = GetProcColumnIndex("STIME", "START", names), ns[3];
+            /* Trust the reported value if it matches hh:mm[:ss], though: */
+            if (sscanf(line[j], "%d:%d:%d", ns, ns + 1, ns + 2) < 2)
+            {
+                /* TODO: use time of ps-run, not time(NULL), which may be later. */
+                time_t value = time(NULL) - (time_t) elapsed;
+
+                Log(LOG_LEVEL_DEBUG,
+                    "SplitProcLine: Replacing parsed start time %s with %s",
+                    line[j], ctime(&value));
+
+                free(line[j]);
+                xasprintf(line + j, "%ld", value);
             }
         }
-
-        if (s <= e)
-        {
-            strncpy(cols2[i], (char *) (proc + s), MIN(CF_SMALLBUF - 1, (e - s + 1)));
-        }
-        else
-        {
-            cols2[i][0] = '\0';
-        }
-
-        if (Chop(cols2[i], CF_EXPANDSIZE) == -1)
-        {
-            Log(LOG_LEVEL_ERR, "Chop was called on a string that seemed to have no terminator");
-        }
-
-        if (strcmp(cols2[i], cols1[i]) != 0)
-        {
-            Log(LOG_LEVEL_INFO, "Unacceptable model uncertainty examining process(%s): '%s' != '%s'", proc, cols1[i], cols2[i]);
-        }
-
-        /* Fall back on cols1 if cols2 got an empty answer: */
-        line[i] = xstrdup(cols2[i][0] ? cols2[i] : cols1[i]);
     }
 
     return true;
@@ -574,17 +741,19 @@ static int SplitProcLine(char *proc, char **names, int *start, int *end, char **
 
 static int GetProcColumnIndex(const char *name1, const char *name2, char **names)
 {
-    int i;
-
-    for (i = 0; names[i] != NULL; i++)
+    for (int i = 0; names[i] != NULL; i++)
     {
-        if ((strcmp(names[i], name1) == 0) || (strcmp(names[i], name2) == 0))
+        if (strcmp(names[i], name1) == 0 ||
+            strcmp(names[i], name2) == 0)
         {
             return i;
         }
     }
 
-    Log(LOG_LEVEL_VERBOSE, " INFO - process column %s/%s was not supported on this system", name1, name2);
+    Log(LOG_LEVEL_VERBOSE,
+        "Process column %s/%s was not supported on this system",
+        name1, name2);
+
     return -1;
 }
 
@@ -593,7 +762,6 @@ static int GetProcColumnIndex(const char *name1, const char *name2, char **names
 bool IsProcessNameRunning(char *procNameRegex)
 {
     char *colHeaders[CF_PROCCOLS];
-    Item *ip;
     int start[CF_PROCCOLS] = { 0 };
     int end[CF_PROCCOLS] = { 0 };
     bool matched = false;
@@ -607,7 +775,7 @@ bool IsProcessNameRunning(char *procNameRegex)
 
     GetProcessColumnNames(PROCESSTABLE->name, (char **) colHeaders, start, end);
 
-    for (ip = PROCESSTABLE->next; ip != NULL; ip = ip->next)    // iterate over ps lines
+    for (const Item *ip = PROCESSTABLE->next; !matched && ip != NULL; ip = ip->next) // iterate over ps lines
     {
         char *lineSplit[CF_PROCCOLS];
 
@@ -625,22 +793,17 @@ bool IsProcessNameRunning(char *procNameRegex)
         if (SelectProcRegexMatch("CMD", "COMMAND", procNameRegex, colHeaders, lineSplit))
         {
             matched = true;
-            break;
         }
 
-        i = 0;
-        while (lineSplit[i] != NULL)
+        for (i = 0; lineSplit[i] != NULL; i++)
         {
             free(lineSplit[i]);
-            i++;
         }
     }
 
-    i = 0;
-    while (colHeaders[i] != NULL)
+    for (i = 0; colHeaders[i] != NULL; i++)
     {
         free(colHeaders[i]);
-        i++;
     }
 
     return matched;
@@ -664,7 +827,7 @@ static void GetProcessColumnNames(char *proc, char **names, int *start, int *end
     {
         offset = sp - proc;
 
-        if (isspace((int) *sp))
+        if (isspace((unsigned char) *sp))
         {
             if (start[col] != -1)
             {
@@ -676,9 +839,7 @@ static void GetProcessColumnNames(char *proc, char **names, int *start, int *end
                     break;
                 }
             }
-            continue;
         }
-
         else if (start[col] == -1)
         {
             start[col] = offset;
@@ -706,7 +867,6 @@ static const char *GetProcessOptions(void)
         // No threads on 2.4 kernels
         return "-eo user,pid,ppid,pgid,pcpu,pmem,vsz,pri,rss,stime,time,args";
     }
-
 # endif
 
     return VPSOPTS[VSYSTEMHARDCLASS];
@@ -715,10 +875,9 @@ static const char *GetProcessOptions(void)
 
 static int ExtractPid(char *psentry, char **names, int *end)
 {
-    char *sp;
-    int col, pid = -1, offset = 0;
+    int offset = 0;
 
-    for (col = 0; col < CF_PROCCOLS; col++)
+    for (int col = 0; col < CF_PROCCOLS; col++)
     {
         if (strcmp(names[col], "PID") == 0)
         {
@@ -730,32 +889,31 @@ static int ExtractPid(char *psentry, char **names, int *end)
         }
     }
 
-    for (sp = psentry + offset; *sp != '\0'; sp++)      /* if first field contains alpha, skip */
+    for (const char *sp = psentry + offset; *sp != '\0'; sp++) /* if first field contains alpha, skip */
     {
         /* If start with alphanum then skip it till the first space */
 
-        if (isalnum((int) *sp))
+        if (isalnum((unsigned char) *sp))
         {
-            while ((*sp != ' ') && (*sp != '\0'))
+            while (*sp != ' ' && *sp != '\0')
             {
                 sp++;
             }
         }
 
-        while ((*sp == ' ') && (*sp == '\t'))
+        while (*sp == ' ' || *sp == '\t')
         {
             sp++;
         }
 
-        sscanf(sp, "%d", &pid);
-
-        if (pid != -1)
+        int pid;
+        if (sscanf(sp, "%d", &pid) == 1 && pid != -1)
         {
-            break;
+            return pid;
         }
     }
 
-    return pid;
+    return -1;
 }
 
 # ifndef __MINGW32__

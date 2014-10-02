@@ -193,9 +193,9 @@ int SocketConnect(const char *host, const char *port,
                   unsigned int connect_timeout, bool force_ipv4,
                   char *txtaddr, size_t txtaddr_size)
 {
-    struct addrinfo *response, *ap;
-    struct addrinfo *response2, *ap2;
-    int sd = -1, connected = false;
+    struct addrinfo *response = NULL, *ap;
+    bool connected = false;
+    int sd = -1;
 
     struct addrinfo query = {
         .ai_family = force_ipv4 ? AF_INET : AF_UNSPEC,
@@ -208,25 +208,28 @@ int SocketConnect(const char *host, const char *port,
         Log(LOG_LEVEL_INFO,
               "Unable to find host '%s' service '%s' (%s)",
               host, port, gai_strerror(ret));
+        if (response != NULL)
+        {
+            freeaddrinfo(response);
+        }
         return -1;
     }
 
-    ap = response;
-    while (ap != NULL && !connected)
+    for (ap = response; !connected && ap != NULL; ap = ap->ai_next)
     {
         /* Convert address to string. */
         getnameinfo(ap->ai_addr, ap->ai_addrlen,
                     txtaddr, txtaddr_size,
                     NULL, 0, NI_NUMERICHOST);
         Log(LOG_LEVEL_VERBOSE,
-            "Connecting to host %s (address %s), port %s",
-            host, txtaddr, port);
+            "Connecting to host %s, port %s as address %s",
+            host, port, txtaddr);
 
         sd = socket(ap->ai_family, ap->ai_socktype, ap->ai_protocol);
         if (sd == -1)
         {
-            Log(LOG_LEVEL_ERR, "Couldn't open a socket. (socket: %s)",
-                GetErrorStr());
+            Log(LOG_LEVEL_ERR, "Couldn't open a socket to '%s' (socket: %s)",
+                txtaddr, GetErrorStr());
         }
         else
         {
@@ -240,6 +243,7 @@ int SocketConnect(const char *host, const char *port,
                     .ai_flags = AI_PASSIVE
                 };
 
+                struct addrinfo *response2 = NULL, *ap2;
                 int ret2 = getaddrinfo(BINDINTERFACE, NULL, &query2, &response2);
                 if (ret2 != 0)
                 {
@@ -247,7 +251,11 @@ int SocketConnect(const char *host, const char *port,
                         "Unable to lookup interface '%s' to bind. (getaddrinfo: %s)",
                         BINDINTERFACE, gai_strerror(ret2));
 
-                    freeaddrinfo(response2);
+                    if (response2 != NULL)
+                    {
+                        freeaddrinfo(response2);
+                    }
+                    assert(response);   /* first getaddrinfo was successful */
                     freeaddrinfo(response);
                     cf_closesocket(sd);
                     return -1;
@@ -266,36 +274,36 @@ int SocketConnect(const char *host, const char *port,
                         "Unable to bind to interface '%s'. (bind: %s)",
                         BINDINTERFACE, GetErrorStr());
                 }
+                assert(response2);     /* second getaddrinfo was successful */
                 freeaddrinfo(response2);
             }
 
             connected = TryConnect(sd, connect_timeout * 1000,
                                    ap->ai_addr, ap->ai_addrlen);
-            ap = ap->ai_next;
+            if (!connected)
+            {
+                Log(LOG_LEVEL_VERBOSE, "Unable to connect to address %s (%s)",
+                    txtaddr, GetErrorStr());
+                cf_closesocket(sd);
+                sd = -1;
+            }
         }
     }
 
-    if (response != NULL)
-    {
-        freeaddrinfo(response);
-    }
+    assert(response != NULL);           /* first getaddrinfo was successful */
+    freeaddrinfo(response);
 
-    if (!connected)
-    {
-        Log(LOG_LEVEL_VERBOSE, "Unable to connect to host %s (%s)",
-            host, GetErrorStr());
-
-        if (sd != -1)
-        {
-            cf_closesocket(sd);
-            sd = -1;
-        }
-    }
-    else
+    if (connected)
     {
         Log(LOG_LEVEL_VERBOSE,
             "Connected to host %s address %s port %s",
             host, txtaddr, port);
+    }
+    else
+    {
+        Log(LOG_LEVEL_VERBOSE,
+            "Unable to connect to host %s port %s",
+            host, port);
     }
 
     return sd;
