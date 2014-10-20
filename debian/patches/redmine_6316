@@ -1,0 +1,13 @@
+Index: Cfengine-debian/tests/unit/mon_processes_test.c
+===================================================================
+--- Cfengine-debian.orig/tests/unit/mon_processes_test.c
++++ Cfengine-debian/tests/unit/mon_processes_test.c
+@@ -78,7 +78,7 @@ static bool GetSysUsers( int *userListSz
+
+ void test_processes_monitor(void)
+ {
+-# ifdef __sun
++# if defined(__sun) || defined(__linux__)
+   return; //redmine 6316
+ # endif
+     double cf_this[100] = { 0.0 };
